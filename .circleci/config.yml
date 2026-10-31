@@ -52,6 +52,13 @@ jobs:
             test -f experiments/m0_engine_comparison/pilot/scenario.json
             test -f experiments/m0_engine_comparison/pilot/compile_pilot.py
       - run:
+          name: Run shared RPG scenario in Dart
+          command: |
+            cd experiments/m0_engine_comparison/dart_probe
+            dart pub get
+            dart analyze
+            dart run bin/probe.dart ../pilot/scenario.json
+      - run:
           name: Record SDK version for the next M0 engine comparison
           command: |
             mkdir -p /tmp/m0-ci-artifacts
