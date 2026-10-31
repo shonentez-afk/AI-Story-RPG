@@ -1,0 +1,220 @@
+{
+  "id": "manor_mystery_m0",
+  "title": "Тайна заброшенного особняка",
+  "initial": {
+    "has_key": false,
+    "has_letter": false,
+    "guard_trust": 0,
+    "witness_alive": true,
+    "investigated": false
+  },
+  "entry": "village",
+  "scenes": [
+    {
+      "id": "village",
+      "text": "Вы приезжаете в деревню у старого особняка.",
+      "choices": [
+        {
+          "id": "talk",
+          "text": "Поговорить со сторожем",
+          "next": "gate"
+        },
+        {
+          "id": "market",
+          "text": "Зайти на рынок",
+          "next": "market"
+        },
+        {
+          "id": "leave",
+          "text": "Уехать",
+          "next": "end_leave"
+        }
+      ]
+    },
+    {
+      "id": "market",
+      "text": "На прилавке лежит старый ключ.",
+      "choices": [
+        {
+          "id": "take_key",
+          "text": "Взять ключ",
+          "set": {
+            "has_key": true
+          },
+          "next": "gate"
+        },
+        {
+          "id": "skip_key",
+          "text": "Ничего не брать",
+          "next": "gate"
+        }
+      ]
+    },
+    {
+      "id": "gate",
+      "text": "Сторож встречает вас у ворот.",
+      "choices": [
+        {
+          "id": "befriend",
+          "text": "Заслужить доверие",
+          "inc": {
+            "guard_trust": 1
+          },
+          "next": "courtyard"
+        },
+        {
+          "id": "open_gate",
+          "text": "Открыть дверь ключом",
+          "when": {
+            "has_key": true
+          },
+          "next": "hall"
+        },
+        {
+          "id": "enter_yard",
+          "text": "Войти во двор",
+          "next": "courtyard"
+        }
+      ]
+    },
+    {
+      "id": "courtyard",
+      "text": "Во дворе слышны шаги.",
+      "choices": [
+        {
+          "id": "save_witness",
+          "text": "Защитить свидетеля",
+          "set": {
+            "witness_alive": true
+          },
+          "next": "library"
+        },
+        {
+          "id": "ignore_witness",
+          "text": "Не вмешиваться",
+          "set": {
+            "witness_alive": false
+          },
+          "next": "library"
+        },
+        {
+          "id": "return_gate",
+          "text": "Вернуться к воротам",
+          "next": "gate"
+        }
+      ]
+    },
+    {
+      "id": "hall",
+      "text": "Внутри дома темно.",
+      "choices": [
+        {
+          "id": "search_hall",
+          "text": "Исследовать комнату",
+          "set": {
+            "investigated": true
+          },
+          "next": "library"
+        },
+        {
+          "id": "walk_library",
+          "text": "Пойти в библиотеку",
+          "next": "library"
+        }
+      ]
+    },
+    {
+      "id": "library",
+      "text": "В библиотеке спрятан конверт.",
+      "choices": [
+        {
+          "id": "find_letter",
+          "text": "Найти письмо",
+          "set": {
+            "has_letter": true
+          },
+          "next": "tower"
+        },
+        {
+          "id": "tower_empty",
+          "text": "Подняться в башню",
+          "next": "tower"
+        },
+        {
+          "id": "ask_witness",
+          "text": "Расспросить свидетеля",
+          "when": {
+            "witness_alive": true
+          },
+          "next": "witness"
+        }
+      ]
+    },
+    {
+      "id": "witness",
+      "text": "Свидетель доверяет вам не сразу.",
+      "choices": [
+        {
+          "id": "trust_talk",
+          "text": "Показать доверие сторожа",
+          "when": {
+            "guard_trust": {
+              "gte": 1
+            }
+          },
+          "set": {
+            "has_letter": true
+          },
+          "next": "tower"
+        },
+        {
+          "id": "no_trust",
+          "text": "Уйти без разговора",
+          "next": "tower"
+        }
+      ]
+    },
+    {
+      "id": "tower",
+      "text": "На вершине башни вы встречаете хозяина.",
+      "choices": [
+        {
+          "id": "show_evidence",
+          "text": "Показать письмо",
+          "when": {
+            "has_letter": true
+          },
+          "next": "end_truth"
+        },
+        {
+          "id": "accuse",
+          "text": "Обвинить без доказательств",
+          "next": "end_failure"
+        },
+        {
+          "id": "back_to_library",
+          "text": "Вернуться за уликами",
+          "next": "library"
+        }
+      ]
+    },
+    {
+      "id": "end_truth",
+      "text": "Тайна раскрыта: исход зависит от спасения свидетеля.",
+      "ending": true,
+      "choices": []
+    },
+    {
+      "id": "end_failure",
+      "text": "Без доказательств вам не поверили.",
+      "ending": true,
+      "choices": []
+    },
+    {
+      "id": "end_leave",
+      "text": "Вы покинули деревню.",
+      "ending": true,
+      "choices": []
+    }
+  ]
+}
