@@ -1,0 +1,6 @@
+name: ai_story_m0_probe
+description: Cross-platform Dart reference probe for shared M0 scenario.
+version: 0.1.0
+publish_to: none
+environment:
+  sdk: '>=3.11.0 <4.0.0'
