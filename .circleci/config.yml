@@ -59,6 +59,13 @@ jobs:
             dart analyze
             dart run bin/probe.dart ../pilot/scenario.json
       - run:
+          name: Test story_engine public API and snapshot support
+          command: |
+            cd experiments/m0_engine_comparison/story_engine_smoke
+            dart pub get
+            dart analyze
+            dart run bin/smoke.dart
+      - run:
           name: Record SDK version for the next M0 engine comparison
           command: |
             mkdir -p /tmp/m0-ci-artifacts
