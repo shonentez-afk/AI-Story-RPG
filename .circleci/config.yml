@@ -1,0 +1,68 @@
+# AI Story RPG: CircleCI bootstrap for Python reference tests and Dart SDK.
+# Flutter Android/Windows builds will be added after application sources exist.
+version: 2.1
+
+jobs:
+  reference-tests:
+    docker:
+      - image: cimg/python:3.12
+    resource_class: small
+    working_directory: ~/project
+    steps:
+      - checkout
+      - run:
+          name: Python version
+          command: python3 --version
+      - run:
+          name: Generate test Ink and validate scenario
+          command: |
+            cd experiments/m0_engine_comparison
+            python3 pilot/compile_pilot.py
+      - run:
+          name: Run RPG reference tests
+          command: |
+            cd experiments/m0_engine_comparison
+            python3 -m unittest discover -s tests -v
+
+  dart-sdk:
+    docker:
+      - image: cimg/base:stable
+    resource_class: small
+    working_directory: ~/project
+    environment:
+      DART_SDK_DIR: /home/circleci/dart-sdk
+    steps:
+      - checkout
+      - run:
+          name: Download and install official Dart stable SDK (Linux x64)
+          command: |
+            set -eu
+            curl --fail --location --retry 3 \
+              --output /tmp/dartsdk-linux-x64-release.zip \
+              https://storage.googleapis.com/dart-archive/channels/stable/release/latest/sdk/dartsdk-linux-x64-release.zip
+            unzip -q /tmp/dartsdk-linux-x64-release.zip -d /home/circleci
+            rm /tmp/dartsdk-linux-x64-release.zip
+            /home/circleci/dart-sdk/bin/dart --version
+            echo 'export PATH="/home/circleci/dart-sdk/bin:$PATH"' >> "$BASH_ENV"
+      - run:
+          name: Check Dart toolchain and source inputs
+          command: |
+            dart --version
+            dart --help > /dev/null
+            test -f experiments/m0_engine_comparison/pilot/scenario.json
+            test -f experiments/m0_engine_comparison/pilot/compile_pilot.py
+      - run:
+          name: Record SDK version for the next M0 engine comparison
+          command: |
+            mkdir -p /tmp/m0-ci-artifacts
+            dart --version 2>&1 | tee /tmp/m0-ci-artifacts/dart-version.txt
+            printf 'Dart SDK installed on CircleCI runner only.\n' > /tmp/m0-ci-artifacts/README.txt
+      - store_artifacts:
+          path: /tmp/m0-ci-artifacts
+          destination: m0-sdk
+
+workflows:
+  m0-bootstrap:
+    jobs:
+      - reference-tests
+      - dart-sdk
