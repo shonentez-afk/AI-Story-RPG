@@ -24,3 +24,9 @@
 - В локальной исполняемой среде выполнено `python3 pilot/compile_pilot.py` и `python3 -m unittest discover -s tests -v` на эквивалентном тестовом сценарии: **4 PASS, 0 FAIL**; код сценария и тестов перенесён в GitHub.
 - **Не выполнено:** компиляция Ink (`inklecate` не установлен), тестирование с `ink_dart` и `story_engine` (нет Dart/Flutter), Windows/Android сборки, проверка сохранений через реальные движки.
 - Следующий шаг: установить SDK на подходящей build-машине, создать Dart-адаптеры к обоим движкам, запустить одинаковый набор ходов, save/restore и принять ADR.
+
+## M0 — продолжение: автономный reference runner
+- В `experiments/m0_engine_comparison/pilot/reference_runtime.py` реализован независимый Python-эталон исполнения сценария: условия, эффекты, журнал событий, проверки повторного action_id, save/restore с перепроигрыванием и fingerprint исходного сценария. Это **тестовый oracle**, не будущий Flutter runtime.
+- Добавлен `tests/test_reference_runtime.py` с проверками развилок, трёх концовок, 20+ ходов, tampered save, несовместимых сохранений, независимых веток.
+- **Локальный запуск** эквивалентного пакета: `python3 -m unittest discover -s tests -v` → 17 PASS / 0 FAIL (4 старых + 13 новых тестов); код oracle и 10 переносимых тестов записаны в GitHub (размер и состав исходных тестов в GitHub и локальной копии отличаются, поэтому число 17 не считать GitHub CI результатом).
+- **SKIP**: Dart и Flutter SDK отсутствуют; `story_engine`/`ink_dart` на устройствах не запущены, Windows/Android проверки не выполнены. Для честного решения о движке необходим действительный Dart/Flutter прогон.
