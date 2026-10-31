@@ -5,4 +5,8 @@ version: 0.1.0
 environment:
   sdk: '>=3.12.0 <4.0.0'
 dependencies:
-  ink_dart: 0.1.1
+  ink_dart:
+    git:
+      url: https://github.com/dennerkrans/ink_dart.git
+      ref: a87f2ee1c1fbfc80f9f22483567fce91f133a18a
+      path: packages/ink_dart
