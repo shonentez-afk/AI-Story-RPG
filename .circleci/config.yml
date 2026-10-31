@@ -69,6 +69,7 @@ jobs:
             dart pub get
             dart analyze
             dart run bin/smoke.dart
+            dart run bin/full_scenario.dart ../pilot/scenario.json ../pilot/expected_contract.json
       - run:
           name: Install official Ink compiler 1.2.1
           command: |
