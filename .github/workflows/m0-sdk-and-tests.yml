@@ -1,0 +1,48 @@
+name: M0 SDK and reference checks
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  reference-python:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Validate scenario and generated Ink draft
+        working-directory: experiments/m0_engine_comparison
+        run: python3 pilot/compile_pilot.py
+      - name: Check deterministic reference tests
+        working-directory: experiments/m0_engine_comparison
+        run: python3 -m unittest discover -s tests -v
+
+  dart-flutter-sdk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: Flutter stable with bundled Dart SDK
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: Check versions
+        run: |
+          flutter --version
+          dart --version
+          flutter doctor -v
+      - name: Explain platform boundaries
+        run: |
+          echo 'This Linux runner checks SDK installation only.'
+          echo 'Windows EXE requires a Windows runner and Visual Studio C++ tools.'
+          echo 'Android APK requires Flutter project plus Android SDK setup.'
