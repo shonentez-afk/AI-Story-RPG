@@ -31,7 +31,7 @@ void main() {
             presentation: const StoryChoicePresentation(
               text: StoryText('Войти'),
             ),
-            transition: StoryDirectTransition(targetEventId: finishId),
+            transition: StoryEventTransition(destinationEventId: finishId),
           ),
         ],
       ),
