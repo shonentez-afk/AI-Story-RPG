@@ -1,0 +1,8 @@
+name: ai_story_story_engine_smoke
+description: M0 public API integration test
+publish_to: none
+version: 0.1.0
+environment:
+  sdk: '>=3.11.0 <4.0.0'
+dependencies:
+  story_engine: 0.1.0-alpha.1
