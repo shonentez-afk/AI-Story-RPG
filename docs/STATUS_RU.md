@@ -36,3 +36,9 @@
 - Добавлены `docs/SETUP_FLUTTER_RU.md` (Windows, Android, Linux, PATH, SDK, Android Studio/Visual Studio) и `.github/workflows/m0-sdk-and-tests.yml` (GitHub Actions для установки Flutter stable на runner и Python unittest).
 - В текущей смонтированной локальной копии `ai_story_m0` запущено `python3 -m unittest discover -s tests -v`: **25 PASS / 0 FAIL**; наличие дополнительных файлов локальной копии отличается от репозитория, поэтому результат **не считать проверкой GitHub CI**.
 - **Не подтверждено:** успешное выполнение нового GitHub Actions workflow, наличие Flutter SDK на устройствах, Dart/Flutter сборки и прохождение игры через `story_engine`/`ink_dart`.
+
+## CI: переход на CircleCI (2026-11-01)
+- В репозитории создан `.circleci/config.yml` с заданиями `reference-tests` (Python сценарий и unittest) и `dart-sdk` (скачивание официального Dart Stable SDK на Linux runner, проверка версии и сохранение артефакта).
+- GitHub Actions ранее завершался до выдачи runner, поэтому этот CI рассматривается как основной для M0.
+- **Не подтверждено:** привязка репозитория к CircleCI, запуск pipeline, успешная загрузка Dart SDK или PASS тестов в CircleCI. Требуется подключить проект в CircleCI и проверить Pipelines.
+- Среда CircleCI изолирована от текущего ChatGPT контейнера; SDK не устанавливается сюда автоматически.
