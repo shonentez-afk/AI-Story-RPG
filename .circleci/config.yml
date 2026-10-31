@@ -66,6 +66,26 @@ jobs:
             dart analyze
             dart run bin/smoke.dart
       - run:
+          name: Install official Ink compiler 1.2.1
+          command: |
+            curl --fail --location --retry 3 -o /tmp/inklecate_linux.zip https://github.com/inkle/ink/releases/download/v1.2.1/inklecate_linux.zip
+            mkdir -p /tmp/inklecate-dist
+            unzip -q /tmp/inklecate_linux.zip -d /tmp/inklecate-dist
+            find /tmp/inklecate-dist -type f -name 'inklecate*' -exec chmod +x {} \;
+            find /tmp/inklecate-dist -type f -name 'inklecate*'
+      - run:
+          name: Compile pilot Ink and test ink_dart runtime
+          command: |
+            INK_BIN="$(find /tmp/inklecate-dist -type f -name 'inklecate*' | head -n 1)"
+            test -n "$INK_BIN"
+            cd experiments/m0_engine_comparison
+            python3 pilot/compile_pilot.py
+            "$INK_BIN" -o pilot/manor_mystery.ink.json pilot/manor_mystery.ink
+            cd ink_dart_smoke
+            dart pub get
+            dart analyze
+            dart run bin/smoke.dart ../pilot/manor_mystery.ink.json
+      - run:
           name: Record SDK version for the next M0 engine comparison
           command: |
             mkdir -p /tmp/m0-ci-artifacts
