@@ -24,3 +24,6 @@
 
 ## Короткий мастер-промпт
 «Продолжай `shonentez-afk/AI-Story-RPG` по `docs/TZ_RU.md` и `docs/STATUS_RU.md`. Сначала проверь реальное состояние репозитория. Реализуй ближайший незавершённый этап M0/M1. Соблюдай Flutter cross-platform offline-first, схемы BookWorld, журнал действий, тесты и лицензии. Сохраняй изменения на GitHub и обновляй STATUS и handoff. Не придумывай результаты проверок».
+
+## Обязательное решение о готовых текстовых движках (2026-11-01)
+Перед написанием собственного runtime: прочитать [аудит](docs/TEXT_RPG_ENGINES_GITHUB_AUDIT_RU.md) и раздел 6.1 [ТЗ](docs/TZ_RU.md). На этапе M0 сравнить на идентичной истории `ErikSchultheiss/story_engine` (BSD-3-Clause) и `dennerkrans/ink_dart + flutter_ink` (MIT), выполнить тесты 20+ ходов, saves, условий, автономности и на Android/Windows, затем зафиксировать выбор в ADR. Единственный источник истины по миру — `story_core`, внешний runtime через `StoryRuntimeAdapter`; `.bworld`/`.bwsave` независимы от его внутреннего формата. Не объявлять ни один движок выбранным, пока нет результатов пилота.
