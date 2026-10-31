@@ -58,6 +58,10 @@ jobs:
             dart pub get
             dart analyze
             dart run bin/probe.dart ../pilot/scenario.json
+            cd ../pilot
+            python3 export_contract.py
+            cd ../dart_probe
+            dart run bin/verify_contract.dart ../pilot/scenario.json ../pilot/expected_contract.json
       - run:
           name: Test story_engine public API and snapshot support
           command: |
