@@ -1,0 +1,8 @@
+name: ai_story_ink_dart_smoke
+description: M0 smoke for compiled Ink runtime
+publish_to: none
+version: 0.1.0
+environment:
+  sdk: '>=3.12.0 <4.0.0'
+dependencies:
+  ink_dart: ^0.1.2
