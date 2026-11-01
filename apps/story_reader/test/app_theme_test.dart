@@ -19,6 +19,9 @@ void main() {
     expect(AppAppearanceController.instance.value, AppAppearance.dark);
     final prefs = await SharedPreferences.getInstance();
     expect(prefs.getBool('ai_story_app_dark_v1'), isTrue);
+    expect(prefs.getInt('ai_story_reading_v1_palette'), 2);
+    await AppAppearanceController.instance.change(AppAppearance.light);
+    expect(prefs.getInt('ai_story_reading_v1_palette'), 1);
   });
 
   test('reader and app colors remain independent', () {
