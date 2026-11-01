@@ -61,3 +61,6 @@
 
 ## UI/UX checkpoint перед следующим функциональным этапом (2026-11-02)
 Кодовый аудит и UX hotfix M1.6.6: `docs/UI_UX_AUDIT_2026-11-02_RU.md`. Изменения старого интерфейса изолированы от `BookWorld`, `.bwsave` и сохраняемых данных. Следующая функциональная стадия M1.7 начинается после PASS Flutter analyze/widget + Android APK + Windows portable для нового HEAD; физическая Android/Windows/a11y проверка помечается SKIP, а не подменяется CI.
+
+## UI/UX checkpoint: принят по автоматическому CI (2026-11-02)
+Коммит исходников `8ca82afd0a71079cde9e08bdc28f17819ce6b436`, GitHub Actions `41332717865`: Python, Dart, Flutter analyze, 71/71 widget tests, Windows portable и Android APK **PASS**. Физические UI/a11y проверки Windows и Android **SKIP**. Полный отчёт `docs/UI_UX_AUDIT_2026-11-02_RU.md`. По просьбе пользователя переход к M1.7 оставлен до следующего отдельного шага.

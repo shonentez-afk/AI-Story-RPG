@@ -83,3 +83,13 @@ Run `41332360623` (SHA `ef004a4`): Python/Dart/analyze PASS, Flutter FAIL из-�
 
 ## QA маленькая правка после CI 41332615600
 Предыдущий запуск Flutter analyze прерван одним `const_with_non_const` в `home_page.dart`; убрано `const` при создании `TimeoutException`. Проверь новый run по HEAD до приёмки UX, продолжать только после PASS widget + Android + Windows.
+
+## ФИНАЛЬНЫЙ HANDOFF UX-АУДИТА — 2026-11-02
+**Проверенный исходный SHA:** `8ca82afd0a71079cde9e08bdc28f17819ce6b436`. **CI:** [`41332717865`](https://github.com/shonentez-afk/AI-Story-RPG/actions/runs/41332717865) `completed/success`: Python PASS, Dart PASS, Flutter analyze PASS, **71/71 widget PASS**, Windows portable PASS, Android debug APK + prerelease [`android-build-138`](https://github.com/shonentez-afk/AI-Story-RPG/releases/tag/android-build-138) PASS.
+
+- **Последние исправления после отчёта:** для `HomePage` убран ненужный background Future.timeout при чтении книг; `LibraryPage` использует управляемый `Timer` с отменой в `dispose`, `Future.any` и 8-секундным дружественным fail/retry; исправлен `const_with_non_const`. Платформенная библиотека не должна блокировать RPG и кнопку «Продолжить».
+- Полный реестр UX и открытых вопросов — `docs/UI_UX_AUDIT_2026-11-02_RU.md`; все изменения, включая шесть финалов, 320 dp/200% интерфейс, сохранения и темы, прошли CI. Не переписывать уже принятый дизайн и не откатывать недавние улучшения.
+- **SKIP:** ручной визуальный осмотр/запуск на реальных Windows и Android, TalkBack/Narrator, системная high contrast, перенос `.bwsave` между устройствами.
+- Открытые будущие задачи: относительный/абзацный якорь позиции чтения вместо scroll pixels; SQLite/Drift ACID; настоящий BookWorld/story_core, EPUB/AI/Compiler по ROADMAP. Не выдавать их за реализованные.
+- **Просьба пользователя:** на этом этапе **остановиться после UI/UX-аудита и исправлений**. M1.7 только после следующего явного «продолжай».
+- Этот handoff — только документационный commit поверх проверенного исходного SHA; если в HEAD дополнительный коммит [skip ci], он не меняет Flutter/Dart-код.

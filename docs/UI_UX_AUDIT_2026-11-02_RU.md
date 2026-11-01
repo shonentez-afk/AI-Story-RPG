@@ -72,3 +72,25 @@
 - Workflow `41332360623` по `ef004a4`: Python/Dart/Flutter analyze PASS, но Flutter widget tests FAIL в разных экранах с одним повторяющимся исключением `A Timer is still pending even after the widget tree was disposed`. Задания Android/Windows SKIP. Причина: `Future.timeout(Duration(seconds: 8))` для чтения `BookStorage` на главной создаёт таймер, который переживал маршрут при бесконечно ожидающем платформенном вызове. Проблема обнаружена инструментальными тестами, а не экранами пользователей.
 - Следующая правка удаляет timeout у независимого фонового считывания книг на главной (не влияет на RPG); в `LibraryPage` вводится `Future.any` с владельцем-виджетом контролируемым `Timer`, регистрацией таймеров, `dispose().cancel()`, 8-секундным понятным отказом и повторной попыткой, с защитой поколения запросов от позднего ответа. Так UI остаётся отзывчивым и не создаёт таймеры, переживающие экран.
 - Результат повторного CI обязательно зафиксировать, не путать `flutter analyze` PASS с общим состоянием CI.
+
+## Итоговая автоматическая приёмка UX-пакета — PASS (2026-11-02)
+
+**Проверенный исходный код:** `8ca82afd0a71079cde9e08bdc28f17819ce6b436`  
+**Workflow:** [GitHub Actions #138](https://github.com/shonentez-afk/AI-Story-RPG/actions/runs/41332717865) — `completed / success`.
+
+| Проверка | Итог |
+|---|---|
+| Python reference tests | PASS |
+| Dart story_engine, scenario, stress, ink_dart | PASS |
+| Flutter analyze | PASS |
+| Flutter widget tests (все экраны и regressions) | **71/71 PASS** |
+| Android debug APK build + artifact + release | PASS |
+| Windows portable release EXE + complete bundle | PASS |
+| Физический Android UI/UX / TalkBack | SKIP — недоступно в облачном CI |
+| Физический Windows UI/UX / keyboard / Narrator | SKIP — требуется запуск на настоящем компьютере |
+
+**Артефакты:** `AI-Story-RPG-Android-debug` и `AI-Story-RPG-Windows-portable` в run #138. Тестовый Android-релиз: [android-build-138](https://github.com/shonentez-afk/AI-Story-RPG/releases/tag/android-build-138), APK `AI-Story-RPG-M1-debug.apk` + `SHA256SUMS.txt`.
+
+**Регрессионная история:** первый UX commit `3560ba54` — 6 widget FAIL; `ef004a4` — ошибки из-за неотменяемых `Future.timeout`; `5a69603` — Dart analyze FAIL (лишний `const`); `8ca82af` — итог **зелёный**. Причины исправлены в коде, тесты не отключались и не пропускались.
+
+**Решение:** пакет исправлений UI/UX **принят по автоматическим критериям**. Полная визуальная/доступная проверка на физических Windows/Android **не проведена**, поэтому не заявлять безусловную сертификацию UX. Дальнейшие возможности M1.7 (BookWorld, story_core) оставлены до следующего отдельного согласованного шага пользователя.

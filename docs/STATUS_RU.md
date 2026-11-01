@@ -227,3 +227,9 @@
 
 ## QA исправление компиляции (2026-11-02)
 - CI `41332615600` по `5a696037`: Python/Dart PASS; Flutter analyze FAIL (один `const_with_non_const` при создании `TimeoutException` в `home_page.dart`), widget и Android/Windows SKIP. Удалён ошибочный `const` у конструктора, бизнес-логика и записи данных не менялись. Повторный полный CI обязателен.
+
+## UI/UX M1.6.6 — успешная приёмка (2026-11-02)
+- **Программный SHA:** `8ca82afd0a71079cde9e08bdc28f17819ce6b436`. **CI:** `41332717865` — `completed/success`. Python PASS, Dart/engine PASS, Flutter analyze PASS, **widget 71/71 PASS**, Android debug APK PASS, Windows portable bundle PASS.
+- Подтверждено наличие GitHub artifact `AI-Story-RPG-Windows-portable`, `AI-Story-RPG-Android-debug` и Android prerelease `android-build-138` с APK+SHA256SUMS. Реальное Windows/Android UI, keyboard navigation и TalkBack остаются SKIP.
+- Ранее обнаруженные 6+ регрессий UX, затем незакрытые таймеры `Future.timeout` и ошибка `const TimeoutException` исправлены последовательными коммитами. Итоговый отчёт: `docs/UI_UX_AUDIT_2026-11-02_RU.md`.
+- Принят кодовый UI/UX checkpoint; следующая функциональная разработка **не начиналась** по просьбе пользователя.
