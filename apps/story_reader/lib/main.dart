@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:story_engine/story_engine.dart';
+import 'save_store.dart';
 
 void main() {
   runApp(const AIStoryApp());
@@ -86,7 +87,8 @@ class StoryReaderPage extends StatefulWidget {
 class _StoryReaderPageState extends State<StoryReaderPage> {
   late final StoryProject _project;
   late StoryEngine _engine;
-  String? _savedSnapshot;
+  final SaveStore _saves = SaveStore();
+  bool _hasSave = false;
 
   @override
   void initState() {
@@ -97,34 +99,55 @@ class _StoryReaderPageState extends State<StoryReaderPage> {
       throw StateError(validation.format());
     }
     _engine = StoryEngine(project: _project)..start();
+    _checkSave();
+  }
+
+  Future<void> _checkSave() async {
+    final snapshot = await _saves.read();
+    if (mounted) setState(() => _hasSave = snapshot != null);
   }
 
   void _choose(StoryChoiceId id) {
     setState(() => _engine.choose(id));
   }
 
-  void _save() {
-    setState(() {
-      _savedSnapshot = StoryRuntimeSnapshotCodec()
+  Future<void> _save() async {
+    try {
+      final encoded = StoryRuntimeSnapshotCodec()
           .encodeJson(_engine.createSnapshot());
-    });
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Снимок прохождения сохранён в памяти')),
-    );
+      await _saves.write(encoded);
+      if (!mounted) return;
+      setState(() => _hasSave = true);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Прогресс сохранён на устройстве')),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Не удалось сохранить: $error')),
+      );
+    }
   }
 
-  void _restore() {
-    final saved = _savedSnapshot;
-    if (saved == null) return;
-    setState(() {
-      _engine = StoryEngine.restore(
+  Future<void> _restore() async {
+    try {
+      final saved = await _saves.read();
+      if (saved == null) return;
+      final restored = StoryEngine.restore(
         project: _project,
         snapshot: StoryRuntimeSnapshotCodec().decodeJson(
           saved,
           project: _project,
         ),
       );
-    });
+      if (!mounted) return;
+      setState(() => _engine = restored);
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Сохранение несовместимо или повреждено: $error')),
+      );
+    }
   }
 
   void _restart() {
@@ -176,12 +199,12 @@ class _StoryReaderPageState extends State<StoryReaderPage> {
                   spacing: 8,
                   children: [
                     OutlinedButton.icon(
-                      onPressed: done ? null : _save,
+                      onPressed: _save,
                       icon: const Icon(Icons.save_outlined),
                       label: const Text('Сохранить'),
                     ),
                     OutlinedButton.icon(
-                      onPressed: _savedSnapshot == null ? null : _restore,
+                      onPressed: _hasSave ? _restore : null,
                       icon: const Icon(Icons.restore),
                       label: const Text('Загрузить'),
                     ),
@@ -189,8 +212,8 @@ class _StoryReaderPageState extends State<StoryReaderPage> {
                 ),
                 const SizedBox(height: 12),
                 const Text(
-                  'M1 прототип: сохранение пока только в оперативной памяти. '
-                  'Импорт книг, постоянные слоты и ИИ будут добавлены отдельно.',
+                  'M1 прототип: один локальный слот сохранения. '
+                  'Импорт книг, полноценные слоты и ИИ будут добавлены отдельно.',
                 ),
               ],
             ),
