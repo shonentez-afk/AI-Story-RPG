@@ -60,3 +60,8 @@
 - Добавлен `story_engine_smoke/bin/stress.dart`: проверка всех переходов, переменной `visited`, snapshot/restore и измерение времени.
 - Тест генератора находится в `tests/test_stress_generator.py`; CircleCI запускает stress после проверки полного сценария.
 - **Итоги CircleCI ещё не проверены**: benchmark создан и включён в pipeline, PASS и производительность пока неизвестны.
+
+## M1 start — Flutter reader scaffold / ADR-001 (2026-11-01)
+- Принято ADR-001: `story_engine 0.1.0-alpha.1` — основной runtime; `ink_dart` — необязательный адаптер Ink, авторитетное состояние BookWorld остаётся под нашим контролем.
+- Созданы `apps/story_reader/pubspec.yaml`, `apps/story_reader/lib/main.dart`, `apps/story_reader/README_RU.md`: начальный Flutter host, текст, кнопки выборов, старт/повтор, внутрисессионный снимок состояния и восстановление.
+- **Не подтверждено:** `flutter analyze`, Flutter widget tests, сборки Android/Windows; нет платформенных каталогов, файловых сохранений, загрузки книг и AI. M1 prototype — исходники, пока не выпускаемый APK/EXE.
