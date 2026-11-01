@@ -70,3 +70,6 @@
 - **M1.7.2:** StoryRuntimeAdapter и единый coordinator `story_engine` / `story_core`, без двух источников истины; миграционные тесты legacy M1.6.
 - **M1.7.3:** BookWorld ZIP/SQLite/manifest/rights/checksums/import; не путать с JSON blueprint.
 - **M1.7.4:** полноценный SQLite/Drift campaign, portable .bwsave, восстановление, UI 20+ ходов Android+Windows и QA.
+
+## M1.7.2 — проверяемый runtime adapter (2026-11-02)
+Новый изолированный Dart `packages/story_runtime_adapter` объединяет `story_engine` с `story_core` через candidate-commit, idempotent action, проверку выбора и верифицированный replay. Реализация и отрицательные тесты: `docs/M17_STORY_RUNTIME_ADAPTER_RU.md`. **Нет** SQLite, связи со старым `GameProgress` и `.bwsave`/читалкой; не выдавать этот этап за полную миграцию. Следующий M1.7.3 — BookWorld ZIP с manifest/world.sqlite; M1.7.4 — durable transactions и безопасная migration UI.

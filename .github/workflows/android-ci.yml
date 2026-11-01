@@ -96,6 +96,12 @@ jobs:
       - name: Test deterministic 35-turn replay and negative cases
         working-directory: packages/story_core
         run: dart test --reporter expanded
+      - name: Analyze and test story_engine runtime coordinator
+        working-directory: packages/story_runtime_adapter
+        run: |
+          dart pub get
+          dart analyze
+          dart test --reporter expanded
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'

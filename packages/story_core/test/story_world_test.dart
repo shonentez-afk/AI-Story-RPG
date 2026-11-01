@@ -192,6 +192,20 @@ void main() {
     expect(() => StoryBlueprint.fromJson(p), throwsFormatException);
   });
 
+  test('a fork is isolated and lock reasons match core validation', () {
+    final original = StoryWorld(originalBlueprint());
+    final preview = original.fork();
+    expect(original.choiceLockReason('enter_hall'),
+        'condition_not_met:has_item');
+    expect(preview.apply(
+        actionId: 'tentative', choiceId: 'inspect_gate').applied, isTrue);
+    expect(preview.state.revision, 1);
+    expect(preview.events.length, 1);
+    expect(original.state.revision, 0);
+    expect(original.events, isEmpty);
+    expect(original.choiceLockReason('inspect_gate'), isNull);
+  });
+
   test('authoritative WorldState cannot be modified by UI callers', () {
     final world = StoryWorld(originalBlueprint());
     expect(() => world.state.inventory.add('key'), throwsUnsupportedError);

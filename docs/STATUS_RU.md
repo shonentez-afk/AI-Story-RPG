@@ -249,3 +249,9 @@
 ## Уточнение M1.7.1 (без изменения старых сейвов)
 - Новое событие `WorldEvent` содержит `blueprint_sha256` точной редакции тестового мира. Replay может проверять ожидаемые sequence + state hash, чтобы определить усечённый конец журнала при наличии подтверждённого checkpoint. Отвергаются неподготовленные CUSTOM/FREE_WORLD. Добавлены негативные Dart+Python тесты.
 - Это контракт только нового M1.7-модуля, **не** изменение `ai_story_save_envelope_v1` и **не** миграция пользовательских данных.
+
+## M1.7.2 — связка story_engine/story_core (2026-11-02)
+- Исходная база `2d779839c26f91146bdad63f1b3afaf7b87b97a2` (Actions `41336338177` **SUCCESS**: Android+Windows, 71 Flutter widget PASS, story_core 9+6 PASS).
+- Добавлен `packages/story_runtime_adapter` с интерфейсом `StoryRuntimeAdapter`, координатором `StoryEngineCoordinator`, `RuntimeChoice`, верифицированным in-memory checkpoint/replay и атомарным в пределах isolate выбором через две независимые кандидатные копии runtime+world.
+- `StoryWorld.fork()` и `choiceLockReason`; доп. unit-тест. Проверка нового пакета в blocking `story-core` CI перед платформенными сборками. Пройдённость нового этапа определяется **только CI нового SHA**.
+- **Никаких изменений старой Flutter-пилотной RPG и пользовательских сохранений**. `manor_m17_original_demo` отдельно от `ai_story_m1_intro`. SQLite/Drift, runtime migration, .bworld ZIP, полноценный .bwsave и GUI интеграция ещё не реализованы. Полный отчёт `docs/M17_STORY_RUNTIME_ADAPTER_RU.md`.

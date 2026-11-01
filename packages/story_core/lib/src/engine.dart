@@ -168,6 +168,37 @@ class StoryWorld {
   List<WorldEvent> get events => List.unmodifiable(_events);
   bool get isTerminal => blueprint.scenes[_state.sceneId]!.terminal;
 
+  /// An isolated tentative world for coordinating with the scenario runtime.
+  /// No I/O occurs here; a rejected proposal never mutates the live world.
+  StoryWorld fork() {
+    final draft = StoryWorld(blueprint);
+    draft._state = _state;
+    draft._events.addAll(_events);
+    draft._byAction.addAll(_byAction);
+    return draft;
+  }
+
+  /// Reason that an action is currently not available. The source of truth
+  /// is the world-state rule interpreter, not the scenario presentation.
+  String? choiceLockReason(String choiceId) {
+    if (isTerminal) return 'terminal_scene';
+    final scene = blueprint.scenes[_state.sceneId]!;
+    BlueprintChoice? selected;
+    for (final choice in scene.choices) {
+      if (choice.id == choiceId) {
+        selected = choice;
+        break;
+      }
+    }
+    if (selected == null) return 'choice_not_in_current_scene';
+    for (final condition in selected.conditions) {
+      if (!_matches(condition)) {
+        return 'condition_not_met:${condition.op}';
+      }
+    }
+    return null;
+  }
+
   DecisionResult apply({
     required String actionId,
     required String choiceId,
@@ -193,21 +224,12 @@ class StoryWorld {
     if (expectedRevision != null && expectedRevision != _state.revision) {
       return _denied('stale_revision');
     }
-    final scene = blueprint.scenes[_state.sceneId]!;
-    if (scene.terminal) return _denied('terminal_scene');
-    BlueprintChoice? choice;
-    for (final option in scene.choices) {
-      if (option.id == choiceId) {
-        choice = option;
-        break;
-      }
-    }
-    if (choice == null) return _denied('choice_not_in_current_scene');
-    for (final condition in choice.conditions) {
-      if (!_matches(condition)) {
-        return _denied('condition_not_met:${condition.op}');
-      }
-    }
+    final lockReason = choiceLockReason(choiceId);
+    if (lockReason != null) return _denied(lockReason);
+    // The choice exists because choiceLockReason validated its scene and
+    // predicates. Keep the actual definition from this exact blueprint.
+    final choice = blueprint.scenes[_state.sceneId]!.choices
+        .firstWhere((option) => option.id == choiceId);
 
     // Copy first, evaluate ALL effects and only then replace authoritative
     // state. A failed effect cannot partially spend a key or leak a fact.

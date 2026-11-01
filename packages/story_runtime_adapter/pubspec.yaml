@@ -1,0 +1,15 @@
+name: story_runtime_adapter
+description: Verified bridge between story_engine and authoritative story_core
+publish_to: none
+version: 0.1.0
+
+environment:
+  sdk: '>=3.11.0 <4.0.0'
+
+dependencies:
+  story_core:
+    path: ../story_core
+  story_engine: 0.1.0-alpha.1
+
+dev_dependencies:
+  test: ^1.25.15
