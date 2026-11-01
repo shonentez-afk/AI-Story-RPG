@@ -14,6 +14,12 @@ class AppAppearanceController extends ChangeNotifier {
     final prefs = await SharedPreferences.getInstance();
     _value = prefs.getBool('ai_story_app_dark_v1') == true
         ? AppAppearance.dark : AppAppearance.light;
+    // Repair the mismatch left by earlier builds, without replacing custom
+    // dark/OLED selections. A later manual book theme choice remains possible.
+    if (_value == AppAppearance.dark &&
+        (prefs.getInt('ai_story_reading_v1_palette') ?? 1) == 1) {
+      await prefs.setInt('ai_story_reading_v1_palette', 2);
+    }
     notifyListeners();
   }
 
