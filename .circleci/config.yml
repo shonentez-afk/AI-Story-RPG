@@ -129,9 +129,39 @@ jobs:
             flutter analyze
             flutter test
 
+  android-apk:
+    docker:
+      - image: cimg/android:2025.10
+    resource_class: large
+    working_directory: ~/project
+    steps:
+      - checkout
+      - run:
+          name: Install Flutter stable
+          command: |
+            git clone --depth 1 --branch stable https://github.com/flutter/flutter.git /tmp/flutter
+            echo 'export PATH="/tmp/flutter/bin:$PATH"' >> "$BASH_ENV"
+            /tmp/flutter/bin/flutter --version
+      - run:
+          name: Create Android host and build test APK
+          no_output_timeout: 20m
+          command: |
+            cd apps/story_reader
+            flutter create --platforms=android --project-name ai_story_reader --org com.aistoryrpg .
+            flutter pub get
+            flutter build apk --debug
+            test -s build/app/outputs/flutter-apk/app-debug.apk
+            mkdir -p /tmp/ai-story-apk
+            cp build/app/outputs/flutter-apk/app-debug.apk /tmp/ai-story-apk/AI-Story-RPG-M1-debug.apk
+            sha256sum /tmp/ai-story-apk/AI-Story-RPG-M1-debug.apk > /tmp/ai-story-apk/SHA256SUMS.txt
+      - store_artifacts:
+          path: /tmp/ai-story-apk
+          destination: ai-story-rpg/android
+
 workflows:
   m0-bootstrap:
     jobs:
       - reference-tests
       - dart-sdk
       - flutter-reader
+      - android-apk
