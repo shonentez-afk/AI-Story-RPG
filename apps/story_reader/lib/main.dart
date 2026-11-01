@@ -204,8 +204,23 @@ class _StoryReaderPageState extends State<StoryReaderPage> {
     final event = _engine.currentEvent;
     final done = _engine.status == StoryEngineStatus.terminated;
     return Scaffold(
-      appBar: AppBar(title: const Text('Живая книга')),
-      bottomNavigationBar: GameQuickBar(onOpen: _openPanel),
+      backgroundColor: _reading.background,
+      appBar: AppBar(
+        backgroundColor: _reading.background,
+        foregroundColor: _reading.foreground,
+        title: const Text('Живая книга'),
+      ),
+      bottomNavigationBar: ColoredBox(
+        color: _reading.background,
+        child: Theme(
+          data: Theme.of(context).copyWith(
+            textButtonTheme: TextButtonThemeData(
+              style: TextButton.styleFrom(foregroundColor: _reading.foreground),
+            ),
+          ),
+          child: GameQuickBar(onOpen: _openPanel),
+        ),
+      ),
       body: ColoredBox(
         color: _reading.background,
         child: SafeArea(
