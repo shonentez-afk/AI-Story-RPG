@@ -4,6 +4,7 @@ import 'book_model.dart';
 import 'book_reading_state.dart';
 import 'reading_preferences.dart';
 import 'reading_settings_sheet.dart';
+import 'reader_chrome.dart';
 
 class BookReaderPage extends StatefulWidget {
   const BookReaderPage({super.key, required this.book, this.bookId});
@@ -20,7 +21,7 @@ class _BookReaderPageState extends State<BookReaderPage> {
   final BookReadingStore _readingStore = BookReadingStore();
   BookReadingState _reading = const BookReadingState();
   bool _progressReady = false;
-  bool _immersive = false;
+  ReaderChromeMode _chrome = ReaderChromeMode.normal;
 
   int get _count => widget.book.structuredChapters.isNotEmpty
       ? widget.book.structuredChapters.length : widget.book.chapters.length;
@@ -120,7 +121,7 @@ class _BookReaderPageState extends State<BookReaderPage> {
 
     return Scaffold(
       backgroundColor: prefs.background,
-      appBar: _immersive ? null : AppBar(
+      appBar: !_chrome.showTopBar ? null : AppBar(
         backgroundColor: prefs.background,
         foregroundColor: prefs.foreground,
         title: Text(widget.book.title),
@@ -144,12 +145,11 @@ class _BookReaderPageState extends State<BookReaderPage> {
           ),
         ],
       ),
-      floatingActionButton: FloatingActionButton.small(
-        backgroundColor: prefs.foreground,
-        foregroundColor: prefs.background,
-        tooltip: _immersive ? 'Показать управление' : 'Скрыть управление',
-        onPressed: () => setState(() => _immersive = !_immersive),
-        child: Icon(_immersive ? Icons.visibility : Icons.visibility_off),
+      floatingActionButton: ReaderChromeButton(
+        mode: _chrome,
+        background: prefs.foreground,
+        foreground: prefs.background,
+        onChange: (mode) => setState(() => _chrome = mode),
       ),
       body: ColoredBox(
         color: prefs.background,
