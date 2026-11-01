@@ -73,3 +73,6 @@
 
 ## M1.7.2 — проверяемый runtime adapter (2026-11-02)
 Новый изолированный Dart `packages/story_runtime_adapter` объединяет `story_engine` с `story_core` через candidate-commit, idempotent action, проверку выбора и верифицированный replay. Реализация и отрицательные тесты: `docs/M17_STORY_RUNTIME_ADAPTER_RU.md`. **Нет** SQLite, связи со старым `GameProgress` и `.bwsave`/читалкой; не выдавать этот этап за полную миграцию. Следующий M1.7.3 — BookWorld ZIP с manifest/world.sqlite; M1.7.4 — durable transactions и безопасная migration UI.
+
+## Контрольная точка M1.7.2 — принят (2026-11-02)
+`8fef11521c9f702414a6364c04b2350d30713b0d`, Actions `41337108811` SUCCESS. Прошли 10 unit тестов story_core, 9 bridge тестов, 6 schema тестов, 71 Flutter widget, Python/Dart, Android APK и Windows bundle. Следующий M1.7.3: контракт и проверяемый `.bworld` ZIP/SQLite (без нарушения существующей библиотеки), затем M1.7.4 durable SQLite/Drift, migration и UI 20+ turns. Подробности: `M17_STORY_RUNTIME_ADAPTER_RU.md`.

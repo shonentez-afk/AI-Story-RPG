@@ -46,3 +46,18 @@
 Для **нового SHA** после публикации обязателен GitHub Actions PASS: Python reference, Dart M0, story_core (теперь оба Dart-пакета + Python schema), Flutter 71+ widget tests, Android APK и Windows portable. Записывать фактические SHA и статусы. Предыдущий успешный CI не доказывает работоспособность нового координатора.
 
 После подтверждения этапа: M1.7.3 — полное versioned `.bworld` со строгой проверкой ZIP/SQLite/rights/checksums и подготовленными сценами; затем M1.7.4 — SQLite/Drift, безопасная миграция M1.6, durable replay/сохранения, UI интеграция и Android↔Windows QA.
+
+## Итоговый QA M1.7.2 — PASS (2026-11-02)
+
+- **Проверенный исходный SHA:** `8fef11521c9f702414a6364c04b2350d30713b0d`.
+- **GitHub Actions #142:** [`41337108811`](https://github.com/shonentez-afk/AI-Story-RPG/actions/runs/41337108811) — `completed/success`.
+- **Python reference:** PASS; **Dart M0 story_engine/ink_dart и 1000-scene stress:** PASS.
+- **`story_core` анализ и тесты:** PASS, **10/10**.
+- **`story_runtime_adapter` анализ и тесты:** PASS, **9/9** (включая 35 ходов через `story_engine`, checkpoint после 23 ходов, replay, повреждение/несовместимость, отказ/идемпотентность).
+- **JSON Schema Draft 2020-12 и adversarial fixtures:** PASS, **6/6**.
+- **Flutter analyze:** PASS; **Flutter widget tests:** **71/71 PASS**.
+- **Windows portable release bundle:** PASS, artifact `AI-Story-RPG-Windows-portable`.
+- **Android debug APK:** PASS, artifact `AI-Story-RPG-Android-debug`; GitHub prerelease [`android-build-142`](https://github.com/shonentez-afk/AI-Story-RPG/releases/tag/android-build-142), `AI-Story-RPG-M1-debug.apk` и `SHA256SUMS.txt`.
+- **SKIP:** физический Android/Windows E2E тест нового адаптера (нет подключения адаптера к старому GUI), SQLite crash recovery, импорт `.bworld` и migration M1.6 пользовательских сейвов; эти функции не объявлены готовыми.
+
+**Вердикт:** M1.7.2 — реализован и принят **по автоматическим проверкам**. К следующему этапу M1.7.3 можно переходить без переделки текущего UX; до UI интеграции и миграций сохранять разделение `ai_story_m1_intro` и `manor_m17_original_demo`.

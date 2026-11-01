@@ -255,3 +255,6 @@
 - Добавлен `packages/story_runtime_adapter` с интерфейсом `StoryRuntimeAdapter`, координатором `StoryEngineCoordinator`, `RuntimeChoice`, верифицированным in-memory checkpoint/replay и атомарным в пределах isolate выбором через две независимые кандидатные копии runtime+world.
 - `StoryWorld.fork()` и `choiceLockReason`; доп. unit-тест. Проверка нового пакета в blocking `story-core` CI перед платформенными сборками. Пройдённость нового этапа определяется **только CI нового SHA**.
 - **Никаких изменений старой Flutter-пилотной RPG и пользовательских сохранений**. `manor_m17_original_demo` отдельно от `ai_story_m1_intro`. SQLite/Drift, runtime migration, .bworld ZIP, полноценный .bwsave и GUI интеграция ещё не реализованы. Полный отчёт `docs/M17_STORY_RUNTIME_ADAPTER_RU.md`.
+
+## M1.7.2 — итоговая приёмка
+Исходный SHA `8fef11521c9f702414a6364c04b2350d30713b0d`, Actions `41337108811` **SUCCESS** (Python/Dart, story_core **10/10**, story_runtime_adapter **9/9**, JSON Schema **6/6**, Flutter analyze, widget **71/71**, Android APK и Windows portable PASS). Артефакты обеих платформ подтверждены, Android prerelease `android-build-142` содержит APK+SHA256SUMS. Физический device QA/M1.6 migration/SQLite/настоящий .bworld ZIP **SKIP, не реализовано**. Отчёт: `docs/M17_STORY_RUNTIME_ADAPTER_RU.md`.
