@@ -175,6 +175,7 @@ class _BookReaderPageState extends State<BookReaderPage> {
     );
 
     return Scaffold(
+      backgroundColor: prefs.background,
       appBar: _immersive ? null : AppBar(
         backgroundColor: prefs.background,
         foregroundColor: prefs.foreground,
@@ -200,6 +201,8 @@ class _BookReaderPageState extends State<BookReaderPage> {
         ],
       ),
       floatingActionButton: FloatingActionButton.small(
+        backgroundColor: prefs.foreground,
+        foregroundColor: prefs.background,
         tooltip: _immersive ? 'Показать управление' : 'Скрыть управление',
         onPressed: () => setState(() => _immersive = !_immersive),
         child: Icon(_immersive ? Icons.visibility : Icons.visibility_off),
@@ -279,11 +282,15 @@ class _BookReaderPageState extends State<BookReaderPage> {
                     ]
                   else
                     SelectableText(widget.book.chapters[_reading.chapter], style: readerText),
-                  const Divider(height: 36),
+                  Divider(height: 36, color: prefs.foreground.withValues(alpha: 0.20)),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       OutlinedButton.icon(
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: prefs.foreground,
+                          side: BorderSide(color: prefs.foreground.withValues(alpha: 0.5)),
+                        ),
                         onPressed: _reading.chapter > 0
                             ? () => _chapter(_reading.chapter - 1) : null,
                         icon: const Icon(Icons.chevron_left),
@@ -291,7 +298,11 @@ class _BookReaderPageState extends State<BookReaderPage> {
                       ),
                       Text('${_reading.chapter + 1} / $_count',
                           style: TextStyle(color: prefs.foreground)),
-                      FilledButton.tonalIcon(
+                      OutlinedButton.icon(
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: prefs.foreground,
+                          side: BorderSide(color: prefs.foreground.withValues(alpha: 0.5)),
+                        ),
                         onPressed: _reading.chapter + 1 < _count
                             ? () => _chapter(_reading.chapter + 1) : null,
                         icon: const Icon(Icons.chevron_right),
