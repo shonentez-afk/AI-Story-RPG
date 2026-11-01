@@ -23,8 +23,8 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Мои прохождения'));
     await tester.pumpAndSettle();
-    expect(find.text('Тайна особняка · 1'), findsOneWidget);
-    await tester.tap(find.text('Тайна особняка · 1'));
+    expect(find.text('Ворота'), findsOneWidget);
+    await tester.tap(find.text('Ворота'));
     await tester.pumpAndSettle();
     expect(find.text('Войти и исследовать дом'), findsOneWidget);
   });

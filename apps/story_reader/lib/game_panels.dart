@@ -48,8 +48,10 @@ class GameInfoSheet extends StatelessWidget {
             ? journalEntries.map((entry) => '• $entry').toList()
             : <String>[];
     return SafeArea(
-      child: FractionallySizedBox(
-        heightFactor: rows.length > 5 ? 0.7 : null,
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.sizeOf(context).height * 0.78,
+        ),
         child: Padding(
           padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
           child: Column(

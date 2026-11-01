@@ -244,10 +244,10 @@ class _StoryReaderPageState extends State<StoryReaderPage> {
       return;
     }
     final event = _engine.currentEvent;
-    final label = _engine.availableChoices
-        .where((choice) => choice.id == id)
-        .map((choice) => choice.presentation?.text.value ?? choice.id.value)
-        .first;
+    final available = _engine.availableChoices
+        .where((choice) => choice.id == id);
+    if (available.isEmpty) return; // Ignore a stale/double tap.
+    final label = available.first.presentation?.text.value ?? id.value;
     setState(() {
       _engine.choose(id);
       final before = _progress;
@@ -350,10 +350,11 @@ class _StoryReaderPageState extends State<StoryReaderPage> {
     final event = _engine.currentEvent;
     showModalBottomSheet<void>(
       context: context,
+      isScrollControlled: true,
       showDragHandle: true,
       builder: (_) => GameInfoSheet(
         panel: panel,
-        currentScene: event?.presentation?.title?.value ?? 'Конец пролога',
+        currentScene: event?.presentation?.title?.value ?? _progress.endingTitle,
         journalEntries: List.unmodifiable(_sessionDecisions),
         progress: _progress,
       ),
@@ -381,7 +382,7 @@ class _StoryReaderPageState extends State<StoryReaderPage> {
         appBar: AppBar(title: const Text('Сохранение не удалось открыть')),
         body: SafeArea(child: Center(child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 520),
-          child: Padding(
+          child: SingleChildScrollView(
             padding: const EdgeInsets.all(24),
             child: Column(mainAxisSize: MainAxisSize.min, children: [
               const Icon(Icons.warning_amber_outlined, size: 48),
@@ -462,14 +463,14 @@ class _StoryReaderPageState extends State<StoryReaderPage> {
                 _reading.horizontalPadding, _reading.horizontalPadding, 100),
               children: [
                 Text(
-                  done ? 'Конец пролога' :
+                  done ? _progress.endingTitle :
                       (event?.presentation?.title?.value ?? 'История'),
                   style: TextStyle(color: _reading.foreground,
                     fontSize: _reading.fontSize + 7, fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(height: 20),
                 Text(
-                  done ? 'Попробуйте другое решение.' :
+                  done ? _progress.endingDescription :
                       (event?.presentation?.body?.value ?? ''),
                   style: TextStyle(color: _reading.foreground,
                     fontSize: _reading.fontSize, height: _reading.lineHeight),
@@ -492,24 +493,47 @@ class _StoryReaderPageState extends State<StoryReaderPage> {
                     foreground: _reading.foreground,
                     onPressed: () => _choose(choice.id),
                   ),
-                if (done)
-                  FilledButton(
-                    onPressed: _restart,
-                    child: const Text('Начать заново'),
+                if (done) ...[
+                  Text('Ваш результат сохранён. '
+                      'Другие прохождения доступны из главного меню.',
+                    style: TextStyle(color: _reading.foreground,
+                      fontSize: _reading.fontSize * 0.85)),
+                  const SizedBox(height: 12),
+                  Wrap(
+                    spacing: 12,
+                    runSpacing: 8,
+                    children: [
+                      FilledButton(
+                        onPressed: _restart,
+                        child: const Text('Новая история'),
+                      ),
+                      OutlinedButton(
+                        style: OutlinedButton.styleFrom(
+                            foregroundColor: _reading.foreground),
+                        onPressed: () => Navigator.of(context).maybePop(),
+                        child: const Text('В главное меню'),
+                      ),
+                    ],
                   ),
+                ],
                 const Divider(height: 36),
                 Wrap(
                   spacing: 8,
                   children: [
                     OutlinedButton.icon(
+                      style: OutlinedButton.styleFrom(
+                          foregroundColor: _reading.foreground),
                       onPressed: _saveBusy || _restoreBusy ? null : _save,
                       icon: const Icon(Icons.save_outlined),
                       label: const Text('Сохранить'),
                     ),
                     OutlinedButton.icon(
-                      onPressed: _hasSave && !_saveBusy && !_restoreBusy ? _restore : null,
+                      style: OutlinedButton.styleFrom(
+                          foregroundColor: _reading.foreground),
+                      onPressed: _hasSave && !_saveBusy && !_restoreBusy
+                          ? _restore : null,
                       icon: const Icon(Icons.restore),
-                      label: const Text('Загрузить'),
+                      label: const Text('Восстановить'),
                     ),
                   ],
                 ),
@@ -551,6 +575,18 @@ class _PilotChoiceButton extends StatelessWidget {
             SizedBox(
               width: double.infinity,
               child: FilledButton.tonal(
+                style: FilledButton.styleFrom(
+                  foregroundColor: foreground,
+                  backgroundColor: foreground.withValues(alpha: 0.10),
+                  disabledForegroundColor: foreground.withValues(alpha: 0.72),
+                  disabledBackgroundColor: foreground.withValues(alpha: 0.06),
+                  side: BorderSide(
+                    color: foreground.withValues(alpha: 0.30),
+                  ),
+                  minimumSize: const Size.fromHeight(52),
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 16, vertical: 14),
+                ),
                 onPressed: disabledReason == null ? onPressed : null,
                 child: Align(
                   alignment: Alignment.centerLeft,

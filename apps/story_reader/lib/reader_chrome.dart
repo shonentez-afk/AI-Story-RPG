@@ -63,12 +63,16 @@ class ReaderChromeButton extends StatelessWidget {
   }
 
   @override
-  Widget build(BuildContext context) => Tooltip(
+  Widget build(BuildContext context) => Semantics(
+    hint: 'Нажмите для переключения. Удерживайте или нажмите '
+        'правой кнопкой мыши для выбора трёх режимов чтения.',
+    child: Tooltip(
     message: mode == ReaderChromeMode.normal
         ? 'Скрыть управление' : 'Показать управление',
     triggerMode: TooltipTriggerMode.manual,
     child: GestureDetector(
       onLongPress: () => _showModes(context),
+      onSecondaryTap: () => _showModes(context),
       child: FloatingActionButton(
         heroTag: null,
         backgroundColor: background,
@@ -78,5 +82,6 @@ class ReaderChromeButton extends StatelessWidget {
             ? Icons.visibility_off : Icons.visibility),
       ),
     ),
+  ),
   );
 }

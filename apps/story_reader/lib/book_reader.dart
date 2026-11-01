@@ -226,6 +226,13 @@ class _BookReaderPageState extends State<BookReaderPage> {
                 .where((text) => text.trim().isNotEmpty)
                 .map((text) => BookBlock(kind: BookBlockKind.paragraph, text: text))
                 .toList();
+    // First FB2 heading is already rendered above the chapter content.
+    // Preserve all nested/remaining headings in original order.
+    final visibleBlocks = blocks.isNotEmpty &&
+            blocks.first.kind == BookBlockKind.heading &&
+            blocks.first.text.trim() == _chapterLabel(_reading.chapter)
+        ? blocks.skip(1).toList()
+        : blocks;
 
     return Scaffold(
       backgroundColor: prefs.background,
@@ -310,9 +317,9 @@ class _BookReaderPageState extends State<BookReaderPage> {
                 SliverPadding(
                   padding: EdgeInsets.symmetric(horizontal: prefs.horizontalPadding),
                   sliver: SliverList.builder(
-                    itemCount: blocks.length,
+                    itemCount: visibleBlocks.length,
                     itemBuilder: (context, index) => _blockWidget(
-                      blocks[index], readerText),
+                      visibleBlocks[index], readerText),
                   ),
                 ),
                 SliverPadding(
@@ -336,7 +343,8 @@ class _BookReaderPageState extends State<BookReaderPage> {
                               icon: const Icon(Icons.chevron_left),
                               label: const Text('Назад'),
                             ),
-                            Text('${_reading.chapter + 1} / $_count',
+                            Text(_count == 0 ? 'Нет глав' :
+                                  '${_reading.chapter + 1} / $_count',
                               style: TextStyle(color: prefs.foreground)),
                             OutlinedButton.icon(
                               style: OutlinedButton.styleFrom(

@@ -207,3 +207,10 @@
 - Корень второго бага: после перехода к scoped queue `write()` вызывал `await SharedPreferences.getInstance()` **до** помещения операции в очередь; `all()` мог захватить ещё пустую очередь.
 - Исправление: очередь теперь привязана к `SharedPreferencesStorePlatform.instance`, доступному синхронно, а `write/delete` ставятся в неё до получения асинхронного `SharedPreferences.getInstance`. `read/all/markActive` захватывают барьер до await. `setMockInitialValues` меняет backend, сохраняя тестовую изоляцию.
 - Явная зависимость `shared_preferences_platform_interface: ^2.4.2` (BSD-3-Clause) добавлена в pubspec; требуется повторный CI и APK/Windows сборки.
+
+## UI/UX audit M1.6.6 (2026-11-02) — пакет исправлений
+- Проведён сквозной статический аудит всех работающих экранов Flutter по коду/UX-контрактам и последнему зелёному baseline `d5f7056`. **Отчёт:** `docs/UI_UX_AUDIT_2026-11-02_RU.md`.
+- Исправлены состояния загрузки и пустые каталоги, доступ к сохранениям из настроек, узкое меню действий, идентификация прохождения по сцене, scrollable подтверждения, корректный показ финалов, кнопки RPG для sepia/dark/OLED, scroll ограничение журнала, первый FB2-heading и видимость режима чтения с мыши.
+- Дополнительное поле `GameProgress.endingId` необязательно, старая форма JSON не отвергается; все маршруты и существующие ID/книги/сейвы остаются без миграции.
+- Добавлен `apps/story_reader/test/ui_ux_audit_test.dart` с проверками accessibility-layout 320 dp/2x, финалов и JSON, сохранений, библиотек, настроек, OLED и FB2. Обновлён тест списка прохождений под обозначения сцен.
+- **QA после публикации нового HEAD:** PASS/FAIL/SKIP по полному GitHub Actions, включая Android и Windows. Ручные device screenshots / TalkBack / Windows keyboard остаются SKIP и перечислены в аудите.

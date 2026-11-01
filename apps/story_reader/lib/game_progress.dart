@@ -1,9 +1,47 @@
 /// M1.6 pilot game state. Recorded by stable choice IDs, not by UI labels.
 class GameProgress {
-  const GameProgress({this.courage = 0, this.insight = 0, this.items = const []});
+  const GameProgress({
+    this.courage = 0,
+    this.insight = 0,
+    this.items = const [],
+    this.endingId,
+  });
   final int courage;
   final int insight;
   final List<String> items;
+
+  /// Stable terminal choice ID. Optional for legacy saves created before
+  /// M1.6 UX polish; keeping it separate avoids parsing localized journals.
+  final String? endingId;
+
+  static const endingTitles = <String, String>{
+    'leave': 'Вы вернулись домой',
+    'finish': 'История остановлена',
+    'retreat': 'Подвал остался заперт',
+    'escape_tower': 'Побег из башни',
+    'preserve_story': 'Тайна сохранена',
+    'reveal_story': 'Правда раскрыта',
+  };
+
+  static const endingDescriptions = <String, String>{
+    'leave': 'Вы решили не входить в особняк. '
+        'Возможно, однажды вы вернётесь к этим воротам.',
+    'finish': 'Вы оставили исследование библиотеки. '
+        'В стенах особняка ещё немало неразгаданных загадок.',
+    'retreat': 'За дверью подвала всё ещё слышен голос, '
+        'но вы выбрали безопасность и закрыли замок.',
+    'escape_tower': 'Вы выбрались через балкон, '
+        'оставив загадочную тень в башне.',
+    'preserve_story': 'Вы сохранили найденные истории путешественников '
+        'в тайне и оставили особняк его хранителям.',
+    'reveal_story': 'Старое письмо помогло вам рассказать миру '
+        'о необычном архиве особняка.',
+  };
+
+  String get endingTitle => endingTitles[endingId] ?? 'История завершена';
+  String get endingDescription => endingDescriptions[endingId]
+      ?? 'Прохождение завершено. Вы можете начать новую историю '
+          'и проверить другие решения.';
 
   static const itemNames = <String, String>{
     'letter': 'Старое письмо',
@@ -68,11 +106,18 @@ class GameProgress {
         nextCourage++;
     }
     return GameProgress(
-      courage: nextCourage, insight: nextInsight, items: nextItems);
+      courage: nextCourage,
+      insight: nextInsight,
+      items: nextItems,
+      endingId: endingTitles.containsKey(choiceId) ? choiceId : endingId,
+    );
   }
 
   Map<String, dynamic> toJson() => {
-    'courage': courage, 'insight': insight, 'items': items,
+    'courage': courage,
+    'insight': insight,
+    'items': items,
+    if (endingId != null) 'endingId': endingId,
   };
 
   factory GameProgress.fromJson(Map<String, dynamic> json) {
@@ -81,10 +126,16 @@ class GameProgress {
         rawItems is! List || rawItems.any((value) => value is! String)) {
       throw const FormatException('Invalid RPG progress');
     }
+    final ending = json['endingId'];
+    if (ending != null &&
+        (ending is! String || !endingTitles.containsKey(ending))) {
+      throw const FormatException('Unknown RPG ending');
+    }
     return GameProgress(
       courage: (json['courage'] as int).clamp(0, 1000000),
       insight: (json['insight'] as int).clamp(0, 1000000),
       items: rawItems.cast<String>().where(itemNames.containsKey).toSet().toList(),
+      endingId: ending as String?,
     );
   }
 }

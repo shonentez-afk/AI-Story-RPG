@@ -18,6 +18,8 @@ class HomePage extends StatefulWidget {
 
 class _HomePageState extends State<HomePage> {
   bool _hasSave = false;
+  bool _saveLoading = true;
+  bool _opening = false;
   String? _recentCampaignId;
   int _campaignCount = 0;
   List<StoredBook> _books = [];
@@ -42,6 +44,8 @@ class _HomePageState extends State<HomePage> {
       });
     } catch (_) {
       // Keep the last known save indicator; do not hide it because a read failed.
+    } finally {
+      if (mounted) setState(() => _saveLoading = false);
     }
     try {
       final books = await BookStorage().all();
@@ -52,10 +56,16 @@ class _HomePageState extends State<HomePage> {
   }
 
   Future<void> _open(Widget page) async {
-    await Navigator.of(context).push(
-      MaterialPageRoute<void>(builder: (_) => page),
-    );
-    if (mounted) await _refresh();
+    if (_opening) return;
+    setState(() => _opening = true);
+    try {
+      await Navigator.of(context).push(
+        MaterialPageRoute<void>(builder: (_) => page),
+      );
+      if (mounted) await _refresh();
+    } finally {
+      if (mounted) setState(() => _opening = false);
+    }
   }
 
   @override
@@ -90,7 +100,8 @@ class _HomePageState extends State<HomePage> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(_hasSave ? 'СЕЙЧАС В ИСТОРИИ' : 'НАЧНИ СВОЮ ИСТОРИЮ',
+                        Text(_saveLoading ? 'ПРОВЕРКА СОХРАНЕНИЙ' :
+                            (_hasSave ? 'СЕЙЧАС В ИСТОРИИ' : 'НАЧНИ СВОЮ ИСТОРИЮ'),
                             style: text.labelLarge?.copyWith(color: scheme.primary)),
                         const SizedBox(height: 14),
                         Row(
@@ -111,9 +122,11 @@ class _HomePageState extends State<HomePage> {
                                 children: [
                                   Text('Тайна особняка', style: text.titleLarge),
                                   const SizedBox(height: 6),
-                                  Text(_hasSave
-                                      ? 'Продолжить сохранённую игровую историю'
-                                      : 'Демонстрационная история • офлайн',
+                                  Text(_saveLoading
+                                      ? 'Проверяем сохранённые прохождения'
+                                      : _hasSave
+                                          ? 'Продолжить сохранённую игровую историю'
+                                          : 'Демонстрационная история • офлайн',
                                       style: text.bodyMedium),
                                 ],
                               ),
@@ -124,12 +137,13 @@ class _HomePageState extends State<HomePage> {
                         SizedBox(
                           width: double.infinity,
                           child: FilledButton.icon(
-                            onPressed: () => _open(StoryReaderPage(
+                            onPressed: _saveLoading ? null : () => _open(StoryReaderPage(
                               resume: _hasSave,
                               campaignId: _hasSave ? _recentCampaignId : null,
                             )),
                             icon: Icon(_hasSave ? Icons.play_arrow : Icons.auto_stories),
-                            label: Text(_hasSave ? 'Продолжить' : 'Начать историю'),
+                            label: Text(_saveLoading ? 'Загрузка…' :
+                                (_hasSave ? 'Продолжить' : 'Начать историю')),
                           ),
                         ),
                       ],
@@ -282,6 +296,7 @@ class _LibraryPageState extends State<LibraryPage> {
   final TextEditingController _searchController = TextEditingController();
   List<StoredBook> _books = [];
   bool _working = false;
+  bool _loadingBooks = true;
   String _query = '';
   bool _sortDescending = false;
 
@@ -303,6 +318,8 @@ class _LibraryPageState extends State<LibraryPage> {
       if (mounted) setState(() => _books = books);
     } catch (error) {
       _error('Ошибка библиотеки: $error');
+    } finally {
+      if (mounted) setState(() => _loadingBooks = false);
     }
   }
 
@@ -323,6 +340,9 @@ class _LibraryPageState extends State<LibraryPage> {
       );
       if (selection == null || selection.files.isEmpty) return;
       final file = selection.files.single;
+      if (file.size > 20 * 1024 * 1024) {
+        throw const FormatException('Книга слишком большая. Максимум — 20 МБ.');
+      }
       final bytes = file.bytes;
       if (bytes == null) throw const FormatException('Не удалось прочитать файл');
       final book = BookImporter.parse(file.name, bytes);
@@ -345,6 +365,7 @@ class _LibraryPageState extends State<LibraryPage> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
+        scrollable: true,
         title: const Text('Удалить книгу?'),
         content: Text('«${entry.book.title}» будет удалена из библиотеки вместе с локальной копией. Это действие нельзя отменить.'),
         actions: [
@@ -408,7 +429,7 @@ class _LibraryPageState extends State<LibraryPage> {
                 Card(child: ListTile(
                   leading: const Icon(Icons.menu_book_outlined),
                   title: const Text('Тайна особняка'),
-                  subtitle: const Text('Демонстрационная RPG • офлайн'),
+                  subtitle: const Text('Демо RPG • начать новое прохождение'),
                   trailing: const Icon(Icons.chevron_right),
                   onTap: () => Navigator.of(context).push(
                     MaterialPageRoute<void>(
@@ -446,11 +467,29 @@ class _LibraryPageState extends State<LibraryPage> {
                     label: Text(_sortDescending ? 'Я—А' : 'А—Я'),
                   ),
                 ]),
-                if (_working) const LinearProgressIndicator(),
-                if (_books.isEmpty)
+                if (_working || _loadingBooks)
+                  const LinearProgressIndicator(),
+                if (_loadingBooks)
                   const Padding(
                     padding: EdgeInsets.all(16),
-                    child: Text('Здесь появятся ваши книги. Нажмите значок книги с плюсом вверху, чтобы добавить TXT или FB2.'),
+                    child: Text('Открываем библиотеку…'),
+                  )
+                else if (_books.isEmpty)
+                  Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text('Книг пока нет. Добавьте TXT или FB2 — '
+                            'они появятся здесь для обычного чтения.'),
+                        const SizedBox(height: 12),
+                        FilledButton.icon(
+                          onPressed: _working ? null : _import,
+                          icon: const Icon(Icons.library_add_outlined),
+                          label: const Text('Добавить книгу'),
+                        ),
+                      ],
+                    ),
                   )
                 else if (filtered.isEmpty)
                   const Padding(
@@ -581,15 +620,21 @@ class _SettingsPageState extends State<SettingsPage> {
                   title: Text('Режим игры'),
                   subtitle: Text('Классический офлайн • без ИИ'),
                 ),
-                const ListTile(
-                  leading: Icon(Icons.save_outlined),
-                  title: Text('Сохранения'),
-                  subtitle: Text('Игра и позиции книг хранятся отдельно'),
+                ListTile(
+                  leading: const Icon(Icons.save_outlined),
+                  title: const Text('Мои прохождения'),
+                  subtitle: const Text('Сохранения RPG, импорт и экспорт .bwsave'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => const CampaignsPage(),
+                    ),
+                  ),
                 ),
                 const ListTile(
                   leading: Icon(Icons.info_outline),
                   title: Text('Версия'),
-                  subtitle: Text('M1.5 UI — Моя история'),
+                  subtitle: Text('0.1.0 · M1.6 · тестовая версия'),
                 ),
               ],
             ),

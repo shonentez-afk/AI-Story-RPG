@@ -66,3 +66,11 @@
 
 ## Critical follow-up: test fence ordering, CI run 41330543268
 Run `41330543268`: Python PASS, Dart PASS, Flutter analyze PASS, основные widget-тесты UI и `.bwsave` PASS, но один `campaign_store_test` FAIL (read-before-write-registration), всего 62/63 PASS. Финальный hotfix использует `SharedPreferencesStorePlatform.instance` как синхронный ключ очереди, `Expando<_CampaignQueue>` и раннюю регистрацию `write/delete`, плюс `shared_preferences_platform_interface: ^2.4.2`. Не объявлять этап зелёным до подтверждения нового HEAD в Actions. `START_NEW_CHAT_RU.md` обязательно обновлять после будущих CI исправлений.
+
+## 2026-11-02 — СТАБИЛИЗАЦИЯ UI/UX M1.6.6 (после запроса «полный аудит, исправь, потом продолжим»)
+1. В первую очередь прочитать `docs/UI_UX_AUDIT_2026-11-02_RU.md` и фактический SHA HEAD `main`. Это **кодовый аудит всех экранов**, а не визуальные замеры на реальном телефоне/Windows.
+2. Исправлены: ложная кнопка новой игры до проверки сохранений, пустой импорт книг/кампаний, стабильные названия сцен и компактное menu на 320dp, переход в прохождения из настроек и версия M1.6, scrollable dialogs, шесть разных финалов по стабильному ending choice ID, custom reading palette RPG, экран ошибок, ограничение большого журнала и дублирование первого FB2-heading. Общий ReaderChromeButton получил accessibility hint/secondary mouse click, прежний контракт normal/reading/fullscreen сохранён.
+3. Новый `GameProgress.endingId` **необязательный** в сериализации (старые JSON без поля продолжают работать); bookId, campaign IDs, engine snapshot, формат пилотного `.bwsave` не менялись. `_choose` игнорирует stale/double taps.
+4. Тест: `apps/story_reader/test/ui_ux_audit_test.dart`, существующий `campaigns_page_test.dart` обновлён под заголовок сцены. Обязательно проверить `flutter analyze/test`, Dart/Python и **реальные** Windows+Android workflow statuses, SHA последнего коммита. До успешной проверки не утверждать, что UI hotfix прошёл QA.
+5. В `docs/UI_UX_AUDIT_2026-11-02_RU.md` перечислены неизменённые ограничения: pixel offset reader, SQLite/Drift, TalkBack, Windows keyboard/real devices, EPUB, производительность FB2, и отсутствие полноценной BookWorld AI RPG.
+6. Пользователь хочет сначала закончить UI/UX и **только потом** продолжать M1.7. Не начинай M1.7 до принятия UI checkpoint.
