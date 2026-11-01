@@ -123,6 +123,12 @@ jobs:
           dart pub get
           dart analyze
           dart test --reporter expanded
+      - name: Analyze and test transactional SQLite BookWorld campaigns
+        working-directory: packages/campaign_manager
+        run: |
+          dart pub get
+          dart analyze
+          dart test --reporter expanded
       - name: Upload test BookWorld artifact
         uses: actions/upload-artifact@v4
         with:

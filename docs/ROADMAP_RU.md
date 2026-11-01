@@ -82,3 +82,6 @@
 
 ## M1.7.3 — принята контрольная точка (2026-11-02)
 Код `7c3923492118a7aef9c9ecda3e0c319a2961499f`, Actions `41338634157` #143 `completed/success` (Python ZIP/SQLite 12, manifest+blueprint schema 9, core 10, adapter 9, BookWorld Dart 5, Flutter widget 71, Android и Windows PASS). Demo `.bworld` опубликован как artifact того же запуска. Далее M1.7.4 — подключить приватное SQLite/Drift хранилище, миграцию, UI-import и фактические E2E на обоих устройствах, без второй библиотеки.
+
+## M1.7.4a — новый durable SQLite-слой без миграции legacy
+Изолированная `packages/campaign_manager`: SHA-verified BookWorld catalog, SQLite WAL+FULL, атомарный journal+head, replay core+engine, portable `ai_story_bwsave_v2`, девять regression/security тестов. Документ `docs/M17_CAMPAIGN_SQLITE_RU.md`. **Следом M1.7.4b:** привязать к приложению через приватный путь, UI import/play/save, фоновый isolate, бэкап и legacy migration policy; потом Android+Windows E2E. Не путать наличие пакета с работающим пользовательским импортом.

@@ -52,3 +52,6 @@
 - `packages/bookworld_format` использует `sqlite3 ^3.8.0` (Dart FFI, MIT; native hooks bundling SQLite для Android/Windows/Linux), `crypto ^3.0.6` (BSD-3-Clause) и собственный `story_core`. В этом пакете нет `archive`: проверка небольшого, ограниченного ZIP_STORED поднабора реализована своим Dart-кодом для отказа от двусмысленных/опасных ZIP особенностей.
 - Отдельный Python-компилятор использует только стандартные `sqlite3`, `zipfile`, `hashlib`, `json`, `pathlib`; Python не входит в Flutter runtime. Для тестирования JSON Schema в CI есть прежняя dev-only зависимость `jsonschema==4.23.0` (MIT).
 - Содержание demo оригинальное и создано для проекта, в `.bworld` нет исходного текста чужих книг или каких-либо приватных ключей/моделей/LLM-вызовов.
+
+## M1.7.4a — новый store
+Чистый Dart `packages/campaign_manager` опирается на уже применённые в `bookworld_format` `sqlite3 ^3.8.0` (MIT, FFI), `crypto ^3.0.6` (BSD-3-Clause), собственные `story_core`, `story_runtime_adapter`, `bookworld_format`; `test` используется только в dev. Новых Python runtime и платных/облачных зависимостей нет. SQLite база создаётся только по privateDir path, предоставленному будущим приложением.

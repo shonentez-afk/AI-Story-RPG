@@ -1,0 +1,20 @@
+name: campaign_manager
+description: Transactional offline SQLite BookWorld campaigns and portable v2 saves
+publish_to: none
+version: 0.1.0
+
+environment:
+  sdk: '>=3.11.0 <4.0.0'
+
+dependencies:
+  bookworld_format:
+    path: ../bookworld_format
+  story_core:
+    path: ../story_core
+  story_runtime_adapter:
+    path: ../story_runtime_adapter
+  sqlite3: ^3.8.0
+  crypto: ^3.0.6
+
+dev_dependencies:
+  test: ^1.25.15
