@@ -6,6 +6,7 @@ import 'app_theme.dart';
 import 'reading_preferences.dart';
 import 'game_panels.dart';
 import 'reading_settings_sheet.dart';
+import 'reader_chrome.dart';
 
 void main() {
   runApp(const AIStoryApp());
@@ -117,7 +118,7 @@ class _StoryReaderPageState extends State<StoryReaderPage> {
   final SaveStore _saves = SaveStore();
   bool _hasSave = false;
   ReadingPreferences _reading = const ReadingPreferences();
-  bool _immersive = false;
+  ReaderChromeMode _chrome = ReaderChromeMode.normal;
   final ReadingSettingsStore _readingSettingsStore = ReadingSettingsStore();
 
   @override
@@ -224,7 +225,7 @@ class _StoryReaderPageState extends State<StoryReaderPage> {
     final done = _engine.status == StoryEngineStatus.terminated;
     return Scaffold(
       backgroundColor: _reading.background,
-      appBar: _immersive ? null : AppBar(
+      appBar: !_chrome.showTopBar ? null : AppBar(
         backgroundColor: _reading.background,
         foregroundColor: _reading.foreground,
         title: const Text('Живая книга'),
@@ -236,14 +237,13 @@ class _StoryReaderPageState extends State<StoryReaderPage> {
           ),
         ],
       ),
-      floatingActionButton: FloatingActionButton.small(
-        backgroundColor: _reading.foreground,
-        foregroundColor: _reading.background,
-        tooltip: _immersive ? 'Показать управление' : 'Скрыть управление',
-        onPressed: () => setState(() => _immersive = !_immersive),
-        child: Icon(_immersive ? Icons.visibility : Icons.visibility_off),
+      floatingActionButton: ReaderChromeButton(
+        mode: _chrome,
+        background: _reading.foreground,
+        foreground: _reading.background,
+        onChange: (mode) => setState(() => _chrome = mode),
       ),
-      bottomNavigationBar: ColoredBox(
+      bottomNavigationBar: !_chrome.showGameBar ? null : ColoredBox(
         color: _reading.background,
         child: Theme(
           data: Theme.of(context).copyWith(
