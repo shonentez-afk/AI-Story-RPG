@@ -1,0 +1,134 @@
+name: AI Story RPG CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ai-story-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  reference-tests:
+    name: Python reference tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Compile pilot scenario
+        run: python3 pilot/compile_pilot.py
+        working-directory: experiments/m0_engine_comparison
+      - name: Reference regression tests
+        run: python3 -m unittest discover -s tests -v
+        working-directory: experiments/m0_engine_comparison
+
+  dart-sdk:
+    name: Dart engine and scenario tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dart-lang/setup-dart@v1
+        with:
+          sdk: stable
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Verify Dart scenario contract
+        run: |
+          dart pub get
+          dart analyze
+          dart run bin/probe.dart ../pilot/scenario.json
+          (cd ../pilot && python3 export_contract.py)
+          dart run bin/verify_contract.dart ../pilot/scenario.json ../pilot/expected_contract.json
+        working-directory: experiments/m0_engine_comparison/dart_probe
+      - name: Test story_engine
+        run: |
+          dart pub get
+          dart analyze
+          dart run bin/smoke.dart
+          dart run bin/full_scenario.dart ../pilot/scenario.json ../pilot/expected_contract.json
+        working-directory: experiments/m0_engine_comparison/story_engine_smoke
+      - name: Stress-test 1000 scenes
+        run: |
+          python3 pilot/generate_stress.py --count 1000 --output pilot/stress_1000.json
+          (cd story_engine_smoke && dart run bin/stress.dart ../pilot/stress_1000.json)
+        working-directory: experiments/m0_engine_comparison
+      - name: Download Ink compiler 1.2.1
+        run: |
+          curl --fail --location --retry 3 -o /tmp/inklecate_linux.zip https://github.com/inkle/ink/releases/download/v1.2.1/inklecate_linux.zip
+          mkdir -p /tmp/inklecate-dist
+          unzip -q /tmp/inklecate_linux.zip -d /tmp/inklecate-dist
+          find /tmp/inklecate-dist -type f -name 'inklecate*' -exec chmod +x {} \;
+      - name: Test ink_dart
+        run: |
+          INK_BIN="$(find /tmp/inklecate-dist -type f -name 'inklecate*' | head -n 1)"
+          test -n "$INK_BIN"
+          python3 pilot/compile_pilot.py
+          "$INK_BIN" -o pilot/manor_mystery.ink.json pilot/manor_mystery.ink
+          cd ink_dart_smoke
+          dart pub get
+          dart analyze
+          dart run bin/smoke.dart ../pilot/manor_mystery.ink.json
+          dart run bin/full_scenario.dart ../pilot/manor_mystery.ink.json ../pilot/scenario.json ../pilot/expected_contract.json
+        working-directory: experiments/m0_engine_comparison
+
+  flutter-reader:
+    name: Flutter analyze and widget tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: Resolve dependencies
+        run: flutter pub get
+        working-directory: apps/story_reader
+      - name: Static analysis
+        run: flutter analyze
+        working-directory: apps/story_reader
+      - name: Widget tests
+        run: flutter test
+        working-directory: apps/story_reader
+
+  android-apk:
+    name: Android APK (debug)
+    runs-on: ubuntu-latest
+    needs: [reference-tests, dart-sdk, flutter-reader]
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: Generate Android host and build APK
+        run: |
+          flutter create --platforms=android --project-name ai_story_reader --org com.aistoryrpg .
+          flutter pub get
+          flutter build apk --debug
+          test -s build/app/outputs/flutter-apk/app-debug.apk
+          mkdir -p ../../artifacts/android
+          cp build/app/outputs/flutter-apk/app-debug.apk ../../artifacts/android/AI-Story-RPG-M1-debug.apk
+          cd ../../artifacts/android
+          sha256sum AI-Story-RPG-M1-debug.apk > SHA256SUMS.txt
+        working-directory: apps/story_reader
+      - name: Upload Android APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: AI-Story-RPG-Android-debug
+          path: artifacts/android/
+          if-no-files-found: error
+          retention-days: 14
