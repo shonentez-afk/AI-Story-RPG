@@ -166,10 +166,10 @@ class _LibraryPageState extends State<LibraryPage> {
         appBar: AppBar(
           title: const Text('Библиотека'),
           actions: [
-            IconButton(
-              tooltip: 'Импорт TXT или FB2',
+            TextButton.icon(
               onPressed: _working ? null : _import,
-              icon: const Icon(Icons.file_upload_outlined),
+              icon: const Icon(Icons.library_add_outlined),
+              label: const Text('Добавить книгу'),
             ),
           ],
         ),
@@ -216,7 +216,7 @@ class _LibraryPageState extends State<LibraryPage> {
               ),
             const Padding(
               padding: EdgeInsets.all(12),
-              child: Text('Нажмите значок импорта вверху, чтобы добавить TXT или FB2. '
+              child: Text('Нажмите «Добавить книгу» вверху, чтобы выбрать TXT или FB2. '
                   'Это пока режим чтения, а не автоматическое создание RPG.'),
             ),
           ],
