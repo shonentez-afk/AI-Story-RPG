@@ -191,7 +191,7 @@ class BookImporter {
     return ImportedBook(
       title: title?.isNotEmpty == true
           ? title!
-          : filename.replaceFirst(RegExp(r'\.[^.]+), ''),
+          : filename.replaceFirst(RegExp(r'\.[^.]+$'), ''),
       author: authors,
       chapters: chapters,
       structuredChapters: structured,
