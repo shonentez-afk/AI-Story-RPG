@@ -74,26 +74,38 @@ class GameQuickBar extends StatelessWidget {
   Widget build(BuildContext context) => SafeArea(
         top: false,
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 3),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
             children: [
-              TextButton.icon(
-                onPressed: () => onOpen(GamePanel.character),
-                icon: const Icon(Icons.person_outline),
-                label: const Text('Герой'),
-              ),
-              TextButton.icon(
-                onPressed: () => onOpen(GamePanel.inventory),
-                icon: const Icon(Icons.backpack_outlined),
-                label: const Text('Предметы'),
-              ),
-              TextButton.icon(
-                onPressed: () => onOpen(GamePanel.journal),
-                icon: const Icon(Icons.menu_book_outlined),
-                label: const Text('Журнал'),
-              ),
+              _item(context, Icons.person_outline, 'Герой', GamePanel.character),
+              _item(context, Icons.backpack_outlined, 'Предметы', GamePanel.inventory),
+              _item(context, Icons.menu_book_outlined, 'Журнал', GamePanel.journal),
             ],
+          ),
+        ),
+      );
+
+  Widget _item(BuildContext context, IconData icon, String name, GamePanel panel) =>
+      Semantics(
+        button: true,
+        label: name,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(12),
+          onTap: () => onOpen(panel),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(minWidth: 72, minHeight: 48),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(icon, size: 21),
+                  const SizedBox(height: 2),
+                  Text(name, style: Theme.of(context).textTheme.labelSmall),
+                ],
+              ),
+            ),
           ),
         ),
       );
