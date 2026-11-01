@@ -99,6 +99,8 @@ jobs:
         working-directory: apps/story_reader
 
   android-apk:
+    permissions:
+      contents: write
     name: Android APK (debug)
     runs-on: ubuntu-latest
     needs: [reference-tests, dart-sdk, flutter-reader]
@@ -143,3 +145,12 @@ jobs:
           path: artifacts/android/
           if-no-files-found: error
           retention-days: 14
+      - name: Publish direct-install APK to GitHub Releases
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG="android-build-${GITHUB_RUN_NUMBER}"
+          gh release create "$TAG"             artifacts/android/AI-Story-RPG-M1-debug.apk             artifacts/android/SHA256SUMS.txt             --target "$GITHUB_SHA"             --title "Android test build #${GITHUB_RUN_NUMBER}"             --notes "Тестовая сборка Android (debug). APK можно скачивать и устанавливать напрямую с телефона. Commit: ${GITHUB_SHA}. Не предназначена для Google Play."             --prerelease
