@@ -82,6 +82,7 @@ jobs:
   flutter-reader:
     name: Flutter analyze and widget tests
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2
@@ -95,7 +96,7 @@ jobs:
         run: flutter analyze
         working-directory: apps/story_reader
       - name: Widget tests
-        run: flutter test
+        run: flutter test --reporter expanded --concurrency=1 --timeout 90s
         working-directory: apps/story_reader
 
   android-apk:
@@ -174,3 +175,47 @@ jobs:
                 ;;
             esac
           done
+
+  windows-exe:
+    name: Windows portable bundle (release)
+    runs-on: windows-latest
+    needs: [reference-tests, dart-sdk, flutter-reader]
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: Generate Windows host and build
+        shell: pwsh
+        working-directory: apps/story_reader
+        run: |
+          $ErrorActionPreference = 'Stop'
+          flutter config --enable-windows-desktop
+          flutter create --platforms=windows --project-name ai_story_reader --org com.aistoryrpg .
+          if ($LASTEXITCODE -ne 0) { throw 'flutter create failed' }
+          flutter pub get
+          if ($LASTEXITCODE -ne 0) { throw 'flutter pub get failed' }
+          flutter build windows --release
+          if ($LASTEXITCODE -ne 0) { throw 'Windows build failed' }
+          $source = 'build/windows/x64/runner/Release'
+          $target = '../../artifacts/windows/AI-Story-RPG-Windows'
+          if (-not (Test-Path "$source/ai_story_reader.exe")) {
+            throw 'Missing Windows EXE'
+          }
+          if (-not (Test-Path "$source/data")) {
+            throw 'Missing Flutter assets directory'
+          }
+          New-Item -ItemType Directory -Force -Path $target | Out-Null
+          Copy-Item -Path "$source/*" -Destination $target -Recurse -Force
+          $exe = Join-Path $target 'ai_story_reader.exe'
+          $digest = (Get-FileHash -Algorithm SHA256 -Path $exe).Hash.ToLowerInvariant()
+          Set-Content -Path (Join-Path $target 'SHA256SUMS.txt') -Encoding utf8 -Value "$digest *ai_story_reader.exe"
+      - name: Upload complete Windows bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: AI-Story-RPG-Windows-portable
+          path: artifacts/windows/AI-Story-RPG-Windows/
+          if-no-files-found: error
+          retention-days: 14

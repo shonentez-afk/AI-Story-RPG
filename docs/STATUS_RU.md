@@ -181,3 +181,7 @@
 - Убран повторный вызов `_restore()` в initState RPG (раньше при resume вызывался дважды, но второй возвращал из-за `_restoreBusy`).
 - Новые тесты: `pilot_save_codec_test.dart` (roundtrip, стабильная контрольная сумма, подмена/неверная версия, UTF-8/размер, runtime snapshot, legacy rules, изоляция импорта), `campaigns_page_test.dart` (доступность действий). `crypto ^3.0.6` — **новая** зависимость. Граница чтения TXT/FB2 не менялась.
 - Договорённости и ограничения: `docs/BWSAVE_PILOT_FORMAT_RU.md`. **QA**: исходники готовы, но PASS/FAIL по новому GitHub Actions нужно получить отдельно; Windows EXE/ручной перенос ещё SKIP.
+
+## M1.6.7 — Windows Flutter release bundle (workflow added, QA pending)
+- Для критерия M1 Windows добавлено отдельное задание `windows-exe` в `.github/workflows/android-ci.yml`: runner Windows + Flutter stable, генерация `windows/`, `flutter build windows --release`, проверка исполняемого файла и каталога `data`, выгрузка **полного** portable bundle через Actions artifact. Одного `.exe` без DLL/data недостаточно.
+- CI зависим от Python/Dart/Flutter gates. Проверка реальной сборки, работа на Windows, наличие вложенных DLL и поведение `.bwsave` — отдельный PASS/FAIL, не объявлять без фактического job. Installer/подпись .exe пока отсутствуют.

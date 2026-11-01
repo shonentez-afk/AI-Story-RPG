@@ -51,3 +51,6 @@
 - `apps/story_reader/test/pilot_save_codec_test.dart`: roundtrip, шах хеша, неверная версия/книга/UTF-8, невозможность испортить старые кампании, legacy rules. Добавлена зависимость `crypto ^3.0.6`; README, STATUS, ARCHITECTURE, ROADMAP обновлены.
 - **Не выдавать за сделанное:** полноценный engine-neutral `.bwsave`, импорт произвольного BookWorld, структурированный event log, SQLite/Drift, реальные Windows EXE и физический Android ↔ Windows transfer, ИИ и автоматический Book Compiler. Продолжение: M1.7 `story_core`/BookWorld/migration и автоматическая + ручная QA.
 - Сравнить с ТЗ; формат для встроенного пилота помечен как временный (оригинальный opaque `story_engine` snapshot).
+
+## M1.6.7 — Windows CI build
+В `.github/workflows/android-ci.yml` добавлен `windows-exe` (Windows runner, portable release directory + `SHA256SUMS.txt`, Actions artifact `AI-Story-RPG-Windows-portable`). Проверить в новом workflow реальный PASS/FAIL, не путать `flutter analyze` на Linux с Windows сборкой. Запуск Windows и перенос сохранения на реальные устройства ещё не проверены. Дистрибутив включает DLL+data; одиночный `.exe` не является работающей поставкой.
