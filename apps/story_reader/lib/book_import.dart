@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:typed_data';
 import 'package:xml/xml.dart';
+import 'book_model.dart';
 
 class ImportedBook {
   const ImportedBook({
@@ -8,12 +9,16 @@ class ImportedBook {
     required this.author,
     required this.chapters,
     this.cover,
+    this.structuredChapters = const [],
+    this.images = const {},
   });
 
   final String title;
   final String author;
   final List<String> chapters;
   final Uint8List? cover;
+  final List<BookChapter> structuredChapters;
+  final Map<String, BookImage> images;
 
   String get text => chapters.join('\n\n');
 }
@@ -82,57 +87,115 @@ class BookImporter {
           .join(' ');
     }).where((author) => author.isNotEmpty).join(', ');
 
-    Uint8List? cover;
-    final coverPage = first(titleInfo, 'coverpage');
-    final coverRef = first(coverPage, 'image');
-    String? id;
-    if (coverRef != null) {
-      for (final attr in coverRef.attributes) {
-        if (attr.name.local == 'href') {
-          id = attr.value.startsWith('#') ? attr.value.substring(1) : null;
-          break;
+    final resources = <String, BookImage>{};
+    for (final binary in child(root, 'binary')) {
+      final imageId = binary.getAttribute('id');
+      if (imageId == null || imageId.isEmpty) continue;
+      try {
+        final encoded = binary.innerText.replaceAll(RegExp(r'\\s'), '');
+        if (encoded.length > 12 * 1024 * 1024) continue;
+        final decoded = base64.decode(encoded);
+        if (decoded.isEmpty || decoded.length > 8 * 1024 * 1024) continue;
+        final type = _png(decoded) ? 'image/png' : _jpg(decoded) ? 'image/jpeg' : null;
+        if (type != null) {
+          resources[imageId] = BookImage(
+            id: imageId, bytes: Uint8List.fromList(decoded), mediaType: type,
+          );
         }
-      }
-    }
-    if (id != null) {
-      for (final binary in child(root, 'binary')) {
-        if (binary.getAttribute('id') != id) continue;
-        try {
-          final raw = base64.decode(binary.innerText.replaceAll(RegExp(r'\s'), ''));
-          // Bound memory and only render genuine PNG/JPEG image headers.
-          if (raw.isNotEmpty && raw.length <= 8 * 1024 * 1024 &&
-              (_png(raw) || _jpg(raw))) {
-            cover = Uint8List.fromList(raw);
-          }
-        } on FormatException {
-          // Bad embedded image must not prevent reading the book.
-        }
-        break;
+      } on FormatException {
+        // Unreadable images should not discard an otherwise readable book.
       }
     }
 
+    String? imageIdFrom(XmlElement? element) {
+      if (element == null) return null;
+      for (final attr in element.attributes) {
+        if (attr.name.local == 'href' && attr.value.startsWith('#')) {
+          return attr.value.substring(1);
+        }
+      }
+      return null;
+    }
+
+    final coverId = imageIdFrom(first(first(titleInfo, 'coverpage'), 'image'));
+    final cover = resources[coverId]?.bytes;
     final chapters = <String>[];
-    for (final body in child(root, 'body')) {
-      for (final section in child(body, 'section')) {
-        final paragraphs = section
-            .descendants
-            .whereType<XmlElement>()
-            .where((node) => node.name.local == 'p' || node.name.local == 'subtitle')
-            .map((node) => node.innerText.trim())
-            .where((part) => part.isNotEmpty)
-            .toList();
-        if (paragraphs.isNotEmpty) chapters.add(paragraphs.join('\n\n'));
+    final structured = <BookChapter>[];
+
+    // Preserve document order, including nested sections and inline images.
+    void appendNode(XmlElement node, List<BookBlock> blocks) {
+      final name = node.name.local;
+      if (name == 'image') {
+        final ref = imageIdFrom(node);
+        if (ref != null) {
+          blocks.add(BookBlock(kind: BookBlockKind.image, resourceId: ref));
+        }
+        return;
+      }
+      if (name == 'p' || name == 'subtitle' || name == 'v') {
+        // Inline image within a paragraph must keep its original position.
+        final buffer = StringBuffer();
+        void flush() {
+          final value = buffer.toString().trim();
+          if (value.isNotEmpty) {
+            blocks.add(BookBlock(
+              kind: name == 'subtitle' ? BookBlockKind.heading : BookBlockKind.paragraph,
+              text: value,
+            ));
+          }
+          buffer.clear();
+        }
+        for (final part in node.children) {
+          if (part is XmlElement && part.name.local == 'image') {
+            flush();
+            appendNode(part, blocks);
+          } else {
+            buffer.write(part is XmlElement ? part.innerText : part.value);
+          }
+        }
+        flush();
+        return;
+      }
+      for (final element in node.children.whereType<XmlElement>()) {
+        appendNode(element, blocks);
       }
     }
-    if (chapters.isEmpty) {
-      throw const FormatException('Не найден текст глав FB2');
+
+    for (final body in child(root, 'body')) {
+      final sections = child(body, 'section').toList();
+      if (sections.isEmpty) {
+        final blocks = <BookBlock>[];
+        appendNode(body, blocks);
+        if (blocks.isNotEmpty) {
+          structured.add(BookChapter(id: 'chapter_${structured.length}', blocks: blocks));
+        }
+      } else {
+        for (final section in sections) {
+          final blocks = <BookBlock>[];
+          appendNode(section, blocks);
+          if (blocks.isNotEmpty) {
+            structured.add(BookChapter(id: 'chapter_${structured.length}', blocks: blocks));
+          }
+        }
+      }
+    }
+    for (final chapter in structured) {
+      chapters.add(chapter.blocks
+          .where((block) => block.kind != BookBlockKind.image)
+          .map((block) => block.text)
+          .join('\\n\\n'));
+    }
+    if (structured.isEmpty) {
+      throw const FormatException('Не найдены главы FB2');
     }
     return ImportedBook(
       title: title?.isNotEmpty == true
           ? title!
-          : filename.replaceFirst(RegExp(r'\.[^.]+$'), ''),
+          : filename.replaceFirst(RegExp(r'\\.[^.]+$'), ''),
       author: authors,
       chapters: chapters,
+      structuredChapters: structured,
+      images: resources,
       cover: cover,
     );
   }
