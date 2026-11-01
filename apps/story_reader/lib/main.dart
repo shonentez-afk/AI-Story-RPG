@@ -5,6 +5,7 @@ import 'home_page.dart';
 import 'app_theme.dart';
 import 'reading_preferences.dart';
 import 'game_panels.dart';
+import 'reading_settings_sheet.dart';
 
 void main() {
   runApp(const AIStoryApp());
@@ -116,6 +117,8 @@ class _StoryReaderPageState extends State<StoryReaderPage> {
   final SaveStore _saves = SaveStore();
   bool _hasSave = false;
   ReadingPreferences _reading = const ReadingPreferences();
+  bool _immersive = false;
+  final ReadingSettingsStore _readingSettingsStore = ReadingSettingsStore();
 
   @override
   void initState() {
@@ -127,7 +130,7 @@ class _StoryReaderPageState extends State<StoryReaderPage> {
     }
     _engine = StoryEngine(project: _project)..start();
     _checkSave();
-    ReadingSettingsStore().load().then((value) {
+    _readingSettingsStore.load().then((value) {
       if (mounted) setState(() => _reading = value);
     });
     if (widget.resume) _restore();
@@ -181,6 +184,22 @@ class _StoryReaderPageState extends State<StoryReaderPage> {
     }
   }
 
+  void _updateReading(ReadingPreferences next) {
+    setState(() => _reading = next);
+    _readingSettingsStore.save(next);
+  }
+
+  void _showReadingSettings() {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (_) => ReadingSettingsSheet(
+        preferences: _reading,
+        onChanged: _updateReading,
+      ),
+    );
+  }
+
   void _openPanel(GamePanel panel) {
     final event = _engine.currentEvent;
     showModalBottomSheet<void>(
@@ -205,12 +224,26 @@ class _StoryReaderPageState extends State<StoryReaderPage> {
     final done = _engine.status == StoryEngineStatus.terminated;
     return Scaffold(
       backgroundColor: _reading.background,
-      appBar: AppBar(
+      appBar: _immersive ? null : AppBar(
         backgroundColor: _reading.background,
         foregroundColor: _reading.foreground,
         title: const Text('Живая книга'),
+        actions: [
+          IconButton(
+            tooltip: 'Настройки чтения',
+            onPressed: _showReadingSettings,
+            icon: const Icon(Icons.text_fields),
+          ),
+        ],
       ),
-      bottomNavigationBar: ColoredBox(
+      floatingActionButton: FloatingActionButton.small(
+        backgroundColor: _reading.foreground,
+        foregroundColor: _reading.background,
+        tooltip: _immersive ? 'Показать управление' : 'Скрыть управление',
+        onPressed: () => setState(() => _immersive = !_immersive),
+        child: Icon(_immersive ? Icons.visibility : Icons.visibility_off),
+      ),
+      bottomNavigationBar: _immersive ? null : ColoredBox(
         color: _reading.background,
         child: Theme(
           data: Theme.of(context).copyWith(
