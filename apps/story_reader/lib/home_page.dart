@@ -321,6 +321,36 @@ class _LibraryPageState extends State<LibraryPage> {
     }
   }
 
+  Future<void> _deleteBook(StoredBook entry) async {
+    if (_working) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Удалить книгу?'),
+        content: Text('«${entry.book.title}» будет удалена из библиотеки вместе с локальной копией. Это действие нельзя отменить.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false),
+            child: const Text('Отмена')),
+          FilledButton(onPressed: () => Navigator.pop(context, true),
+            child: const Text('Удалить')),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    setState(() => _working = true);
+    try {
+      await _storage.remove(entry.id);
+      await _refresh();
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Книга удалена из библиотеки')),
+      );
+    } catch (error) {
+      _error('Не удалось удалить книгу: $error');
+    } finally {
+      if (mounted) setState(() => _working = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final filtered = _books.where((entry) {
@@ -426,7 +456,11 @@ class _LibraryPageState extends State<LibraryPage> {
                     title: Text(entry.book.title),
                     subtitle: Text(entry.book.author.isEmpty
                         ? 'Импортированная книга' : entry.book.author),
-                    trailing: const Icon(Icons.chevron_right),
+                    trailing: IconButton(
+                      tooltip: 'Удалить книгу: ${entry.book.title}',
+                      icon: const Icon(Icons.delete_outline),
+                      onPressed: _working ? null : () => _deleteBook(entry),
+                    ),
                     onTap: () => Navigator.of(context).push(
                       MaterialPageRoute<void>(
                         builder: (_) => BookReaderPage(
