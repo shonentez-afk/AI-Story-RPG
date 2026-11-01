@@ -43,3 +43,30 @@ GitHub Actions `story-core` теперь дополнительно запуск
 ## Следующий подэтап M1.7.4b
 
 Интеграция BookWorldStore с `path_provider`, file picker/изоляцией native работу в отдельном isolate, минимальная панель запуска подготовленного мира в существующем интерфейсе, сохранение после каждого хода и отображение отказов; совместимость M1.6 через неизменный старый стор и явную миграцию только при подтверждении. Затем реальные Android/Windows 20+ ходов, перенос .bwsave v2, отказ от подделанных ZIP и визуальный/a11y аудит.
+
+## Итоговая автоматическая приёмка M1.7.4a — PASS (2026-11-02)
+
+**Проверенный исходный SHA:** `cc69778586b45c3e82c4f1dc415ce2dc545b043e` (предшествующий коммит `19e4345c7b826f3f9545873f0c9139b8ed4c13c7` добавил основной модуль; `cc69778` исправил полноценное ветвление).
+
+**GitHub Actions #145:** [run `41340309393`](https://github.com/shonentez-afk/AI-Story-RPG/actions/runs/41340309393) — `completed/success`, **все 6/6 jobs PASS**.
+
+| Проверка | Итог |
+|---|---|
+| Python reference / Dart M0 engine/ink_dart/stress | PASS |
+| `story_core` analyze + tests | **10/10 PASS** |
+| `story_runtime_adapter` analyze + tests | **9/9 PASS** |
+| JSON Schema blueprint/manifest | **9/9 PASS** |
+| Python BookWorld ZIP/SQLite security tests | **12/12 PASS** |
+| `bookworld_format` analyze + import tests | **5/5 PASS** |
+| **Новый `campaign_manager`**, analyze + SQLite tests | **10/10 PASS** |
+| Flutter analyze + UI/widget regression | **71/71 PASS** |
+| Windows portable bundle (release) | **PASS**, artifact `AI-Story-RPG-Windows-portable` |
+| Android debug APK + GitHub prerelease | **PASS**, artifact `AI-Story-RPG-Android-debug`, [`android-build-145`](https://github.com/shonentez-afk/AI-Story-RPG/releases/tag/android-build-145) |
+| Демо `.bworld` fixture (Linux) | **PASS**, artifact `AI-Story-RPG-BookWorld-demo` |
+| Запуск нового native SQLite `campaign_manager` внутри Android/Windows UI | **SKIP — не подключён к Flutter** |
+| Физическое тестирование Android/Windows, forced power-off/recovery | **SKIP — устройства недоступны** |
+| Legacy M1.6 migration, UI import .bworld, реальное .bwsave v2 на устройстве | **SKIP — ещё не реализовано** |
+
+**Примечание:** workflow `41339885596` по первоначальному `19e4345` был `cancelled` правилом CI после публикации fork-исправления, а не из-за дефекта в тестах. Приёмка основана **исключительно на финальном успешном SHA `cc69778` и run #145**. Документальный коммит с `[skip ci]` поверх этого SHA не меняет исходный код.
+
+**Вердикт:** M1.7.4a — **реализован и автоматически принят**. Общий M1.7.4 не закрыт до подключения к UI/старым сохранениям и реальных Android↔Windows E2E.

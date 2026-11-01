@@ -273,3 +273,9 @@
 - 10 новых автоматических сценариев: в том числе 35 ходов/перезапуск после 23, повреждение SQLite event, откат INSERT failure, независимые кампании, целостность portable export/import.
 - `story-core` blocking job расширен `dart analyze/test` модуля. **Итоговый SHA и CI PASS вписать по результату**, старый #143 не является проверкой этого пакета. Подробности `docs/M17_CAMPAIGN_SQLITE_RU.md`.
 - Flutter GUI и текущие кампании пока используют прежний код; UI-импорт и legacy migration остаются в M1.7.4b, новые UI функции не выдавать за готовые.
+
+## M1.7.4a — итоговая приёмка PASS, 2026-11-02
+- Проверенный кодовый SHA `cc69778586b45c3e82c4f1dc415ce2dc545b043e`, Actions [#145 / `41340309393`](https://github.com/shonentez-afk/AI-Story-RPG/actions/runs/41340309393) **completed/success, 6/6 jobs PASS**.
+- Python/Dart M0 PASS; `story_core` 10/10, `StoryRuntimeAdapter` 9/9, JSON Schema 9/9, Python BookWorld 12/12, `bookworld_format` 5/5, новый `campaign_manager` 10/10, Flutter analyze и widget 71/71 **PASS**. Android APK/Windows portable PASS. GitHub [Android release `android-build-145`](https://github.com/shonentez-afk/AI-Story-RPG/releases/tag/android-build-145) и артефакты `AI-Story-RPG-Android-debug`, `AI-Story-RPG-Windows-portable`, `AI-Story-RPG-BookWorld-demo` опубликованы.
+- В stage реализованы SQLite WAL+FULL confirmed turn/events/head, replay, restart after 23/35, настоящие дочерние ветки с переносом проверенного состояния, отдельный save v2 с импортом в новый ID. Прежняя Flutter UI и M1.6 сохранения НЕ МЕНЯЛИСЬ.
+- **SKIP/не реализовано:** физический QA, UI-импорт .bworld, фактический запуск нового store в Android/Windows приложении, legacy migration/backup, force power loss. Подробный документ `docs/M17_CAMPAIGN_SQLITE_RU.md`. Общий M1.7.4 **не закрыт**.
