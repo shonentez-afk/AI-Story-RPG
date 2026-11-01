@@ -23,6 +23,24 @@ void main() {
     expect(find.textContaining('Пока нет найденных предметов'), findsOneWidget);
   });
 
+  testWidgets('immediate exit after choice still saves and resumes',
+      (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    await tester.pumpWidget(const AIStoryApp());
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Новая история'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Войти и исследовать дом'));
+    // Deliberately pop before waiting for an animation or a manual save.
+    final navigator = tester.state<NavigatorState>(find.byType(Navigator).first);
+    navigator.pop();
+    await tester.pumpAndSettle();
+    expect(find.text('Продолжить'), findsOneWidget);
+    await tester.tap(find.text('Продолжить'));
+    await tester.pumpAndSettle();
+    expect(find.text('Прочитать старое письмо'), findsOneWidget);
+  });
+
   testWidgets('journal records actual choice in current game session', (tester) async {
     SharedPreferences.setMockInitialValues({});
     await tester.pumpWidget(const AIStoryApp());

@@ -210,18 +210,22 @@ class _StoryReaderPageState extends State<StoryReaderPage> {
     }
     final scene = _engine.currentEvent?.presentation?.title?.value
         ?? 'История завершена';
-    _pendingWrite = _pendingWrite.then((_) async {
-      try {
-        await _campaigns.write(id, game, sceneTitle: scene);
+    // Enqueue in CampaignStore synchronously, before navigation can request
+    // all(). The store's shared _writeFence guarantees write order across
+    // pages. Delaying this call in _pendingWrite.then would leave a gap:
+    // HomePage could list saves before the last choice was even queued.
+    _pendingWrite = _campaigns.write(id, game, sceneTitle: scene).then<bool>(
+      (_) {
         if (mounted && id == _campaignId) {
           setState(() => _hasSave = true);
         }
         return true;
-      } catch (error) {
+      },
+      onError: (Object error) {
         _saveError(error);
         return false;
-      }
-    });
+      },
+    );
     return _pendingWrite;
   }
 
