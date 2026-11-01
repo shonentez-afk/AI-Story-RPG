@@ -86,7 +86,7 @@ StoryChoice buildChoice(Map<String, dynamic> choice) {
         ? null
         : predicates.length == 1
             ? predicates.single
-            : StoryAllCondition(conditions: predicates),
+            : StoryAllCondition(predicates),
     effects: [
       for (final entry in (choice['set'] as Map? ?? {}).entries)
         StorySetVariableEffect(
