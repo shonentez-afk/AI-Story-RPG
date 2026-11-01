@@ -63,16 +63,20 @@ class ReaderChromeButton extends StatelessWidget {
   }
 
   @override
-  Widget build(BuildContext context) => GestureDetector(
-    onLongPress: () => _showModes(context),
-    child: FloatingActionButton.small(
-      heroTag: null,
-      backgroundColor: background,
-      foregroundColor: foreground,
-      tooltip: mode == ReaderChromeMode.normal ? 'Скрыть управление' : 'Показать управление',
-      onPressed: () => onChange(mode.toggled),
-      child: Icon(mode == ReaderChromeMode.normal
-          ? Icons.visibility_off : Icons.visibility),
+  Widget build(BuildContext context) => Tooltip(
+    message: mode == ReaderChromeMode.normal
+        ? 'Скрыть управление' : 'Показать управление',
+    triggerMode: TooltipTriggerMode.manual,
+    child: GestureDetector(
+      onLongPress: () => _showModes(context),
+      child: FloatingActionButton.small(
+        heroTag: null,
+        backgroundColor: background,
+        foregroundColor: foreground,
+        onPressed: () => onChange(mode.toggled),
+        child: Icon(mode == ReaderChromeMode.normal
+            ? Icons.visibility_off : Icons.visibility),
+      ),
     ),
   );
 }
