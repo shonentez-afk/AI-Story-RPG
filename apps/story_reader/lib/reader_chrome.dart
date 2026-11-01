@@ -69,7 +69,7 @@ class ReaderChromeButton extends StatelessWidget {
     triggerMode: TooltipTriggerMode.manual,
     child: GestureDetector(
       onLongPress: () => _showModes(context),
-      child: FloatingActionButton.small(
+      child: FloatingActionButton(
         heroTag: null,
         backgroundColor: background,
         foregroundColor: foreground,
