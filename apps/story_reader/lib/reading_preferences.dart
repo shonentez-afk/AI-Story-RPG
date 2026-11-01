@@ -1,0 +1,69 @@
+import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+enum ReadingPalette { light, sepia, dark, oled }
+
+class ReadingPreferences {
+  const ReadingPreferences({
+    this.palette = ReadingPalette.sepia,
+    this.fontSize = 18,
+    this.lineHeight = 1.65,
+    this.horizontalPadding = 24,
+  });
+
+  final ReadingPalette palette;
+  final double fontSize;
+  final double lineHeight;
+  final double horizontalPadding;
+
+  Color get background => switch (palette) {
+    ReadingPalette.light => const Color(0xFFFFFFFF),
+    ReadingPalette.sepia => const Color(0xFFF4ECDD),
+    ReadingPalette.dark => const Color(0xFF272727),
+    ReadingPalette.oled => const Color(0xFF000000),
+  };
+  Color get foreground => switch (palette) {
+    ReadingPalette.light => const Color(0xFF202020),
+    ReadingPalette.sepia => const Color(0xFF3A332B),
+    ReadingPalette.dark => const Color(0xFFF0F0F0),
+    ReadingPalette.oled => const Color(0xFFFFFFFF),
+  };
+
+  ReadingPreferences copyWith({
+    ReadingPalette? palette,
+    double? fontSize,
+    double? lineHeight,
+    double? horizontalPadding,
+  }) => ReadingPreferences(
+        palette: palette ?? this.palette,
+        fontSize: fontSize ?? this.fontSize,
+        lineHeight: lineHeight ?? this.lineHeight,
+        horizontalPadding: horizontalPadding ?? this.horizontalPadding,
+      );
+}
+
+class ReadingSettingsStore {
+  static const _prefix = 'ai_story_reading_v1_';
+
+  Future<ReadingPreferences> load() async {
+    final prefs = await SharedPreferences.getInstance();
+    final theme = prefs.getInt('${_prefix}palette') ?? 1;
+    final palette = theme >= 0 && theme < ReadingPalette.values.length
+        ? ReadingPalette.values[theme]
+        : ReadingPalette.sepia;
+    final font = (prefs.getDouble('${_prefix}font') ?? 18).clamp(12.0, 32.0).toDouble();
+    final height = (prefs.getDouble('${_prefix}line') ?? 1.65).clamp(1.2, 2.2).toDouble();
+    final padding = (prefs.getDouble('${_prefix}padding') ?? 24).clamp(12.0, 48.0).toDouble();
+    return ReadingPreferences(
+      palette: palette, fontSize: font, lineHeight: height, horizontalPadding: padding,
+    );
+  }
+
+  Future<void> save(ReadingPreferences settings) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt('${_prefix}palette', settings.palette.index);
+    await prefs.setDouble('${_prefix}font', settings.fontSize);
+    await prefs.setDouble('${_prefix}line', settings.lineHeight);
+    await prefs.setDouble('${_prefix}padding', settings.horizontalPadding);
+  }
+}
