@@ -26,8 +26,15 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Предметы'), findsOneWidget);
     expect(find.byTooltip('Показать управление'), findsOneWidget);
+    await tester.longPress(find.byTooltip('Показать управление'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Полный экран'));
+    await tester.pumpAndSettle();
+    expect(find.text('Предметы'), findsNothing);
+    expect(find.text('Войти и исследовать дом'), findsOneWidget);
     await tester.tap(find.byTooltip('Показать управление'));
     await tester.pumpAndSettle();
     expect(find.text('Предметы'), findsOneWidget);
+    expect(find.byTooltip('Настройки чтения'), findsOneWidget);
   });
 }
