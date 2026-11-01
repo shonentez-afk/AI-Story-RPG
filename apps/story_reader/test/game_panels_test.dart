@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:ai_story_reader/main.dart';
@@ -44,8 +45,12 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Сохранить'));
     await tester.pumpAndSettle();
-    await tester.pageBack();
+    // Pop the RPG route directly: tooltips and transient snackbars can
+    // intercept the synthetic back-button tap in widget tests.
+    final navigator = tester.state<NavigatorState>(find.byType(Navigator).first);
+    navigator.pop();
     await tester.pumpAndSettle();
+    expect(find.text('Продолжить'), findsOneWidget);
     await tester.tap(find.text('Продолжить'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Журнал'));
