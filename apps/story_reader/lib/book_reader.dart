@@ -102,7 +102,7 @@ class _BookReaderPageState extends State<BookReaderPage> {
       final blocks = widget.book.structuredChapters[i].blocks;
       for (final block in blocks) {
         if (block.kind == BookBlockKind.heading && block.text.trim().isNotEmpty) {
-          return block.text.trim().replaceAll(RegExp(r'\\s+'), ' ');
+          return block.text.trim().replaceAll(RegExp(r'\s+'), ' ');
         }
       }
     }
@@ -221,7 +221,7 @@ class _BookReaderPageState extends State<BookReaderPage> {
         widget.book.structuredChapters.isNotEmpty
             ? widget.book.structuredChapters[_reading.chapter].blocks
             : widget.book.chapters[_reading.chapter]
-                .split(RegExp(r'\\n\\s*\\n'))
+                .split(RegExp(r'\n\s*\n'))
                 .where((text) => text.trim().isNotEmpty)
                 .map((text) => BookBlock(kind: BookBlockKind.paragraph, text: text))
                 .toList();
