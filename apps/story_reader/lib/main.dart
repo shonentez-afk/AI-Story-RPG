@@ -253,7 +253,7 @@ class _StoryReaderPageState extends State<StoryReaderPage> {
     final done = _engine.status == StoryEngineStatus.terminated;
     return Scaffold(
       backgroundColor: _reading.background,
-      appBar: !(_chrome.showTopBar || _peekControls) ? null : AppBar(
+      appBar: !_chrome.showTopBar ? null : AppBar(
         backgroundColor: _reading.background,
         foregroundColor: _reading.foreground,
         title: const Text('Живая книга'),
