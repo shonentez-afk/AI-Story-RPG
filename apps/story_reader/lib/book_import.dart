@@ -92,7 +92,7 @@ class BookImporter {
       final imageId = binary.getAttribute('id');
       if (imageId == null || imageId.isEmpty) continue;
       try {
-        final encoded = binary.innerText.replaceAll(RegExp(r'\\s'), '');
+        final encoded = binary.innerText.replaceAll(RegExp(r'\s'), '');
         if (encoded.length > 12 * 1024 * 1024) continue;
         final decoded = base64.decode(encoded);
         if (decoded.isEmpty || decoded.length > 8 * 1024 * 1024) continue;
@@ -183,7 +183,7 @@ class BookImporter {
       chapters.add(chapter.blocks
           .where((block) => block.kind != BookBlockKind.image)
           .map((block) => block.text)
-          .join('\\n\\n'));
+          .join('\n\n'));
     }
     if (structured.isEmpty) {
       throw const FormatException('Не найдены главы FB2');
@@ -191,7 +191,26 @@ class BookImporter {
     return ImportedBook(
       title: title?.isNotEmpty == true
           ? title!
-          : filename.replaceFirst(RegExp(r'\\.[^.]+$'), ''),
+          : filename.replaceFirst(RegExp(r'\.[^.]+), ''),
+      author: authors,
+      chapters: chapters,
+      structuredChapters: structured,
+      images: resources,
+      cover: cover,
+    );
+  }
+
+  static bool _png(List<int> bytes) =>
+      bytes.length >= 8 &&
+      bytes[0] == 137 && bytes[1] == 80 && bytes[2] == 78 &&
+      bytes[3] == 71 && bytes[4] == 13 && bytes[5] == 10 &&
+      bytes[6] == 26 && bytes[7] == 10;
+
+  static bool _jpg(List<int> bytes) =>
+      bytes.length >= 3 &&
+      bytes[0] == 255 && bytes[1] == 216 && bytes[2] == 255;
+}
+), ''),
       author: authors,
       chapters: chapters,
       structuredChapters: structured,
