@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -78,6 +79,32 @@ void main() {
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
     expect(find.text('Далее'), findsOneWidget);
+  });
+
+  testWidgets('saved position restores inside long chapter after reopening',
+      (tester) async {
+    SharedPreferences.setMockInitialValues({
+      'ai_story_book_state_v1_test-long': jsonEncode({
+        'chapter': 0,
+        'scrollOffset': 420.0,
+        'bookmarks': <int>[],
+      }),
+    });
+    final book = ImportedBook(
+      title: 'Длинная глава',
+      author: '',
+      chapters: const [''],
+      structuredChapters: [
+        BookChapter(id: 'chapter_0', blocks: List.generate(120,
+          (index) => BookBlock(kind: BookBlockKind.paragraph,
+            text: 'Новый абзац номер $index. Очень длинная история.' * 4))),
+      ],
+    );
+    await tester.pumpWidget(MaterialApp(
+      home: BookReaderPage(book: book, bookId: 'test-long')));
+    await tester.pumpAndSettle();
+    final scroll = tester.widget<CustomScrollView>(find.byType(CustomScrollView));
+    expect(scroll.controller!.offset, greaterThan(100));
   });
 
 }
