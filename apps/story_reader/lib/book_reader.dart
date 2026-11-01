@@ -167,6 +167,48 @@ class _BookReaderPageState extends State<BookReaderPage> {
     );
   }
 
+  Widget _blockWidget(BookBlock block, TextStyle readerText) {
+    if (block.kind != BookBlockKind.image) {
+      return Padding(
+        padding: const EdgeInsets.only(bottom: 12),
+        child: SelectableText(
+          block.text,
+          style: block.kind == BookBlockKind.heading
+              ? readerText.copyWith(fontWeight: FontWeight.bold)
+              : readerText,
+        ),
+      );
+    }
+    final image = widget.book.images[block.resourceId];
+    if (image == null) {
+      return Text('Иллюстрация недоступна', style: readerText.copyWith(fontSize: 13));
+    }
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 12),
+      child: Semantics(
+        label: 'Иллюстрация книги. Нажмите для увеличения',
+        button: true,
+        child: InkWell(
+          onTap: () => showDialog<void>(
+            context: context,
+            builder: (_) => Dialog(
+              child: InteractiveViewer(
+                minScale: 0.5, maxScale: 5,
+                child: Image.memory(image.bytes, fit: BoxFit.contain),
+              ),
+            ),
+          ),
+          child: Image.memory(
+            image.bytes,
+            fit: BoxFit.contain,
+            errorBuilder: (_, error, stack) =>
+                Text('Ошибка изображения', style: readerText),
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final prefs = _settings;
@@ -175,6 +217,14 @@ class _BookReaderPageState extends State<BookReaderPage> {
       height: prefs.lineHeight,
       color: prefs.foreground,
     );
+    final blocks = _count == 0 ? <BookBlock>[] :
+        widget.book.structuredChapters.isNotEmpty
+            ? widget.book.structuredChapters[_reading.chapter].blocks
+            : widget.book.chapters[_reading.chapter]
+                .split(RegExp(r'\\n\\s*\\n'))
+                .where((text) => text.trim().isNotEmpty)
+                .map((text) => BookBlock(kind: BookBlockKind.paragraph, text: text))
+                .toList();
 
     return Scaffold(
       backgroundColor: prefs.background,
@@ -213,109 +263,97 @@ class _BookReaderPageState extends State<BookReaderPage> {
         child: Center(
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 800),
-            child: ListView(
+            child: CustomScrollView(
               controller: _scroll,
-              padding: EdgeInsets.symmetric(
-                horizontal: prefs.horizontalPadding,
-                vertical: 24,
-              ),
-              children: [
-                if (_reading.chapter == 0 && widget.book.cover != null)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 24),
-                    child: Image.memory(
-                      widget.book.cover!,
-                      height: 280,
-                      fit: BoxFit.contain,
-                      errorBuilder: (_, error, stack) =>
-                          Icon(Icons.menu_book, color: prefs.foreground),
+              slivers: [
+                SliverPadding(
+                  padding: EdgeInsets.fromLTRB(
+                    prefs.horizontalPadding, 24, prefs.horizontalPadding, 0),
+                  sliver: SliverToBoxAdapter(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        if (_reading.chapter == 0 && widget.book.cover != null)
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 24),
+                            child: Image.memory(
+                              widget.book.cover!, height: 280,
+                              fit: BoxFit.contain,
+                              errorBuilder: (_, error, stack) =>
+                                  Icon(Icons.menu_book, color: prefs.foreground),
+                            ),
+                          ),
+                        if (_reading.chapter == 0)
+                          Text(widget.book.title,
+                            style: readerText.copyWith(
+                              fontSize: prefs.fontSize + 8,
+                              fontWeight: FontWeight.bold)),
+                        if (_reading.chapter == 0 && widget.book.author.isNotEmpty)
+                          Text(widget.book.author, style: readerText),
+                        const SizedBox(height: 18),
+                        if (_count > 0)
+                          Text(_chapterLabel(_reading.chapter),
+                            style: readerText.copyWith(
+                              fontSize: prefs.fontSize + 4,
+                              fontWeight: FontWeight.w600)),
+                        if (_count > 0)
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 14),
+                            child: Text('Глава ${_reading.chapter + 1} из $_count',
+                              style: readerText.copyWith(fontSize: 12)),
+                          ),
+                      ],
                     ),
                   ),
-                if (_reading.chapter == 0) Text(widget.book.title,
-                    style: readerText.copyWith(
-                      fontSize: prefs.fontSize + 8,
-                      fontWeight: FontWeight.bold,
-                    )),
-                if (_reading.chapter == 0 && widget.book.author.isNotEmpty)
-                  Text(widget.book.author, style: readerText),
-                const SizedBox(height: 24),
-                if (_count > 0) ...[
-                  Text('Глава ${_reading.chapter + 1} из $_count',
-                      style: readerText.copyWith(
-                        fontSize: prefs.fontSize + 4,
-                        fontWeight: FontWeight.w600,
-                      )),
-                  const SizedBox(height: 12),
-                  if (widget.book.structuredChapters.isNotEmpty)
-                    for (final block in widget.book.structuredChapters[_reading.chapter].blocks) ...[
-                      if (block.kind == BookBlockKind.image)
-                        Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 12),
-                          child: Builder(builder: (context) {
-                            final image = widget.book.images[block.resourceId];
-                            if (image == null) {
-                              return Text('Иллюстрация недоступна',
-                                  style: readerText.copyWith(fontSize: 13));
-                            }
-                            return InkWell(
-                              onTap: () => showDialog<void>(
-                                context: context,
-                                builder: (_) => Dialog(
-                                  child: InteractiveViewer(
-                                    minScale: 0.5, maxScale: 5,
-                                    child: Image.memory(image.bytes, fit: BoxFit.contain),
-                                  ),
-                                ),
-                              ),
-                              child: Image.memory(image.bytes, fit: BoxFit.contain,
-                                  errorBuilder: (_, error, stack) =>
-                                      Text('Ошибка изображения', style: readerText)),
-                            );
-                          }),
-                        )
-                      else
-                        Padding(
-                          padding: const EdgeInsets.only(bottom: 12),
-                          child: SelectableText(block.text,
-                            style: block.kind == BookBlockKind.heading
-                                ? readerText.copyWith(fontWeight: FontWeight.bold)
-                                : readerText),
-                        ),
-                    ]
-                  else
-                    SelectableText(widget.book.chapters[_reading.chapter], style: readerText),
-                  Divider(height: 36, color: prefs.foreground.withValues(alpha: 0.20)),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      OutlinedButton.icon(
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: prefs.foreground,
-                          side: BorderSide(color: prefs.foreground.withValues(alpha: 0.5)),
-                        ),
-                        onPressed: _reading.chapter > 0
-                            ? () => _chapter(_reading.chapter - 1) : null,
-                        icon: const Icon(Icons.chevron_left),
-                        label: const Text('Назад'),
-                      ),
-                      Text('${_reading.chapter + 1} / $_count',
-                          style: TextStyle(color: prefs.foreground)),
-                      OutlinedButton.icon(
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: prefs.foreground,
-                          side: BorderSide(color: prefs.foreground.withValues(alpha: 0.5)),
-                        ),
-                        onPressed: _reading.chapter + 1 < _count
-                            ? () => _chapter(_reading.chapter + 1) : null,
-                        icon: const Icon(Icons.chevron_right),
-                        label: const Text('Далее'),
-                      ),
-                    ],
+                ),
+                SliverPadding(
+                  padding: EdgeInsets.symmetric(horizontal: prefs.horizontalPadding),
+                  sliver: SliverList.builder(
+                    itemCount: blocks.length,
+                    itemBuilder: (context, index) => _blockWidget(
+                      blocks[index], readerText),
                   ),
-                  const SizedBox(height: 96),
-                ],
-                Text('Режим чтения • RPG по этой книге появится позже',
-                    style: readerText.copyWith(fontSize: 12)),
+                ),
+                SliverPadding(
+                  padding: EdgeInsets.fromLTRB(prefs.horizontalPadding, 8,
+                    prefs.horizontalPadding, 110),
+                  sliver: SliverToBoxAdapter(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Divider(color: prefs.foreground.withValues(alpha: 0.20)),
+                        const SizedBox(height: 14),
+                        Wrap(
+                          spacing: 12, runSpacing: 12,
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          children: [
+                            OutlinedButton.icon(
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: prefs.foreground),
+                              onPressed: _reading.chapter > 0
+                                  ? () => _chapter(_reading.chapter - 1) : null,
+                              icon: const Icon(Icons.chevron_left),
+                              label: const Text('Назад'),
+                            ),
+                            Text('${_reading.chapter + 1} / $_count',
+                              style: TextStyle(color: prefs.foreground)),
+                            OutlinedButton.icon(
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: prefs.foreground),
+                              onPressed: _reading.chapter + 1 < _count
+                                  ? () => _chapter(_reading.chapter + 1) : null,
+                              icon: const Icon(Icons.chevron_right),
+                              label: const Text('Далее'),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 24),
+                        Text('Режим чтения • RPG по этой книге появится позже',
+                          style: readerText.copyWith(fontSize: 12)),
+                      ],
+                    ),
+                  ),
+                ),
               ],
             ),
           ),
