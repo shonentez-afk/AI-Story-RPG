@@ -97,6 +97,18 @@ class _BookReaderPageState extends State<BookReaderPage> {
     if (widget.bookId != null) _readingStore.save(widget.bookId!, _reading);
   }
 
+  String _chapterLabel(int i) {
+    if (widget.book.structuredChapters.isNotEmpty) {
+      final blocks = widget.book.structuredChapters[i].blocks;
+      for (final block in blocks) {
+        if (block.kind == BookBlockKind.heading && block.text.trim().isNotEmpty) {
+          return block.text.trim().replaceAll(RegExp(r'\\s+'), ' ');
+        }
+      }
+    }
+    return 'Глава ${i + 1}';
+  }
+
   void _chapters() {
     showModalBottomSheet<void>(
       context: context,
@@ -109,7 +121,7 @@ class _BookReaderPageState extends State<BookReaderPage> {
             itemBuilder: (context, i) => ListTile(
               leading: Icon(_reading.bookmarks.contains(i)
                   ? Icons.bookmark : Icons.menu_book_outlined),
-              title: Text('Глава ${i + 1}'),
+              title: Text(_chapterLabel(i)),
               subtitle: i == _reading.chapter ? const Text('Текущая') : null,
               onTap: () {
                 Navigator.pop(context);
