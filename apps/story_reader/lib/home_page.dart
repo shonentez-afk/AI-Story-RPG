@@ -9,13 +9,13 @@ import 'main.dart' show StoryReaderPage;
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
-
   @override
   State<HomePage> createState() => _HomePageState();
 }
 
 class _HomePageState extends State<HomePage> {
   bool _hasSave = false;
+  List<StoredBook> _books = [];
 
   @override
   void initState() {
@@ -25,10 +25,14 @@ class _HomePageState extends State<HomePage> {
 
   Future<void> _refresh() async {
     try {
-      final value = await SaveStore().read();
-      if (mounted) setState(() => _hasSave = value != null);
+      final save = await SaveStore().read();
+      final books = await BookStorage().all();
+      if (mounted) setState(() {
+        _hasSave = save != null;
+        _books = books;
+      });
     } catch (_) {
-      if (mounted) setState(() => _hasSave = false);
+      // Keep the home menu usable even when a local library read fails.
     }
   }
 
@@ -41,56 +45,163 @@ class _HomePageState extends State<HomePage> {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     final text = Theme.of(context).textTheme;
     return Scaffold(
-      appBar: AppBar(title: const Text('Живая книга')),
+      appBar: AppBar(
+        title: const Text('Живая книга'),
+        actions: [
+          IconButton(
+            tooltip: 'Настройки',
+            icon: const Icon(Icons.settings_outlined),
+            onPressed: () => _open(const SettingsPage()),
+          ),
+        ],
+      ),
       body: SafeArea(
         child: Center(
           child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 650),
+            constraints: const BoxConstraints(maxWidth: 680),
             child: ListView(
-              padding: const EdgeInsets.all(24),
+              padding: const EdgeInsets.fromLTRB(20, 12, 20, 32),
               children: [
-                const Icon(Icons.auto_stories_outlined, size: 64),
+                Text('Читай. Выбирай. Меняй.',
+                    style: text.titleMedium?.copyWith(color: scheme.primary)),
+                const SizedBox(height: 20),
+                Card(
+                  clipBehavior: Clip.antiAlias,
+                  child: Padding(
+                    padding: const EdgeInsets.all(20),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(_hasSave ? 'СЕЙЧАС В ИСТОРИИ' : 'НАЧНИ СВОЮ ИСТОРИЮ',
+                            style: text.labelLarge?.copyWith(color: scheme.primary)),
+                        const SizedBox(height: 14),
+                        Row(
+                          children: [
+                            Container(
+                              width: 76, height: 94,
+                              decoration: BoxDecoration(
+                                color: scheme.primary.withValues(alpha: 0.16),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Icon(Icons.auto_stories_outlined,
+                                  size: 42, color: scheme.primary),
+                            ),
+                            const SizedBox(width: 16),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text('Тайна особняка', style: text.titleLarge),
+                                  const SizedBox(height: 6),
+                                  Text(_hasSave
+                                      ? 'Продолжить сохранённую игровую историю'
+                                      : 'Демонстрационная история • офлайн',
+                                      style: text.bodyMedium),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 18),
+                        SizedBox(
+                          width: double.infinity,
+                          child: FilledButton.icon(
+                            onPressed: () => _open(StoryReaderPage(resume: _hasSave)),
+                            icon: Icon(_hasSave ? Icons.play_arrow : Icons.auto_stories),
+                            label: Text(_hasSave ? 'Продолжить' : 'Начать историю'),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
                 const SizedBox(height: 16),
-                Text('Добро пожаловать в историю',
-                    style: text.headlineMedium, textAlign: TextAlign.center),
-                const SizedBox(height: 12),
-                const Text(
-                  'Исследуйте сюжеты, принимайте решения и меняйте судьбы героев.',
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 32),
-                FilledButton.icon(
-                  onPressed: _hasSave
-                      ? () => _open(const StoryReaderPage(resume: true))
-                      : null,
-                  icon: const Icon(Icons.play_arrow),
-                  label: const Text('Продолжить'),
-                ),
-                const SizedBox(height: 12),
-                FilledButton.tonalIcon(
-                  onPressed: () => _open(const StoryReaderPage()),
-                  icon: const Icon(Icons.add),
-                  label: const Text('Новая история'),
-                ),
-                const SizedBox(height: 12),
-                OutlinedButton.icon(
-                  onPressed: () => _open(const LibraryPage()),
-                  icon: const Icon(Icons.library_books_outlined),
-                  label: const Text('Библиотека'),
-                ),
-                const SizedBox(height: 12),
-                OutlinedButton.icon(
-                  onPressed: () => _open(const SettingsPage()),
-                  icon: const Icon(Icons.settings_outlined),
-                  label: const Text('Настройки'),
-                ),
+                LayoutBuilder(builder: (context, constraints) {
+                  final narrow = constraints.maxWidth < 360;
+                  final library = _HomeAction(
+                    icon: Icons.library_books_outlined,
+                    title: 'Библиотека',
+                    subtitle: 'Книги и миры',
+                    onTap: () => _open(const LibraryPage()),
+                  );
+                  final story = _HomeAction(
+                    icon: Icons.add_circle_outline,
+                    title: 'Новая история',
+                    subtitle: 'Начать заново',
+                    onTap: () => _open(const StoryReaderPage()),
+                  );
+                  return narrow
+                      ? Column(children: [library, const SizedBox(height: 10), story])
+                      : Row(children: [
+                          Expanded(child: library),
+                          const SizedBox(width: 10),
+                          Expanded(child: story),
+                        ]);
+                }),
                 const SizedBox(height: 24),
-                const Text(
-                  'Библиотека поддерживает TXT и FB2. Откройте библиотеку, чтобы импортировать книгу.',
-                  textAlign: TextAlign.center,
+                Row(
+                  children: [
+                    Expanded(child: Text('Моя библиотека', style: text.titleLarge)),
+                    TextButton(
+                      onPressed: () => _open(const LibraryPage()),
+                      child: const Text('Все книги'),
+                    ),
+                  ],
                 ),
+                if (_books.isEmpty)
+                  Card(
+                    child: ListTile(
+                      leading: const Icon(Icons.book_outlined),
+                      title: const Text('Добавьте свою первую книгу'),
+                      subtitle: const Text('Поддерживаются TXT и FB2'),
+                      onTap: () => _open(const LibraryPage()),
+                      trailing: const Icon(Icons.chevron_right),
+                    ),
+                  )
+                else
+                  SizedBox(
+                    height: 166,
+                    child: ListView.separated(
+                      scrollDirection: Axis.horizontal,
+                      itemCount: _books.length > 8 ? 8 : _books.length,
+                      separatorBuilder: (_, _) => const SizedBox(width: 10),
+                      itemBuilder: (context, i) {
+                        final entry = _books[i];
+                        return SizedBox(
+                          width: 116,
+                          child: InkWell(
+                            borderRadius: BorderRadius.circular(12),
+                            onTap: () => _open(BookReaderPage(
+                              book: entry.book, bookId: entry.id)),
+                            child: Column(children: [
+                              Container(
+                                width: 104, height: 118,
+                                decoration: BoxDecoration(
+                                  color: scheme.primary.withValues(alpha: 0.12),
+                                  borderRadius: BorderRadius.circular(10)),
+                                clipBehavior: Clip.antiAlias,
+                                child: entry.book.cover == null
+                                    ? Icon(Icons.menu_book_outlined,
+                                        size: 40, color: scheme.primary)
+                                    : Image.memory(entry.book.cover!,
+                                        fit: BoxFit.cover,
+                                        errorBuilder: (_, _, _) =>
+                                            Icon(Icons.book, color: scheme.primary)),
+                              ),
+                              const SizedBox(height: 5),
+                              Text(entry.book.title, maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                  textAlign: TextAlign.center,
+                                  style: text.labelSmall),
+                            ]),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
               ],
             ),
           ),
@@ -98,6 +209,40 @@ class _HomePageState extends State<HomePage> {
       ),
     );
   }
+}
+
+class _HomeAction extends StatelessWidget {
+  const _HomeAction({
+    required this.icon, required this.title,
+    required this.subtitle, required this.onTap,
+  });
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => Card(
+    child: InkWell(
+      borderRadius: BorderRadius.circular(16),
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Row(children: [
+          Icon(icon, color: Theme.of(context).colorScheme.primary),
+          const SizedBox(width: 12),
+          Expanded(child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(title, style: Theme.of(context).textTheme.titleSmall),
+              const SizedBox(height: 3),
+              Text(subtitle, style: Theme.of(context).textTheme.bodySmall),
+            ],
+          )),
+        ]),
+      ),
+    ),
+  );
 }
 
 class LibraryPage extends StatefulWidget {
