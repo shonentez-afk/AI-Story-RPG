@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:ai_story_reader/game_panels.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:ai_story_reader/main.dart';
 
@@ -114,6 +115,27 @@ void main() {
     await tester.tap(find.text('Журнал'));
     await tester.pumpAndSettle();
     expect(find.textContaining('Найдено: Старое письмо'), findsOneWidget);
+  });
+
+  testWidgets('long RPG journal scrolls within bottom sheet', (tester) async {
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(body: Builder(builder: (context) => TextButton(
+        onPressed: () => showModalBottomSheet<void>(
+          context: context,
+          showDragHandle: true,
+          builder: (_) => GameInfoSheet(
+            panel: GamePanel.journal,
+            currentScene: 'Коридор',
+            journalEntries: List.generate(150, (i) => 'Решение $i'),
+          ),
+        ),
+        child: const Text('Открыть журнал'),
+      ))),
+    ));
+    await tester.tap(find.text('Открыть журнал'));
+    await tester.pumpAndSettle();
+    expect(find.byType(Scrollable), findsWidgets);
+    expect(tester.takeException(), isNull);
   });
 
 }
