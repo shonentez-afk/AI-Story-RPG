@@ -58,30 +58,25 @@
         "roles": {
           "type": "array",
           "minItems": 1,
+          "maxItems": 1,
           "uniqueItems": true,
           "items": {
-            "enum": [
-              "PROTAGONIST",
-              "CUSTOM",
-              "BOOK_CHARACTER"
-            ]
+            "const": "PROTAGONIST"
           }
         },
         "plots": {
           "type": "array",
           "minItems": 1,
+          "maxItems": 1,
           "uniqueItems": true,
           "items": {
-            "enum": [
-              "CANON",
-              "ALTER_FATE",
-              "FREE_WORLD"
-            ]
+            "const": "CANON"
           }
         },
         "interactions": {
           "type": "array",
           "minItems": 1,
+          "maxItems": 1,
           "uniqueItems": true,
           "items": {
             "const": "CLASSIC"

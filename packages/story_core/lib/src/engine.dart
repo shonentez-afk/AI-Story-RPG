@@ -35,6 +35,7 @@ class WorldEvent {
     required this.sceneId,
     required this.choiceId,
     required this.nextSceneId,
+    required this.blueprintHash,
     required this.previousHash,
     required this.beforeStateHash,
     required this.afterStateHash,
@@ -47,6 +48,8 @@ class WorldEvent {
   final String sceneId;
   final String choiceId;
   final String nextSceneId;
+  /// Prevents applying this event log to another version of the rules.
+  final String blueprintHash;
   final String? previousHash;
   final String beforeStateHash;
   final String afterStateHash;
@@ -61,6 +64,7 @@ class WorldEvent {
     'scene_id': sceneId,
     'choice_id': choiceId,
     'next_scene_id': nextSceneId,
+    'blueprint_sha256': blueprintHash,
     'previous_hash': previousHash,
     'before_state_hash': beforeStateHash,
     'after_state_hash': afterStateHash,
@@ -73,6 +77,7 @@ class WorldEvent {
     required String sceneId,
     required String choiceId,
     required String nextSceneId,
+    required String blueprintHash,
     required String? previousHash,
     required String beforeStateHash,
     required String afterStateHash,
@@ -84,6 +89,7 @@ class WorldEvent {
       sceneId: sceneId,
       choiceId: choiceId,
       nextSceneId: nextSceneId,
+      blueprintHash: blueprintHash,
       previousHash: previousHash,
       beforeStateHash: beforeStateHash,
       afterStateHash: afterStateHash,
@@ -99,6 +105,7 @@ class WorldEvent {
       sceneId: sceneId,
       choiceId: choiceId,
       nextSceneId: nextSceneId,
+      blueprintHash: blueprintHash,
       previousHash: previousHash,
       beforeStateHash: beforeStateHash,
       afterStateHash: afterStateHash,
@@ -110,7 +117,8 @@ class WorldEvent {
     final data = jsonObject(raw, 'world_event');
     const keys = {
       'sequence', 'action_id', 'actor', 'scene_id', 'choice_id',
-      'next_scene_id', 'previous_hash', 'before_state_hash',
+      'next_scene_id', 'blueprint_sha256', 'previous_hash',
+      'before_state_hash',
       'after_state_hash', 'hash',
     };
     assertFields(data, 'world_event', keys, keys);
@@ -136,6 +144,7 @@ class WorldEvent {
       sceneId: jsonId(data['scene_id'], 'scene_id'),
       choiceId: jsonId(data['choice_id'], 'choice_id'),
       nextSceneId: jsonId(data['next_scene_id'], 'next_scene_id'),
+      blueprintHash: verifiedHash('blueprint_sha256'),
       previousHash: previous as String?,
       beforeStateHash: verifiedHash('before_state_hash'),
       afterStateHash: verifiedHash('after_state_hash'),
@@ -247,6 +256,7 @@ class StoryWorld {
       sceneId: _state.sceneId,
       choiceId: choice.id,
       nextSceneId: choice.nextSceneId,
+      blueprintHash: blueprint.blueprintHash,
       previousHash: _events.isEmpty ? null : _events.last.hash,
       beforeStateHash: _state.stateHash,
       afterStateHash: nextState.stateHash,
@@ -282,8 +292,10 @@ class StoryWorld {
   /// A checkpoint is verified by deterministic replay. Caller-supplied
   /// state blobs are NOT trusted as an alternative source of truth.
   static StoryWorld replay(
-    StoryBlueprint blueprint, Iterable<Object?> recordedEvents,
-  ) {
+    StoryBlueprint blueprint, Iterable<Object?> recordedEvents, {
+    int? expectedSequence,
+    String? expectedStateHash,
+  }) {
     final world = StoryWorld(blueprint);
     for (final raw in recordedEvents) {
       final expected = WorldEvent.fromJson(raw);
@@ -299,6 +311,14 @@ class StoryWorld {
         throw const FormatException(
             'Event chain altered or incompatible with this BookWorld');
       }
+    }
+    // Without an expected head, a shortened valid prefix looks like a
+    // legitimate earlier checkpoint. Callers must bind the expected head.
+    if ((expectedSequence != null &&
+            world.state.revision != expectedSequence) ||
+        (expectedStateHash != null &&
+            world.state.stateHash != expectedStateHash)) {
+      throw const FormatException('Incomplete or mismatched event log head');
     }
     return world;
   }

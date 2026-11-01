@@ -32,3 +32,8 @@
 Проверить для опубликованного SHA `main`: Python M0 PASS, Dart M0 PASS, **новое** `story-core` analyze/test/schema PASS, Flutter analyze/widget PASS, Android APK PASS, Windows portable PASS. Зафиксировать номер run и commit. До фактического выполнения **не писать PASS** для нового модуля.
 
 Нельзя считать 35 шагов чистого Dart теста выполненными в пользовательском GUI. Это другой критерий приёмки, и он пока не заменяет тестирование 20 ходов в интерфейсе.
+
+## Защита от версии другого мира (M1.7.1 hardening)
+- `StoryBlueprint.blueprintHash` = SHA-256 канонического JSON **всего** проверенного blueprint, а не только `book_id`; `WorldEvent.blueprint_sha256` включён в payload цепочки и проверяется на каждом шаге replay. Сохранение с другой редакцией мира не принимается молча.
+- `StoryWorld.replay(..., expectedSequence, expectedStateHash)` позволяет обнаружить обрезанный **конец** журнала, если ожидаемый head сохранён в доверенном checkpoint. Без ожидаемого head корректный префикс принципиально неотличим от прежней точки сохранения, поэтому обещать обнаружение любого удаления хвоста нельзя.
+- Прототип отвергает неподготовленные роли/сюжетные режимы: только `PROTAGONIST / CANON / CLASSIC`, синхронно и в JSON Schema, и в Dart validator. Реальных ROLE/PLOT мастеров и генерации ИИ ещё нет.

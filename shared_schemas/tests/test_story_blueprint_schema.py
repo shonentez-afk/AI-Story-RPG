@@ -44,6 +44,15 @@ class StoryBlueprintSchemaTest(unittest.TestCase):
         bad["supported_modes"]["interactions"] = ["AI_FREEFORM"]
         self.assertTrue(list(self.validator.iter_errors(bad)))
 
+    def test_unsupported_story_roles_and_plots_rejected(self):
+        for field, value in [
+            ("roles", ["CUSTOM"]),
+            ("plots", ["FREE_WORLD"]),
+        ]:
+            invalid = copy.deepcopy(BLUEPRINT)
+            invalid["supported_modes"][field] = value
+            self.assertTrue(list(self.validator.iter_errors(invalid)))
+
     def test_extra_fields_and_invalid_effect_rejected(self):
         bad = copy.deepcopy(BLUEPRINT)
         bad["scenes"][0]["choices"][0]["script"] = "call network"

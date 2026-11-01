@@ -82,7 +82,10 @@ void main() {
     expect(world.state.knowledge['guard'], isEmpty);
     expect(world.state.stateHash, mirror.state.stateHash);
     final replayed = StoryWorld.replay(
-      originalBlueprint(), world.events.map((e) => e.toJson()));
+      originalBlueprint(), world.events.map((e) => e.toJson()),
+      expectedSequence: 35,
+      expectedStateHash: world.state.stateHash,
+    );
     expect(replayed.state.stateHash, world.state.stateHash);
     expect(replayed.events.last.hash, world.events.last.hash);
     expect(step(world, 'after_end', 'inspect_gate').reason,
@@ -142,6 +145,26 @@ void main() {
         throwsFormatException);
   });
 
+  test('replay is bound to exact blueprint version and expected head', () {
+    final original = originalBlueprint();
+    final world = StoryWorld(original);
+    for (var i = 0; i < 4; i++) {
+      expect(step(world, 'inspect_$i', 'inspect_gate').applied, true);
+    }
+    final complete = world.events.map((e) => e.toJson()).toList();
+    final prefix = complete.take(3).toList();
+    expect(() => StoryWorld.replay(original, prefix,
+        expectedSequence: 4, expectedStateHash: world.state.stateHash),
+        throwsFormatException);
+    final altered = mutableFixture();
+    altered['title'] = 'Новая версия тех же правил';
+    final otherVersion = StoryBlueprint.fromJson(altered);
+    expect(otherVersion.blueprintHash, isNot(original.blueprintHash));
+    // Same choices/effects cannot silently import a log from a new story.
+    expect(() => StoryWorld.replay(otherVersion, complete),
+        throwsFormatException);
+  });
+
   test('input catalog, scene references, modes and JSON DSL reject lies', () {
     final x = mutableFixture();
     (x['scenes'] as List)[0]['choices'][0]['next_scene_id'] = 'not_found';
@@ -150,6 +173,11 @@ void main() {
     final y = mutableFixture();
     (y['supported_modes'] as Map)['interactions'] = ['AI_FREEFORM'];
     expect(() => StoryBlueprint.fromJson(y), throwsFormatException);
+
+    final incompatibleRole = mutableFixture();
+    (incompatibleRole['supported_modes'] as Map)['roles'] = ['CUSTOM'];
+    expect(() => StoryBlueprint.fromJson(incompatibleRole),
+        throwsFormatException);
 
     final z = mutableFixture();
     (z['scenes'] as List)[0]['choices'][0]['effects'] = [

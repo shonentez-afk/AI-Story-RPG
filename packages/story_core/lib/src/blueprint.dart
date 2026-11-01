@@ -1,3 +1,7 @@
+import 'dart:convert';
+
+import 'package:crypto/crypto.dart';
+
 import 'codec.dart';
 import 'world_state.dart';
 
@@ -8,6 +12,7 @@ class StoryBlueprint {
     required this.bookId,
     required this.title,
     required this.entrySceneId,
+    required this.blueprintHash,
     required this.scenes,
     required this.items,
     required this.facts,
@@ -18,6 +23,8 @@ class StoryBlueprint {
   final String bookId;
   final String title;
   final String entrySceneId;
+  /// Exact canonical JSON blueprint SHA-256; not a source book fingerprint.
+  final String blueprintHash;
   final Map<String, BlueprintScene> scenes;
   final Set<String> items;
   final Set<String> facts;
@@ -63,9 +70,14 @@ class StoryBlueprint {
         throw FormatException('Invalid supported mode: ${entry.key}');
       }
     }
-    // M1.7 fixture cannot promise executable AI or novel role paths.
-    if ((modes['interactions'] as List).any((value) => value != 'CLASSIC')) {
-      throw const FormatException('AI modes are not compiled in M1.7');
+    // A declared mode must be truly executable by this prototype.
+    if ((modes['roles'] as List).length != 1 ||
+        (modes['roles'] as List).single != 'PROTAGONIST' ||
+        (modes['plots'] as List).length != 1 ||
+        (modes['plots'] as List).single != 'CANON' ||
+        (modes['interactions'] as List).length != 1 ||
+        (modes['interactions'] as List).single != 'CLASSIC') {
+      throw const FormatException('Unsupported M1.7 prototype modes');
     }
     final items = _readIdSet(root['items'], 'items');
     final facts = _readIdSet(root['facts'], 'facts');
@@ -150,6 +162,7 @@ class StoryBlueprint {
       bookId: jsonId(root['book_id'], 'book_id'),
       title: root['title'] as String,
       entrySceneId: entry,
+      blueprintHash: sha256.convert(utf8.encode(canonicalJson(root))).toString(),
       scenes: Map.unmodifiable(scenes),
       items: Set.unmodifiable(items),
       facts: Set.unmodifiable(facts),
