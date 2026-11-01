@@ -6,6 +6,7 @@ import 'home_page.dart';
 import 'app_theme.dart';
 import 'reading_preferences.dart';
 import 'game_panels.dart';
+import 'game_progress.dart';
 import 'reading_settings_sheet.dart';
 import 'reader_chrome.dart';
 
@@ -49,57 +50,64 @@ class _AIStoryAppState extends State<AIStoryApp> {
 }
 
 StoryProject makePilotStory() {
-  const gate = 'gate';
-  const library = 'library';
+  StoryEvent node(String id, String title, String body, List<StoryChoice> choices) =>
+      StoryEvent(
+        id: StoryEventId(id),
+        presentation: StoryEventPresentation(
+          title: StoryText(title), body: StoryText(body)),
+        choices: choices,
+      );
+  StoryChoice go(String id, String label, String destination) => StoryChoice(
+    id: StoryChoiceId(id),
+    presentation: StoryChoicePresentation(text: StoryText(label)),
+    transition: StoryEventTransition(destinationEventId: StoryEventId(destination)),
+  );
+  StoryChoice end(String id, String label) => StoryChoice(
+    id: StoryChoiceId(id),
+    presentation: StoryChoicePresentation(text: StoryText(label)),
+    transition: const StoryTerminalTransition(),
+  );
+
   return StoryProject(
     id: StoryProjectId('ai_story_m1_intro'),
-    entryEventId: StoryEventId(gate),
+    entryEventId: StoryEventId('gate'),
     events: [
-      StoryEvent(
-        id: StoryEventId(gate),
-        presentation: StoryEventPresentation(
-          title: const StoryText('Тайна особняка'),
-          body: const StoryText(
-            'На закате вы подходите к старому особняку. За воротами слышатся шаги.',
-          ),
-        ),
-        choices: [
-          StoryChoice(
-            id: StoryChoiceId('enter'),
-            presentation: const StoryChoicePresentation(
-              text: StoryText('Войти и исследовать дом'),
-            ),
-            transition: StoryEventTransition(
-              destinationEventId: StoryEventId(library),
-            ),
-          ),
-          StoryChoice(
-            id: StoryChoiceId('leave'),
-            presentation: const StoryChoicePresentation(
-              text: StoryText('Вернуться домой'),
-            ),
-            transition: const StoryTerminalTransition(),
-          ),
-        ],
-      ),
-      StoryEvent(
-        id: StoryEventId(library),
-        presentation: StoryEventPresentation(
-          title: const StoryText('Библиотека'),
-          body: const StoryText(
-            'В библиотеке вы находите старое письмо. История только начинается.',
-          ),
-        ),
-        choices: [
-          StoryChoice(
-            id: StoryChoiceId('finish'),
-            presentation: const StoryChoicePresentation(
-              text: StoryText('Завершить пролог'),
-            ),
-            transition: const StoryTerminalTransition(),
-          ),
-        ],
-      ),
+      node('gate', 'Тайна особняка',
+        'На закате вы подходите к старому особняку. За воротами слышатся шаги.', [
+          go('enter', 'Войти и исследовать дом', 'library'),
+          end('leave', 'Вернуться домой'),
+        ]),
+      node('library', 'Библиотека',
+        'В библиотеке вы находите старое письмо. В нижнем ящике что-то звенит.', [
+          go('inspect_letter', 'Прочитать старое письмо', 'study'),
+          go('search_drawer', 'Осмотреть ящик стола', 'study'),
+          end('finish', 'Завершить пролог'),
+        ]),
+      node('study', 'Кабинет хранителя',
+        'За книжной полкой скрыта лестница. На стене висит план особняка.', [
+          go('take_map', 'Забрать план особняка', 'corridor'),
+          go('follow_steps', 'Пойти на звук шагов', 'corridor'),
+        ]),
+      node('corridor', 'Тёмный коридор',
+        'В конце коридора — дверь с латунным замком и потемневшая лестница.', [
+          go('unlock_cellar', 'Открыть дверь в подвал', 'cellar'),
+          go('climb_tower', 'Подняться по лестнице', 'tower'),
+        ]),
+      node('cellar', 'Подвал',
+        'В подвале мерцает свет. За каменной кладкой слышится голос.', [
+          go('open_secret', 'Раскрыть тайный проход', 'secret'),
+          end('retreat', 'Запереть подвал и уйти'),
+        ]),
+      node('tower', 'Башня',
+        'В башне колышется тень. На столе лежат следы чужого исследования.', [
+          go('face_shadow', 'Подойти к таинственной тени', 'secret'),
+          end('escape_tower', 'Покинуть особняк через балкон'),
+        ]),
+      node('secret', 'Тайна раскрыта',
+        'Вы находите запись хранителя: особняк собирал истории путешественников.', [
+          end('preserve_story', 'Сохранить тайну особняка'),
+          end('reveal_story', 'Рассказать миру правду'),
+        ]),
     ],
   );
 }
@@ -119,6 +127,7 @@ class _StoryReaderPageState extends State<StoryReaderPage> {
   final SaveStore _saves = SaveStore();
   bool _hasSave = false;
   final List<String> _sessionDecisions = [];
+  GameProgress _progress = const GameProgress();
   ReadingPreferences _reading = const ReadingPreferences();
   ReaderChromeMode _chrome = ReaderChromeMode.normal;
   bool _peekControls = false;
@@ -179,6 +188,7 @@ class _StoryReaderPageState extends State<StoryReaderPage> {
         .first;
     setState(() {
       _engine.choose(id);
+      _progress = _progress.apply(id.value);
       _sessionDecisions.add('${event?.presentation?.title?.value ?? 'Сцена'}: $label');
     });
   }
@@ -187,7 +197,7 @@ class _StoryReaderPageState extends State<StoryReaderPage> {
     try {
       final encoded = StoryRuntimeSnapshotCodec()
           .encodeJson(_engine.createSnapshot());
-      await _saves.writeGame(encoded, _sessionDecisions);
+      await _saves.writeGame(encoded, _sessionDecisions, _progress);
       if (!mounted) return;
       setState(() => _hasSave = true);
       ScaffoldMessenger.of(context).showSnackBar(
@@ -215,6 +225,7 @@ class _StoryReaderPageState extends State<StoryReaderPage> {
       if (!mounted) return;
       setState(() {
         _engine = restored;
+        _progress = saved.progress;
         _sessionDecisions
           ..clear()
           ..addAll(saved.journal);
@@ -252,6 +263,7 @@ class _StoryReaderPageState extends State<StoryReaderPage> {
         panel: panel,
         currentScene: event?.presentation?.title?.value ?? 'Конец пролога',
         journalEntries: List.unmodifiable(_sessionDecisions),
+        progress: _progress,
       ),
     );
   }
@@ -259,6 +271,7 @@ class _StoryReaderPageState extends State<StoryReaderPage> {
   void _restart() {
     setState(() {
       _sessionDecisions.clear();
+      _progress = const GameProgress();
       _engine = StoryEngine(project: _project)..start();
     });
   }
