@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:story_engine/story_engine.dart';
 import 'save_store.dart';
+import 'home_page.dart';
 
 void main() {
   runApp(const AIStoryApp());
@@ -17,7 +18,7 @@ class AIStoryApp extends StatelessWidget {
           useMaterial3: true,
           colorSchemeSeed: const Color(0xFF6750A4),
         ),
-        home: const StoryReaderPage(),
+        home: const HomePage(),
       );
 }
 
@@ -78,7 +79,9 @@ StoryProject makePilotStory() {
 }
 
 class StoryReaderPage extends StatefulWidget {
-  const StoryReaderPage({super.key});
+  const StoryReaderPage({super.key, this.resume = false});
+
+  final bool resume;
 
   @override
   State<StoryReaderPage> createState() => _StoryReaderPageState();
@@ -100,6 +103,7 @@ class _StoryReaderPageState extends State<StoryReaderPage> {
     }
     _engine = StoryEngine(project: _project)..start();
     _checkSave();
+    if (widget.resume) _restore();
   }
 
   Future<void> _checkSave() async {
