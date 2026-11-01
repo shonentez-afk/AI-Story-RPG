@@ -187,7 +187,7 @@ class _StoryReaderPageState extends State<StoryReaderPage> {
     try {
       final encoded = StoryRuntimeSnapshotCodec()
           .encodeJson(_engine.createSnapshot());
-      await _saves.write(encoded);
+      await _saves.writeGame(encoded, _sessionDecisions);
       if (!mounted) return;
       setState(() => _hasSave = true);
       ScaffoldMessenger.of(context).showSnackBar(
@@ -203,17 +203,22 @@ class _StoryReaderPageState extends State<StoryReaderPage> {
 
   Future<void> _restore() async {
     try {
-      final saved = await _saves.read();
+      final saved = await _saves.readGame();
       if (saved == null) return;
       final restored = StoryEngine.restore(
         project: _project,
         snapshot: StoryRuntimeSnapshotCodec().decodeJson(
-          saved,
+          saved.snapshot,
           project: _project,
         ),
       );
       if (!mounted) return;
-      setState(() => _engine = restored);
+      setState(() {
+        _engine = restored;
+        _sessionDecisions
+          ..clear()
+          ..addAll(saved.journal);
+      });
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
