@@ -201,3 +201,9 @@
 - Очередь и tombstones переведены на `Expando<_CampaignQueue>` по **экземпляру `SharedPreferences`**. В пределах работающего приложения очередь остаётся общей для всех `CampaignStore`, гарантирует последовательные операции и барьер чтения, но свежий тестовый кэш не наследует незавершённые Future/удалённые IDs.
 - Добавлены unit-тесты повторного использования ID после смены тестового кэша и независимости очередей.
 - **QA gate:** новый HEAD должен пройти полный Flutter widget suite, затем Android APK и Windows release bundle. До этого PASS не заявлять.
+
+## QA корректировка очереди после run 41330543268
+- По HEAD `26d737e4032225bbe0d9edd6a884481526e1ebe6`, `flutter analyze` PASS; прежние 5 проблемных widget-сценариев (три game panels, старый slot и экран portable) **PASS**, тайм-аут устранён. Полная Flutter job **FAIL**: единственный тест `campaign_store_test.dart: listing and reading wait for queued autosaves` показал пустой список при чтении одновременно с записью (всего 62 PASS / 1 FAIL).
+- Корень второго бага: после перехода к scoped queue `write()` вызывал `await SharedPreferences.getInstance()` **до** помещения операции в очередь; `all()` мог захватить ещё пустую очередь.
+- Исправление: очередь теперь привязана к `SharedPreferencesStorePlatform.instance`, доступному синхронно, а `write/delete` ставятся в неё до получения асинхронного `SharedPreferences.getInstance`. `read/all/markActive` захватывают барьер до await. `setMockInitialValues` меняет backend, сохраняя тестовую изоляцию.
+- Явная зависимость `shared_preferences_platform_interface: ^2.4.2` (BSD-3-Clause) добавлена в pubspec; требуется повторный CI и APK/Windows сборки.
