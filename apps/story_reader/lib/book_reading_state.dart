@@ -3,13 +3,15 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 /// Reading progress is separate from gameplay snapshots.
 class BookReadingState {
-  const BookReadingState({this.chapter = 0, this.bookmarks = const []});
+  const BookReadingState({this.chapter = 0, this.scrollOffset = 0, this.bookmarks = const []});
   final int chapter;
+  final double scrollOffset;
   final List<int> bookmarks;
 
-  BookReadingState copyWith({int? chapter, List<int>? bookmarks}) =>
+  BookReadingState copyWith({int? chapter, double? scrollOffset, List<int>? bookmarks}) =>
       BookReadingState(
         chapter: chapter ?? this.chapter,
+        scrollOffset: scrollOffset ?? this.scrollOffset,
         bookmarks: bookmarks ?? this.bookmarks,
       );
 }
@@ -25,6 +27,7 @@ class BookReadingStore {
       final map = jsonDecode(raw) as Map<String, dynamic>;
       return BookReadingState(
         chapter: ((map['chapter'] as num?)?.toInt() ?? 0).clamp(0, 1000000),
+        scrollOffset: ((map['scrollOffset'] as num?)?.toDouble() ?? 0).clamp(0.0, 100000000.0).toDouble(),
         bookmarks: ((map['bookmarks'] as List?) ?? const [])
             .whereType<num>()
             .map((value) => value.toInt())
@@ -41,6 +44,7 @@ class BookReadingStore {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_key(bookId), jsonEncode({
       'chapter': state.chapter,
+      'scrollOffset': state.scrollOffset,
       'bookmarks': state.bookmarks,
     }));
   }
