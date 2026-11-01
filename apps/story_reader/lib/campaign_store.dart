@@ -90,6 +90,22 @@ class CampaignStore {
     });
   }
 
+  /// Imports always fork to a fresh local ID. The source campaign ID is
+  /// metadata only and is never used as a SharedPreferences key.
+  Future<String> importNew(GameSaveRecord game, {
+    required String sceneTitle,
+  }) async {
+    final existing = await all();
+    final ids = existing.map((entry) => entry.id).toSet();
+    for (var attempt = 0; attempt < 8; attempt++) {
+      final id = newId();
+      if (ids.contains(id) || _deletedInProcess.contains(id)) continue;
+      await write(id, game, sceneTitle: sceneTitle);
+      return id;
+    }
+    throw StateError('Не удалось выделить уникальный ID новой кампании');
+  }
+
   Future<GameSaveRecord?> read(String id) async {
     _validate(id);
     if (id == legacyId) return SaveStore().readGame();

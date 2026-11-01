@@ -43,3 +43,11 @@
 
 ## Устранение гонки удаление/автосохранение
 После M1.6.5 проверь `campaign_store_test.dart`: сценарий `deletion wins over in-flight and late autosaves`. Хранилище сериализует in-process write/delete и запрещает повторную запись под удалённым ID. Это не полноценная SQLite-транзакция.
+
+## M1.6.6 — пилотные переносимые `.bwsave` (2026-11-01)
+- Прочитать `docs/BWSAVE_PILOT_FORMAT_RU.md` и проверить точный HEAD `main`, GitHub Actions и новейший Android prerelease перед любыми заявлениями о PASS.
+- `apps/story_reader/lib/pilot_save_codec.dart`: JSON v1 с SHA-256 от канонически отсортированного payload, встроенный `book_id=ai_story_m1_intro`, `bookworld_hash=null`, реальный `GameProgress`, журнал, snapshot и rulesVersion. Размер максимум 4 МиБ; импорту предшествует настоящая `StoryEngine.restore` без записи в хранилище.
+- `CampaignsPage`: системные FilePicker export/import `.bwsave`, предпросмотр и подтверждение перед созданием **нового** слота через `CampaignStore.importNew`; нельзя перезаписывать исходную или legacy-кампанию. Доступность действий проверяют новые виджет-тесты.
+- `apps/story_reader/test/pilot_save_codec_test.dart`: roundtrip, шах хеша, неверная версия/книга/UTF-8, невозможность испортить старые кампании, legacy rules. Добавлена зависимость `crypto ^3.0.6`; README, STATUS, ARCHITECTURE, ROADMAP обновлены.
+- **Не выдавать за сделанное:** полноценный engine-neutral `.bwsave`, импорт произвольного BookWorld, структурированный event log, SQLite/Drift, реальные Windows EXE и физический Android ↔ Windows transfer, ИИ и автоматический Book Compiler. Продолжение: M1.7 `story_core`/BookWorld/migration и автоматическая + ручная QA.
+- Сравнить с ТЗ; формат для встроенного пилота помечен как временный (оригинальный opaque `story_engine` snapshot).

@@ -29,6 +29,27 @@ void main() {
     expect(find.text('Войти и исследовать дом'), findsOneWidget);
   });
 
+  testWidgets('portable save actions are visible without mixing book import',
+      (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    final engine = StoryEngine(project: makePilotStory())..start();
+    final snapshot = StoryRuntimeSnapshotCodec()
+        .encodeJson(engine.createSnapshot());
+    await CampaignStore().write('campaign_export',
+        GameSaveRecord(snapshot, const [], const GameProgress(), 1),
+        sceneTitle: 'Тайна особняка');
+    await tester.pumpWidget(const AIStoryApp());
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Мои прохождения'));
+    await tester.pumpAndSettle();
+    expect(find.byTooltip('Импортировать сохранение (.bwsave)'),
+        findsOneWidget);
+    expect(find.byTooltip('Экспортировать прохождение'),
+        findsOneWidget);
+    expect(find.byTooltip('Удалить прохождение'),
+        findsOneWidget);
+  });
+
   testWidgets('old single-slot save resumes without new-game overwrite',
       (tester) async {
     SharedPreferences.setMockInitialValues({});

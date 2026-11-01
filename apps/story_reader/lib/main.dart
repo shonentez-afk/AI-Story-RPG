@@ -163,7 +163,6 @@ class _StoryReaderPageState extends State<StoryReaderPage> {
     _readingSettingsStore.load().then((value) {
       if (mounted) setState(() => _reading = value);
     });
-    if (widget.resume) _restore();
   }
 
   @override
