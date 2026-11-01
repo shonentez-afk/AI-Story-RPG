@@ -258,13 +258,22 @@ class LibraryPage extends StatefulWidget {
 
 class _LibraryPageState extends State<LibraryPage> {
   final BookStorage _storage = BookStorage();
+  final TextEditingController _searchController = TextEditingController();
   List<StoredBook> _books = [];
   bool _working = false;
+  String _query = '';
+  bool _sortDescending = false;
 
   @override
   void initState() {
     super.initState();
     _refresh();
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
   }
 
   Future<void> _refresh() async {
@@ -311,69 +320,124 @@ class _LibraryPageState extends State<LibraryPage> {
   }
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-        appBar: AppBar(
-          title: const Text('Библиотека'),
-          actions: [
-            IconButton(
-              tooltip: 'Добавить книгу (TXT или FB2)',
-              onPressed: _working ? null : _import,
-              icon: const Icon(Icons.library_add_outlined),
-            ),
-          ],
-        ),
-        body: ListView(
-          padding: const EdgeInsets.all(16),
-          children: [
-            Text('Ваши книги и игровые истории',
-              style: Theme.of(context).textTheme.titleLarge),
-            const SizedBox(height: 12),
-            Card(
-              child: ListTile(
-                leading: const Icon(Icons.menu_book_outlined),
-                title: const Text('Тайна особняка'),
-                subtitle: const Text('Демонстрационная RPG • офлайн'),
-                trailing: const Icon(Icons.chevron_right),
-                onTap: () => Navigator.of(context).push(
-                  MaterialPageRoute<void>(
-                    builder: (_) => const StoryReaderPage(),
-                  ),
-                ),
-              ),
-            ),
-            for (final entry in _books)
-              Card(
-                child: ListTile(
-                  leading: entry.book.cover == null
-                      ? const Icon(Icons.book_outlined)
-                      : Image.memory(
-                          entry.book.cover!,
-                          width: 48,
-                          height: 64,
-                          fit: BoxFit.cover,
-                          errorBuilder: (_, error, stack) =>
-                              const Icon(Icons.book_outlined),
-                        ),
-                  title: Text(entry.book.title),
-                  subtitle: Text(entry.book.author.isEmpty
-                      ? 'Импортированная книга'
-                      : entry.book.author),
+  Widget build(BuildContext context) {
+    final filtered = _books.where((entry) {
+      final term = _query.trim().toLowerCase();
+      return term.isEmpty ||
+          entry.book.title.toLowerCase().contains(term) ||
+          entry.book.author.toLowerCase().contains(term);
+    }).toList()
+      ..sort((a, b) {
+        final order = a.book.title.toLowerCase()
+            .compareTo(b.book.title.toLowerCase());
+        return _sortDescending ? -order : order;
+      });
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Библиотека'),
+        actions: [
+          IconButton(
+            tooltip: 'Добавить книгу (TXT или FB2)',
+            onPressed: _working ? null : _import,
+            icon: const Icon(Icons.library_add_outlined),
+          ),
+        ],
+      ),
+      body: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 680),
+          child: CustomScrollView(slivers: [
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+              sliver: SliverList.list(children: [
+                Text('Ваши книги и игровые истории',
+                    style: Theme.of(context).textTheme.titleLarge),
+                const SizedBox(height: 12),
+                Card(child: ListTile(
+                  leading: const Icon(Icons.menu_book_outlined),
+                  title: const Text('Тайна особняка'),
+                  subtitle: const Text('Демонстрационная RPG • офлайн'),
                   trailing: const Icon(Icons.chevron_right),
                   onTap: () => Navigator.of(context).push(
                     MaterialPageRoute<void>(
-                      builder: (_) => BookReaderPage(book: entry.book, bookId: entry.id),
+                      builder: (_) => const StoryReaderPage())),
+                )),
+                const SizedBox(height: 14),
+                TextField(
+                  controller: _searchController,
+                  decoration: InputDecoration(
+                    labelText: 'Поиск книг',
+                    hintText: 'Название или автор',
+                    prefixIcon: const Icon(Icons.search),
+                    suffixIcon: _query.isEmpty ? null : IconButton(
+                      tooltip: 'Очистить поиск',
+                      icon: const Icon(Icons.close),
+                      onPressed: () {
+                        _searchController.clear();
+                        setState(() => _query = '');
+                      },
                     ),
+                    border: const OutlineInputBorder(),
                   ),
+                  onChanged: (value) => setState(() => _query = value),
                 ),
+                const SizedBox(height: 8),
+                Row(children: [
+                  Expanded(child: Text(
+                    'Импортированные книги: ${filtered.length} из ${_books.length}',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  )),
+                  TextButton.icon(
+                    onPressed: () => setState(() => _sortDescending = !_sortDescending),
+                    icon: Icon(_sortDescending
+                        ? Icons.arrow_downward : Icons.arrow_upward),
+                    label: Text(_sortDescending ? 'Я—А' : 'А—Я'),
+                  ),
+                ]),
+                if (_working) const LinearProgressIndicator(),
+                if (_books.isEmpty)
+                  const Padding(
+                    padding: EdgeInsets.all(16),
+                    child: Text('Здесь появятся ваши книги. Нажмите значок книги с плюсом вверху, чтобы добавить TXT или FB2.'),
+                  )
+                else if (filtered.isEmpty)
+                  const Padding(
+                    padding: EdgeInsets.all(16),
+                    child: Text('По вашему запросу книги не найдены.'),
+                  ),
+              ]),
+            ),
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+              sliver: SliverList.builder(
+                itemCount: filtered.length,
+                itemBuilder: (context, index) {
+                  final entry = filtered[index];
+                  return Card(child: ListTile(
+                    leading: entry.book.cover == null
+                        ? const Icon(Icons.book_outlined)
+                        : Image.memory(entry.book.cover!,
+                            width: 48, height: 64, fit: BoxFit.cover,
+                            errorBuilder: (_, error, stack) =>
+                                const Icon(Icons.book_outlined)),
+                    title: Text(entry.book.title),
+                    subtitle: Text(entry.book.author.isEmpty
+                        ? 'Импортированная книга' : entry.book.author),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () => Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (_) => BookReaderPage(
+                          book: entry.book, bookId: entry.id))),
+                  ));
+                },
               ),
-            if (_books.isEmpty)
-              const Padding(
-                padding: EdgeInsets.all(16),
-                child: Text('Здесь появятся ваши книги. Нажмите значок книги с плюсом вверху, чтобы добавить TXT или FB2.'),
-              ),
-          ],
+            ),
+          ]),
         ),
-      );
+      ),
+    );
+  }
 }
 
 class SettingsPage extends StatefulWidget {
