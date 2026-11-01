@@ -321,6 +321,9 @@ class _LibraryPageState extends State<LibraryPage> {
         body: ListView(
           padding: const EdgeInsets.all(16),
           children: [
+            Text('Ваши книги и игровые истории',
+              style: Theme.of(context).textTheme.titleLarge),
+            const SizedBox(height: 12),
             Card(
               child: ListTile(
                 leading: const Icon(Icons.menu_book_outlined),
@@ -359,11 +362,11 @@ class _LibraryPageState extends State<LibraryPage> {
                   ),
                 ),
               ),
-            const Padding(
-              padding: EdgeInsets.all(12),
-              child: Text('Нажмите «Добавить книгу» вверху, чтобы выбрать TXT или FB2. '
-                  'Это пока режим чтения, а не автоматическое создание RPG.'),
-            ),
+            if (_books.isEmpty)
+              const Padding(
+                padding: EdgeInsets.all(16),
+                child: Text('Здесь появятся ваши книги. Нажмите значок книги с плюсом вверху, чтобы добавить TXT или FB2.'),
+              ),
           ],
         ),
       );
@@ -402,7 +405,7 @@ class _SettingsPageState extends State<SettingsPage> {
             child: ListView(
               padding: const EdgeInsets.all(20),
               children: [
-                Text('Оформление приложения',
+                Text('Внешний вид',
                     style: Theme.of(context).textTheme.titleMedium),
                 const SizedBox(height: 12),
                 Wrap(
@@ -424,7 +427,7 @@ class _SettingsPageState extends State<SettingsPage> {
                 const ListTile(
                   leading: Icon(Icons.auto_stories_outlined),
                   title: Text('Оформление страниц'),
-                  subtitle: Text('Четыре темы и настройки текста доступны внутри книги'),
+                  subtitle: Text('Общие настройки текста доступны в читалке и игре'),
                 ),
                 const ListTile(
                   leading: Icon(Icons.offline_bolt_outlined),
@@ -439,7 +442,7 @@ class _SettingsPageState extends State<SettingsPage> {
                 const ListTile(
                   leading: Icon(Icons.info_outline),
                   title: Text('Версия'),
-                  subtitle: Text('M1.3 UI — единое оформление'),
+                  subtitle: Text('M1.5 UI — Моя история'),
                 ),
               ],
             ),
