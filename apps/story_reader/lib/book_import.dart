@@ -125,6 +125,13 @@ class BookImporter {
     // Preserve document order, including nested sections and inline images.
     void appendNode(XmlElement node, List<BookBlock> blocks) {
       final name = node.name.local;
+      if (name == 'title') {
+        final heading = node.innerText.trim();
+        if (heading.isNotEmpty) {
+          blocks.add(BookBlock(kind: BookBlockKind.heading, text: heading));
+        }
+        return;
+      }
       if (name == 'image') {
         final ref = imageIdFrom(node);
         if (ref != null) {
