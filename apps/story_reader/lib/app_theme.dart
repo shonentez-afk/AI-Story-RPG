@@ -22,6 +22,10 @@ class AppAppearanceController extends ChangeNotifier {
     notifyListeners();
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('ai_story_app_dark_v1', next == AppAppearance.dark);
+    // Global appearance selection also changes the default reading palette.
+    // The in-reader palette control can subsequently override it.
+    await prefs.setInt('ai_story_reading_v1_palette',
+        next == AppAppearance.dark ? 2 : 1);
   }
 }
 
