@@ -32,7 +32,7 @@ void main(List<String> args) {
   for (final raw in contract['cases'] as List) {
     final test = raw as Map<String, dynamic>;
     final actions = (test['choices'] as List).cast<String>();
-    final story = Story.fromJson(compiled);
+    var story = Story.fromJson(compiled);
     final errors = <String>[];
     story.onError = (message, type) => errors.add('$type: $message');
     var sceneId = scenario['entry'] as String;
@@ -73,6 +73,8 @@ void main(List<String> args) {
           verify(restored.currentChoices[k].text == story.currentChoices[k].text,
               'Restore changed choice text');
         }
+        restored.onError = (message, type) => errors.add('$type: $message');
+        story = restored; // Continue all remaining actions on restored instance.
       }
     }
 
