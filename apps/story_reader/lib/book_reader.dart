@@ -19,6 +19,7 @@ class _BookReaderPageState extends State<BookReaderPage> {
   final BookReadingStore _readingStore = BookReadingStore();
   BookReadingState _reading = const BookReadingState();
   bool _progressReady = false;
+  bool _immersive = false;
 
   int get _count => widget.book.structuredChapters.isNotEmpty
       ? widget.book.structuredChapters.length : widget.book.chapters.length;
@@ -174,7 +175,9 @@ class _BookReaderPageState extends State<BookReaderPage> {
     );
 
     return Scaffold(
-      appBar: AppBar(
+      appBar: _immersive ? null : AppBar(
+        backgroundColor: prefs.background,
+        foregroundColor: prefs.foreground,
         title: Text(widget.book.title),
         actions: [
           IconButton(
@@ -195,6 +198,11 @@ class _BookReaderPageState extends State<BookReaderPage> {
             icon: const Icon(Icons.text_fields),
           ),
         ],
+      ),
+      floatingActionButton: FloatingActionButton.small(
+        tooltip: _immersive ? 'Показать управление' : 'Скрыть управление',
+        onPressed: () => setState(() => _immersive = !_immersive),
+        child: Icon(_immersive ? Icons.visibility : Icons.visibility_off),
       ),
       body: ColoredBox(
         color: prefs.background,
