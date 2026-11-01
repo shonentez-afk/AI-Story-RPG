@@ -41,48 +41,47 @@ class GameInfoSheet extends StatelessWidget {
         ? 'Текущая сцена: $currentScene. Решений в этом сеансе пока нет.'
         : 'Текущая сцена: $currentScene.',
     };
+    final rows = panel == GamePanel.inventory
+        ? progress.items.map((item) =>
+            '• ${GameProgress.itemNames[item] ?? item}').toList()
+        : panel == GamePanel.journal
+            ? journalEntries.map((entry) => '• $entry').toList()
+            : <String>[];
     return SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
+      child: FractionallySizedBox(
+        heightFactor: rows.length > 5 ? 0.7 : null,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(children: [
                 Icon(icon),
                 const SizedBox(width: 12),
-                Text(heading, style: Theme.of(context).textTheme.titleLarge),
-                const Spacer(),
+                Expanded(child: Text(heading,
+                  style: Theme.of(context).textTheme.titleLarge)),
                 IconButton(
                   tooltip: 'Закрыть',
                   onPressed: () => Navigator.of(context).pop(),
                   icon: const Icon(Icons.close),
                 ),
+              ]),
+              const SizedBox(height: 8),
+              Text(message),
+              if (rows.isNotEmpty) ...[
+                const SizedBox(height: 10),
+                Flexible(child: ListView.builder(
+                  shrinkWrap: true,
+                  itemCount: rows.length,
+                  itemBuilder: (_, index) => Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 6),
+                    child: Text(rows[index]),
+                  ),
+                )),
               ],
-            ),
-            const SizedBox(height: 12),
-            Text(message),
-            if (panel == GamePanel.inventory && progress.items.isNotEmpty) ...[
-              const SizedBox(height: 12),
-              for (final item in progress.items)
-                ListTile(
-                  dense: true,
-                  leading: const Icon(Icons.inventory_2_outlined),
-                  title: Text(GameProgress.itemNames[item] ?? item),
-                ),
             ],
-            if (panel == GamePanel.journal && journalEntries.isNotEmpty) ...[
-              const SizedBox(height: 14),
-              for (final entry in journalEntries)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 10),
-                  child: Text('• $entry'),
-                ),
-              Text('История решений сохраняется вместе с прогрессом игры.',
-                style: Theme.of(context).textTheme.bodySmall),
-            ],
-          ],
+          ),
         ),
       ),
     );
