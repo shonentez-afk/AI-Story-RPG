@@ -126,6 +126,9 @@ class _StoryReaderPageState extends State<StoryReaderPage> {
   late StoryEngine _engine;
   final SaveStore _saves = SaveStore();
   bool _hasSave = false;
+  bool _saveBusy = false;
+  bool _restoreBusy = false;
+  bool _loadedFromSlot = false;
   final List<String> _sessionDecisions = [];
   GameProgress _progress = const GameProgress();
   ReadingPreferences _reading = const ReadingPreferences();
@@ -188,18 +191,57 @@ class _StoryReaderPageState extends State<StoryReaderPage> {
         .first;
     setState(() {
       _engine.choose(id);
+      final before = _progress;
       _progress = _progress.apply(id.value);
       _sessionDecisions.add('${event?.presentation?.title?.value ?? 'Сцена'}: $label');
+      final effects = <String>[];
+      if (_progress.courage > before.courage) effects.add('Смелость +${_progress.courage - before.courage}');
+      if (_progress.insight > before.insight) effects.add('Наблюдательность +${_progress.insight - before.insight}');
+      for (final item in _progress.items) {
+        if (!before.items.contains(item)) effects.add('Найдено: ${GameProgress.itemNames[item] ?? item}');
+      }
+      if (effects.isNotEmpty) {
+        _sessionDecisions.add('Результат: ${effects.join(', ')}');
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(effects.join(' • ')), duration: const Duration(seconds: 3)));
+        });
+      }
     });
   }
 
   Future<void> _save() async {
+    if (_saveBusy || _restoreBusy) return;
+    setState(() => _saveBusy = true);
     try {
+      // A new session must not silently replace a previously saved game.
+      if (!_loadedFromSlot && await _saves.read() != null) {
+        if (!mounted) return;
+        final replace = await showDialog<bool>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('Заменить сохранение?'),
+            content: const Text(
+              'Сейчас сохранена другая игровая сессия. '
+              'Её прогресс будет перезаписан. Продолжить?'),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(context, false),
+                child: const Text('Отмена')),
+              FilledButton(onPressed: () => Navigator.pop(context, true),
+                child: const Text('Заменить')),
+            ],
+          ),
+        );
+        if (replace != true || !mounted) return;
+      }
       final encoded = StoryRuntimeSnapshotCodec()
           .encodeJson(_engine.createSnapshot());
       await _saves.writeGame(encoded, _sessionDecisions, _progress);
       if (!mounted) return;
-      setState(() => _hasSave = true);
+      setState(() {
+        _hasSave = true;
+        _loadedFromSlot = true;
+      });
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Прогресс сохранён на устройстве')),
       );
@@ -208,24 +250,28 @@ class _StoryReaderPageState extends State<StoryReaderPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Не удалось сохранить: $error')),
       );
+    } finally {
+      if (mounted) setState(() => _saveBusy = false);
     }
   }
 
   Future<void> _restore() async {
+    if (_saveBusy || _restoreBusy) return;
+    setState(() => _restoreBusy = true);
     try {
       final saved = await _saves.readGame();
       if (saved == null) return;
       final restored = StoryEngine.restore(
         project: _project,
         snapshot: StoryRuntimeSnapshotCodec().decodeJson(
-          saved.snapshot,
-          project: _project,
+          saved.snapshot, project: _project,
         ),
       );
       if (!mounted) return;
       setState(() {
         _engine = restored;
         _progress = saved.progress;
+        _loadedFromSlot = true;
         _sessionDecisions
           ..clear()
           ..addAll(saved.journal);
@@ -235,6 +281,8 @@ class _StoryReaderPageState extends State<StoryReaderPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Сохранение несовместимо или повреждено: $error')),
       );
+    } finally {
+      if (mounted) setState(() => _restoreBusy = false);
     }
   }
 
@@ -272,6 +320,7 @@ class _StoryReaderPageState extends State<StoryReaderPage> {
     setState(() {
       _sessionDecisions.clear();
       _progress = const GameProgress();
+      _loadedFromSlot = false;
       _engine = StoryEngine(project: _project)..start();
     });
   }
@@ -364,12 +413,12 @@ class _StoryReaderPageState extends State<StoryReaderPage> {
                   spacing: 8,
                   children: [
                     OutlinedButton.icon(
-                      onPressed: _save,
+                      onPressed: _saveBusy || _restoreBusy ? null : _save,
                       icon: const Icon(Icons.save_outlined),
                       label: const Text('Сохранить'),
                     ),
                     OutlinedButton.icon(
-                      onPressed: _hasSave ? _restore : null,
+                      onPressed: _hasSave && !_saveBusy && !_restoreBusy ? _restore : null,
                       icon: const Icon(Icons.restore),
                       label: const Text('Загрузить'),
                     ),
