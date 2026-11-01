@@ -18,7 +18,7 @@ void main() {
     await tester.tap(find.text('Предметы'));
     await tester.pumpAndSettle();
     expect(find.text('Инвентарь'), findsOneWidget);
-    expect(find.textContaining('демонстрационный сюжет'), findsOneWidget);
+    expect(find.textContaining('Пока нет найденных предметов'), findsOneWidget);
   });
 
   testWidgets('journal records actual choice in current game session', (tester) async {
@@ -52,6 +52,27 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.textContaining('Тайна особняка: Войти и исследовать дом'),
         findsOneWidget);
+  });
+
+  testWidgets('character and inventory reflect actual story decisions',
+      (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    await tester.pumpWidget(const AIStoryApp());
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Новая история'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Войти и исследовать дом'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Прочитать старое письмо'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Герой'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Смелость: 1'), findsOneWidget);
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Предметы'));
+    await tester.pumpAndSettle();
+    expect(find.text('Старое письмо'), findsOneWidget);
   });
 
 }
