@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'game_progress.dart';
 
 /// M1.4 shell. These panels do not invent character attributes or loot:
 /// they describe only capabilities actually present in the pilot runtime.
@@ -10,11 +11,13 @@ class GameInfoSheet extends StatelessWidget {
     required this.panel,
     required this.currentScene,
     this.journalEntries = const [],
+    this.progress = const GameProgress(),
   });
 
   final GamePanel panel;
   final String currentScene;
   final List<String> journalEntries;
+  final GameProgress progress;
 
   @override
   Widget build(BuildContext context) {
@@ -30,11 +33,10 @@ class GameInfoSheet extends StatelessWidget {
     };
     final message = switch (panel) {
       GamePanel.character =>
-        'В демонстрационной истории характеристики героя пока не заданы. '
-        'Параметры персонажа появятся при подключении игрового мира.',
-      GamePanel.inventory =>
-        'Предметы пока не доступны: демонстрационный сюжет не содержит '
-        'инвентаря. Здесь будут найденные вещи, документы и иллюстрации.',
+        'Смелость: ${progress.courage}   •   Наблюдательность: ${progress.insight}',
+      GamePanel.inventory => progress.items.isEmpty
+        ? 'Пока нет найденных предметов. Исследуйте комнаты особняка.'
+        : 'Найденные предметы:',
       GamePanel.journal => journalEntries.isEmpty
         ? 'Текущая сцена: $currentScene. Решений в этом сеансе пока нет.'
         : 'Текущая сцена: $currentScene.',
@@ -61,6 +63,15 @@ class GameInfoSheet extends StatelessWidget {
             ),
             const SizedBox(height: 12),
             Text(message),
+            if (panel == GamePanel.inventory && progress.items.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              for (final item in progress.items)
+                ListTile(
+                  dense: true,
+                  leading: const Icon(Icons.inventory_2_outlined),
+                  title: Text(GameProgress.itemNames[item] ?? item),
+                ),
+            ],
             if (panel == GamePanel.journal && journalEntries.isNotEmpty) ...[
               const SizedBox(height: 14),
               for (final entry in journalEntries)
@@ -68,7 +79,7 @@ class GameInfoSheet extends StatelessWidget {
                   padding: const EdgeInsets.only(bottom: 10),
                   child: Text('• $entry'),
                 ),
-              Text('Записи показывают текущий сеанс. Сохранение истории решений будет подключено отдельно.',
+              Text('История решений сохраняется вместе с прогрессом игры.',
                 style: Theme.of(context).textTheme.bodySmall),
             ],
           ],
