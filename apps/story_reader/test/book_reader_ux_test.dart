@@ -78,7 +78,14 @@ void main() {
     ));
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
+    await tester.scrollUntilVisible(
+      find.text('Далее'), 220,
+      scrollable: find.descendant(
+        of: find.byType(CustomScrollView), matching: find.byType(Scrollable)),
+    );
+    await tester.pumpAndSettle();
     expect(find.text('Далее'), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('saved position restores inside long chapter after reopening',
