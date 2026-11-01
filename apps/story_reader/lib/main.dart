@@ -132,6 +132,8 @@ class _StoryReaderPageState extends State<StoryReaderPage> {
   bool _hasSave = false;
   bool _saveBusy = false;
   bool _restoreBusy = false;
+  bool _restoreFailed = false;
+  String? _restoreFailureText;
   final List<String> _sessionDecisions = [];
   GameProgress _progress = const GameProgress();
   int _rulesVersion = 1; // New pilot games use inventory-gated choices.
@@ -233,7 +235,7 @@ class _StoryReaderPageState extends State<StoryReaderPage> {
   }
 
   void _choose(StoryChoiceId id) {
-    if (_saveBusy || _restoreBusy) return;
+    if (_saveBusy || _restoreBusy || _restoreFailed) return;
     // Validate at the action boundary, not only in the disabled-button UI.
     if (_rulesVersion >= 1 && _progress.choiceLockReason(id.value) != null) {
       return;
@@ -266,7 +268,7 @@ class _StoryReaderPageState extends State<StoryReaderPage> {
   }
 
   Future<void> _save() async {
-    if (_saveBusy || _restoreBusy) return;
+    if (_saveBusy || _restoreBusy || _restoreFailed) return;
     setState(() => _saveBusy = true);
     final ok = await _queueSave();
     if (mounted) {
@@ -305,6 +307,8 @@ class _StoryReaderPageState extends State<StoryReaderPage> {
         _rulesVersion = saved.rulesVersion;
         _campaignId = id;
         _hasSave = true;
+        _restoreFailed = false;
+        _restoreFailureText = null;
         _sessionDecisions
           ..clear()
           ..addAll(saved.journal);
@@ -312,9 +316,12 @@ class _StoryReaderPageState extends State<StoryReaderPage> {
       await _campaigns.markActive(id);
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Сохранение несовместимо или повреждено: $error')),
-      );
+      // Never fall back to an empty writable new game for a broken save.
+      // The original bytes stay in storage for recovery or explicit deletion.
+      setState(() {
+        _restoreFailed = true;
+        _restoreFailureText = error.toString();
+      });
     } finally {
       if (mounted) setState(() => _restoreBusy = false);
     }
@@ -351,7 +358,7 @@ class _StoryReaderPageState extends State<StoryReaderPage> {
   }
 
   void _restart() {
-    if (_saveBusy || _restoreBusy) return;
+    if (_saveBusy || _restoreBusy || _restoreFailed) return;
     setState(() {
       // A fresh campaign never destroys the completed one.
       _campaignId = CampaignStore.newId();
@@ -366,6 +373,39 @@ class _StoryReaderPageState extends State<StoryReaderPage> {
 
   @override
   Widget build(BuildContext context) {
+    if (_restoreFailed) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('Сохранение не удалось открыть')),
+        body: SafeArea(child: Center(child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 520),
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              const Icon(Icons.warning_amber_outlined, size: 48),
+              const SizedBox(height: 16),
+              const Text('Прохождение не изменено. Загрузка остановлена, '
+                  'чтобы не перезаписать ваши данные.'),
+              if (_restoreFailureText != null) ...[
+                const SizedBox(height: 12),
+                SelectableText(_restoreFailureText!),
+              ],
+              const SizedBox(height: 20),
+              FilledButton(
+                onPressed: _restoreBusy ? null : () {
+                  setState(() => _restoreFailed = false);
+                  _restore();
+                },
+                child: const Text('Повторить загрузку'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text('Вернуться к прохождениям'),
+              ),
+            ]),
+          ),
+        ))),
+      );
+    }
     final event = _engine.currentEvent;
     final done = _engine.status == StoryEngineStatus.terminated;
     return Scaffold(

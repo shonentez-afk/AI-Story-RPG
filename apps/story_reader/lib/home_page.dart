@@ -34,8 +34,10 @@ class _HomePageState extends State<HomePage> {
     try {
       final campaigns = await CampaignStore().all();
       if (mounted) setState(() {
-        _hasSave = campaigns.isNotEmpty;
-        _recentCampaignId = campaigns.isEmpty ? null : campaigns.first.id;
+        // A damaged slot must not become the default "Continue" target.
+        final healthy = campaigns.where((item) => !item.damaged).toList();
+        _hasSave = healthy.isNotEmpty;
+        _recentCampaignId = healthy.isEmpty ? null : healthy.first.id;
         _campaignCount = campaigns.length;
       });
     } catch (_) {

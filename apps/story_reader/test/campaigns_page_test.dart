@@ -1,4 +1,3 @@
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:story_engine/story_engine.dart';
@@ -57,6 +56,25 @@ void main() {
     expect(find.byTooltip('Удалить прохождение'), findsOneWidget);
   });
 
+  testWidgets('corrupt engine snapshot never becomes a writable new story',
+      (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    final store = CampaignStore();
+    const id = 'campaign_broken';
+    await store.write(id,
+        const GameSaveRecord('invalid engine snapshot', []),
+        sceneTitle: 'Кабинет');
+    final before = (await store.read(id))!.snapshot;
+    await tester.pumpWidget(const AIStoryApp());
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Продолжить'));
+    await tester.pumpAndSettle();
+    expect(find.text('Сохранение не удалось открыть'), findsOneWidget);
+    expect(find.text('Войти и исследовать дом'), findsNothing);
+    expect(find.textContaining('не перезаписать ваши данные'), findsOneWidget);
+    expect((await store.read(id))!.snapshot, before);
+  });
+
   testWidgets('autosave writes a choice without manual save action',
       (tester) async {
     SharedPreferences.setMockInitialValues({});
@@ -78,3 +96,5 @@ void main() {
     expect(restored.snapshot, isNotEmpty);
   });
 }
+
+// Negative scenario: invalid engine snapshots must remain immutable on load.
