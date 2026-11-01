@@ -65,3 +65,9 @@
 - Принято ADR-001: `story_engine 0.1.0-alpha.1` — основной runtime; `ink_dart` — необязательный адаптер Ink, авторитетное состояние BookWorld остаётся под нашим контролем.
 - Созданы `apps/story_reader/pubspec.yaml`, `apps/story_reader/lib/main.dart`, `apps/story_reader/README_RU.md`: начальный Flutter host, текст, кнопки выборов, старт/повтор, внутрисессионный снимок состояния и восстановление.
 - **Не подтверждено:** `flutter analyze`, Flutter widget tests, сборки Android/Windows; нет платформенных каталогов, файловых сохранений, загрузки книг и AI. M1 prototype — исходники, пока не выпускаемый APK/EXE.
+
+## M1 — persistent saves and Flutter CI (2026-11-01)
+- `apps/story_reader/lib/save_store.dart`: один локальный слот сохранения на основе shared_preferences; `main.dart` сохраняет snapshot при нажатии кнопки и восстанавливает его в другом запуске, обрабатывает ошибки. Это временный M1 формат, не `.bwsave`.
+- Добавлен `apps/story_reader/test/reader_test.dart` — widget smoke сцены и перехода.
+- В `.circleci/config.yml` добавлен отдельный job `flutter-reader`: загрузка Flutter stable, `flutter pub get`, `flutter analyze`, `flutter test`.
+- **CI ещё не подтверждён:** проверка Flutter, сборка Android APK/Windows EXE и установка на устройство пока не выполнены. Реальный локальный persistent save требует проверки после сборки.
