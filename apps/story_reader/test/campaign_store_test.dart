@@ -117,6 +117,43 @@ void main() {
     expect(await store.read(id), isNull);
   });
 
+  test('a new preferences cache does not inherit deleted IDs', () async {
+    SharedPreferences.setMockInitialValues({});
+    final first = CampaignStore();
+    const id = 'campaign_reused_after_reset';
+    await first.write(
+      id, const GameSaveRecord('old', []), sceneTitle: 'До перезапуска',
+    );
+    await first.delete(id);
+    expect(await first.read(id), isNull);
+
+    // Mock reset represents a new store/session. Its write fence and
+    // tombstones must not be the same as those from the previous cache.
+    SharedPreferences.setMockInitialValues({});
+    final second = CampaignStore();
+    await second.write(
+      id, const GameSaveRecord('fresh', []), sceneTitle: 'Новая сессия',
+    );
+    expect((await second.read(id))!.snapshot, 'fresh');
+    expect((await second.all()).single.id, id);
+  });
+
+  test('independent preference caches have independent write queues', () async {
+    SharedPreferences.setMockInitialValues({});
+    final first = CampaignStore();
+    const oldId = 'campaign_old_cache';
+    await first.write(oldId, const GameSaveRecord('first', []),
+        sceneTitle: 'Старый кэш');
+
+    SharedPreferences.setMockInitialValues({});
+    final second = CampaignStore();
+    expect(await second.all(), isEmpty);
+    await second.write('campaign_new_cache',
+        const GameSaveRecord('second', []), sceneTitle: 'Новый кэш');
+    expect((await second.all()).single.id, 'campaign_new_cache');
+    expect(await second.read(oldId), isNull);
+  });
+
   test('IDs are generated for independent campaigns', () {
     final a = CampaignStore.newId();
     final b = CampaignStore.newId();

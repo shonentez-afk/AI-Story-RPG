@@ -60,3 +60,6 @@
 
 ## Корневая поправка очереди
 `StoryReaderPage._queueSave()` теперь вызывает `CampaignStore.write()` синхронно при подтверждении выбора, вместо отложенного вызова через `_pendingWrite.then`. Иначе `HomePage` мог прочитать `CampaignStore.all()` до регистрации записи в `_writeFence`. Дополнительный widget-тест проверяет немедленный выход без ручного Save. Проверить Flutter CI по актуальному HEAD.
+
+## Блокирующий hotfix очереди сохранений после screenshot CI (2026-11-02)
+Лог `41328244444` подтвердил FAIL/Timeout в `game_panels_test.dart` и `campaigns_page_test.dart` (10 мин ожидания), Android и Windows сборки SKIP. Корень — общая на isolate статическая `CampaignStore._writeFence` переживала `SharedPreferences.setMockInitialValues` в widget-тестах; устаревшее Future из FakeAsync блокировало чтение в новом тесте. Исправлено: `Expando<_CampaignQueue>` keyed by `SharedPreferences` object (per cache lifecycle) плюс тесты смены кэша. Проверить **актуальный HEAD и РЕАЛЬНЫЙ зелёный Flutter CI** перед продолжением M1.7; в частности «Продолжить», старый слот, несколько кампаний, экран .bwsave, удаление. Версии и source data не трогать. При CI ошибках исправлять по логам, без заглушек и без запросов на ручную установку.

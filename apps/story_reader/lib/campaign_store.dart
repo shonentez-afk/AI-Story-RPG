@@ -31,16 +31,17 @@ class CampaignStore {
   static const _bookId = 'ai_story_m1_intro';
   static final RegExp _safeId = RegExp(r'^[a-z0-9_-]{8,96}$');
 
-  // Serialize writes/deletes between CampaignStore instances in-process.
-  // Tombstones stop late autosaves from resurrecting deleted campaigns.
-  static final Set<String> _deletedInProcess = <String>{};
-  static Future<void> _writeFence = Future<void>.value();
+  // Queue state belongs to a particular SharedPreferences instance, not
+  // to the whole Dart isolate. setMockInitialValues creates a fresh backing
+  // instance in widget tests; a static Future from a disposed FakeAsync zone
+  // could otherwise block the next test's all()/read() indefinitely.
+  // In production getInstance returns the same cache for this app session,
+  // preserving serialized writes and tombstones across CampaignStore objects.
+  static final Expando<_CampaignQueue> _queues =
+      Expando<_CampaignQueue>('campaign-queue');
 
-  static Future<T> _serial<T>(Future<T> Function() action) {
-    final result = _writeFence.then((_) => action());
-    _writeFence = result.then<void>((_) {}, onError: (Object error) {});
-    return result;
-  }
+  static _CampaignQueue _queue(SharedPreferences prefs) =>
+      _queues[prefs] ??= _CampaignQueue();
 
   static String newId() {
     final secure = Random.secure();
@@ -61,32 +62,34 @@ class CampaignStore {
   Future<void> write(String id, GameSaveRecord game,
       {required String sceneTitle}) {
     _validate(id);
-    return _serial(() async {
-      if (_deletedInProcess.contains(id)) {
-        throw StateError('Удалённое прохождение нельзя перезаписать');
-      }
-      final prefs = await SharedPreferences.getInstance();
-      if (id == legacyId) {
-        await SaveStore().writeGame(
-          game.snapshot, game.journal, game.progress, game.rulesVersion,
-        );
-      } else {
-        final payload = jsonEncode({
-          'format': _format,
-          'id': id,
-          'bookId': _bookId,
-          'sceneTitle': sceneTitle,
-          'savedAtUtc': DateTime.now().toUtc().toIso8601String(),
-          'game': SaveStore.encodeGameRecord(game),
-        });
-        final ok = await prefs.setString(_key(id), payload);
-        if (!ok) throw StateError('Не удалось записать кампанию');
-      }
-      try {
-        await prefs.setString(_activeKey, id);
-      } catch (_) {
-        // The active pointer does not participate in the game write.
-      }
+    return SharedPreferences.getInstance().then((prefs) {
+      final queue = _queue(prefs);
+      return queue.serial<void>(() async {
+        if (queue.deleted.contains(id)) {
+          throw StateError('Удалённое прохождение нельзя перезаписать');
+        }
+        if (id == legacyId) {
+          await SaveStore().writeGame(
+            game.snapshot, game.journal, game.progress, game.rulesVersion,
+          );
+        } else {
+          final payload = jsonEncode({
+            'format': _format,
+            'id': id,
+            'bookId': _bookId,
+            'sceneTitle': sceneTitle,
+            'savedAtUtc': DateTime.now().toUtc().toIso8601String(),
+            'game': SaveStore.encodeGameRecord(game),
+          });
+          final ok = await prefs.setString(_key(id), payload);
+          if (!ok) throw StateError('Не удалось записать кампанию');
+        }
+        try {
+          await prefs.setString(_activeKey, id);
+        } catch (_) {
+          // The active pointer does not participate in the game write.
+        }
+      });
     });
   }
 
@@ -97,9 +100,10 @@ class CampaignStore {
   }) async {
     final existing = await all();
     final ids = existing.map((entry) => entry.id).toSet();
+    final queue = _queue(await SharedPreferences.getInstance());
     for (var attempt = 0; attempt < 8; attempt++) {
       final id = newId();
-      if (ids.contains(id) || _deletedInProcess.contains(id)) continue;
+      if (ids.contains(id) || queue.deleted.contains(id)) continue;
       await write(id, game, sceneTitle: sceneTitle);
       return id;
     }
@@ -108,11 +112,11 @@ class CampaignStore {
 
   Future<GameSaveRecord?> read(String id) async {
     _validate(id);
-    // A just-confirmed choice may still be in the autosave queue when
-    // navigation starts. Never return an older snapshot in that window.
-    await _writeFence;
-    if (id == legacyId) return SaveStore().readGame();
     final prefs = await SharedPreferences.getInstance();
+    // The same preferences scope owns pending writes. Never wait for an
+    // unrelated test/app cache or an orphaned FakeAsync Future.
+    await _queue(prefs).pending;
+    if (id == legacyId) return SaveStore().readGame();
     final raw = prefs.getString(_key(id));
     if (raw == null) return null;
     final slot = _decode(raw, id);
@@ -136,6 +140,7 @@ class CampaignStore {
   Future<void> markActive(String id) async {
     _validate(id);
     final prefs = await SharedPreferences.getInstance();
+    await _queue(prefs).pending;
     if (!prefs.containsKey(id == legacyId ? SaveStore.key : _key(id))) {
       throw StateError('Кампания больше не существует');
     }
@@ -144,10 +149,9 @@ class CampaignStore {
   }
 
   Future<List<CampaignSummary>> all() async {
-    // Main menu and campaign picker must observe a consistent committed
-    // view after an RPG page is popped immediately after a choice.
-    await _writeFence;
     final prefs = await SharedPreferences.getInstance();
+    // Observe the latest committed turn, including immediate page pop.
+    await _queue(prefs).pending;
     final result = <CampaignSummary>[];
     for (final key in prefs.getKeys()) {
       if (!key.startsWith(_prefix)) continue;
@@ -182,23 +186,25 @@ class CampaignStore {
   /// Deletion is isolated to exactly one validated key.
   Future<void> delete(String id) {
     _validate(id);
-    // Set before awaiting any I/O, so future writes cannot resurrect the ID.
-    _deletedInProcess.add(id);
-    return _serial(() async {
-      final prefs = await SharedPreferences.getInstance();
-      final key = id == legacyId ? SaveStore.key : _key(id);
-      final ok = await prefs.remove(key);
-      if (!ok) {
-        _deletedInProcess.remove(id);
-        throw StateError('Не удалось удалить кампанию');
-      }
-      if (prefs.getString(_activeKey) == id) {
-        try {
-          await prefs.remove(_activeKey);
-        } catch (_) {
-          // Stale pointer never contains gameplay state.
+    return SharedPreferences.getInstance().then((prefs) {
+      final queue = _queue(prefs);
+      // Mark deleted before enqueueing, blocking every late autosave.
+      queue.deleted.add(id);
+      return queue.serial<void>(() async {
+        final key = id == legacyId ? SaveStore.key : _key(id);
+        final ok = await prefs.remove(key);
+        if (!ok) {
+          queue.deleted.remove(id);
+          throw StateError('Не удалось удалить кампанию');
         }
-      }
+        if (prefs.getString(_activeKey) == id) {
+          try {
+            await prefs.remove(_activeKey);
+          } catch (_) {
+            // Stale pointer never contains gameplay state.
+          }
+        }
+      });
     });
   }
 
@@ -233,4 +239,20 @@ class _CampaignSlot {
   final String sceneTitle;
   final DateTime savedAt;
   final String game;
+}
+
+/// Queue is scoped to the preferences cache's lifetime (per app session).
+/// Errors in one write do not poison later writes or subsequent reads.
+class _CampaignQueue {
+  Future<void> pending = Future<void>.value();
+  final Set<String> deleted = <String>{};
+
+  Future<T> serial<T>(Future<T> Function() work) {
+    final task = pending.then((_) => work());
+    pending = task.then<void>(
+      (_) {},
+      onError: (Object error, StackTrace stack) {},
+    );
+    return task;
+  }
 }

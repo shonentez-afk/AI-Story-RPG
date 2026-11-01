@@ -194,3 +194,10 @@
 ## Уточнение корня гонки — синхронная постановка в очередь
 - Помимо ожидания `CampaignStore._writeFence` при чтении, исправлена `StoryReaderPage._queueSave()`: раньше вызов `_campaigns.write` откладывался через `_pendingWrite.then(...)`, поэтому UI мог открыть `all()` **до** регистрации записи в store. Теперь запись ставится в `CampaignStore._serial` непосредственно при подтверждённом действии; дальнейшая последовательность и обработка ошибок остались на store.
 - В `game_panels_test.dart` добавлен отрицательный сценарий **«выбор -> немедленный выход без Save -> Продолжить -> та же сцена»**. Результат фиксировать только после новых CI логов.
+
+## QA hotfix — Widget tests зависали и не находили «Продолжить» (2026-11-02)
+- По логу workflow `41328244444` для `0823fd80a0057d826def6f81917b1cdf1bc2c294`: Python PASS, Dart PASS, Flutter analyze PASS, но неуспешны 3 widget-сценария в `game_panels_test.dart`; `campaigns_page_test.dart` завис на `portable save actions are visible without mixing book import` и достиг `TimeoutException after 10 minutes`, затем `old single-slot save resumes` не увидел «Продолжить». Android APK и Windows bundle SKIP (не собраны).
+- Причина выявлена в `CampaignStore`: статическая `_writeFence` и tombstone-набор действовали на весь Dart isolate. В последовательных widget-тестах с `SharedPreferences.setMockInitialValues` предыдущие операции могли оставить незавершённую очередь от уничтоженного FakeAsync test scope; новый тест ждал старую очередь при `all()/read()`. Ранее исправленная постановка записи при выборе не устраняла изоляцию этой очереди.
+- Очередь и tombstones переведены на `Expando<_CampaignQueue>` по **экземпляру `SharedPreferences`**. В пределах работающего приложения очередь остаётся общей для всех `CampaignStore`, гарантирует последовательные операции и барьер чтения, но свежий тестовый кэш не наследует незавершённые Future/удалённые IDs.
+- Добавлены unit-тесты повторного использования ID после смены тестового кэша и независимости очередей.
+- **QA gate:** новый HEAD должен пройти полный Flutter widget suite, затем Android APK и Windows release bundle. До этого PASS не заявлять.
