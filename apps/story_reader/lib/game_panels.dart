@@ -67,8 +67,9 @@ class GameInfoSheet extends StatelessWidget {
 }
 
 class GameQuickBar extends StatelessWidget {
-  const GameQuickBar({super.key, required this.onOpen});
+  const GameQuickBar({super.key, required this.onOpen, this.color});
   final ValueChanged<GamePanel> onOpen;
+  final Color? color;
 
   @override
   Widget build(BuildContext context) => SafeArea(
@@ -100,9 +101,9 @@ class GameQuickBar extends StatelessWidget {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(icon, size: 21),
+                  Icon(icon, size: 21, color: color),
                   const SizedBox(height: 2),
-                  Text(name, style: Theme.of(context).textTheme.labelSmall),
+                  Text(name, style: Theme.of(context).textTheme.labelSmall?.copyWith(color: color)),
                 ],
               ),
             ),
