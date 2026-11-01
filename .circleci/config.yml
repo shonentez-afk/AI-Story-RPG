@@ -90,6 +90,7 @@ jobs:
             dart pub get
             dart analyze
             dart run bin/smoke.dart ../pilot/manor_mystery.ink.json
+            dart run bin/full_scenario.dart ../pilot/manor_mystery.ink.json ../pilot/scenario.json ../pilot/expected_contract.json
       - run:
           name: Record SDK version for the next M0 engine comparison
           command: |
