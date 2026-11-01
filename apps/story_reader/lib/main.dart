@@ -2,22 +2,44 @@ import 'package:flutter/material.dart';
 import 'package:story_engine/story_engine.dart';
 import 'save_store.dart';
 import 'home_page.dart';
+import 'app_theme.dart';
+import 'reading_preferences.dart';
 
 void main() {
   runApp(const AIStoryApp());
 }
 
-class AIStoryApp extends StatelessWidget {
+class AIStoryApp extends StatefulWidget {
   const AIStoryApp({super.key});
+
+  @override
+  State<AIStoryApp> createState() => _AIStoryAppState();
+}
+
+class _AIStoryAppState extends State<AIStoryApp> {
+  @override
+  void initState() {
+    super.initState();
+    AppAppearanceController.instance.addListener(_refresh);
+    AppAppearanceController.instance.load();
+  }
+
+  void _refresh() { if (mounted) setState(() {}); }
+
+  @override
+  void dispose() {
+    AppAppearanceController.instance.removeListener(_refresh);
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) => MaterialApp(
         title: 'Живая книга',
         debugShowCheckedModeBanner: false,
-        theme: ThemeData(
-          useMaterial3: true,
-          colorSchemeSeed: const Color(0xFF6750A4),
-        ),
+        theme: AppTheme.light(),
+        darkTheme: AppTheme.dark(),
+        themeMode: AppAppearanceController.instance.value == AppAppearance.dark
+            ? ThemeMode.dark : ThemeMode.light,
         home: const HomePage(),
       );
 }
@@ -92,6 +114,7 @@ class _StoryReaderPageState extends State<StoryReaderPage> {
   late StoryEngine _engine;
   final SaveStore _saves = SaveStore();
   bool _hasSave = false;
+  ReadingPreferences _reading = const ReadingPreferences();
 
   @override
   void initState() {
@@ -103,6 +126,9 @@ class _StoryReaderPageState extends State<StoryReaderPage> {
     }
     _engine = StoryEngine(project: _project)..start();
     _checkSave();
+    ReadingSettingsStore().load().then((value) {
+      if (mounted) setState(() => _reading = value);
+    });
     if (widget.resume) _restore();
   }
 
@@ -166,23 +192,27 @@ class _StoryReaderPageState extends State<StoryReaderPage> {
     final done = _engine.status == StoryEngineStatus.terminated;
     return Scaffold(
       appBar: AppBar(title: const Text('Живая книга')),
-      body: SafeArea(
+      body: ColoredBox(
+        color: _reading.background,
+        child: SafeArea(
         child: Center(
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 760),
             child: ListView(
-              padding: const EdgeInsets.all(24),
+              padding: EdgeInsets.all(_reading.horizontalPadding),
               children: [
                 Text(
                   done ? 'Конец пролога' :
                       (event?.presentation?.title?.value ?? 'История'),
-                  style: Theme.of(context).textTheme.headlineMedium,
+                  style: TextStyle(color: _reading.foreground,
+                    fontSize: _reading.fontSize + 7, fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(height: 20),
                 Text(
                   done ? 'Попробуйте другое решение.' :
                       (event?.presentation?.body?.value ?? ''),
-                  style: Theme.of(context).textTheme.bodyLarge,
+                  style: TextStyle(color: _reading.foreground,
+                    fontSize: _reading.fontSize, height: _reading.lineHeight),
                 ),
                 const SizedBox(height: 30),
                 for (final choice in _engine.availableChoices)
@@ -215,14 +245,13 @@ class _StoryReaderPageState extends State<StoryReaderPage> {
                   ],
                 ),
                 const SizedBox(height: 12),
-                const Text(
-                  'M1 прототип: один локальный слот сохранения. '
-                  'Импорт книг, полноценные слоты и ИИ будут добавлены отдельно.',
-                ),
+                Text('Демо RPG • Один локальный слот сохранения',
+                  style: TextStyle(color: _reading.foreground, fontSize: 12)),
               ],
             ),
           ),
         ),
+      ),
       ),
     );
   }
