@@ -279,7 +279,7 @@ class _StoryReaderPageState extends State<StoryReaderPage> {
               style: TextButton.styleFrom(foregroundColor: _reading.foreground),
             ),
           ),
-          child: GameQuickBar(onOpen: _openPanel),
+          child: GameQuickBar(onOpen: _openPanel, color: _reading.foreground),
         ),
       ),
       body: ColoredBox(
