@@ -4,6 +4,7 @@ import 'book_import.dart';
 import 'book_storage.dart';
 import 'book_reader.dart';
 import 'save_store.dart';
+import 'app_theme.dart';
 import 'main.dart' show StoryReaderPage;
 
 class HomePage extends StatefulWidget {
@@ -223,31 +224,81 @@ class _LibraryPageState extends State<LibraryPage> {
       );
 }
 
-class SettingsPage extends StatelessWidget {
+class SettingsPage extends StatefulWidget {
   const SettingsPage({super.key});
+
+  @override
+  State<SettingsPage> createState() => _SettingsPageState();
+}
+
+class _SettingsPageState extends State<SettingsPage> {
+  final controller = AppAppearanceController.instance;
+
+  @override
+  void initState() {
+    super.initState();
+    controller.addListener(_refresh);
+  }
+
+  void _refresh() { if (mounted) setState(() {}); }
+
+  @override
+  void dispose() {
+    controller.removeListener(_refresh);
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) => Scaffold(
         appBar: AppBar(title: const Text('Настройки')),
-        body: ListView(
-          padding: EdgeInsets.all(20),
-          children: [
-            ListTile(
-              leading: Icon(Icons.offline_bolt_outlined),
-              title: Text('Режим игры'),
-              subtitle: Text('Классический офлайн • без ИИ'),
+        body: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 650),
+            child: ListView(
+              padding: const EdgeInsets.all(20),
+              children: [
+                Text('Оформление приложения',
+                    style: Theme.of(context).textTheme.titleMedium),
+                const SizedBox(height: 12),
+                Wrap(
+                  spacing: 8,
+                  children: [
+                    ChoiceChip(
+                      label: const Text('Светлая'),
+                      selected: controller.value == AppAppearance.light,
+                      onSelected: (_) => controller.change(AppAppearance.light),
+                    ),
+                    ChoiceChip(
+                      label: const Text('Тёмная'),
+                      selected: controller.value == AppAppearance.dark,
+                      onSelected: (_) => controller.change(AppAppearance.dark),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                const ListTile(
+                  leading: Icon(Icons.auto_stories_outlined),
+                  title: Text('Оформление страниц'),
+                  subtitle: Text('Четыре темы и настройки текста доступны внутри книги'),
+                ),
+                const ListTile(
+                  leading: Icon(Icons.offline_bolt_outlined),
+                  title: Text('Режим игры'),
+                  subtitle: Text('Классический офлайн • без ИИ'),
+                ),
+                const ListTile(
+                  leading: Icon(Icons.save_outlined),
+                  title: Text('Сохранения'),
+                  subtitle: Text('Игра и позиции книг хранятся отдельно'),
+                ),
+                const ListTile(
+                  leading: Icon(Icons.info_outline),
+                  title: Text('Версия'),
+                  subtitle: Text('M1.3 UI — единое оформление'),
+                ),
+              ],
             ),
-            ListTile(
-              leading: Icon(Icons.save_outlined),
-              title: Text('Сохранения'),
-              subtitle: Text('Один локальный слот на устройстве'),
-            ),
-            ListTile(
-              leading: Icon(Icons.info_outline),
-              title: Text('Версия'),
-              subtitle: Text('M1.1 — первый экран и библиотека'),
-            ),
-          ],
+          ),
         ),
       );
 }
