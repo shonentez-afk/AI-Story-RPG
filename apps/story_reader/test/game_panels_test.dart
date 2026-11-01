@@ -78,7 +78,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Предметы'));
     await tester.pumpAndSettle();
-    expect(find.textContaining('Старое письмо'), findsOneWidget);
+    expect(find.text('• Старое письмо'), findsOneWidget);
   });
 
   testWidgets('new game warns before overwriting the existing slot', (tester) async {
