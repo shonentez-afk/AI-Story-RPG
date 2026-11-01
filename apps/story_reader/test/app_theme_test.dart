@@ -11,9 +11,9 @@ void main() {
     SharedPreferences.setMockInitialValues({});
     await tester.pumpWidget(const AIStoryApp());
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Настройки'));
+    await tester.tap(find.byTooltip('Настройки'));
     await tester.pumpAndSettle();
-    expect(find.text('Оформление приложения'), findsOneWidget);
+    expect(find.text('Внешний вид'), findsOneWidget);
     await tester.tap(find.text('Тёмная'));
     await tester.pumpAndSettle();
     expect(AppAppearanceController.instance.value, AppAppearance.dark);
