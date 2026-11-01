@@ -12,9 +12,15 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Новая история'), findsOneWidget);
     expect(find.text('Библиотека'), findsOneWidget);
+    // One library destination on home; imported books live only inside it.
+    expect(find.text('Моя библиотека'), findsNothing);
+    expect(find.text('Все книги'), findsNothing);
+    expect(find.text('Добавьте свою первую книгу'), findsNothing);
     expect(find.byTooltip('Настройки'), findsOneWidget);
     await tester.tap(find.text('Библиотека'));
     await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('library-import')), findsOneWidget);
+    expect(find.text('Добавить книгу'), findsOneWidget);
     expect(find.text('Тайна особняка'), findsOneWidget);
     await tester.tap(find.text('Тайна особняка'));
     await tester.pumpAndSettle();

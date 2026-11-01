@@ -46,7 +46,8 @@ void main() {
     // If platform file storage is unavailable, show retry instead of
     // leaving a spinner running forever.
     expect(find.text('Повторить загрузку'), findsOneWidget);
-    expect(find.byTooltip('Добавить книгу (TXT или FB2)'), findsOneWidget);
+    expect(find.byKey(const ValueKey('library-import')), findsOneWidget);
+    expect(find.byIcon(Icons.library_add_outlined), findsOneWidget);
     expect(find.text('Тайна особняка'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });

@@ -24,7 +24,6 @@ class _HomePageState extends State<HomePage> {
   bool _opening = false;
   String? _recentCampaignId;
   int _campaignCount = 0;
-  List<StoredBook> _books = [];
 
   @override
   void initState() {
@@ -49,15 +48,8 @@ class _HomePageState extends State<HomePage> {
     } finally {
       if (mounted) setState(() => _saveLoading = false);
     }
-    try {
-      // The home page must never delay game navigation for book I/O.
-      // Avoid Future.timeout here: its timer outlives an unmounted screen
-      // in Flutter widget tests. The library page provides bounded retries.
-      final books = await BookStorage().all();
-      if (mounted) setState(() => _books = books);
-    } catch (_) {
-      // Home remains usable without the library; saved RPG still appears.
-    }
+    // Book files are loaded only in LibraryPage. Home deliberately
+    // exposes one navigation entry instead of a second book shelf.
   }
 
   Future<void> _open(Widget page) async {
@@ -189,67 +181,6 @@ class _HomePageState extends State<HomePage> {
                   subtitle: 'Сохранённые кампании: $_campaignCount',
                   onTap: () => _open(const CampaignsPage()),
                 ),
-                const SizedBox(height: 24),
-                Row(
-                  children: [
-                    Expanded(child: Text('Моя библиотека', style: text.titleLarge)),
-                    TextButton(
-                      onPressed: () => _open(const LibraryPage()),
-                      child: const Text('Все книги'),
-                    ),
-                  ],
-                ),
-                if (_books.isEmpty)
-                  Card(
-                    child: ListTile(
-                      leading: const Icon(Icons.book_outlined),
-                      title: const Text('Добавьте свою первую книгу'),
-                      subtitle: const Text('Поддерживаются TXT и FB2'),
-                      onTap: () => _open(const LibraryPage()),
-                      trailing: const Icon(Icons.chevron_right),
-                    ),
-                  )
-                else
-                  SizedBox(
-                    height: 166,
-                    child: ListView.separated(
-                      scrollDirection: Axis.horizontal,
-                      itemCount: _books.length > 8 ? 8 : _books.length,
-                      separatorBuilder: (_, _) => const SizedBox(width: 10),
-                      itemBuilder: (context, i) {
-                        final entry = _books[i];
-                        return SizedBox(
-                          width: 116,
-                          child: InkWell(
-                            borderRadius: BorderRadius.circular(12),
-                            onTap: () => _open(BookReaderPage(
-                              book: entry.book, bookId: entry.id)),
-                            child: Column(children: [
-                              Container(
-                                width: 104, height: 118,
-                                decoration: BoxDecoration(
-                                  color: scheme.primary.withValues(alpha: 0.12),
-                                  borderRadius: BorderRadius.circular(10)),
-                                clipBehavior: Clip.antiAlias,
-                                child: entry.book.cover == null
-                                    ? Icon(Icons.menu_book_outlined,
-                                        size: 40, color: scheme.primary)
-                                    : Image.memory(entry.book.cover!,
-                                        fit: BoxFit.cover,
-                                        errorBuilder: (_, _, _) =>
-                                            Icon(Icons.book, color: scheme.primary)),
-                              ),
-                              const SizedBox(height: 5),
-                              Text(entry.book.title, maxLines: 2,
-                                  overflow: TextOverflow.ellipsis,
-                                  textAlign: TextAlign.center,
-                                  style: text.labelSmall),
-                            ]),
-                          ),
-                        );
-                      },
-                    ),
-                  ),
               ],
             ),
           ),
@@ -461,16 +392,7 @@ class _LibraryPageState extends State<LibraryPage> {
       });
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Библиотека'),
-        actions: [
-          IconButton(
-            tooltip: 'Добавить книгу (TXT или FB2)',
-            onPressed: _working ? null : _import,
-            icon: const Icon(Icons.library_add_outlined),
-          ),
-        ],
-      ),
+      appBar: AppBar(title: const Text('Библиотека')),
       body: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 680),
@@ -490,6 +412,24 @@ class _LibraryPageState extends State<LibraryPage> {
                     MaterialPageRoute<void>(
                       builder: (_) => const StoryReaderPage())),
                 )),
+                const SizedBox(height: 14),
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton.icon(
+                    key: const ValueKey('library-import'),
+                    onPressed: _working ? null : _import,
+                    icon: const Icon(Icons.library_add_outlined),
+                    label: const Text('Добавить книгу'),
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text('TXT или FB2, до 20 МБ',
+                  style: Theme.of(context).textTheme.bodySmall),
+                if (_working)
+                  const Padding(
+                    padding: EdgeInsets.only(top: 8),
+                    child: LinearProgressIndicator(),
+                  ),
                 const SizedBox(height: 14),
                 TextField(
                   controller: _searchController,
@@ -522,7 +462,7 @@ class _LibraryPageState extends State<LibraryPage> {
                     label: Text(_sortDescending ? 'Я—А' : 'А—Я'),
                   ),
                 ]),
-                if (_working || _loadingBooks)
+                if (_loadingBooks)
                   const LinearProgressIndicator(),
                 if (_loadingBooks)
                   const Padding(
@@ -543,12 +483,6 @@ class _LibraryPageState extends State<LibraryPage> {
                           icon: const Icon(Icons.refresh),
                           label: const Text('Повторить загрузку'),
                         ),
-                        const SizedBox(height: 8),
-                        FilledButton.icon(
-                          onPressed: _working ? null : _import,
-                          icon: const Icon(Icons.library_add_outlined),
-                          label: const Text('Добавить книгу'),
-                        ),
                       ],
                     ),
                   )
@@ -558,14 +492,8 @@ class _LibraryPageState extends State<LibraryPage> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text('Книг пока нет. Добавьте TXT или FB2 — '
-                            'они появятся здесь для обычного чтения.'),
-                        const SizedBox(height: 12),
-                        FilledButton.icon(
-                          onPressed: _working ? null : _import,
-                          icon: const Icon(Icons.library_add_outlined),
-                          label: const Text('Добавить книгу'),
-                        ),
+                        const Text('Книг пока нет. Нажмите «Добавить книгу» '
+                            'выше, чтобы импортировать TXT или FB2.'),
                       ],
                     ),
                   )
