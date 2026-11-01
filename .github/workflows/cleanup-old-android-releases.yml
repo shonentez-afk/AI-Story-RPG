@@ -1,0 +1,41 @@
+name: Prune old Android test releases
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/cleanup-old-android-releases.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Keep newest Android test APK and delete older test releases
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          KEEP_TAG="$(gh release list --limit 100 --json tagName \
+            --jq '[.[].tagName | select(startswith("android-build-"))][0] // ""')"
+          if [ -z "$KEEP_TAG" ]; then
+            echo "No android-build releases to prune."
+            exit 0
+          fi
+          echo "Keeping: $KEEP_TAG"
+          gh release list --limit 100 --json tagName --jq '.[].tagName' |
+            while IFS= read -r TAG; do
+              case "$TAG" in
+                android-build-*)
+                  if [ "$TAG" != "$KEEP_TAG" ]; then
+                    echo "Deleting old test release: $TAG"
+                    gh release delete "$TAG" --cleanup-tag --yes
+                  fi
+                  ;;
+              esac
+            done
