@@ -34,4 +34,24 @@ void main() {
     expect(find.textContaining('Тайна особняка: Войти и исследовать дом'),
         findsOneWidget);
   });
+  testWidgets('saved game restores journal after reopening', (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    await tester.pumpWidget(const AIStoryApp());
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Новая история'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Войти и исследовать дом'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Сохранить'));
+    await tester.pumpAndSettle();
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Продолжить'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Журнал'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Тайна особняка: Войти и исследовать дом'),
+        findsOneWidget);
+  });
+
 }
