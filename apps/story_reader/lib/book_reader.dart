@@ -59,7 +59,6 @@ class _BookReaderPageState extends State<BookReaderPage> {
   }
 
   void _changeChrome(ReaderChromeMode next) {
-    _peekTimer?.cancel();
     setState(() {
       _chrome = next;
     });
