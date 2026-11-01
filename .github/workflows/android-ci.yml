@@ -130,6 +130,8 @@ jobs:
       - name: Generate Android host and build APK
         run: |
           flutter create --platforms=android --project-name ai_story_reader --org com.aistoryrpg .
+          python3 -m pip install --quiet Pillow
+          python3 ../../tools/build_android_branding.py android/app/src/main/res
           flutter pub get
           flutter build apk --debug
           test -s build/app/outputs/flutter-apk/app-debug.apk
