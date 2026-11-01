@@ -338,7 +338,7 @@ class _LibraryPageState extends State<LibraryPage> {
     final deadline = Timer(const Duration(seconds: 8), () {
       if (!timeout.isCompleted) {
         timeout.completeError(
-          const TimeoutException('Не удалось прочитать библиотеку за 8 секунд'),
+          TimeoutException('Не удалось прочитать библиотеку за 8 секунд'),
         );
       }
     });

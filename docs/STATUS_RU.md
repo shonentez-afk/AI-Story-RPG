@@ -224,3 +224,6 @@
 - CI `41332360623` по `ef004a4`: Python, Dart, Flutter analyze PASS; Flutter widget tests FAIL из-за незакрытых таймеров в `HomePage._refresh`; Android/Windows SKIP.
 - Исправление: убрать background `Future.timeout` на главном экране, а в `LibraryPage` заменить его на явно управляемый `Timer` + `Future.any` и отменять каждый deadline в `dispose()` и при завершении операции; `_loadGeneration` не допускает запись устаревшего результата. Видимые состояния «Повторить загрузку» и данные книг сохраняются.
 - Проверить полный CI нового SHA. `docs/UI_UX_AUDIT_2026-11-02_RU.md` дополнен.
+
+## QA исправление компиляции (2026-11-02)
+- CI `41332615600` по `5a696037`: Python/Dart PASS; Flutter analyze FAIL (один `const_with_non_const` при создании `TimeoutException` в `home_page.dart`), widget и Android/Windows SKIP. Удалён ошибочный `const` у конструктора, бизнес-логика и записи данных не менялись. Повторный полный CI обязателен.

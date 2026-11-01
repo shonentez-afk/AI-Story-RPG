@@ -80,3 +80,6 @@ Run `41330543268`: Python PASS, Dart PASS, Flutter analyze PASS, основны�
 
 ## UI/UX audit — QA hotfix lifecycle (после ef004a4)
 Run `41332360623` (SHA `ef004a4`): Python/Dart/analyze PASS, Flutter FAIL из-за незакрытых 8s `Future.timeout` timers в `HomePage._refresh`; Android/Windows SKIP. Убираем фоновый timeout на главной, в `LibraryPage` ставим отменяемые в `dispose` deadline timers для `Future.any`, защищаем позднее обновление по поколению загрузки. При возобновлении — проверить последние HEAD, весь CI, обе сборки и не сообщать PASS без логов. Исходные RPG/book saves не мигрировать.
+
+## QA маленькая правка после CI 41332615600
+Предыдущий запуск Flutter analyze прерван одним `const_with_non_const` в `home_page.dart`; убрано `const` при создании `TimeoutException`. Проверь новый run по HEAD до приёмки UX, продолжать только после PASS widget + Android + Windows.
