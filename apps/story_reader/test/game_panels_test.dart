@@ -81,25 +81,27 @@ void main() {
     expect(find.text('• Старое письмо'), findsOneWidget);
   });
 
-  testWidgets('new game warns before overwriting the existing slot', (tester) async {
+  testWidgets('new story creates its own slot instead of overwriting',
+      (tester) async {
     SharedPreferences.setMockInitialValues({});
     await tester.pumpWidget(const AIStoryApp());
     await tester.pumpAndSettle();
     await tester.tap(find.text('Новая история'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Сохранить'));
+    await tester.tap(find.text('Войти и исследовать дом'));
     await tester.pumpAndSettle();
-    final navigator = tester.state<NavigatorState>(find.byType(Navigator).first);
+    var navigator = tester.state<NavigatorState>(find.byType(Navigator).first);
     navigator.pop();
     await tester.pumpAndSettle();
     await tester.tap(find.text('Новая история'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Сохранить'));
-    await tester.pumpAndSettle();
-    expect(find.text('Заменить сохранение?'), findsOneWidget);
-    await tester.tap(find.text('Отмена'));
-    await tester.pumpAndSettle();
     expect(find.text('Заменить сохранение?'), findsNothing);
+    navigator = tester.state<NavigatorState>(find.byType(Navigator).first);
+    navigator.pop();
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Мои прохождения'));
+    await tester.pumpAndSettle();
+    expect(find.byTooltip('Удалить прохождение'), findsNWidgets(2));
   });
 
   testWidgets('choice reports acquired item in journal', (tester) async {

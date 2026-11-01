@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:story_engine/story_engine.dart';
 import 'save_store.dart';
+import 'campaign_store.dart';
 import 'home_page.dart';
 import 'app_theme.dart';
 import 'reading_preferences.dart';
@@ -113,9 +114,10 @@ StoryProject makePilotStory() {
 }
 
 class StoryReaderPage extends StatefulWidget {
-  const StoryReaderPage({super.key, this.resume = false});
+  const StoryReaderPage({super.key, this.resume = false, this.campaignId});
 
   final bool resume;
+  final String? campaignId;
 
   @override
   State<StoryReaderPage> createState() => _StoryReaderPageState();
@@ -124,11 +126,12 @@ class StoryReaderPage extends StatefulWidget {
 class _StoryReaderPageState extends State<StoryReaderPage> {
   late final StoryProject _project;
   late StoryEngine _engine;
-  final SaveStore _saves = SaveStore();
+  final CampaignStore _campaigns = CampaignStore();
+  String? _campaignId;
+  Future<bool> _pendingWrite = Future<bool>.value(true);
   bool _hasSave = false;
   bool _saveBusy = false;
   bool _restoreBusy = false;
-  bool _loadedFromSlot = false;
   final List<String> _sessionDecisions = [];
   GameProgress _progress = const GameProgress();
   int _rulesVersion = 1; // New pilot games use inventory-gated choices.
@@ -147,7 +150,14 @@ class _StoryReaderPageState extends State<StoryReaderPage> {
       throw StateError(validation.format());
     }
     _engine = StoryEngine(project: _project)..start();
-    _checkSave();
+    _campaignId = widget.campaignId;
+    if (widget.resume || widget.campaignId != null) {
+      _restore();
+    } else {
+      _campaignId = CampaignStore.newId();
+      // Start each new story with a separate initial checkpoint.
+      _queueSave();
+    }
     _readingSettingsStore.load().then((value) {
       if (mounted) setState(() => _reading = value);
     });
@@ -179,9 +189,47 @@ class _StoryReaderPageState extends State<StoryReaderPage> {
     }
   }
 
-  Future<void> _checkSave() async {
-    final snapshot = await _saves.read();
-    if (mounted) setState(() => _hasSave = snapshot != null);
+  /// Every confirmed transition captures all state synchronously.
+  /// Writes are serialized so a slow earlier turn cannot overwrite a newer
+  /// choice, even when the user taps actions quickly or leaves the page.
+  Future<bool> _queueSave() {
+    final id = _campaignId;
+    if (id == null) return Future<bool>.value(false);
+    late final GameSaveRecord game;
+    try {
+      game = GameSaveRecord(
+        StoryRuntimeSnapshotCodec().encodeJson(_engine.createSnapshot()),
+        List<String>.unmodifiable(_sessionDecisions),
+        _progress,
+        _rulesVersion,
+      );
+    } catch (error) {
+      _saveError(error);
+      return Future<bool>.value(false);
+    }
+    final scene = _engine.currentEvent?.presentation?.title?.value
+        ?? 'История завершена';
+    _pendingWrite = _pendingWrite.then((_) async {
+      try {
+        await _campaigns.write(id, game, sceneTitle: scene);
+        if (mounted && id == _campaignId) {
+          setState(() => _hasSave = true);
+        }
+        return true;
+      } catch (error) {
+        _saveError(error);
+        return false;
+      }
+    });
+    return _pendingWrite;
+  }
+
+  void _saveError(Object error) {
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Автосохранение не удалось: $error')),
+      );
+    }
   }
 
   void _choose(StoryChoiceId id) {
@@ -214,50 +262,20 @@ class _StoryReaderPageState extends State<StoryReaderPage> {
         });
       }
     });
+    _queueSave();
   }
 
   Future<void> _save() async {
     if (_saveBusy || _restoreBusy) return;
     setState(() => _saveBusy = true);
-    try {
-      // A new session must not silently replace a previously saved game.
-      if (!_loadedFromSlot && await _saves.read() != null) {
-        if (!mounted) return;
-        final replace = await showDialog<bool>(
-          context: context,
-          builder: (context) => AlertDialog(
-            title: const Text('Заменить сохранение?'),
-            content: const Text(
-              'Сейчас сохранена другая игровая сессия. '
-              'Её прогресс будет перезаписан. Продолжить?'),
-            actions: [
-              TextButton(onPressed: () => Navigator.pop(context, false),
-                child: const Text('Отмена')),
-              FilledButton(onPressed: () => Navigator.pop(context, true),
-                child: const Text('Заменить')),
-            ],
-          ),
+    final ok = await _queueSave();
+    if (mounted) {
+      if (ok) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Прогресс сохранён на устройстве')),
         );
-        if (replace != true || !mounted) return;
       }
-      final encoded = StoryRuntimeSnapshotCodec()
-          .encodeJson(_engine.createSnapshot());
-      await _saves.writeGame(encoded, _sessionDecisions, _progress, _rulesVersion);
-      if (!mounted) return;
-      setState(() {
-        _hasSave = true;
-        _loadedFromSlot = true;
-      });
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Прогресс сохранён на устройстве')),
-      );
-    } catch (error) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Не удалось сохранить: $error')),
-      );
-    } finally {
-      if (mounted) setState(() => _saveBusy = false);
+      setState(() => _saveBusy = false);
     }
   }
 
@@ -265,8 +283,15 @@ class _StoryReaderPageState extends State<StoryReaderPage> {
     if (_saveBusy || _restoreBusy) return;
     setState(() => _restoreBusy = true);
     try {
-      final saved = await _saves.readGame();
-      if (saved == null) return;
+      await _pendingWrite;
+      String? id = _campaignId;
+      if (id == null) {
+        final available = await _campaigns.all();
+        if (available.isEmpty) throw StateError('Нет сохранённых прохождений');
+        id = available.first.id;
+      }
+      final saved = await _campaigns.read(id);
+      if (saved == null) throw StateError('Сохранение не найдено');
       final restored = StoryEngine.restore(
         project: _project,
         snapshot: StoryRuntimeSnapshotCodec().decodeJson(
@@ -278,11 +303,13 @@ class _StoryReaderPageState extends State<StoryReaderPage> {
         _engine = restored;
         _progress = saved.progress;
         _rulesVersion = saved.rulesVersion;
-        _loadedFromSlot = true;
+        _campaignId = id;
+        _hasSave = true;
         _sessionDecisions
           ..clear()
           ..addAll(saved.journal);
       });
+      await _campaigns.markActive(id);
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -324,13 +351,17 @@ class _StoryReaderPageState extends State<StoryReaderPage> {
   }
 
   void _restart() {
+    if (_saveBusy || _restoreBusy) return;
     setState(() {
+      // A fresh campaign never destroys the completed one.
+      _campaignId = CampaignStore.newId();
+      _hasSave = false;
       _sessionDecisions.clear();
       _progress = const GameProgress();
       _rulesVersion = 1;
-      _loadedFromSlot = false;
       _engine = StoryEngine(project: _project)..start();
     });
+    _queueSave();
   }
 
   @override
@@ -434,7 +465,7 @@ class _StoryReaderPageState extends State<StoryReaderPage> {
                   ],
                 ),
                 const SizedBox(height: 12),
-                Text('Демо RPG • Один локальный слот сохранения',
+                Text('Демо RPG • Автосохранение • Независимые прохождения',
                   style: TextStyle(color: _reading.foreground, fontSize: 12)),
               ],
             ),

@@ -3,7 +3,8 @@ import 'package:file_picker/file_picker.dart';
 import 'book_import.dart';
 import 'book_storage.dart';
 import 'book_reader.dart';
-import 'save_store.dart';
+import 'campaign_store.dart';
+import 'campaigns_page.dart';
 import 'app_theme.dart';
 import 'reading_preferences.dart';
 import 'reading_settings_sheet.dart';
@@ -17,6 +18,8 @@ class HomePage extends StatefulWidget {
 
 class _HomePageState extends State<HomePage> {
   bool _hasSave = false;
+  String? _recentCampaignId;
+  int _campaignCount = 0;
   List<StoredBook> _books = [];
 
   @override
@@ -29,8 +32,12 @@ class _HomePageState extends State<HomePage> {
     // The book filesystem may be unavailable in widget tests or temporarily
     // unreadable on device. It must not hide an existing RPG save.
     try {
-      final save = await SaveStore().read();
-      if (mounted) setState(() => _hasSave = save != null);
+      final campaigns = await CampaignStore().all();
+      if (mounted) setState(() {
+        _hasSave = campaigns.isNotEmpty;
+        _recentCampaignId = campaigns.isEmpty ? null : campaigns.first.id;
+        _campaignCount = campaigns.length;
+      });
     } catch (_) {
       // Keep the last known save indicator; do not hide it because a read failed.
     }
@@ -115,7 +122,10 @@ class _HomePageState extends State<HomePage> {
                         SizedBox(
                           width: double.infinity,
                           child: FilledButton.icon(
-                            onPressed: () => _open(StoryReaderPage(resume: _hasSave)),
+                            onPressed: () => _open(StoryReaderPage(
+                              resume: _hasSave,
+                              campaignId: _hasSave ? _recentCampaignId : null,
+                            )),
                             icon: Icon(_hasSave ? Icons.play_arrow : Icons.auto_stories),
                             label: Text(_hasSave ? 'Продолжить' : 'Начать историю'),
                           ),
@@ -147,6 +157,13 @@ class _HomePageState extends State<HomePage> {
                           Expanded(child: story),
                         ]);
                 }),
+                const SizedBox(height: 10),
+                _HomeAction(
+                  icon: Icons.history_outlined,
+                  title: 'Мои прохождения',
+                  subtitle: 'Сохранённые кампании: $_campaignCount',
+                  onTap: () => _open(const CampaignsPage()),
+                ),
                 const SizedBox(height: 24),
                 Row(
                   children: [
