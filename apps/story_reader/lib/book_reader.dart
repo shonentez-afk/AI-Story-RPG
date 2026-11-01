@@ -40,7 +40,7 @@ class _BookReaderPageState extends State<BookReaderPage> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       if (_scroll.hasClients) {
-        _scroll.jumpTo(_reading.scrollOffset.clamp(0.0, _scroll.position.maxScrollExtent));
+        _scroll.jumpTo(_reading.scrollOffset);
       }
       _restoring = false;
     });
