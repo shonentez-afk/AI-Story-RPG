@@ -54,4 +54,30 @@ void main() {
     expect(find.text('Продолжение'), findsOneWidget);
     expect(find.text('Автор'), findsNothing);
   });
+  testWidgets('chapter actions fit narrow screens with large accessibility text',
+      (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    tester.view.physicalSize = const Size(320, 640);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+    const book = ImportedBook(title: 'Книга', author: '', chapters: [
+      'Глава с небольшим текстом',
+      'Продолжение',
+    ]);
+    await tester.pumpWidget(MaterialApp(
+      builder: (context, child) => MediaQuery(
+        data: MediaQuery.of(context).copyWith(
+          textScaler: const TextScaler.linear(2)),
+        child: child!,
+      ),
+      home: const BookReaderPage(book: book),
+    ));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    expect(find.text('Далее'), findsOneWidget);
+  });
+
 }
