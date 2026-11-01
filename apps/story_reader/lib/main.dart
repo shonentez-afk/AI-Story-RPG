@@ -4,6 +4,7 @@ import 'save_store.dart';
 import 'home_page.dart';
 import 'app_theme.dart';
 import 'reading_preferences.dart';
+import 'game_panels.dart';
 
 void main() {
   runApp(const AIStoryApp());
@@ -180,6 +181,18 @@ class _StoryReaderPageState extends State<StoryReaderPage> {
     }
   }
 
+  void _openPanel(GamePanel panel) {
+    final event = _engine.currentEvent;
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (_) => GameInfoSheet(
+        panel: panel,
+        currentScene: event?.presentation?.title?.value ?? 'Конец пролога',
+      ),
+    );
+  }
+
   void _restart() {
     setState(() {
       _engine = StoryEngine(project: _project)..start();
@@ -192,6 +205,7 @@ class _StoryReaderPageState extends State<StoryReaderPage> {
     final done = _engine.status == StoryEngineStatus.terminated;
     return Scaffold(
       appBar: AppBar(title: const Text('Живая книга')),
+      bottomNavigationBar: GameQuickBar(onOpen: _openPanel),
       body: ColoredBox(
         color: _reading.background,
         child: SafeArea(
@@ -215,6 +229,14 @@ class _StoryReaderPageState extends State<StoryReaderPage> {
                     fontSize: _reading.fontSize, height: _reading.lineHeight),
                 ),
                 const SizedBox(height: 30),
+                if (!done && _engine.availableChoices.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: Text('ВАШЕ ДЕЙСТВИЕ',
+                      style: TextStyle(color: _reading.foreground,
+                        fontSize: 12, fontWeight: FontWeight.w700,
+                        letterSpacing: 1.2)),
+                  ),
                 for (final choice in _engine.availableChoices)
                   Padding(
                     padding: const EdgeInsets.only(bottom: 10),
