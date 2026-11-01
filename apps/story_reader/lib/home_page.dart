@@ -5,6 +5,8 @@ import 'book_storage.dart';
 import 'book_reader.dart';
 import 'save_store.dart';
 import 'app_theme.dart';
+import 'reading_preferences.dart';
+import 'reading_settings_sheet.dart';
 import 'main.dart' show StoryReaderPage;
 
 class HomePage extends StatefulWidget {
@@ -464,6 +466,28 @@ class _SettingsPageState extends State<SettingsPage> {
     super.dispose();
   }
 
+  final ReadingSettingsStore _readerStore = ReadingSettingsStore();
+
+  Future<void> _openReadingSettings() async {
+    try {
+      final current = await _readerStore.load();
+      if (!mounted) return;
+      showModalBottomSheet<void>(
+        context: context,
+        isScrollControlled: true,
+        builder: (_) => ReadingSettingsSheet(
+          preferences: current,
+          onChanged: (next) => _readerStore.save(next),
+        ),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Не удалось открыть настройки чтения: $error')),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) => Scaffold(
         appBar: AppBar(title: const Text('Настройки')),
@@ -492,10 +516,12 @@ class _SettingsPageState extends State<SettingsPage> {
                   ],
                 ),
                 const SizedBox(height: 12),
-                const ListTile(
-                  leading: Icon(Icons.auto_stories_outlined),
-                  title: Text('Оформление страниц'),
-                  subtitle: Text('Общие настройки текста доступны в читалке и игре'),
+                ListTile(
+                  leading: const Icon(Icons.auto_stories_outlined),
+                  title: const Text('Оформление страниц'),
+                  subtitle: const Text('Палитра, размер текста, интервалы и поля'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: _openReadingSettings,
                 ),
                 const ListTile(
                   leading: Icon(Icons.offline_bolt_outlined),
