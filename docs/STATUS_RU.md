@@ -101,3 +101,9 @@
 - Читалка показывает изображения внутри книги и увеличивает по нажатию; добавлен тест вложенных секций/порядка иллюстраций.
 - Файл `docs/MEDIA_IN_GAME_IMPLEMENTATION_PLAN_RU.md` фиксирует дорожную карту до игровых привязок и ограничений спойлеров.
 - **CI и APK после этих изменений пока не проверены; игровые привязки только модель, ещё не подключены к движку.**
+
+## Переход с CircleCI на GitHub Actions (2026-11-01)
+- Создан `.github/workflows/android-ci.yml` (Python reference, Dart engine/probe/stress/Ink, Flutter analyze/test, Android debug APK).
+- APK публикуется артефактом `AI-Story-RPG-Android-debug` с файлом SHA256SUMS.txt (после зелёного workflow).
+- Удалён `.circleci/config.yml`, чтобы не запускались две CI-системы. Подключение CircleCI к GitHub и будущие уведомления могут отдельно отключаться пользователем в интерфейсе CircleCI.
+- Ветка `main`, push / pull request / manual workflow_dispatch. Требуется подтвердить первый прогон GitHub Actions; успешную сборку пока не заявляем.
