@@ -32,6 +32,10 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Предметы'), findsNothing);
     expect(find.text('Войти и исследовать дом'), findsOneWidget);
+    await tester.tap(find.text('Тайна особняка').last);
+    await tester.pump();
+    expect(find.text('Предметы'), findsOneWidget);
+    expect(find.byTooltip('Настройки чтения'), findsNothing);
     await tester.tap(find.byTooltip('Показать управление'));
     await tester.pumpAndSettle();
     expect(find.text('Предметы'), findsOneWidget);
