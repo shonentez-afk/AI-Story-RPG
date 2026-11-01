@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:story_engine/story_engine.dart';
 import 'save_store.dart';
@@ -119,6 +120,8 @@ class _StoryReaderPageState extends State<StoryReaderPage> {
   bool _hasSave = false;
   ReadingPreferences _reading = const ReadingPreferences();
   ReaderChromeMode _chrome = ReaderChromeMode.normal;
+  bool _peekControls = false;
+  Timer? _peekTimer;
   final ReadingSettingsStore _readingSettingsStore = ReadingSettingsStore();
 
   @override
@@ -135,6 +138,31 @@ class _StoryReaderPageState extends State<StoryReaderPage> {
       if (mounted) setState(() => _reading = value);
     });
     if (widget.resume) _restore();
+  }
+
+  @override
+  void dispose() {
+    _peekTimer?.cancel();
+    super.dispose();
+  }
+
+  void _changeChrome(ReaderChromeMode next) {
+    _peekTimer?.cancel();
+    setState(() {
+      _chrome = next;
+      _peekControls = false;
+    });
+  }
+
+  void _tapReadingCanvas() {
+    if (_chrome != ReaderChromeMode.fullscreen) return;
+    _peekTimer?.cancel();
+    setState(() => _peekControls = !_peekControls);
+    if (_peekControls) {
+      _peekTimer = Timer(const Duration(seconds: 5), () {
+        if (mounted) setState(() => _peekControls = false);
+      });
+    }
   }
 
   Future<void> _checkSave() async {
@@ -225,7 +253,7 @@ class _StoryReaderPageState extends State<StoryReaderPage> {
     final done = _engine.status == StoryEngineStatus.terminated;
     return Scaffold(
       backgroundColor: _reading.background,
-      appBar: !_chrome.showTopBar ? null : AppBar(
+      appBar: !(_chrome.showTopBar || _peekControls) ? null : AppBar(
         backgroundColor: _reading.background,
         foregroundColor: _reading.foreground,
         title: const Text('Живая книга'),
@@ -241,9 +269,9 @@ class _StoryReaderPageState extends State<StoryReaderPage> {
         mode: _chrome,
         background: _reading.foreground,
         foreground: _reading.background,
-        onChange: (mode) => setState(() => _chrome = mode),
+        onChange: _changeChrome,
       ),
-      bottomNavigationBar: !_chrome.showGameBar ? null : ColoredBox(
+      bottomNavigationBar: !(_chrome.showGameBar || _peekControls) ? null : ColoredBox(
         color: _reading.background,
         child: Theme(
           data: Theme.of(context).copyWith(
@@ -256,6 +284,9 @@ class _StoryReaderPageState extends State<StoryReaderPage> {
       ),
       body: ColoredBox(
         color: _reading.background,
+        child: GestureDetector(
+        behavior: HitTestBehavior.translucent,
+        onTap: _tapReadingCanvas,
         child: SafeArea(
         child: Center(
           child: ConstrainedBox(
@@ -321,6 +352,7 @@ class _StoryReaderPageState extends State<StoryReaderPage> {
             ),
           ),
         ),
+      ),
       ),
       ),
     );
