@@ -37,56 +37,14 @@ class BookStorage {
     await file.writeAsString(payload, flush: true);
   }
 
-  /// Delete only a file whose ID came from the library itself.
+  /// Remove one imported library file; game saves stay separate.
   Future<void> remove(String bookId) async {
-    if (!RegExp(r'^[0-9]+_[0-9]+\\.json
-    final folder = await _folder();
-    final records = <StoredBook>[];
-    await for (final item in folder.list()) {
-      if (item is! File || !item.path.endsWith('.json')) continue;
-      try {
-        final data = jsonDecode(await item.readAsString()) as Map<String, dynamic>;
-        if (data['schema'] != 1 && data['schema'] != 2) continue;
-        final cover64 = data['coverBase64'] as String?;
-        records.add(StoredBook(
-          id: item.uri.pathSegments.last,
-          book: ImportedBook(
-            title: data['title'] as String,
-            author: data['author'] as String? ?? '',
-            chapters: (data['chapters'] as List).cast<String>(),
-            cover: cover64 == null ? null : base64Decode(cover64),
-            structuredChapters: data['schema'] == 2
-                ? (data['structuredChapters'] as List).map((x) =>
-                    BookChapter.fromJson(x as Map<String, dynamic>)).toList()
-                : const [],
-            images: data['schema'] == 2
-                ? (data['images'] as Map<String, dynamic>).map((id, item) {
-                    final value = item as Map<String, dynamic>;
-                    return MapEntry(id, BookImage(
-                      id: id,
-                      mediaType: value['mediaType'] as String,
-                      bytes: base64Decode(value['bytes'] as String),
-                    ));
-                  })
-                : const {},
-          ),
-        ));
-      } catch (_) {
-        // Isolate corrupt records; keep all remaining books accessible.
-      }
-    }
-    records.sort((a, b) => a.book.title.compareTo(b.book.title));
-    return records;
-  }
-}
-).hasMatch(bookId)) {
+    if (!RegExp(r'^[0-9]+_[0-9]+\.json$').hasMatch(bookId)) {
       throw const FormatException('Недопустимый идентификатор книги');
     }
     final folder = await _folder();
     final file = File('${folder.path}/$bookId');
-    if (!await file.exists()) {
-      throw StateError('Книга не найдена');
-    }
+    if (!await file.exists()) throw StateError('Книга не найдена');
     await file.delete();
   }
 
