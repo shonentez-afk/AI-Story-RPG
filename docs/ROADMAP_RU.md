@@ -76,3 +76,9 @@
 
 ## Контрольная точка M1.7.2 — принят (2026-11-02)
 `8fef11521c9f702414a6364c04b2350d30713b0d`, Actions `41337108811` SUCCESS. Прошли 10 unit тестов story_core, 9 bridge тестов, 6 schema тестов, 71 Flutter widget, Python/Dart, Android APK и Windows bundle. Следующий M1.7.3: контракт и проверяемый `.bworld` ZIP/SQLite (без нарушения существующей библиотеки), затем M1.7.4 durable SQLite/Drift, migration и UI 20+ turns. Подробности: `M17_STORY_RUNTIME_ADAPTER_RU.md`.
+
+## M1.7.3 — реализация формата BookWorld (2026-11-02)
+Кодовый этап: `docs/M17_BOOKWORLD_FORMAT_RU.md`. Есть пакет `packages/bookworld_format` (Dart) и Python builder, реальная ZIP/SQLite структура, versioned manifest, точные SHA/CRC, read-only проверка, оригинальный demo .bworld и security/unit contracts. **Не** подключён Flutter импорт, нет произвольных assets/source/ZIP compression, сохранений SQLite/Drift. Следующий M1.7.4 — приватная библиотека миров и кампаний, миграция `M1.6`, реальное Android↔Windows QA.
+
+## M1.7.3 — принята контрольная точка (2026-11-02)
+Код `7c3923492118a7aef9c9ecda3e0c319a2961499f`, Actions `41338634157` #143 `completed/success` (Python ZIP/SQLite 12, manifest+blueprint schema 9, core 10, adapter 9, BookWorld Dart 5, Flutter widget 71, Android и Windows PASS). Demo `.bworld` опубликован как artifact того же запуска. Далее M1.7.4 — подключить приватное SQLite/Drift хранилище, миграцию, UI-import и фактические E2E на обоих устройствах, без второй библиотеки.

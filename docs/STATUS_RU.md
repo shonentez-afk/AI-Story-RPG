@@ -258,3 +258,11 @@
 
 ## M1.7.2 — итоговая приёмка
 Исходный SHA `8fef11521c9f702414a6364c04b2350d30713b0d`, Actions `41337108811` **SUCCESS** (Python/Dart, story_core **10/10**, story_runtime_adapter **9/9**, JSON Schema **6/6**, Flutter analyze, widget **71/71**, Android APK и Windows portable PASS). Артефакты обеих платформ подтверждены, Android prerelease `android-build-142` содержит APK+SHA256SUMS. Физический device QA/M1.6 migration/SQLite/настоящий .bworld ZIP **SKIP, не реализовано**. Отчёт: `docs/M17_STORY_RUNTIME_ADAPTER_RU.md`.
+
+## M1.7.3 — первый полноценный ZIP+SQLite BookWorld (2026-11-02)
+- Рабочий коммит исходников `7c3923492118a7aef9c9ecda3e0c319a2961499f`. Python `tools/bookworld/bookworld.py` детерминированно компилирует оригинальный blueprint в реально проверяемый `.bworld` (ZIP, manifest.json, scenario/blueprint.json, world.sqlite). Dart `packages/bookworld_format` независимо импортирует, проверяет CRC, SHA-256, SQLite integrity + rows и возвращает `StoryBlueprint`, который в тесте запускает `StoryEngineCoordinator`.
+- Новые unit/security тесты Python, Dart, JSON Schema. Blocking CI job `story-core` расширен; ожидаем конечные реальные PASS/FAIL по run нового SHA. Подробности `docs/M17_BOOKWORLD_FORMAT_RU.md`.
+- GUI, пользовательские книги/сейвы, `CampaignStore` и дизайн главного меню НЕ МЕНЯЛИСЬ. Следующий этап M1.7.4 — SQLite/Drift, safe UI import, migration и 20+ E2E ходов.
+
+## M1.7.3 — автоматическая приёмка завершена
+Исходный SHA `7c3923492118a7aef9c9ecda3e0c319a2961499f`; GitHub Actions `41338634157` (**#143 SUCCESS 6/6**). Python BookWorld security **12/12 PASS**, JSON Schema **9/9 PASS**, story_core **10/10 PASS**, adapter **9/9 PASS**, Dart BookWorld importer **5/5 PASS**, Flutter analyze PASS и widget **71/71 PASS**, Windows portable PASS, Android APK PASS. Artifacts: `AI-Story-RPG-BookWorld-demo`, `AI-Story-RPG-Windows-portable`, `AI-Story-RPG-Android-debug`, prerelease `android-build-143`. **SKIP:** реальный Android/Windows UI-импорт `.bworld`, SQLite/Drift сохранения, перенос M1.6; подробности `docs/M17_BOOKWORLD_FORMAT_RU.md`.

@@ -47,3 +47,8 @@
 
 ## M1.7.2: сценарный координатор
 Новый `packages/story_runtime_adapter` использует только уже выбранные `story_engine 0.1.0-alpha.1` (BSD-3-Clause), локальный собственный `story_core` и `test` (только dev). Внешний код не скопирован и приватные методы зависимостей не импортируются; обращение к StoryEngine происходит исключительно через публичный API. Реальных новых зависимостей внутри Android/Windows Flutter UI нет.
+
+## M1.7.3 — native BookWorld import и compiler
+- `packages/bookworld_format` использует `sqlite3 ^3.8.0` (Dart FFI, MIT; native hooks bundling SQLite для Android/Windows/Linux), `crypto ^3.0.6` (BSD-3-Clause) и собственный `story_core`. В этом пакете нет `archive`: проверка небольшого, ограниченного ZIP_STORED поднабора реализована своим Dart-кодом для отказа от двусмысленных/опасных ZIP особенностей.
+- Отдельный Python-компилятор использует только стандартные `sqlite3`, `zipfile`, `hashlib`, `json`, `pathlib`; Python не входит в Flutter runtime. Для тестирования JSON Schema в CI есть прежняя dev-only зависимость `jsonschema==4.23.0` (MIT).
+- Содержание demo оригинальное и создано для проекта, в `.bworld` нет исходного текста чужих книг или каких-либо приватных ключей/моделей/LLM-вызовов.
