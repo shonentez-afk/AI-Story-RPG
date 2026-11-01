@@ -150,7 +150,7 @@ class BookImporter {
             flush();
             appendNode(part, blocks);
           } else {
-            buffer.write(part.innerText);
+            buffer.write(part is XmlText ? part.value : part.innerText);
           }
         }
         flush();
