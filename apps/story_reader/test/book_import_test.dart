@@ -27,6 +27,10 @@ void main() {
     expect(book.author, 'Иван Иванов');
     expect(book.chapters.single, contains('Начало'));
     expect(book.cover, isNotNull);
+    expect(book.structuredChapters.single.blocks.first.kind,
+        BookBlockKind.heading);
+    expect(book.structuredChapters.single.blocks.first.text,
+        'Первая глава');
   });
   test('FB2 preserves image between paragraphs and nested sections', () {
     const xml = '''<FictionBook xmlns:l="http://www.w3.org/1999/xlink">
