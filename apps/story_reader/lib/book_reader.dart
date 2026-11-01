@@ -22,13 +22,39 @@ class _BookReaderPageState extends State<BookReaderPage> {
   final BookReadingStore _readingStore = BookReadingStore();
   BookReadingState _reading = const BookReadingState();
   bool _progressReady = false;
+  final ScrollController _scroll = ScrollController();
+  Timer? _progressTimer;
+  bool _restoring = false;
+
+  void _saveScroll() {
+    if (!_progressReady || _restoring || widget.bookId == null || !_scroll.hasClients) return;
+    _progressTimer?.cancel();
+    final offset = _scroll.offset;
+    _progressTimer = Timer(const Duration(milliseconds: 350), () {
+      _readingStore.save(widget.bookId!, _reading.copyWith(scrollOffset: offset));
+    });
+  }
+
+  void _restoreScroll() {
+    _restoring = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      if (_scroll.hasClients) {
+        _scroll.jumpTo(_reading.scrollOffset.clamp(0.0, _scroll.position.maxScrollExtent));
+      }
+      _restoring = false;
+    });
+  }
   ReaderChromeMode _chrome = ReaderChromeMode.normal;
-  bool _peekControls = false;
-  Timer? _peekTimer;
+
 
   @override
   void dispose() {
-    _peekTimer?.cancel();
+    _progressTimer?.cancel();
+    if (widget.bookId != null && _scroll.hasClients) {
+      _readingStore.save(widget.bookId!, _reading.copyWith(scrollOffset: _scroll.offset));
+    }
+    _scroll.dispose();
     super.dispose();
   }
 
@@ -36,19 +62,7 @@ class _BookReaderPageState extends State<BookReaderPage> {
     _peekTimer?.cancel();
     setState(() {
       _chrome = next;
-      _peekControls = false;
     });
-  }
-
-  void _tapReadingCanvas() {
-    if (_chrome != ReaderChromeMode.fullscreen) return;
-    _peekTimer?.cancel();
-    setState(() => _peekControls = !_peekControls);
-    if (_peekControls) {
-      _peekTimer = Timer(const Duration(seconds: 5), () {
-        if (mounted) setState(() => _peekControls = false);
-      });
-    }
   }
 
   int get _count => widget.book.structuredChapters.isNotEmpty
@@ -64,11 +78,14 @@ class _BookReaderPageState extends State<BookReaderPage> {
       _reading = saved.copyWith(chapter: saved.chapter.clamp(0, _count > 0 ? _count - 1 : 0).toInt());
       _progressReady = true;
     });
+    _restoreScroll();
   }
 
   void _chapter(int index) {
     if (index < 0 || index >= _count) return;
-    setState(() => _reading = _reading.copyWith(chapter: index));
+    _progressTimer?.cancel();
+    setState(() => _reading = _reading.copyWith(chapter: index, scrollOffset: 0));
+    _restoreScroll();
     if (widget.bookId != null) {
       _readingStore.save(widget.bookId!, _reading);
     }
@@ -111,6 +128,7 @@ class _BookReaderPageState extends State<BookReaderPage> {
     super.initState();
     _loadSettings();
     _loadPosition();
+    _scroll.addListener(_saveScroll);
   }
 
   Future<void> _loadSettings() async {
@@ -181,13 +199,11 @@ class _BookReaderPageState extends State<BookReaderPage> {
       ),
       body: ColoredBox(
         color: prefs.background,
-        child: GestureDetector(
-          behavior: HitTestBehavior.translucent,
-          onTap: _tapReadingCanvas,
         child: Center(
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 800),
             child: ListView(
+              controller: _scroll,
               padding: EdgeInsets.symmetric(
                 horizontal: prefs.horizontalPadding,
                 vertical: 24,
@@ -204,12 +220,12 @@ class _BookReaderPageState extends State<BookReaderPage> {
                           Icon(Icons.menu_book, color: prefs.foreground),
                     ),
                   ),
-                Text(widget.book.title,
+                if (_reading.chapter == 0) Text(widget.book.title,
                     style: readerText.copyWith(
                       fontSize: prefs.fontSize + 8,
                       fontWeight: FontWeight.bold,
                     )),
-                if (widget.book.author.isNotEmpty)
+                if (_reading.chapter == 0 && widget.book.author.isNotEmpty)
                   Text(widget.book.author, style: readerText),
                 const SizedBox(height: 24),
                 if (_count > 0) ...[
@@ -285,14 +301,13 @@ class _BookReaderPageState extends State<BookReaderPage> {
                       ),
                     ],
                   ),
-                  const SizedBox(height: 28),
+                  const SizedBox(height: 96),
                 ],
                 Text('Режим чтения • RPG по этой книге появится позже',
                     style: readerText.copyWith(fontSize: 12)),
               ],
             ),
           ),
-        ),
         ),
       ),
     );
