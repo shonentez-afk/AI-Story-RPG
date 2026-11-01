@@ -210,22 +210,3 @@ class BookImporter {
       bytes.length >= 3 &&
       bytes[0] == 255 && bytes[1] == 216 && bytes[2] == 255;
 }
-), ''),
-      author: authors,
-      chapters: chapters,
-      structuredChapters: structured,
-      images: resources,
-      cover: cover,
-    );
-  }
-
-  static bool _png(List<int> bytes) =>
-      bytes.length >= 8 &&
-      bytes[0] == 137 && bytes[1] == 80 && bytes[2] == 78 &&
-      bytes[3] == 71 && bytes[4] == 13 && bytes[5] == 10 &&
-      bytes[6] == 26 && bytes[7] == 10;
-
-  static bool _jpg(List<int> bytes) =>
-      bytes.length >= 3 &&
-      bytes[0] == 255 && bytes[1] == 216 && bytes[2] == 255;
-}
