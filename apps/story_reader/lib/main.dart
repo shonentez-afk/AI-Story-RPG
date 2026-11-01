@@ -118,6 +118,7 @@ class _StoryReaderPageState extends State<StoryReaderPage> {
   late StoryEngine _engine;
   final SaveStore _saves = SaveStore();
   bool _hasSave = false;
+  final List<String> _sessionDecisions = [];
   ReadingPreferences _reading = const ReadingPreferences();
   ReaderChromeMode _chrome = ReaderChromeMode.normal;
   bool _peekControls = false;
@@ -171,7 +172,15 @@ class _StoryReaderPageState extends State<StoryReaderPage> {
   }
 
   void _choose(StoryChoiceId id) {
-    setState(() => _engine.choose(id));
+    final event = _engine.currentEvent;
+    final label = _engine.availableChoices
+        .where((choice) => choice.id == id)
+        .map((choice) => choice.presentation?.text.value ?? choice.id.value)
+        .first;
+    setState(() {
+      _engine.choose(id);
+      _sessionDecisions.add('${event?.presentation?.title?.value ?? 'Сцена'}: $label');
+    });
   }
 
   Future<void> _save() async {
@@ -237,12 +246,14 @@ class _StoryReaderPageState extends State<StoryReaderPage> {
       builder: (_) => GameInfoSheet(
         panel: panel,
         currentScene: event?.presentation?.title?.value ?? 'Конец пролога',
+        journalEntries: List.unmodifiable(_sessionDecisions),
       ),
     );
   }
 
   void _restart() {
     setState(() {
+      _sessionDecisions.clear();
       _engine = StoryEngine(project: _project)..start();
     });
   }
