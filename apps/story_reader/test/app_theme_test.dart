@@ -28,4 +28,16 @@ void main() {
     expect(AppTheme.light().brightness, Brightness.light);
     expect(AppTheme.dark().brightness, Brightness.dark);
   });
+  testWidgets('reading preferences open directly from settings', (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    await tester.pumpWidget(const AIStoryApp());
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Настройки'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Оформление страниц'));
+    await tester.pumpAndSettle();
+    expect(find.text('Настройки чтения'), findsOneWidget);
+    expect(find.text('OLED'), findsOneWidget);
+  });
+
 }
