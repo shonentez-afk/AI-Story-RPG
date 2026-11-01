@@ -24,15 +24,19 @@ class _HomePageState extends State<HomePage> {
   }
 
   Future<void> _refresh() async {
+    // The book filesystem may be unavailable in widget tests or temporarily
+    // unreadable on device. It must not hide an existing RPG save.
     try {
       final save = await SaveStore().read();
-      final books = await BookStorage().all();
-      if (mounted) setState(() {
-        _hasSave = save != null;
-        _books = books;
-      });
+      if (mounted) setState(() => _hasSave = save != null);
     } catch (_) {
-      // Keep the home menu usable even when a local library read fails.
+      // Keep the last known save indicator; do not hide it because a read failed.
+    }
+    try {
+      final books = await BookStorage().all();
+      if (mounted) setState(() => _books = books);
+    } catch (_) {
+      // Home remains usable without the library; saved RPG still appears.
     }
   }
 
