@@ -3,6 +3,7 @@ import 'book_import.dart';
 import 'book_model.dart';
 import 'book_reading_state.dart';
 import 'reading_preferences.dart';
+import 'reading_settings_sheet.dart';
 
 class BookReaderPage extends StatefulWidget {
   const BookReaderPage({super.key, required this.book, this.bookId});
@@ -101,66 +102,9 @@ class _BookReaderPageState extends State<BookReaderPage> {
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
-      builder: (sheetContext) => StatefulBuilder(
-        builder: (context, updateSheet) {
-          void apply(ReadingPreferences value) {
-            _change(value);
-            updateSheet(() {});
-          }
-
-          return SafeArea(
-            child: Padding(
-              padding: const EdgeInsets.all(20),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text('Настройки чтения',
-                      style: Theme.of(context).textTheme.titleLarge),
-                  const SizedBox(height: 12),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 4,
-                    alignment: WrapAlignment.center,
-                    children: [
-                      for (final entry in <(ReadingPalette, String)>[
-                        (ReadingPalette.light, 'Свет'),
-                        (ReadingPalette.sepia, 'Сепия'),
-                        (ReadingPalette.dark, 'Тёмная'),
-                        (ReadingPalette.oled, 'OLED'),
-                      ])
-                        ChoiceChip(
-                          label: Text(entry.$2),
-                          selected: _settings.palette == entry.$1,
-                          onSelected: (_) =>
-                              apply(_settings.copyWith(palette: entry.$1)),
-                        ),
-                    ],
-                  ),
-                  Text('Размер текста: ${_settings.fontSize.toStringAsFixed(0)}'),
-                  Slider(
-                    value: _settings.fontSize, min: 12, max: 32, divisions: 20,
-                    onChanged: (value) =>
-                        apply(_settings.copyWith(fontSize: value)),
-                  ),
-                  Text('Интервал: ${_settings.lineHeight.toStringAsFixed(2)}'),
-                  Slider(
-                    value: _settings.lineHeight, min: 1.2, max: 2.2,
-                    divisions: 20,
-                    onChanged: (value) =>
-                        apply(_settings.copyWith(lineHeight: value)),
-                  ),
-                  Text('Поля: ${_settings.horizontalPadding.toStringAsFixed(0)}'),
-                  Slider(
-                    value: _settings.horizontalPadding, min: 12, max: 48,
-                    divisions: 18,
-                    onChanged: (value) =>
-                        apply(_settings.copyWith(horizontalPadding: value)),
-                  ),
-                ],
-              ),
-            ),
-          );
-        },
+      builder: (_) => ReadingSettingsSheet(
+        preferences: _settings,
+        onChanged: _change,
       ),
     );
   }
