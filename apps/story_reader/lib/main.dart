@@ -243,7 +243,7 @@ class _StoryReaderPageState extends State<StoryReaderPage> {
         onPressed: () => setState(() => _immersive = !_immersive),
         child: Icon(_immersive ? Icons.visibility : Icons.visibility_off),
       ),
-      bottomNavigationBar: _immersive ? null : ColoredBox(
+      bottomNavigationBar: ColoredBox(
         color: _reading.background,
         child: Theme(
           data: Theme.of(context).copyWith(
