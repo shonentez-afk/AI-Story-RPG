@@ -1,0 +1,174 @@
+import 'dart:convert';
+import 'dart:io';
+
+import 'package:story_core/story_core.dart';
+import 'package:test/test.dart';
+
+StoryBlueprint originalBlueprint() {
+  final raw = File('../../shared_schemas/fixtures/manor_world_m17.json')
+      .readAsStringSync();
+  return StoryBlueprint.fromJson(jsonDecode(raw));
+}
+
+Map<String, dynamic> mutableFixture() => jsonDecode(
+  File('../../shared_schemas/fixtures/manor_world_m17.json')
+      .readAsStringSync(),
+) as Map<String, dynamic>;
+
+DecisionResult step(StoryWorld world, String id, String choice) =>
+    world.apply(actionId: id, choiceId: choice,
+      expectedRevision: world.state.revision);
+
+void main() {
+  test('offline blueprint validates 8 original demo scenes and a terminal', () {
+    final blueprint = originalBlueprint();
+    expect(blueprint.bookId, 'manor_m17_original_demo');
+    expect(blueprint.scenes.length, 8);
+    expect(blueprint.entrySceneId, 'gate');
+    expect(blueprint.initial.stats['insight'], 0);
+    expect(blueprint.actors, containsAll(['player', 'guard']));
+  });
+
+  test('denials have no side effects or fabricated items', () {
+    final world = StoryWorld(originalBlueprint());
+    final before = world.state.stateHash;
+    expect(step(world, 'a_1', 'enter_hall').status, DecisionStatus.denied);
+    expect(step(world, 'a_2', 'not_an_option').reason,
+        'choice_not_in_current_scene');
+    expect(world.state.inventory, isEmpty);
+    expect(world.state.stats['insight'], 0);
+    expect(world.state.revision, 0);
+    expect(world.events, isEmpty);
+    expect(world.state.stateHash, before);
+    expect(world.state.knowledge['guard'], isEmpty);
+  });
+
+  test('35 deterministic turns, 2 locations, knowledge and terminal', () {
+    final world = StoryWorld(originalBlueprint());
+    final mirror = StoryWorld(originalBlueprint());
+    void both(String id, String choice) {
+      final a = step(world, id, choice);
+      final b = step(mirror, id, choice);
+      expect(a.status, DecisionStatus.applied, reason: id);
+      expect(b.status, DecisionStatus.applied, reason: id);
+      expect(a.event!.hash, b.event!.hash);
+    }
+
+    for (var i = 0; i < 23; i++) {
+      both('inspect_$i', 'inspect_gate');
+    }
+    expect(world.state.tick, 46);
+    both('walk_market_1', 'walk_market');
+    both('talk_guard', 'ask_guard');
+    both('walk_market_2', 'walk_market');
+    both('take_map', 'buy_map');
+    both('walk_market_3', 'walk_market');
+    both('take_key', 'find_key');
+    both('enter', 'enter_hall');
+    both('ask_family', 'learn_from_guard');
+    both('write', 'write_note');
+    both('descend', 'go_cellar');
+    both('open', 'open_vault');
+    both('finish', 'publish_archive');
+    expect(world.events.length, 35);
+    expect(world.state.revision, 35);
+    expect(world.state.sceneId, 'end_reveal');
+    expect(world.isTerminal, isTrue);
+    expect(world.state.flags['revealed'], true);
+    expect(world.state.inventory, contains('map'));
+    expect(world.state.inventory, isNot(contains('key')));
+    expect(world.state.knowledge['player'],
+        containsAll(['family_secret', 'archive_origin']));
+    expect(world.state.knowledge['guard'], isEmpty);
+    expect(world.state.stateHash, mirror.state.stateHash);
+    final replayed = StoryWorld.replay(
+      originalBlueprint(), world.events.map((e) => e.toJson()));
+    expect(replayed.state.stateHash, world.state.stateHash);
+    expect(replayed.events.last.hash, world.events.last.hash);
+    expect(step(world, 'after_end', 'inspect_gate').reason,
+        'terminal_scene');
+  });
+
+  test('duplicate action is idempotent, reused ID with new choice rejects', () {
+    final world = StoryWorld(originalBlueprint());
+    expect(step(world, 'unique_1', 'inspect_gate').applied, true);
+    final hash = world.state.stateHash;
+    final duplicate = world.apply(
+        actionId: 'unique_1', choiceId: 'inspect_gate');
+    expect(duplicate.status, DecisionStatus.duplicate);
+    expect(world.events.length, 1);
+    expect(world.state.stateHash, hash);
+    expect(() => world.apply(
+      actionId: 'unique_1', choiceId: 'walk_market'),
+      throwsFormatException);
+    expect(world.apply(
+      actionId: 'second', choiceId: 'walk_market', expectedRevision: 0).reason,
+      'stale_revision');
+    expect(world.state.sceneId, 'gate');
+  });
+
+  test('failed second effect cannot partially grant inventory', () {
+    final mutable = mutableFixture();
+    final scenes = mutable['scenes'] as List<dynamic>;
+    final gate = scenes.first as Map<String, dynamic>;
+    final choices = gate['choices'] as List<dynamic>;
+    final inspect = choices.first as Map<String, dynamic>;
+    inspect['effects'] = [
+      {'op': 'grant_item', 'id': 'map'},
+      {'op': 'consume_item', 'id': 'key'},
+    ];
+    final world = StoryWorld(StoryBlueprint.fromJson(mutable));
+    final hash = world.state.stateHash;
+    final result = step(world, 'invalid_effect', 'inspect_gate');
+    expect(result.reason, 'missing_item');
+    expect(world.state.stateHash, hash);
+    expect(world.state.inventory, isEmpty);
+    expect(world.events, isEmpty);
+  });
+
+  test('event tampering and history truncation are detected by replay', () {
+    final world = StoryWorld(originalBlueprint());
+    for (var i = 0; i < 4; i++) {
+      step(world, 'inspect_$i', 'inspect_gate');
+    }
+    final captured = world.events.map((e) =>
+        Map<String, dynamic>.from(e.toJson())).toList();
+    captured[1]['next_scene_id'] = 'market';
+    expect(() => StoryWorld.replay(originalBlueprint(), captured),
+        throwsFormatException);
+    captured[1] = Map<String, dynamic>.from(world.events[1].toJson());
+    captured.removeAt(1);
+    expect(() => StoryWorld.replay(originalBlueprint(), captured),
+        throwsFormatException);
+  });
+
+  test('input catalog, scene references, modes and JSON DSL reject lies', () {
+    final x = mutableFixture();
+    (x['scenes'] as List)[0]['choices'][0]['next_scene_id'] = 'not_found';
+    expect(() => StoryBlueprint.fromJson(x), throwsFormatException);
+
+    final y = mutableFixture();
+    (y['supported_modes'] as Map)['interactions'] = ['AI_FREEFORM'];
+    expect(() => StoryBlueprint.fromJson(y), throwsFormatException);
+
+    final z = mutableFixture();
+    (z['scenes'] as List)[0]['choices'][0]['effects'] = [
+      {'op': 'run_python', 'code': 'print(1)'},
+    ];
+    expect(() => StoryBlueprint.fromJson(z), throwsFormatException);
+
+    final p = mutableFixture();
+    (p['scenes'] as List)[0]['choices'][0]['conditions'] = [
+      {'op': 'has_item', 'id': 'unlisted_item'},
+    ];
+    expect(() => StoryBlueprint.fromJson(p), throwsFormatException);
+  });
+
+  test('authoritative WorldState cannot be modified by UI callers', () {
+    final world = StoryWorld(originalBlueprint());
+    expect(() => world.state.inventory.add('key'), throwsUnsupportedError);
+    expect(() => world.state.stats['trust'] = 1000, throwsUnsupportedError);
+    expect(() => world.state.knowledge['guard']!.add('family_secret'),
+        throwsUnsupportedError);
+  });
+}

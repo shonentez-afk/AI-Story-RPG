@@ -1,0 +1,13 @@
+name: story_core
+description: Deterministic offline world-state contracts for AI Story RPG
+publish_to: none
+version: 0.1.0
+
+environment:
+  sdk: '>=3.11.0 <4.0.0'
+
+dependencies:
+  crypto: ^3.0.6
+
+dev_dependencies:
+  test: ^1.25.15

@@ -62,3 +62,6 @@ ZIP/JSON+SQLite экспорт, включающий `schema_version, book_id, b
 
 ## Временный формат встроенного демо (M1.6.6)
 `apps/story_reader/lib/pilot_save_codec.dart` создаёт `.bwsave` только для `ai_story_m1_intro`; подробности: [BWSAVE_PILOT_FORMAT_RU.md](BWSAVE_PILOT_FORMAT_RU.md). Это промежуточная переносимая обёртка над legacy снимком `story_engine`, не целевой engine-neutral `.bwsave` из раздела выше. Не использовать для произвольных `.bworld`, не подменять им будущие схемы и не импортировать без пробного восстановления snapshot. Совместимость и миграции — обязательные задачи M1.7.
+
+## M1.7.1 — первый реальный `story_core` (2026-11-02)
+`packages/story_core` содержит типизированные, сериализуемые без исполнения сценарного кода контракты `StoryBlueprint`, `WorldState`, `StoryWorld` и `WorldEvent`. Схема JSON и оригинальный fixture — `shared_schemas/`. Это **первый модуль авторитетной модели мира**, но текущий Flutter пилот пока использует прежний `GameProgress`; двух одновременно исполняющих миров нет. Все будущие изменения состояния должны пройти координацию с выбранным `story_engine` согласно ADR-001. Полный контракт, ограничения и последовательность интеграции — [M17_STORY_CORE_RU.md](M17_STORY_CORE_RU.md).

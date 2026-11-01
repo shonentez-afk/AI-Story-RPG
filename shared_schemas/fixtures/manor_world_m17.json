@@ -1,0 +1,310 @@
+{
+  "format": "ai_story_blueprint_v1",
+  "schema_version": 1,
+  "book_id": "manor_m17_original_demo",
+  "title": "Тайна особняка — тестовый мир M1.7",
+  "entry_scene_id": "gate",
+  "rights_status": "original_demo",
+  "source_fingerprint": null,
+  "supported_modes": {
+    "roles": [
+      "PROTAGONIST"
+    ],
+    "plots": [
+      "CANON"
+    ],
+    "interactions": [
+      "CLASSIC"
+    ]
+  },
+  "items": [
+    "key",
+    "map"
+  ],
+  "facts": [
+    "family_secret",
+    "archive_origin"
+  ],
+  "actors": [
+    "player",
+    "guard"
+  ],
+  "initial_state": {
+    "scene_id": "gate",
+    "revision": 0,
+    "tick": 0,
+    "stats": {
+      "insight": 0,
+      "trust": 0
+    },
+    "inventory": [],
+    "flags": {
+      "notes_ready": false,
+      "revealed": false
+    },
+    "knowledge": {
+      "player": [],
+      "guard": []
+    }
+  },
+  "scenes": [
+    {
+      "id": "gate",
+      "text": "У ворот тихо. Вы можете осмотреть камни или пройти к рынку.",
+      "terminal": false,
+      "choices": [
+        {
+          "id": "inspect_gate",
+          "label": "Осмотреть старый знак",
+          "next_scene_id": "gate",
+          "conditions": [],
+          "effects": [
+            {
+              "op": "stat_delta",
+              "id": "insight",
+              "amount": 1
+            },
+            {
+              "op": "advance_time",
+              "amount": 1
+            }
+          ]
+        },
+        {
+          "id": "walk_market",
+          "label": "Пойти к рынку",
+          "next_scene_id": "market",
+          "conditions": [],
+          "effects": []
+        },
+        {
+          "id": "enter_hall",
+          "label": "Открыть дверь и войти",
+          "next_scene_id": "hall",
+          "conditions": [
+            {
+              "op": "has_item",
+              "id": "key"
+            },
+            {
+              "op": "stat_at_least",
+              "id": "insight",
+              "amount": 20
+            }
+          ],
+          "effects": []
+        },
+        {
+          "id": "leave",
+          "label": "Уехать",
+          "next_scene_id": "end_leave",
+          "conditions": [],
+          "effects": []
+        }
+      ]
+    },
+    {
+      "id": "market",
+      "text": "Торговка нашла ключ, план и записку сторожа.",
+      "terminal": false,
+      "choices": [
+        {
+          "id": "find_key",
+          "label": "Забрать ключ",
+          "next_scene_id": "gate",
+          "conditions": [],
+          "effects": [
+            {
+              "op": "grant_item",
+              "id": "key"
+            }
+          ]
+        },
+        {
+          "id": "buy_map",
+          "label": "Забрать план",
+          "next_scene_id": "gate",
+          "conditions": [],
+          "effects": [
+            {
+              "op": "grant_item",
+              "id": "map"
+            }
+          ]
+        },
+        {
+          "id": "ask_guard",
+          "label": "Поговорить со сторожем",
+          "next_scene_id": "gate",
+          "conditions": [],
+          "effects": [
+            {
+              "op": "stat_delta",
+              "id": "trust",
+              "amount": 1
+            }
+          ]
+        },
+        {
+          "id": "return_gate",
+          "label": "Вернуться без находки",
+          "next_scene_id": "gate",
+          "conditions": [],
+          "effects": []
+        }
+      ]
+    },
+    {
+      "id": "hall",
+      "text": "В прихожей висят портреты неизвестной семьи.",
+      "terminal": false,
+      "choices": [
+        {
+          "id": "learn_from_guard",
+          "label": "Расспросить сторожа о семье",
+          "next_scene_id": "hall",
+          "conditions": [
+            {
+              "op": "stat_at_least",
+              "id": "trust",
+              "amount": 1
+            }
+          ],
+          "effects": [
+            {
+              "op": "learn_fact",
+              "actor": "player",
+              "id": "family_secret"
+            }
+          ]
+        },
+        {
+          "id": "write_note",
+          "label": "Сделать запись о портретах",
+          "next_scene_id": "hall",
+          "conditions": [],
+          "effects": [
+            {
+              "op": "set_flag",
+              "id": "notes_ready",
+              "value": true
+            }
+          ]
+        },
+        {
+          "id": "go_cellar",
+          "label": "Спуститься в подвал",
+          "next_scene_id": "cellar",
+          "conditions": [
+            {
+              "op": "has_item",
+              "id": "map"
+            }
+          ],
+          "effects": []
+        }
+      ]
+    },
+    {
+      "id": "cellar",
+      "text": "За дверью подвала слышен механический бой часов.",
+      "terminal": false,
+      "choices": [
+        {
+          "id": "open_vault",
+          "label": "Открыть архив",
+          "next_scene_id": "archive",
+          "conditions": [
+            {
+              "op": "has_item",
+              "id": "key"
+            },
+            {
+              "op": "knows_fact",
+              "actor": "player",
+              "id": "family_secret"
+            },
+            {
+              "op": "flag_is",
+              "id": "notes_ready",
+              "value": true
+            }
+          ],
+          "effects": [
+            {
+              "op": "consume_item",
+              "id": "key"
+            },
+            {
+              "op": "learn_fact",
+              "actor": "player",
+              "id": "archive_origin"
+            }
+          ]
+        },
+        {
+          "id": "back_to_hall",
+          "label": "Вернуться в прихожую",
+          "next_scene_id": "hall",
+          "conditions": [],
+          "effects": []
+        }
+      ]
+    },
+    {
+      "id": "archive",
+      "text": "Архив хранит письма путешественников.",
+      "terminal": false,
+      "choices": [
+        {
+          "id": "publish_archive",
+          "label": "Рассказать историю миру",
+          "next_scene_id": "end_reveal",
+          "conditions": [
+            {
+              "op": "knows_fact",
+              "actor": "player",
+              "id": "archive_origin"
+            },
+            {
+              "op": "tick_at_least",
+              "amount": 30
+            }
+          ],
+          "effects": [
+            {
+              "op": "set_flag",
+              "id": "revealed",
+              "value": true
+            }
+          ]
+        },
+        {
+          "id": "keep_archive",
+          "label": "Сохранить архив в тайне",
+          "next_scene_id": "end_protect",
+          "conditions": [],
+          "effects": []
+        }
+      ]
+    },
+    {
+      "id": "end_leave",
+      "text": "Вы оставили особняк нетронутым.",
+      "terminal": true,
+      "choices": []
+    },
+    {
+      "id": "end_reveal",
+      "text": "Архив впервые открыт читателям.",
+      "terminal": true,
+      "choices": []
+    },
+    {
+      "id": "end_protect",
+      "text": "История остаётся тайной.",
+      "terminal": true,
+      "choices": []
+    }
+  ]
+}

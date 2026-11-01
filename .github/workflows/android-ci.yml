@@ -79,6 +79,31 @@ jobs:
           dart run bin/full_scenario.dart ../pilot/manor_mystery.ink.json ../pilot/scenario.json ../pilot/expected_contract.json
         working-directory: experiments/m0_engine_comparison
 
+  story-core:
+    name: M1.7 deterministic world and schema contracts
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dart-lang/setup-dart@v1
+        with:
+          sdk: stable
+      - name: Analyze pure Dart story_core
+        working-directory: packages/story_core
+        run: |
+          dart pub get
+          dart analyze
+      - name: Test deterministic 35-turn replay and negative cases
+        working-directory: packages/story_core
+        run: dart test --reporter expanded
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Validate JSON Schema 2020-12 and adversarial fixtures
+        run: |
+          python3 -m pip install --quiet jsonschema==4.23.0
+          python3 -m unittest discover -s shared_schemas/tests -v
+
   flutter-reader:
     name: Flutter analyze and widget tests
     runs-on: ubuntu-latest
@@ -104,7 +129,7 @@ jobs:
       contents: write
     name: Android APK (debug)
     runs-on: ubuntu-latest
-    needs: [reference-tests, dart-sdk, flutter-reader]
+    needs: [reference-tests, dart-sdk, story-core, flutter-reader]
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
@@ -179,7 +204,7 @@ jobs:
   windows-exe:
     name: Windows portable bundle (release)
     runs-on: windows-latest
-    needs: [reference-tests, dart-sdk, flutter-reader]
+    needs: [reference-tests, dart-sdk, story-core, flutter-reader]
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4

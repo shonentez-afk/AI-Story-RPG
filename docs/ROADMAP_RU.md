@@ -64,3 +64,9 @@
 
 ## UI/UX checkpoint: принят по автоматическому CI (2026-11-02)
 Коммит исходников `8ca82afd0a71079cde9e08bdc28f17819ce6b436`, GitHub Actions `41332717865`: Python, Dart, Flutter analyze, 71/71 widget tests, Windows portable и Android APK **PASS**. Физические UI/a11y проверки Windows и Android **SKIP**. Полный отчёт `docs/UI_UX_AUDIT_2026-11-02_RU.md`. По просьбе пользователя переход к M1.7 оставлен до следующего отдельного шага.
+
+## Начало M1.7 (2026-11-02)
+- **M1.7.1:** первый реальный чистый Dart `story_core` и схема промежуточного original-demo blueprint: правила, факты, предметы, транзакционная проверка в памяти, replay по хешированному event log, 35-step test, отдельный blocking CI job. Подробности `M17_STORY_CORE_RU.md`. **Не** готовый .bworld и **не** UI интеграция.
+- **M1.7.2:** StoryRuntimeAdapter и единый coordinator `story_engine` / `story_core`, без двух источников истины; миграционные тесты legacy M1.6.
+- **M1.7.3:** BookWorld ZIP/SQLite/manifest/rights/checksums/import; не путать с JSON blueprint.
+- **M1.7.4:** полноценный SQLite/Drift campaign, portable .bwsave, восстановление, UI 20+ ходов Android+Windows и QA.

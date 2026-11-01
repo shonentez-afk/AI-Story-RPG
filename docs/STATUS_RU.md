@@ -238,3 +238,10 @@
 - По прямому отзыву пользователя после успешного APK #138 удалено дублирование «Библиотека» + «Моя библиотека»/«Все книги» на Home. Там теперь один вход в каталог, прежняя горизонтальная полка первых восьми книг удалена. На главной больше нет второго чтения `BookStorage().all()`.
 - В самой библиотеке оставлено ровно одно `Добавить книгу` — явная текстовая кнопка; верхняя import-иконка и второй CTA пустого/ошибочного состояния удалены. Файлы TXT/FB2 по-прежнему импортируются тем же `BookImporter` и сохраняются в прежнюю папку; никаких миграций/удалений пользовательских книг и RPG не выполняется.
 - Тесты `home_test.dart`, `ui_ux_audit_test.dart` адаптированы к новому контракту. **CI после фиксации**: заполнить реальными PASS/FAIL/commit; не путать старый зелёный APK #138 с новым.
+
+## M1.7.1 — начало независимого ядра мира (2026-11-02)
+- Начальная база: `17d99e1a339e401d795f7db19e14613cad786753` (Actions `41334189482` SUCCESS, Android/Windows artifacts).
+- Новые файлы `packages/story_core`, `shared_schemas/v1/story_blueprint.schema.json`, `shared_schemas/fixtures/manor_world_m17.json`. Чистый Dart deterministic core, строгая схема оригинального blueprint, атомарная проверка эффектов **в памяти**, actor-specific knowledge, idempotent actions, hash-linked replay. Входные данные — только original demo, CLASSIC.
+- Новый блокирующий CI job `story-core`: Dart analyze/test и Python JSON Schema Draft 2020-12. Тест: 35 действий, межпрогонный hash, replay и отрицательные случаи. Модуль пока не подключён к Flutter и не хранит пользовательские кампании.
+- **Не реализовано:** настоящий ZIP `.bworld`, StoryRuntimeAdapter transaction, SQLite/Drift, сохранения M1.7, AI, Book Compiler; не считать M1.7 полностью завершённым. Подробности `docs/M17_STORY_CORE_RU.md`.
+- **QA:** новый SHA и PASS/FAIL записать ПОСЛЕ GitHub Actions. Не выдавать существующие 71 Flutter тесты за тест ядра. Старые сохранения и UI не менялись.
