@@ -74,3 +74,6 @@ Run `41330543268`: Python PASS, Dart PASS, Flutter analyze PASS, основны�
 4. Тест: `apps/story_reader/test/ui_ux_audit_test.dart`, существующий `campaigns_page_test.dart` обновлён под заголовок сцены. Обязательно проверить `flutter analyze/test`, Dart/Python и **реальные** Windows+Android workflow statuses, SHA последнего коммита. До успешной проверки не утверждать, что UI hotfix прошёл QA.
 5. В `docs/UI_UX_AUDIT_2026-11-02_RU.md` перечислены неизменённые ограничения: pixel offset reader, SQLite/Drift, TalkBack, Windows keyboard/real devices, EPUB, производительность FB2, и отсутствие полноценной BookWorld AI RPG.
 6. Пользователь хочет сначала закончить UI/UX и **только потом** продолжать M1.7. Не начинай M1.7 до принятия UI checkpoint.
+
+## После UI/UX hotfix — исправление долгой загрузки библиотеки
+По первому UX запуску `41332089654` (SHA `3560ba54`) Python/Dart/Flutter analyze PASS, widget FAIL из-за `pumpAndSettle` в библиотеке без platform storage и заблокированной Home навигации, Android+Windows SKIP. Следующая правка: `HomePage._open` снимает lock сразу после возврата, `_refresh` не блокирует переход к RPG, `BookStorage.all()` ограничен 8 секундами с явной ошибкой и кнопкой «Повторить загрузку». Уточнение в `docs/UI_UX_AUDIT_2026-11-02_RU.md`. Требуется повторный полный CI последнего SHA до передачи в следующий чат.

@@ -43,6 +43,9 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(find.text('Добавить книгу'), findsOneWidget);
+    // If platform file storage is unavailable, show retry instead of
+    // leaving a spinner running forever.
+    expect(find.text('Повторить загрузку'), findsOneWidget);
     expect(find.byTooltip('Добавить книгу (TXT или FB2)'), findsOneWidget);
     expect(find.text('Тайна особняка'), findsOneWidget);
     expect(tester.takeException(), isNull);

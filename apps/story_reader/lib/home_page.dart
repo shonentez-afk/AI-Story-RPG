@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'book_import.dart';
@@ -48,7 +50,8 @@ class _HomePageState extends State<HomePage> {
       if (mounted) setState(() => _saveLoading = false);
     }
     try {
-      final books = await BookStorage().all();
+      final books = await BookStorage().all()
+          .timeout(const Duration(seconds: 8));
       if (mounted) setState(() => _books = books);
     } catch (_) {
       // Home remains usable without the library; saved RPG still appears.
@@ -62,9 +65,13 @@ class _HomePageState extends State<HomePage> {
       await Navigator.of(context).push(
         MaterialPageRoute<void>(builder: (_) => page),
       );
-      if (mounted) await _refresh();
     } finally {
-      if (mounted) setState(() => _opening = false);
+      if (mounted) {
+        // Release the navigation lock immediately after pop. Reading local
+        // books may be slow or unavailable; it must never prevent Continue.
+        setState(() => _opening = false);
+        unawaited(_refresh());
+      }
     }
   }
 
@@ -297,6 +304,7 @@ class _LibraryPageState extends State<LibraryPage> {
   List<StoredBook> _books = [];
   bool _working = false;
   bool _loadingBooks = true;
+  bool _libraryLoadError = false;
   String _query = '';
   bool _sortDescending = false;
 
@@ -314,13 +322,28 @@ class _LibraryPageState extends State<LibraryPage> {
 
   Future<void> _refresh() async {
     try {
-      final books = await _storage.all();
-      if (mounted) setState(() => _books = books);
-    } catch (error) {
-      _error('Ошибка библиотеки: $error');
+      final books = await _storage.all()
+          .timeout(const Duration(seconds: 8));
+      if (mounted) setState(() {
+        _books = books;
+        _libraryLoadError = false;
+      });
+    } catch (_) {
+      if (mounted) setState(() => _libraryLoadError = true);
+      _error('Библиотеку пока не удалось открыть. '
+          'Книги не удалены — повторите попытку.');
     } finally {
       if (mounted) setState(() => _loadingBooks = false);
     }
+  }
+
+  void _retryLibrary() {
+    if (_loadingBooks) return;
+    setState(() {
+      _loadingBooks = true;
+      _libraryLoadError = false;
+    });
+    unawaited(_refresh());
   }
 
   void _error(String message) {
@@ -473,6 +496,29 @@ class _LibraryPageState extends State<LibraryPage> {
                   const Padding(
                     padding: EdgeInsets.all(16),
                     child: Text('Открываем библиотеку…'),
+                  )
+                else if (_libraryLoadError)
+                  Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text('Не удалось прочитать локальную библиотеку. '
+                            'Сохранённые книги не удалены.'),
+                        const SizedBox(height: 12),
+                        OutlinedButton.icon(
+                          onPressed: _retryLibrary,
+                          icon: const Icon(Icons.refresh),
+                          label: const Text('Повторить загрузку'),
+                        ),
+                        const SizedBox(height: 8),
+                        FilledButton.icon(
+                          onPressed: _working ? null : _import,
+                          icon: const Icon(Icons.library_add_outlined),
+                          label: const Text('Добавить книгу'),
+                        ),
+                      ],
+                    ),
                   )
                 else if (_books.isEmpty)
                   Padding(
