@@ -10,10 +10,12 @@ void main() {
     final store = BookReadingStore();
     await store.save('book-A', const BookReadingState(
       chapter: 3,
+      scrollOffset: 421.5,
       bookmarks: [1, 3],
     ));
     final restored = await BookReadingStore().load('book-A');
     expect(restored.chapter, 3);
+    expect(restored.scrollOffset, 421.5);
     expect(restored.bookmarks, [1, 3]);
     final other = await store.load('book-B');
     expect(other.chapter, 0);
@@ -27,6 +29,7 @@ void main() {
     });
     final state = await BookReadingStore().load('broken');
     expect(state.chapter, 0);
+    expect(state.scrollOffset, 0);
     expect(state.bookmarks, isEmpty);
     final prefs = await SharedPreferences.getInstance();
     expect(prefs.getString('ai_story_m1_snapshot_v1'), 'existing-game-save');
