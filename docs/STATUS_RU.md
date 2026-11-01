@@ -71,3 +71,9 @@
 - Добавлен `apps/story_reader/test/reader_test.dart` — widget smoke сцены и перехода.
 - В `.circleci/config.yml` добавлен отдельный job `flutter-reader`: загрузка Flutter stable, `flutter pub get`, `flutter analyze`, `flutter test`.
 - **CI ещё не подтверждён:** проверка Flutter, сборка Android APK/Windows EXE и установка на устройство пока не выполнены. Реальный локальный persistent save требует проверки после сборки.
+
+## M1.1 — Главное меню и оболочка (2026-11-01)
+- Добавлен `apps/story_reader/lib/home_page.dart`: стартовое меню (Продолжить, Новая история, Библиотека, Настройки), библиотека с демо, информационный экран настроек.
+- `main.dart` переключён на домашнюю страницу; `StoryReaderPage(resume: true)` загружает существующий единственный слот, новая история запускается независимо от сохранения.
+- Добавлен `test/home_test.dart`; существующий `test/reader_test.dart` адаптирован к новому меню.
+- Android APK генерируется существующим `android-apk` заданием. **CI после этих коммитов ещё не проверен**. Библиотека пока содержит только демо, импорта книг нет.
