@@ -219,3 +219,8 @@
 - `41332089654` (первый UI/UX пакет `3560ba54`) завершился Flutter widget FAIL (6 ошибок); Python, Dart и Flutter analyze PASS, Android и Windows SKIP.
 - Выявлено: `LibraryPage._loadingBooks` держал бесконечный анимированный индикатор в среде без доступа к path_provider; `HomePage._opening` оставался заблокированным, пока `_refresh` ждал `BookStorage.all()`, что мешало «Продолжить». Данные сохранений не повреждались.
 - Исправление: разблокировать навигацию сразу при `Navigator.pop`, обновлять Home независимо, ограничить операцию чтения книг 8 секундами, отображать ошибку + «Повторить загрузку», добавить регрессионное ожидание. Проверить следующий HEAD CI полностью.
+
+## UX audit — устранение утечки таймеров загрузки книг
+- CI `41332360623` по `ef004a4`: Python, Dart, Flutter analyze PASS; Flutter widget tests FAIL из-за незакрытых таймеров в `HomePage._refresh`; Android/Windows SKIP.
+- Исправление: убрать background `Future.timeout` на главном экране, а в `LibraryPage` заменить его на явно управляемый `Timer` + `Future.any` и отменять каждый deadline в `dispose()` и при завершении операции; `_loadGeneration` не допускает запись устаревшего результата. Видимые состояния «Повторить загрузку» и данные книг сохраняются.
+- Проверить полный CI нового SHA. `docs/UI_UX_AUDIT_2026-11-02_RU.md` дополнен.

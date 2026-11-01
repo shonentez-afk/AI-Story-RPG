@@ -50,8 +50,10 @@ class _HomePageState extends State<HomePage> {
       if (mounted) setState(() => _saveLoading = false);
     }
     try {
-      final books = await BookStorage().all()
-          .timeout(const Duration(seconds: 8));
+      // The home page must never delay game navigation for book I/O.
+      // Avoid Future.timeout here: its timer outlives an unmounted screen
+      // in Flutter widget tests. The library page provides bounded retries.
+      final books = await BookStorage().all();
       if (mounted) setState(() => _books = books);
     } catch (_) {
       // Home remains usable without the library; saved RPG still appears.
@@ -307,6 +309,8 @@ class _LibraryPageState extends State<LibraryPage> {
   bool _libraryLoadError = false;
   String _query = '';
   bool _sortDescending = false;
+  final Set<Timer> _loadDeadlines = <Timer>{};
+  int _loadGeneration = 0;
 
   @override
   void initState() {
@@ -316,24 +320,52 @@ class _LibraryPageState extends State<LibraryPage> {
 
   @override
   void dispose() {
+    // A future storage read may never complete on an unsupported platform.
+    // Cancel its UI deadline when this route is removed. No test-zone timer
+    // can survive the widget that created it.
+    _loadGeneration++;
+    for (final timer in _loadDeadlines) {
+      timer.cancel();
+    }
+    _loadDeadlines.clear();
     _searchController.dispose();
     super.dispose();
   }
 
   Future<void> _refresh() async {
+    final generation = ++_loadGeneration;
+    final timeout = Completer<List<StoredBook>>();
+    final deadline = Timer(const Duration(seconds: 8), () {
+      if (!timeout.isCompleted) {
+        timeout.completeError(
+          const TimeoutException('Не удалось прочитать библиотеку за 8 секунд'),
+        );
+      }
+    });
+    _loadDeadlines.add(deadline);
     try {
-      final books = await _storage.all()
-          .timeout(const Duration(seconds: 8));
-      if (mounted) setState(() {
-        _books = books;
-        _libraryLoadError = false;
-      });
+      final books = await Future.any<List<StoredBook>>([
+        _storage.all(),
+        timeout.future,
+      ]);
+      if (mounted && generation == _loadGeneration) {
+        setState(() {
+          _books = books;
+          _libraryLoadError = false;
+        });
+      }
     } catch (_) {
-      if (mounted) setState(() => _libraryLoadError = true);
-      _error('Библиотеку пока не удалось открыть. '
-          'Книги не удалены — повторите попытку.');
+      if (mounted && generation == _loadGeneration) {
+        setState(() => _libraryLoadError = true);
+        _error('Библиотеку пока не удалось открыть. '
+            'Книги не удалены — повторите попытку.');
+      }
     } finally {
-      if (mounted) setState(() => _loadingBooks = false);
+      deadline.cancel();
+      _loadDeadlines.remove(deadline);
+      if (mounted && generation == _loadGeneration) {
+        setState(() => _loadingBooks = false);
+      }
     }
   }
 
