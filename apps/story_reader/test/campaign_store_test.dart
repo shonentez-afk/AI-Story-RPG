@@ -39,6 +39,24 @@ void main() {
     expect((await store.all()).single.id, b);
   });
 
+  test('listing and reading wait for queued autosaves', () async {
+    SharedPreferences.setMockInitialValues({});
+    final store = CampaignStore();
+    const id = 'campaign_queue';
+    // Intentionally do not await the write: this mimics the user returning
+    // home immediately after a confirmed choice.
+    final pending = store.write(
+      id, const GameSaveRecord('latest snapshot', ['decision']),
+      sceneTitle: 'Библиотека',
+    );
+    final listed = await store.all();
+    final restored = await store.read(id);
+    await pending;
+    expect(listed.map((item) => item.id), contains(id));
+    expect(restored!.snapshot, 'latest snapshot');
+    expect(restored.journal, ['decision']);
+  });
+
   test('legacy slot remains intact, readable and independent', () async {
     SharedPreferences.setMockInitialValues({});
     const legacy = '{"schema":1,"engine":"old"}';

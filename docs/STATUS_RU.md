@@ -185,3 +185,8 @@
 ## M1.6.7 — Windows Flutter release bundle (workflow added, QA pending)
 - Для критерия M1 Windows добавлено отдельное задание `windows-exe` в `.github/workflows/android-ci.yml`: runner Windows + Flutter stable, генерация `windows/`, `flutter build windows --release`, проверка исполняемого файла и каталога `data`, выгрузка **полного** portable bundle через Actions artifact. Одного `.exe` без DLL/data недостаточно.
 - CI зависим от Python/Dart/Flutter gates. Проверка реальной сборки, работа на Windows, наличие вложенных DLL и поведение `.bwsave` — отдельный PASS/FAIL, не объявлять без фактического job. Installer/подпись .exe пока отсутствуют.
+
+## Исправление регрессии при возвращении к меню после автосохранения
+- В отменённом запуске `41327708276` (коммит `860500eb`) шесть тестов `pilot_save_codec_test.dart` завершились PASS, но два прежних widget-сценария `game_panels_test.dart` дали FAIL: после быстрого выхода не находились «Продолжить» и два отдельных прохождения. Android этап отменён новой публикацией исходников.
+- Корень проблемы: `CampaignStore.all/read` мог выполнять чтение раньше незавершённого `_writeFence` (переход из игры/кнопка «Главная» не ожидали очереди). Исправление: ждать in-process очередь записей перед перечислением и чтением. Добавлен юнит-тест `listing and reading wait for queued autosaves`.
+- До повторных реальных логов Flutter widget tests и Windows/Android builds не ставить PASS.

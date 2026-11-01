@@ -108,6 +108,9 @@ class CampaignStore {
 
   Future<GameSaveRecord?> read(String id) async {
     _validate(id);
+    // A just-confirmed choice may still be in the autosave queue when
+    // navigation starts. Never return an older snapshot in that window.
+    await _writeFence;
     if (id == legacyId) return SaveStore().readGame();
     final prefs = await SharedPreferences.getInstance();
     final raw = prefs.getString(_key(id));
@@ -141,6 +144,9 @@ class CampaignStore {
   }
 
   Future<List<CampaignSummary>> all() async {
+    // Main menu and campaign picker must observe a consistent committed
+    // view after an RPG page is popped immediately after a choice.
+    await _writeFence;
     final prefs = await SharedPreferences.getInstance();
     final result = <CampaignSummary>[];
     for (final key in prefs.getKeys()) {

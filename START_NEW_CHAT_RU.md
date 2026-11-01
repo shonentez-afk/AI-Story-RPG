@@ -54,3 +54,6 @@
 
 ## M1.6.7 — Windows CI build
 В `.github/workflows/android-ci.yml` добавлен `windows-exe` (Windows runner, portable release directory + `SHA256SUMS.txt`, Actions artifact `AI-Story-RPG-Windows-portable`). Проверить в новом workflow реальный PASS/FAIL, не путать `flutter analyze` на Linux с Windows сборкой. Запуск Windows и перенос сохранения на реальные устройства ещё не проверены. Дистрибутив включает DLL+data; одиночный `.exe` не является работающей поставкой.
+
+## Важное исправление M1.6.5/M1.6.6
+По логам `41327708276` новые 6 тестов `pilot_save_codec_test.dart` PASS, но `game_panels_test.dart` имел две регрессии: отсутствие «Продолжить» и незагруженный список новых кампаний при быстром выходе. `CampaignStore.all()` и `read()` теперь ожидают `_writeFence` (очередь автосохранений). Проверить реальный CI по актуальному HEAD, затем именно widget сценарии возврата из игры; не выдавать за исправленное только по просмотру кода.
