@@ -292,7 +292,8 @@ class _StoryReaderPageState extends State<StoryReaderPage> {
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 760),
             child: ListView(
-              padding: EdgeInsets.all(_reading.horizontalPadding),
+              padding: EdgeInsets.fromLTRB(_reading.horizontalPadding,
+                _reading.horizontalPadding, _reading.horizontalPadding, 100),
               children: [
                 Text(
                   done ? 'Конец пролога' :
