@@ -13,6 +13,8 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('ВАШЕ ДЕЙСТВИЕ'), findsOneWidget);
     expect(find.text('Предметы'), findsOneWidget);
+    expect(find.text('Герой'), findsOneWidget);
+    expect(find.text('Журнал'), findsOneWidget);
     await tester.tap(find.text('Предметы'));
     await tester.pumpAndSettle();
     expect(find.text('Инвентарь'), findsOneWidget);
