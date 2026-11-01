@@ -11,6 +11,9 @@ dependencies:
     sdk: flutter
   story_engine: 0.1.0-alpha.1
   shared_preferences: ^2.5.3
+  file_picker: ^10.3.3
+  path_provider: ^2.1.5
+  xml: ^6.6.1
 
 dev_dependencies:
   flutter_test:
