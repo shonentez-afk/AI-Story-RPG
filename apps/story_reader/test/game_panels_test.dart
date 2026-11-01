@@ -80,4 +80,40 @@ void main() {
     expect(find.text('Старое письмо'), findsOneWidget);
   });
 
+  testWidgets('new game warns before overwriting the existing slot', (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    await tester.pumpWidget(const AIStoryApp());
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Новая история'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Сохранить'));
+    await tester.pumpAndSettle();
+    final navigator = tester.state<NavigatorState>(find.byType(Navigator).first);
+    navigator.pop();
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Новая история'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Сохранить'));
+    await tester.pumpAndSettle();
+    expect(find.text('Заменить сохранение?'), findsOneWidget);
+    await tester.tap(find.text('Отмена'));
+    await tester.pumpAndSettle();
+    expect(find.text('Заменить сохранение?'), findsNothing);
+  });
+
+  testWidgets('choice reports acquired item in journal', (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    await tester.pumpWidget(const AIStoryApp());
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Новая история'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Войти и исследовать дом'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Прочитать старое письмо'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Журнал'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Найдено: Старое письмо'), findsOneWidget);
+  });
+
 }
