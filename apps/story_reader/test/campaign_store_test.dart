@@ -78,6 +78,27 @@ void main() {
     expect(await store.all(), isEmpty);
   });
 
+  test('deletion wins over in-flight and late autosaves', () async {
+    SharedPreferences.setMockInitialValues({});
+    final store = CampaignStore();
+    const id = 'campaign_race';
+    await store.write(id, const GameSaveRecord('initial', []),
+        sceneTitle: 'Ворота');
+    final delayed = store.write(id, const GameSaveRecord('queued', []),
+        sceneTitle: 'Библиотека');
+    final deleting = store.delete(id);
+    try {
+      await delayed;
+    } on StateError {
+      // An enqueued write may be rejected after deletion is requested.
+    }
+    await deleting;
+    expect(await store.read(id), isNull);
+    expect(() => store.write(id, const GameSaveRecord('late', []),
+        sceneTitle: 'Ворота'), throwsStateError);
+    expect(await store.read(id), isNull);
+  });
+
   test('IDs are generated for independent campaigns', () {
     final a = CampaignStore.newId();
     final b = CampaignStore.newId();

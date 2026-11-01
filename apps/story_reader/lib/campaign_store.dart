@@ -31,6 +31,17 @@ class CampaignStore {
   static const _bookId = 'ai_story_m1_intro';
   static final RegExp _safeId = RegExp(r'^[a-z0-9_-]{8,96}$');
 
+  // Serialize writes/deletes between CampaignStore instances in-process.
+  // Tombstones stop late autosaves from resurrecting deleted campaigns.
+  static final Set<String> _deletedInProcess = <String>{};
+  static Future<void> _writeFence = Future<void>.value();
+
+  static Future<T> _serial<T>(Future<T> Function() action) {
+    final result = _writeFence.then((_) => action());
+    _writeFence = result.then<void>((_) {}, onError: (Object error) {});
+    return result;
+  }
+
   static String newId() {
     final secure = Random.secure();
     final suffix = secure.nextInt(0x100000000).toRadixString(36);
@@ -48,32 +59,35 @@ class CampaignStore {
   /// Update the full record as a single preference value. A failed write
   /// leaves the old snapshot untouched rather than partially updating it.
   Future<void> write(String id, GameSaveRecord game,
-      {required String sceneTitle}) async {
+      {required String sceneTitle}) {
     _validate(id);
-    final prefs = await SharedPreferences.getInstance();
-    if (id == legacyId) {
-      // Non-destructive compatibility: old saves keep their existing key.
-      await SaveStore().writeGame(
-        game.snapshot, game.journal, game.progress, game.rulesVersion,
-      );
-    } else {
-      final payload = jsonEncode({
-        'format': _format,
-        'id': id,
-        'bookId': _bookId,
-        'sceneTitle': sceneTitle,
-        'savedAtUtc': DateTime.now().toUtc().toIso8601String(),
-        'game': SaveStore.encodeGameRecord(game),
-      });
-      final ok = await prefs.setString(_key(id), payload);
-      if (!ok) throw StateError('Не удалось записать кампанию');
-    }
-    // Best-effort pointer; not a second part of the game's transaction.
-    try {
-      await prefs.setString(_activeKey, id);
-    } catch (_) {
-      // Lost pointer does not mean lost campaign.
-    }
+    return _serial(() async {
+      if (_deletedInProcess.contains(id)) {
+        throw StateError('Удалённое прохождение нельзя перезаписать');
+      }
+      final prefs = await SharedPreferences.getInstance();
+      if (id == legacyId) {
+        await SaveStore().writeGame(
+          game.snapshot, game.journal, game.progress, game.rulesVersion,
+        );
+      } else {
+        final payload = jsonEncode({
+          'format': _format,
+          'id': id,
+          'bookId': _bookId,
+          'sceneTitle': sceneTitle,
+          'savedAtUtc': DateTime.now().toUtc().toIso8601String(),
+          'game': SaveStore.encodeGameRecord(game),
+        });
+        final ok = await prefs.setString(_key(id), payload);
+        if (!ok) throw StateError('Не удалось записать кампанию');
+      }
+      try {
+        await prefs.setString(_activeKey, id);
+      } catch (_) {
+        // The active pointer does not participate in the game write.
+      }
+    });
   }
 
   Future<GameSaveRecord?> read(String id) async {
@@ -144,13 +158,26 @@ class CampaignStore {
   }
 
   /// Deletion is isolated to exactly one validated key.
-  Future<void> delete(String id) async {
+  Future<void> delete(String id) {
     _validate(id);
-    final prefs = await SharedPreferences.getInstance();
-    final key = id == legacyId ? SaveStore.key : _key(id);
-    final ok = await prefs.remove(key);
-    if (!ok) throw StateError('Не удалось удалить кампанию');
-    if (prefs.getString(_activeKey) == id) await prefs.remove(_activeKey);
+    // Set before awaiting any I/O, so future writes cannot resurrect the ID.
+    _deletedInProcess.add(id);
+    return _serial(() async {
+      final prefs = await SharedPreferences.getInstance();
+      final key = id == legacyId ? SaveStore.key : _key(id);
+      final ok = await prefs.remove(key);
+      if (!ok) {
+        _deletedInProcess.remove(id);
+        throw StateError('Не удалось удалить кампанию');
+      }
+      if (prefs.getString(_activeKey) == id) {
+        try {
+          await prefs.remove(_activeKey);
+        } catch (_) {
+          // Stale pointer never contains gameplay state.
+        }
+      }
+    });
   }
 
   static _CampaignSlot _decode(String raw, String expectedId) {

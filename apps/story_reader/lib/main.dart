@@ -406,6 +406,12 @@ class _StoryReaderPageState extends State<StoryReaderPage> {
         ))),
       );
     }
+    if (_restoreBusy) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('Загрузка прохождения')),
+        body: const Center(child: CircularProgressIndicator()),
+      );
+    }
     final event = _engine.currentEvent;
     final done = _engine.status == StoryEngineStatus.terminated;
     return Scaffold(

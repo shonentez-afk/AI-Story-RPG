@@ -29,6 +29,28 @@ void main() {
     expect(find.text('Войти и исследовать дом'), findsOneWidget);
   });
 
+  testWidgets('old single-slot save resumes without new-game overwrite',
+      (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    final engine = StoryEngine(project: makePilotStory())..start();
+    engine.choose(StoryChoiceId('enter'));
+    final originalSnapshot = StoryRuntimeSnapshotCodec()
+        .encodeJson(engine.createSnapshot());
+    await SaveStore().writeGame(originalSnapshot,
+        ['Тайна особняка: Войти и исследовать дом'],
+        const GameProgress().apply('enter'), 0);
+    await tester.pumpWidget(const AIStoryApp());
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Продолжить'));
+    await tester.pumpAndSettle();
+    expect(find.text('Прочитать старое письмо'), findsOneWidget);
+    await tester.tap(find.text('Герой'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Смелость: 1'), findsOneWidget);
+    expect((await SaveStore().readGame())!.snapshot, originalSnapshot);
+    expect((await CampaignStore().all()).single.isLegacy, isTrue);
+  });
+
   testWidgets('deletion requires confirmation and preserves other slot',
       (tester) async {
     SharedPreferences.setMockInitialValues({});
