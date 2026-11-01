@@ -1,0 +1,77 @@
+# OS and editors
+.DS_Store
+Thumbs.db
+Desktop.ini
+.idea/
+.vscode/
+*.iml
+*.swp
+*.swo
+*~
+
+# Python caches, environments and test outputs
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.tox/
+.venv/
+venv/
+env/
+*.egg-info/
+.coverage
+.coverage.*
+htmlcov/
+
+# Dart / Flutter (keep pubspec.lock and platform sources tracked)
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+.pub-cache/
+.pub/
+build/
+coverage/
+**/flutter/ephemeral/
+**/flutter/generated_plugin_registrant.*
+**/flutter/generated_plugins.cmake
+
+# Android / Gradle local generated files
+.gradle/
+.cxx/
+**/android/captures/
+**/android/local.properties
+local.properties
+
+# Build outputs and diagnostics
+dist/
+artifacts/
+*.apk
+*.aab
+*.exe
+*.msi
+*.msix
+*.log
+*.tmp
+*.bak
+
+# Credentials and signing materials - never commit them
+.env
+.env.*
+!.env.example
+!.env.sample
+.envrc
+*.pem
+*.p12
+*.pfx
+*.key
+*.jks
+*.keystore
+key.properties
+
+# Local user books and game saves (force-add only cleared test fixtures)
+*.fb2
+*.fb2.zip
+*.epub
+*.bwsave
