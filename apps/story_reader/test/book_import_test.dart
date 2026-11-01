@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:ai_story_reader/book_import.dart';
+import 'package:ai_story_reader/book_model.dart';
 
 void main() {
   test('TXT UTF-8 import', () {
@@ -27,4 +28,21 @@ void main() {
     expect(book.chapters.single, contains('Начало'));
     expect(book.cover, isNotNull);
   });
+  test('FB2 preserves image between paragraphs and nested sections', () {
+    const xml = '''<FictionBook xmlns:l="http://www.w3.org/1999/xlink">
+      <description><title-info><book-title>Книга</book-title></title-info></description>
+      <body><section><p>До</p><image l:href="#inside"/>
+        <section><p>После</p></section></section></body>
+      <binary id="inside" content-type="image/png">iVBORw0KGgo=</binary>
+    </FictionBook>''';
+    final book = BookImporter.parse('book.fb2',
+        Uint8List.fromList(utf8.encode(xml)));
+    final blocks = book.structuredChapters.single.blocks;
+    expect(blocks.map((b) => b.kind).toList(), [
+      BookBlockKind.paragraph, BookBlockKind.image, BookBlockKind.paragraph
+    ]);
+    expect(blocks[1].resourceId, 'inside');
+    expect(book.images.containsKey('inside'), isTrue);
+  });
+
 }
