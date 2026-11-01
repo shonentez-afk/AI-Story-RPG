@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'book_import.dart';
 import 'book_model.dart';
@@ -22,6 +23,33 @@ class _BookReaderPageState extends State<BookReaderPage> {
   BookReadingState _reading = const BookReadingState();
   bool _progressReady = false;
   ReaderChromeMode _chrome = ReaderChromeMode.normal;
+  bool _peekControls = false;
+  Timer? _peekTimer;
+
+  @override
+  void dispose() {
+    _peekTimer?.cancel();
+    super.dispose();
+  }
+
+  void _changeChrome(ReaderChromeMode next) {
+    _peekTimer?.cancel();
+    setState(() {
+      _chrome = next;
+      _peekControls = false;
+    });
+  }
+
+  void _tapReadingCanvas() {
+    if (_chrome != ReaderChromeMode.fullscreen) return;
+    _peekTimer?.cancel();
+    setState(() => _peekControls = !_peekControls);
+    if (_peekControls) {
+      _peekTimer = Timer(const Duration(seconds: 5), () {
+        if (mounted) setState(() => _peekControls = false);
+      });
+    }
+  }
 
   int get _count => widget.book.structuredChapters.isNotEmpty
       ? widget.book.structuredChapters.length : widget.book.chapters.length;
@@ -121,7 +149,7 @@ class _BookReaderPageState extends State<BookReaderPage> {
 
     return Scaffold(
       backgroundColor: prefs.background,
-      appBar: !_chrome.showTopBar ? null : AppBar(
+      appBar: !(_chrome.showTopBar || _peekControls) ? null : AppBar(
         backgroundColor: prefs.background,
         foregroundColor: prefs.foreground,
         title: Text(widget.book.title),
@@ -149,10 +177,13 @@ class _BookReaderPageState extends State<BookReaderPage> {
         mode: _chrome,
         background: prefs.foreground,
         foreground: prefs.background,
-        onChange: (mode) => setState(() => _chrome = mode),
+        onChange: _changeChrome,
       ),
       body: ColoredBox(
         color: prefs.background,
+        child: GestureDetector(
+          behavior: HitTestBehavior.translucent,
+          onTap: _tapReadingCanvas,
         child: Center(
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 800),
@@ -261,6 +292,7 @@ class _BookReaderPageState extends State<BookReaderPage> {
               ],
             ),
           ),
+        ),
         ),
       ),
     );
