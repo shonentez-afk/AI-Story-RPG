@@ -246,19 +246,37 @@ CREATE TABLE events(
     if (parentCampaignId != null) _validId(parentCampaignId, 'parent ID');
     final id = _newId();
     _transaction(() {
-      if (parentCampaignId != null &&
-          _campaignRow(parentCampaignId).worldHash != archiveHash) {
+      final parent = parentCampaignId == null
+          ? null : _campaignRow(parentCampaignId);
+      if (parent != null && parent.worldHash != archiveHash) {
         throw const FormatException('Cross-BookWorld parent mismatch');
       }
-      final coordinator = StoryEngineCoordinator.start(world.blueprint);
+      // Fork from the exact verified parent head, not just a parent label.
+      // All cloned events and the new campaign head are one transaction.
+      final coordinator = parent == null
+          ? StoryEngineCoordinator.start(world.blueprint)
+          : _restore(parentCampaignId!, parent);
       _db.execute(
         'INSERT INTO campaigns'
         '(campaign_id,world_sha256,parent_campaign_id,revision,'
         'state_sha256,head_event_sha256,saved_at_utc) '
         'VALUES(?,?,?,?,?,?,?)',
-        [id, archiveHash, parentCampaignId, 0,
-         coordinator.state.stateHash, null, _utc()],
+        [id, archiveHash, parentCampaignId,
+         coordinator.state.revision, coordinator.state.stateHash,
+         coordinator.events.isEmpty ? null : coordinator.events.last.hash,
+         _utc()],
       );
+      if (parent != null) {
+        for (final event in coordinator.events) {
+          _db.execute(
+            'INSERT INTO events'
+            '(campaign_id,sequence,action_id,event_sha256,payload) '
+            'VALUES(?,?,?,?,?)',
+            [id, event.sequence, event.actionId,
+             event.hash, canonicalJson(event.toJson())],
+          );
+        }
+      }
     });
     return id;
   }

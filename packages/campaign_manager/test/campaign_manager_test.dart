@@ -128,6 +128,30 @@ void main() {
     expect(store.loadCampaign(a).coordinator.isTerminal, isFalse);
   });
 
+  test('branch copies verified parent events and then evolves independently', () {
+    final parent = store.createCampaign(world.archiveHash);
+    expect(take(parent, 'parent_market', 'walk_market').applied, isTrue);
+    expect(take(parent, 'parent_key', 'find_key').applied, isTrue);
+    final parentBefore = store.loadCampaign(parent);
+    final child = store.createCampaign(
+      world.archiveHash, parentCampaignId: parent,
+    );
+    final branch = store.loadCampaign(child);
+    expect(branch.metadata.parentId, parent);
+    expect(branch.metadata.revision, parentBefore.metadata.revision);
+    expect(branch.metadata.headEventHash, parentBefore.metadata.headEventHash);
+    expect(branch.metadata.stateHash, parentBefore.metadata.stateHash);
+    expect(branch.coordinator.state.inventory, contains('key'));
+    expect(take(child, 'child_inspect', 'inspect_gate').applied, isTrue);
+    expect(store.loadCampaign(parent).metadata.stateHash,
+        parentBefore.metadata.stateHash);
+    expect(store.loadCampaign(parent).metadata.revision, 2);
+    expect(store.loadCampaign(child).metadata.revision, 3);
+    expect(take(parent, 'parent_leave', 'leave').applied, isTrue);
+    expect(store.loadCampaign(parent).coordinator.isTerminal, isTrue);
+    expect(store.loadCampaign(child).coordinator.isTerminal, isFalse);
+  });
+
   test('portable v2 save verifies then forks to a fresh local ID', () {
     final campaign = store.createCampaign(world.archiveHash);
     take(campaign, 'inspect', 'inspect_gate');

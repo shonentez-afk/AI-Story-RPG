@@ -270,6 +270,6 @@
 ## M1.7.4a — реализован native SQLite store новых BookWorld-кампаний
 - Создан независимый `packages/campaign_manager`: устанавливает только проверенный .bworld по SHA, хранит worlds/campaigns/events в новом SQLite с WAL+FULL, подтверждает game event+head строго одной транзакцией и проверяет replay при каждом открытии.
 - `ai_story_bwsave_v2`: отдельный контракт для нового мира; импорт форкает ID и требует точный установленный BookWorld. Legacy M1.6 SharedPreferences и .bwsave v1 **не изменялись**.
-- 9 новых автоматических сценариев: в том числе 35 ходов/перезапуск после 23, повреждение SQLite event, откат INSERT failure, независимые кампании, целостность portable export/import.
+- 10 новых автоматических сценариев: в том числе 35 ходов/перезапуск после 23, повреждение SQLite event, откат INSERT failure, независимые кампании, целостность portable export/import.
 - `story-core` blocking job расширен `dart analyze/test` модуля. **Итоговый SHA и CI PASS вписать по результату**, старый #143 не является проверкой этого пакета. Подробности `docs/M17_CAMPAIGN_SQLITE_RU.md`.
 - Flutter GUI и текущие кампании пока используют прежний код; UI-импорт и legacy migration остаются в M1.7.4b, новые UI функции не выдавать за готовые.

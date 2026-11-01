@@ -9,7 +9,7 @@
 - `BookworldCampaignStore.openPrivateDirectory(path)` создаёт **отдельный** `bookworld_campaigns_v1.sqlite` в приватном каталоге, переданном вызывающим приложением. Schema v1 помечена `application_id=ASRP`, `user_version=1`; незнакомые версии отказываются открываться, автомиграций и перезаписи чужих схем нет.
 - `PRAGMA foreign_keys=ON`, `trusted_schema=OFF`, `journal_mode=WAL`, `synchronous=FULL`, integrity/foreign key check. Ровно четыре таблицы: `meta`, `bookworlds` (проверенный .bworld blob + SHA-256), `campaigns` (идентификатор, BookWorld hash, parent ID, revision, state/head hash, дата), `events` (монотонный sequence, action_id, канонический JSON, event hash). Ограничение **2000 ходов** на новую кампанию.
 - `installBookworld` полностью проверяет ZIP, hashes и сам SQLite **до** записи в каталог; одинаковый мир дедуплицируется по точному hash, другие редакции допускаются отдельным BookWorld.
-- `createCampaign` создаёт независимую кампанию без изменения сохранений `ai_story_m1_intro`.
+- `createCampaign` создаёт независимую кампанию без изменения сохранений `ai_story_m1_intro`. Если указан `parentCampaignId`, **создаётся настоящая ветка**: в одной SQLite-транзакции полностью проверяется журнал родителя, копируются все подтверждённые события и его контрольный head. Затем дочерняя кампания продолжает собственный журнал, не меняя родительский.
 - `commitChoice`: `BEGIN IMMEDIATE`, загрузка и проверка полного сохранённого журнала, восстановление через `story_core`+ `story_engine`, `choose` в кандидатных состояниях, затем **атомарно в одной SQLite транзакции** `INSERT INTO events` + `UPDATE campaigns` на expected revision. Любой сбой хранилища делает ROLLBACK без наполовину сохранённого хода. Повтор action_id идемпотентен; старые revision и недопустимые choice не фиксируются.
 - `loadCampaign` заново проверяет полный журнал, event hashes, точное соответствие blueprint SHA, head revision/state SHA и навигацию `story_engine`; не выдаёт повреждённое состояние как успешное восстановление.
 - `exportPortable` / `importPortable`: собственный **`ai_story_bwsave_v2`**, только для new BookWorld, точный `world_sha256`, source campaign ID как метаданные, role=PROTAGONIST, plot=CANON, interaction=CLASSIC, проверяемый checkpoint и SHA-256 envelope. Импорт после replay создаёт **новый локальный campaign ID**, не затрагивает исходный и другие слоты. Лимит 2 МиБ. Для импорта требуется заранее установленная точная версия BookWorld: экспорт не содержит текст книги или внешний API-ключ.
@@ -26,6 +26,7 @@
 7. Подмена события в SQLite — загрузка запрещена.
 8. Искусственная ошибка SQLite при INSERT: полностью проверенный ROLLBACK; после снятия ошибки игра продолжается.
 9. Неизвестная DB schema version и повреждённый BookWorld BLOB отвергаются.
+10. Создание дочернего прохождения переносит подтверждённые события/состояние родителя, после чего две ветки развиваются независимо.
 
 GitHub Actions `story-core` теперь дополнительно запускает `dart pub get`, `dart analyze`, `dart test` для `packages/campaign_manager`. Он уже блокирует публикацию APK/Windows при FAIL. Ссылки на действительный run/commit и итог PASS вписать **только после выполнения CI**.
 
