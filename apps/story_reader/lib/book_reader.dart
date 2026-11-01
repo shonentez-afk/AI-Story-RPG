@@ -149,7 +149,7 @@ class _BookReaderPageState extends State<BookReaderPage> {
 
     return Scaffold(
       backgroundColor: prefs.background,
-      appBar: !(_chrome.showTopBar || _peekControls) ? null : AppBar(
+      appBar: !_chrome.showTopBar ? null : AppBar(
         backgroundColor: prefs.background,
         foregroundColor: prefs.foreground,
         title: Text(widget.book.title),
