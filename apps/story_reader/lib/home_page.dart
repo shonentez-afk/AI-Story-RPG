@@ -1,4 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:file_picker/file_picker.dart';
+import 'book_import.dart';
+import 'book_storage.dart';
+import 'book_reader.dart';
 import 'save_store.dart';
 import 'main.dart' show StoryReaderPage;
 
@@ -96,12 +100,79 @@ class _HomePageState extends State<HomePage> {
   }
 }
 
-class LibraryPage extends StatelessWidget {
+class LibraryPage extends StatefulWidget {
   const LibraryPage({super.key});
 
   @override
+  State<LibraryPage> createState() => _LibraryPageState();
+}
+
+class _LibraryPageState extends State<LibraryPage> {
+  final BookStorage _storage = BookStorage();
+  List<StoredBook> _books = [];
+  bool _working = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _refresh();
+  }
+
+  Future<void> _refresh() async {
+    try {
+      final books = await _storage.all();
+      if (mounted) setState(() => _books = books);
+    } catch (error) {
+      _error('Ошибка библиотеки: $error');
+    }
+  }
+
+  void _error(String message) {
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+    }
+  }
+
+  Future<void> _import() async {
+    if (_working) return;
+    setState(() => _working = true);
+    try {
+      final selection = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['txt', 'fb2'],
+        withData: true,
+      );
+      if (selection == null || selection.files.isEmpty) return;
+      final file = selection.files.single;
+      final bytes = file.bytes;
+      if (bytes == null) throw const FormatException('Не удалось прочитать файл');
+      final book = BookImporter.parse(file.name, bytes);
+      await _storage.add(book);
+      await _refresh();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Добавлена книга: ${book.title}')),
+        );
+      }
+    } catch (error) {
+      _error('Импорт не выполнен: $error');
+    } finally {
+      if (mounted) setState(() => _working = false);
+    }
+  }
+
+  @override
   Widget build(BuildContext context) => Scaffold(
-        appBar: AppBar(title: const Text('Библиотека')),
+        appBar: AppBar(
+          title: const Text('Библиотека'),
+          actions: [
+            IconButton(
+              tooltip: 'Импорт TXT или FB2',
+              onPressed: _working ? null : _import,
+              icon: const Icon(Icons.file_upload_outlined),
+            ),
+          ],
+        ),
         body: ListView(
           padding: const EdgeInsets.all(16),
           children: [
@@ -109,7 +180,7 @@ class LibraryPage extends StatelessWidget {
               child: ListTile(
                 leading: const Icon(Icons.menu_book_outlined),
                 title: const Text('Тайна особняка'),
-                subtitle: const Text('Демонстрационная история • офлайн'),
+                subtitle: const Text('Демонстрационная RPG • офлайн'),
                 trailing: const Icon(Icons.chevron_right),
                 onTap: () => Navigator.of(context).push(
                   MaterialPageRoute<void>(
@@ -118,9 +189,35 @@ class LibraryPage extends StatelessWidget {
                 ),
               ),
             ),
+            for (final entry in _books)
+              Card(
+                child: ListTile(
+                  leading: entry.book.cover == null
+                      ? const Icon(Icons.book_outlined)
+                      : Image.memory(
+                          entry.book.cover!,
+                          width: 48,
+                          height: 64,
+                          fit: BoxFit.cover,
+                          errorBuilder: (_, error, stack) =>
+                              const Icon(Icons.book_outlined),
+                        ),
+                  title: Text(entry.book.title),
+                  subtitle: Text(entry.book.author.isEmpty
+                      ? 'Импортированная книга'
+                      : entry.book.author),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => BookReaderPage(book: entry.book),
+                    ),
+                  ),
+                ),
+              ),
             const Padding(
               padding: EdgeInsets.all(12),
-              child: Text('Добавление TXT, FB2 и EPUB находится в разработке.'),
+              child: Text('Нажмите значок импорта вверху, чтобы добавить TXT или FB2. '
+                  'Это пока режим чтения, а не автоматическое создание RPG.'),
             ),
           ],
         ),
