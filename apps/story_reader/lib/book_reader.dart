@@ -30,7 +30,7 @@ class _BookReaderPageState extends State<BookReaderPage> {
     }
     final saved = await _readingStore.load(widget.bookId!);
     if (mounted) setState(() {
-      _reading = saved.copyWith(chapter: saved.chapter.clamp(0, _count > 0 ? _count - 1 : 0));
+      _reading = saved.copyWith(chapter: saved.chapter.clamp(0, _count > 0 ? _count - 1 : 0).toInt());
       _progressReady = true;
     });
   }
@@ -207,7 +207,7 @@ class _BookReaderPageState extends State<BookReaderPage> {
                 vertical: 24,
               ),
               children: [
-                if (widget.book.cover != null)
+                if (_reading.chapter == 0 && widget.book.cover != null)
                   Padding(
                     padding: const EdgeInsets.only(bottom: 24),
                     child: Image.memory(
