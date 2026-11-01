@@ -138,4 +138,30 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('new pilot explains a locked door and keeps the alternate route',
+      (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    await tester.pumpWidget(const AIStoryApp());
+    await tester.pumpAndSettle();
+    Future<void> act(String label) async {
+      final target = find.text(label);
+      await tester.ensureVisible(target);
+      await tester.tap(target);
+      await tester.pumpAndSettle();
+    }
+    await act('Новая история');
+    await act('Войти и исследовать дом');
+    await act('Прочитать старое письмо');
+    await act('Забрать план особняка');
+    expect(find.text('Открыть дверь в подвал'), findsOneWidget);
+    expect(find.textContaining('Нужен латунный ключ'), findsOneWidget);
+    final locked = tester.widget<FilledButton>(
+        find.widgetWithText(FilledButton, 'Открыть дверь в подвал'));
+    expect(locked.onPressed, isNull);
+    await act('Подняться по лестнице');
+    await act('Подойти к таинственной тени');
+    expect(find.text('Рассказать миру правду'), findsOneWidget);
+    expect(find.textContaining('Недоступно:'), findsNothing);
+  });
+
 }

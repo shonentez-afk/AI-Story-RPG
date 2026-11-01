@@ -11,6 +11,36 @@ class GameProgress {
     'map': 'План особняка',
   };
 
+  /// Rules apply only to M1.6.4+ pilot campaigns. Legacy saves use
+  /// their original unguarded choices, so an older journey remains playable.
+  /// These rules live outside the engine presentation and are checked before
+  /// each committed transition; they never infer inventory from prose labels.
+  String? choiceLockReason(String choiceId) {
+    switch (choiceId) {
+      case 'unlock_cellar':
+        if (!items.contains('key')) {
+          return 'Нужен латунный ключ из библиотеки.';
+        }
+      case 'open_secret':
+        if (!items.contains('map')) {
+          return 'Нужен план особняка, чтобы найти тайный проход.';
+        }
+      case 'face_shadow':
+        if (!items.contains('letter') && !items.contains('map')) {
+          return 'Нужна подсказка из письма или плана особняка.';
+        }
+      case 'preserve_story':
+        if (!items.contains('map')) {
+          return 'Нужен план особняка, чтобы сохранить тайну.';
+        }
+      case 'reveal_story':
+        if (!items.contains('letter')) {
+          return 'Нужно старое письмо как доказательство.';
+        }
+    }
+    return null;
+  }
+
   GameProgress apply(String choiceId) {
     var nextCourage = courage;
     var nextInsight = insight;

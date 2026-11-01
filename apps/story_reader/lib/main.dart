@@ -131,6 +131,7 @@ class _StoryReaderPageState extends State<StoryReaderPage> {
   bool _loadedFromSlot = false;
   final List<String> _sessionDecisions = [];
   GameProgress _progress = const GameProgress();
+  int _rulesVersion = 1; // New pilot games use inventory-gated choices.
   ReadingPreferences _reading = const ReadingPreferences();
   ReaderChromeMode _chrome = ReaderChromeMode.normal;
   bool _peekControls = false;
@@ -184,6 +185,11 @@ class _StoryReaderPageState extends State<StoryReaderPage> {
   }
 
   void _choose(StoryChoiceId id) {
+    if (_saveBusy || _restoreBusy) return;
+    // Validate at the action boundary, not only in the disabled-button UI.
+    if (_rulesVersion >= 1 && _progress.choiceLockReason(id.value) != null) {
+      return;
+    }
     final event = _engine.currentEvent;
     final label = _engine.availableChoices
         .where((choice) => choice.id == id)
@@ -236,7 +242,7 @@ class _StoryReaderPageState extends State<StoryReaderPage> {
       }
       final encoded = StoryRuntimeSnapshotCodec()
           .encodeJson(_engine.createSnapshot());
-      await _saves.writeGame(encoded, _sessionDecisions, _progress);
+      await _saves.writeGame(encoded, _sessionDecisions, _progress, _rulesVersion);
       if (!mounted) return;
       setState(() {
         _hasSave = true;
@@ -271,6 +277,7 @@ class _StoryReaderPageState extends State<StoryReaderPage> {
       setState(() {
         _engine = restored;
         _progress = saved.progress;
+        _rulesVersion = saved.rulesVersion;
         _loadedFromSlot = true;
         _sessionDecisions
           ..clear()
@@ -320,6 +327,7 @@ class _StoryReaderPageState extends State<StoryReaderPage> {
     setState(() {
       _sessionDecisions.clear();
       _progress = const GameProgress();
+      _rulesVersion = 1;
       _loadedFromSlot = false;
       _engine = StoryEngine(project: _project)..start();
     });
@@ -396,12 +404,13 @@ class _StoryReaderPageState extends State<StoryReaderPage> {
                         letterSpacing: 1.2)),
                   ),
                 for (final choice in _engine.availableChoices)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 10),
-                    child: FilledButton.tonal(
-                      onPressed: () => _choose(choice.id),
-                      child: Text(choice.presentation?.text.value ?? choice.id.value),
-                    ),
+                  _PilotChoiceButton(
+                    label: choice.presentation?.text.value ?? choice.id.value,
+                    disabledReason: _rulesVersion == 0
+                        ? null
+                        : _progress.choiceLockReason(choice.id.value),
+                    foreground: _reading.foreground,
+                    onPressed: () => _choose(choice.id),
                   ),
                 if (done)
                   FilledButton(
@@ -436,4 +445,48 @@ class _StoryReaderPageState extends State<StoryReaderPage> {
       ),
     );
   }
+}
+
+/// A visible, explanatory lock is preferable to silently hiding a choice.
+/// Keeps the same list layout and accessibility on phone and desktop.
+class _PilotChoiceButton extends StatelessWidget {
+  const _PilotChoiceButton({
+    required this.label,
+    required this.disabledReason,
+    required this.foreground,
+    required this.onPressed,
+  });
+
+  final String label;
+  final String? disabledReason;
+  final Color foreground;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+        padding: const EdgeInsets.only(bottom: 10),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton.tonal(
+                onPressed: disabledReason == null ? onPressed : null,
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(label),
+                ),
+              ),
+            ),
+            if (disabledReason != null)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(12, 4, 12, 2),
+                child: Text(
+                  'Недоступно: $disabledReason',
+                  style: TextStyle(color: foreground, fontSize: 12),
+                ),
+              ),
+          ],
+        ),
+      );
 }
