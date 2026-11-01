@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'book_import.dart';
+import 'book_model.dart';
 import 'reading_preferences.dart';
 
 class BookReaderPage extends StatefulWidget {
@@ -152,16 +153,65 @@ class _BookReaderPageState extends State<BookReaderPage> {
                 if (widget.book.author.isNotEmpty)
                   Text(widget.book.author, style: readerText),
                 const SizedBox(height: 24),
-                for (var i = 0; i < widget.book.chapters.length; i++) ...[
-                  Text('Глава ${i + 1}',
-                      style: readerText.copyWith(
-                        fontSize: prefs.fontSize + 4,
-                        fontWeight: FontWeight.w600,
-                      )),
-                  const SizedBox(height: 12),
-                  SelectableText(widget.book.chapters[i], style: readerText),
-                  const SizedBox(height: 28),
-                ],
+                if (widget.book.structuredChapters.isNotEmpty)
+                  for (var i = 0; i < widget.book.structuredChapters.length; i++) ...[
+                    Text('Глава ${i + 1}',
+                        style: readerText.copyWith(
+                          fontSize: prefs.fontSize + 4,
+                          fontWeight: FontWeight.w600,
+                        )),
+                    const SizedBox(height: 12),
+                    for (final block in widget.book.structuredChapters[i].blocks) ...[
+                      if (block.kind == BookBlockKind.image)
+                        Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          child: Builder(builder: (context) {
+                            final image = widget.book.images[block.resourceId];
+                            if (image == null) {
+                              return Text('Иллюстрация недоступна',
+                                  style: readerText.copyWith(fontSize: 13));
+                            }
+                            return InkWell(
+                              onTap: () => showDialog<void>(
+                                context: context,
+                                builder: (_) => Dialog(
+                                  child: InteractiveViewer(
+                                    minScale: 0.5,
+                                    maxScale: 5,
+                                    child: Image.memory(image.bytes,
+                                        fit: BoxFit.contain),
+                                  ),
+                                ),
+                              ),
+                              child: Image.memory(image.bytes,
+                                  fit: BoxFit.contain,
+                                  errorBuilder: (_, error, stack) =>
+                                      Text('Ошибка изображения', style: readerText)),
+                            );
+                          }),
+                        )
+                      else
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 12),
+                          child: SelectableText(block.text,
+                            style: block.kind == BookBlockKind.heading
+                                ? readerText.copyWith(fontWeight: FontWeight.bold)
+                                : readerText),
+                        ),
+                    ],
+                    const SizedBox(height: 28),
+                  ]
+                else
+                  for (var i = 0; i < widget.book.chapters.length; i++) ...[
+                    Text('Глава ${i + 1}',
+                        style: readerText.copyWith(
+                          fontSize: prefs.fontSize + 4,
+                          fontWeight: FontWeight.w600,
+                        )),
+                    const SizedBox(height: 12),
+                    SelectableText(widget.book.chapters[i], style: readerText),
+                    const SizedBox(height: 28),
+                  ],
                 Text('Режим чтения • RPG по этой книге появится позже',
                     style: readerText.copyWith(fontSize: 12)),
               ],
