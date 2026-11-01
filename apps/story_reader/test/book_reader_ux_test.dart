@@ -80,8 +80,7 @@ void main() {
     expect(tester.takeException(), isNull);
     await tester.scrollUntilVisible(
       find.text('Далее'), 220,
-      scrollable: find.descendant(
-        of: find.byType(CustomScrollView), matching: find.byType(Scrollable)),
+      scrollable: find.byType(Scrollable).first,
     );
     await tester.pumpAndSettle();
     expect(find.text('Далее'), findsOneWidget);
