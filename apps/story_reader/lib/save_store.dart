@@ -1,17 +1,58 @@
+import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 
-/// M1 single-slot persistence. The final .bwsave storage API will replace this.
+/// A snapshot and the decisions that led to it are stored atomically.
+class GameSaveRecord {
+  const GameSaveRecord(this.snapshot, this.journal);
+  final String snapshot;
+  final List<String> journal;
+}
+
+/// M1 single-slot persistence, compatible with existing raw engine snapshots.
 class SaveStore {
   static const key = 'ai_story_m1_snapshot_v1';
+  static const _format = 'ai_story_save_envelope_v1';
 
+  /// Legacy API retained for older call sites and save fixtures.
   Future<void> write(String snapshot) async {
     final prefs = await SharedPreferences.getInstance();
     final ok = await prefs.setString(key, snapshot);
     if (!ok) throw StateError('Could not persist game snapshot');
   }
 
-  Future<String?> read() async {
+  Future<void> writeGame(String snapshot, List<String> journal) async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getString(key);
+    final data = jsonEncode({
+      'format': _format,
+      'snapshot': snapshot,
+      'journal': List<String>.of(journal),
+    });
+    final ok = await prefs.setString(key, data);
+    if (!ok) throw StateError('Could not persist game and journal');
   }
+
+  Future<GameSaveRecord?> readGame() async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(key);
+    if (raw == null) return null;
+    final dynamic json;
+    try {
+      json = jsonDecode(raw);
+    } on FormatException {
+      // The engine codec owns validation of legacy snapshot payloads.
+      return GameSaveRecord(raw, const []);
+    }
+    if (json is Map && json['format'] == _format) {
+      final snapshot = json['snapshot'];
+      final journal = json['journal'];
+      if (snapshot is! String || journal is! List ||
+          journal.any((entry) => entry is! String)) {
+        throw const FormatException('Invalid game save envelope');
+      }
+      return GameSaveRecord(snapshot, List<String>.unmodifiable(journal.cast<String>()));
+    }
+    return GameSaveRecord(raw, const []);
+  }
+
+  Future<String?> read() async => (await readGame())?.snapshot;
 }
