@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'book_import.dart';
 import 'book_model.dart';
+import 'book_reading_state.dart';
 import 'reading_preferences.dart';
 
 class BookReaderPage extends StatefulWidget {
-  const BookReaderPage({super.key, required this.book});
+  const BookReaderPage({super.key, required this.book, this.bookId});
   final ImportedBook book;
+  final String? bookId;
 
   @override
   State<BookReaderPage> createState() => _BookReaderPageState();
@@ -14,11 +16,70 @@ class BookReaderPage extends StatefulWidget {
 class _BookReaderPageState extends State<BookReaderPage> {
   final ReadingSettingsStore _store = ReadingSettingsStore();
   ReadingPreferences _settings = const ReadingPreferences();
+  final BookReadingStore _readingStore = BookReadingStore();
+  BookReadingState _reading = const BookReadingState();
+  bool _progressReady = false;
+
+  int get _count => widget.book.structuredChapters.isNotEmpty
+      ? widget.book.structuredChapters.length : widget.book.chapters.length;
+
+  Future<void> _loadPosition() async {
+    if (widget.bookId == null) {
+      setState(() => _progressReady = true);
+      return;
+    }
+    final saved = await _readingStore.load(widget.bookId!);
+    if (mounted) setState(() {
+      _reading = saved.copyWith(chapter: saved.chapter.clamp(0, _count > 0 ? _count - 1 : 0));
+      _progressReady = true;
+    });
+  }
+
+  void _chapter(int index) {
+    if (index < 0 || index >= _count) return;
+    setState(() => _reading = _reading.copyWith(chapter: index));
+    if (widget.bookId != null) {
+      _readingStore.save(widget.bookId!, _reading);
+    }
+  }
+
+  void _bookmark() {
+    final marks = _reading.bookmarks.toSet();
+    if (!marks.add(_reading.chapter)) marks.remove(_reading.chapter);
+    setState(() => _reading = _reading.copyWith(bookmarks: marks.toList()..sort()));
+    if (widget.bookId != null) _readingStore.save(widget.bookId!, _reading);
+  }
+
+  void _chapters() {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (context) => SafeArea(
+        child: SizedBox(
+          height: MediaQuery.sizeOf(context).height * 0.65,
+          child: ListView.builder(
+            itemCount: _count,
+            itemBuilder: (context, i) => ListTile(
+              leading: Icon(_reading.bookmarks.contains(i)
+                  ? Icons.bookmark : Icons.menu_book_outlined),
+              title: Text('Глава ${i + 1}'),
+              subtitle: i == _reading.chapter ? const Text('Текущая') : null,
+              onTap: () {
+                Navigator.pop(context);
+                _chapter(i);
+              },
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 
   @override
   void initState() {
     super.initState();
     _loadSettings();
+    _loadPosition();
   }
 
   Future<void> _loadSettings() async {
@@ -117,6 +178,18 @@ class _BookReaderPageState extends State<BookReaderPage> {
         title: Text(widget.book.title),
         actions: [
           IconButton(
+            tooltip: 'Оглавление',
+            onPressed: _chapters,
+            icon: const Icon(Icons.list_alt),
+          ),
+          IconButton(
+            tooltip: _reading.bookmarks.contains(_reading.chapter)
+                ? 'Убрать закладку' : 'Добавить закладку',
+            onPressed: _progressReady && widget.bookId != null ? _bookmark : null,
+            icon: Icon(_reading.bookmarks.contains(_reading.chapter)
+                ? Icons.bookmark : Icons.bookmark_border),
+          ),
+          IconButton(
             tooltip: 'Настройки чтения',
             onPressed: _showReaderSettings,
             icon: const Icon(Icons.text_fields),
@@ -153,15 +226,15 @@ class _BookReaderPageState extends State<BookReaderPage> {
                 if (widget.book.author.isNotEmpty)
                   Text(widget.book.author, style: readerText),
                 const SizedBox(height: 24),
-                if (widget.book.structuredChapters.isNotEmpty)
-                  for (var i = 0; i < widget.book.structuredChapters.length; i++) ...[
-                    Text('Глава ${i + 1}',
-                        style: readerText.copyWith(
-                          fontSize: prefs.fontSize + 4,
-                          fontWeight: FontWeight.w600,
-                        )),
-                    const SizedBox(height: 12),
-                    for (final block in widget.book.structuredChapters[i].blocks) ...[
+                if (_count > 0) ...[
+                  Text('Глава ${_reading.chapter + 1} из $_count',
+                      style: readerText.copyWith(
+                        fontSize: prefs.fontSize + 4,
+                        fontWeight: FontWeight.w600,
+                      )),
+                  const SizedBox(height: 12),
+                  if (widget.book.structuredChapters.isNotEmpty)
+                    for (final block in widget.book.structuredChapters[_reading.chapter].blocks) ...[
                       if (block.kind == BookBlockKind.image)
                         Padding(
                           padding: const EdgeInsets.symmetric(vertical: 12),
@@ -176,15 +249,12 @@ class _BookReaderPageState extends State<BookReaderPage> {
                                 context: context,
                                 builder: (_) => Dialog(
                                   child: InteractiveViewer(
-                                    minScale: 0.5,
-                                    maxScale: 5,
-                                    child: Image.memory(image.bytes,
-                                        fit: BoxFit.contain),
+                                    minScale: 0.5, maxScale: 5,
+                                    child: Image.memory(image.bytes, fit: BoxFit.contain),
                                   ),
                                 ),
                               ),
-                              child: Image.memory(image.bytes,
-                                  fit: BoxFit.contain,
+                              child: Image.memory(image.bytes, fit: BoxFit.contain,
                                   errorBuilder: (_, error, stack) =>
                                       Text('Ошибка изображения', style: readerText)),
                             );
@@ -198,20 +268,31 @@ class _BookReaderPageState extends State<BookReaderPage> {
                                 ? readerText.copyWith(fontWeight: FontWeight.bold)
                                 : readerText),
                         ),
+                    ]
+                  else
+                    SelectableText(widget.book.chapters[_reading.chapter], style: readerText),
+                  const Divider(height: 36),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      OutlinedButton.icon(
+                        onPressed: _reading.chapter > 0
+                            ? () => _chapter(_reading.chapter - 1) : null,
+                        icon: const Icon(Icons.chevron_left),
+                        label: const Text('Назад'),
+                      ),
+                      Text('${_reading.chapter + 1} / $_count',
+                          style: TextStyle(color: prefs.foreground)),
+                      FilledButton.tonalIcon(
+                        onPressed: _reading.chapter + 1 < _count
+                            ? () => _chapter(_reading.chapter + 1) : null,
+                        icon: const Icon(Icons.chevron_right),
+                        label: const Text('Далее'),
+                      ),
                     ],
-                    const SizedBox(height: 28),
-                  ]
-                else
-                  for (var i = 0; i < widget.book.chapters.length; i++) ...[
-                    Text('Глава ${i + 1}',
-                        style: readerText.copyWith(
-                          fontSize: prefs.fontSize + 4,
-                          fontWeight: FontWeight.w600,
-                        )),
-                    const SizedBox(height: 12),
-                    SelectableText(widget.book.chapters[i], style: readerText),
-                    const SizedBox(height: 28),
-                  ],
+                  ),
+                  const SizedBox(height: 28),
+                ],
                 Text('Режим чтения • RPG по этой книге появится позже',
                     style: readerText.copyWith(fontSize: 12)),
               ],
