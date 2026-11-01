@@ -19,4 +19,23 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Войти и исследовать дом'), findsOneWidget);
   });
+  testWidgets('library search can be cleared without hiding demo RPG', (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    await tester.pumpWidget(const AIStoryApp());
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Библиотека'));
+    await tester.pumpAndSettle();
+    expect(find.text('Поиск книг'), findsOneWidget);
+    await tester.enterText(find.byType(EditableText), 'несуществующая книга');
+    await tester.pumpAndSettle();
+    expect(find.text('Тайна особняка'), findsOneWidget);
+    expect(find.text('А—Я'), findsOneWidget);
+    await tester.tap(find.text('А—Я'));
+    await tester.pumpAndSettle();
+    expect(find.text('Я—А'), findsOneWidget);
+    await tester.tap(find.byTooltip('Очистить поиск'));
+    await tester.pumpAndSettle();
+    expect(find.text('Тайна особняка'), findsOneWidget);
+  });
+
 }
