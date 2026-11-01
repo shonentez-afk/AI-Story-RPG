@@ -1,0 +1,151 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/shonentez-afk/AI-Story-RPG/shared_schemas/v1/bookworld_manifest.schema.json",
+  "title": "AI Story RPG BookWorld package, v1 original-demo restriction",
+  "description": "M1.7.3 package manifest with fixed three-entry ZIP, no embedded copyrighted source or executable code.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "format",
+    "format_version",
+    "bookworld_id",
+    "source_fingerprint",
+    "title",
+    "author",
+    "languages",
+    "engine_min_version",
+    "scenario_format",
+    "scenario_format_version",
+    "content_capabilities",
+    "build_status",
+    "hashes",
+    "sizes",
+    "build_tool",
+    "model_provenance",
+    "rights_status",
+    "blueprint_sha256"
+  ],
+  "properties": {
+    "format": {
+      "const": "ai_story_bookworld"
+    },
+    "format_version": {
+      "const": 1
+    },
+    "bookworld_id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]{0,63}$"
+    },
+    "source_fingerprint": {
+      "type": "null"
+    },
+    "title": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256
+    },
+    "author": {
+      "const": "AI Story RPG"
+    },
+    "languages": {
+      "const": [
+        "ru"
+      ]
+    },
+    "engine_min_version": {
+      "const": "0.1.0"
+    },
+    "scenario_format": {
+      "const": "ai_story_blueprint_v1"
+    },
+    "scenario_format_version": {
+      "const": 1
+    },
+    "content_capabilities": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "roles",
+        "plots",
+        "interactions"
+      ],
+      "properties": {
+        "roles": {
+          "const": [
+            "PROTAGONIST"
+          ]
+        },
+        "plots": {
+          "const": [
+            "CANON"
+          ]
+        },
+        "interactions": {
+          "const": [
+            "CLASSIC"
+          ]
+        }
+      }
+    },
+    "build_status": {
+      "const": "original_demo_verified"
+    },
+    "rights_status": {
+      "const": "original_demo"
+    },
+    "build_tool": {
+      "const": {
+        "name": "ai_story_offline_bookworld",
+        "version": "1.0"
+      }
+    },
+    "model_provenance": {
+      "const": {
+        "provider": "none",
+        "model_id": null
+      }
+    },
+    "hashes": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "scenario/blueprint.json",
+        "world.sqlite"
+      ],
+      "properties": {
+        "scenario/blueprint.json": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "world.sqlite": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      }
+    },
+    "sizes": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "scenario/blueprint.json",
+        "world.sqlite"
+      ],
+      "properties": {
+        "scenario/blueprint.json": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 8388608
+        },
+        "world.sqlite": {
+          "type": "integer",
+          "minimum": 512,
+          "maximum": 8388608
+        }
+      }
+    },
+    "blueprint_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    }
+  }
+}

@@ -82,7 +82,7 @@ jobs:
   story-core:
     name: M1.7 deterministic world and schema contracts
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
       - uses: dart-lang/setup-dart@v1
@@ -109,6 +109,27 @@ jobs:
         run: |
           python3 -m pip install --quiet jsonschema==4.23.0
           python3 -m unittest discover -s shared_schemas/tests -v
+      - name: Test offline BookWorld compiler and ZIP/SQLite security
+        run: python3 -m unittest discover -s tools/bookworld/tests -v
+      - name: Build and verify deterministic M1.7.3 demo BookWorld
+        run: |
+          mkdir -p artifacts/bookworld
+          python3 tools/bookworld/bookworld.py build --blueprint shared_schemas/fixtures/manor_world_m17.json --output artifacts/bookworld/manor_m17_original_demo.bworld
+          python3 tools/bookworld/bookworld.py verify --input artifacts/bookworld/manor_m17_original_demo.bworld
+          (cd artifacts/bookworld && sha256sum manor_m17_original_demo.bworld > SHA256SUMS.txt)
+      - name: Analyze and test native Dart BookWorld reader
+        working-directory: packages/bookworld_format
+        run: |
+          dart pub get
+          dart analyze
+          dart test --reporter expanded
+      - name: Upload test BookWorld artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: AI-Story-RPG-BookWorld-demo
+          path: artifacts/bookworld/
+          if-no-files-found: error
+          retention-days: 14
 
   flutter-reader:
     name: Flutter analyze and widget tests
