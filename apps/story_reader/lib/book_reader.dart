@@ -54,17 +54,24 @@ class _BookReaderPageState extends State<BookReaderPage> {
                   Text('Настройки чтения',
                       style: Theme.of(context).textTheme.titleLarge),
                   const SizedBox(height: 12),
-                  SegmentedButton<ReadingPalette>(
-                    showSelectedIcon: false,
-                    segments: const [
-                      ButtonSegment(value: ReadingPalette.light, label: Text('Свет')),
-                      ButtonSegment(value: ReadingPalette.sepia, label: Text('Сепия')),
-                      ButtonSegment(value: ReadingPalette.dark, label: Text('Тёмная')),
-                      ButtonSegment(value: ReadingPalette.oled, label: Text('OLED')),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 4,
+                    alignment: WrapAlignment.center,
+                    children: [
+                      for (final entry in <(ReadingPalette, String)>[
+                        (ReadingPalette.light, 'Свет'),
+                        (ReadingPalette.sepia, 'Сепия'),
+                        (ReadingPalette.dark, 'Тёмная'),
+                        (ReadingPalette.oled, 'OLED'),
+                      ])
+                        ChoiceChip(
+                          label: Text(entry.$2),
+                          selected: _settings.palette == entry.$1,
+                          onSelected: (_) =>
+                              apply(_settings.copyWith(palette: entry.$1)),
+                        ),
                     ],
-                    selected: {_settings.palette},
-                    onSelectionChanged: (value) =>
-                        apply(_settings.copyWith(palette: value.first)),
                   ),
                   Text('Размер текста: ${_settings.fontSize.toStringAsFixed(0)}'),
                   Slider(
