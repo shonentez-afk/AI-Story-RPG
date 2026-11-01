@@ -22,6 +22,10 @@ class M0ScenarioTests(unittest.TestCase):
 
     def test_ink_generation(self):
         text = compile_ink(DATA)
+        # Regression: without a top-level divert Ink starts at an empty root,
+        # reaches END, and exposes no choices.
+        self.assertIn("-> village\n\n=== village ===", text)
+        self.assertLess(text.index("-> village"), text.index("=== village ==="))
         self.assertIn("=== witness ===", text)
         self.assertIn("guard_trust >= 1", text)
         self.assertNotIn("EXTERNAL", text)
