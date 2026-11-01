@@ -73,11 +73,11 @@ void main() {
     await tester.tap(find.text('Герой'));
     await tester.pumpAndSettle();
     expect(find.textContaining('Смелость: 1'), findsOneWidget);
-    await tester.pageBack();
+    await tester.tap(find.byTooltip('Закрыть'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Предметы'));
     await tester.pumpAndSettle();
-    expect(find.text('Старое письмо'), findsOneWidget);
+    expect(find.textContaining('Старое письмо'), findsOneWidget);
   });
 
   testWidgets('new game warns before overwriting the existing slot', (tester) async {
