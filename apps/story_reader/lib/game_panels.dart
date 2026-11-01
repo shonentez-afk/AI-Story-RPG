@@ -9,10 +9,12 @@ class GameInfoSheet extends StatelessWidget {
     super.key,
     required this.panel,
     required this.currentScene,
+    this.journalEntries = const [],
   });
 
   final GamePanel panel;
   final String currentScene;
+  final List<String> journalEntries;
 
   @override
   Widget build(BuildContext context) {
@@ -33,9 +35,9 @@ class GameInfoSheet extends StatelessWidget {
       GamePanel.inventory =>
         'Предметы пока не доступны: демонстрационный сюжет не содержит '
         'инвентаря. Здесь будут найденные вещи, документы и иллюстрации.',
-      GamePanel.journal =>
-        'Текущая сцена: $currentScene. '
-        'Подробная история решений появится вместе с журналом событий.',
+      GamePanel.journal => journalEntries.isEmpty
+        ? 'Текущая сцена: $currentScene. Решений в этом сеансе пока нет.'
+        : 'Текущая сцена: $currentScene.',
     };
     return SafeArea(
       child: Padding(
@@ -59,6 +61,16 @@ class GameInfoSheet extends StatelessWidget {
             ),
             const SizedBox(height: 12),
             Text(message),
+            if (panel == GamePanel.journal && journalEntries.isNotEmpty) ...[
+              const SizedBox(height: 14),
+              for (final entry in journalEntries)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 10),
+                  child: Text('• $entry'),
+                ),
+              Text('Записи показывают текущий сеанс. Сохранение истории решений будет подключено отдельно.',
+                style: Theme.of(context).textTheme.bodySmall),
+            ],
           ],
         ),
       ),
