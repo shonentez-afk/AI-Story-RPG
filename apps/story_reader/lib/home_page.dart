@@ -166,10 +166,10 @@ class _LibraryPageState extends State<LibraryPage> {
         appBar: AppBar(
           title: const Text('Библиотека'),
           actions: [
-            TextButton.icon(
+            IconButton(
+              tooltip: 'Добавить книгу (TXT или FB2)',
               onPressed: _working ? null : _import,
               icon: const Icon(Icons.library_add_outlined),
-              label: const Text('Добавить книгу'),
             ),
           ],
         ),
