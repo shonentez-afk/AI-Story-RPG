@@ -11,7 +11,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Новая история'), findsOneWidget);
     expect(find.text('Библиотека'), findsOneWidget);
-    expect(find.text('Настройки'), findsOneWidget);
+    expect(find.byTooltip('Настройки'), findsOneWidget);
     await tester.tap(find.text('Библиотека'));
     await tester.pumpAndSettle();
     expect(find.text('Тайна особняка'), findsOneWidget);
