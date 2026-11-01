@@ -1,8 +1,8 @@
 # M1: «Живая книга» — Flutter host, первый срез
 
-Основной runtime: `story_engine: 0.1.0-alpha.1` (ADR-001). Сейчас здесь исходный код Flutter читателя: текст сцен, выбор, перезапуск и внутрисессионные save/restore через `StoryRuntimeSnapshotCodec`.
+Основной runtime: `story_engine: 0.1.0-alpha.1` (ADR-001). Сейчас здесь исходный код Flutter читателя: текст сцен, выбор, перезапуск и локальные сохранение/восстановление между запусками через `StoryRuntimeSnapshotCodec`.
 
-**Ещё не реализовано:** постоянная запись на диск, книга из FB2/EPUB, AI, `.bworld/.bwsave`, Android/Windows generated files, готовые инсталляторы.
+**Ещё не реализовано:** полноценный формат .bwsave и несколько слотов, книга из FB2/EPUB, AI, `.bworld/.bwsave`, Android/Windows generated files, готовые инсталляторы.
 
 На компьютере с установленным Flutter:
 
