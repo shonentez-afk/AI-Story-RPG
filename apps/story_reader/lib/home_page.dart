@@ -87,8 +87,7 @@ class _HomePageState extends State<HomePage> {
                 ),
                 const SizedBox(height: 24),
                 const Text(
-                  'M1.1 • В библиотеке пока доступен демонстрационный пролог. '
-                  'Импорт собственных книг будет добавлен следующим этапом.',
+                  'Библиотека поддерживает TXT и FB2. Откройте библиотеку, чтобы импортировать книгу.',
                   textAlign: TextAlign.center,
                 ),
               ],
@@ -209,7 +208,7 @@ class _LibraryPageState extends State<LibraryPage> {
                   trailing: const Icon(Icons.chevron_right),
                   onTap: () => Navigator.of(context).push(
                     MaterialPageRoute<void>(
-                      builder: (_) => BookReaderPage(book: entry.book),
+                      builder: (_) => BookReaderPage(book: entry.book, bookId: entry.id),
                     ),
                   ),
                 ),
