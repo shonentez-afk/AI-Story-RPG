@@ -111,6 +111,13 @@ void main() {
         expectedRevision: 0);
     expect(chosen.applied, true);
     expect((await worker.load(id)).revision, 1);
+    final portable = await worker.exportSave(id);
+    final preview = await worker.previewSave(
+      portable, expectedWorldHash: world.archiveHash,
+    );
+    expect(preview.revision, 1);
+    expect(preview.worldHash, world.archiveHash);
+    expect((await worker.campaigns()).length, 1);
   });
 
   testWidgets('one library imports and displays verified worlds separately '
