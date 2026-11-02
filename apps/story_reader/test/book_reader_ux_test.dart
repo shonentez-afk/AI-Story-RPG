@@ -173,6 +173,7 @@ void main() {
       'Текст параграфа ${old.anchor!.blockIndex}.',
     ), findsOneWidget, reason:
         'visible=$visibleParagraphs, saved=${old.anchor!.blockIndex}, '
+        'fraction=${old.anchor!.fraction}, '
         'post=${afterResize.anchor?.blockIndex}, '
         'scroll=${liveView.controller?.offset}');
     expect(tester.takeException(), isNull);
