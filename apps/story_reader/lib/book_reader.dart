@@ -119,61 +119,22 @@ class _BookReaderPageState extends State<BookReaderPage>
     _restoring = true;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      if (!_scroll.hasClients) {
-        _restoring = false;
-        return;
+      if (_scroll.hasClients) {
+        final anchor = _reading.anchor;
+        final pos = _scroll.position;
+        // CustomScrollView.center pins the selected source paragraph to
+        // scroll coordinate zero. Do NOT combine it with old pixel offsets
+        // or viewport-reveal offsets: those refer to a different layout.
+        // On reflow, reliably show the same paragraph from its beginning.
+        // The fine fraction remains stored for future reading-position work.
+        final offset = _layoutAnchorIndex != null && anchor != null
+            ? 0.0 : _reading.scrollOffset;
+        _scroll.jumpTo(offset.clamp(
+          pos.minScrollExtent, pos.maxScrollExtent,
+        ).toDouble());
       }
-      final anchor = _reading.anchor;
-      if (_layoutAnchorIndex != null && anchor != null) {
-        _alignVisibleParagraph(anchor, attempts: 4);
-        return;
-      }
-      final pos = _scroll.position;
-      _scroll.jumpTo(_reading.scrollOffset.clamp(
-        pos.minScrollExtent, pos.maxScrollExtent,
-      ).toDouble());
       _restoring = false;
     });
-  }
-
-  /// Align against ACTUAL rendered geometry after resize. ScrollView.center
-  /// may shift its coordinate origin when earlier slivers change size;
-  /// absolute offsets and a single jumpTo are not reliable across metrics.
-  void _alignVisibleParagraph(BookTextAnchor anchor, {required int attempts}) {
-    if (!mounted || !_scroll.hasClients) {
-      _restoring = false;
-      return;
-    }
-    final target = _anchorParagraphKey.currentContext?.findRenderObject();
-    final viewport = _viewportKey.currentContext?.findRenderObject();
-    if (target is RenderBox && target.hasSize &&
-        viewport is RenderBox && viewport.hasSize) {
-      final top = viewport.localToGlobal(Offset.zero).dy + 1;
-      final targetTop = target.localToGlobal(Offset.zero).dy;
-      // A tail-end saved position should still leave some paragraph visible.
-      final fraction = anchor.fraction.clamp(0.0, 0.85);
-      final desiredTop = top - target.size.height * fraction;
-      final correction = targetTop - desiredTop;
-      if (correction.abs() > 1 && attempts > 0) {
-        final pos = _scroll.position;
-        final next = (_scroll.offset + correction).clamp(
-          pos.minScrollExtent, pos.maxScrollExtent,
-        ).toDouble();
-        if ((next - _scroll.offset).abs() > 0.5) {
-          _scroll.jumpTo(next);
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            _alignVisibleParagraph(anchor, attempts: attempts - 1);
-          });
-          return;
-        }
-      }
-    } else if (attempts > 0) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        _alignVisibleParagraph(anchor, attempts: attempts - 1);
-      });
-      return;
-    }
-    _restoring = false;
   }
 
   /// A font, width, line-height or reader-chrome change preserves a semantic
