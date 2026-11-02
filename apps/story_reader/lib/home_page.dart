@@ -1,9 +1,9 @@
 import 'dart:async';
-import 'dart:isolate';
 
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'book_import.dart';
+import 'book_isolate_workers.dart';
 import 'book_storage.dart';
 import 'book_reader.dart';
 import 'source_index_preview_page.dart';
@@ -477,7 +477,7 @@ class _LibraryPageState extends State<LibraryPage> {
         // TXT/FB2 may be up to 20 MiB. Parsing off the UI isolate prevents
         // long synchronous frames on both Android and Windows.
         final sourceName = file.name;
-        final book = await Isolate.run(() => BookImporter.parse(sourceName, bytes));
+        final book = await parseImportedBookInWorker(sourceName, bytes);
         await _storage.add(book);
         await _refresh();
         if (mounted) {
