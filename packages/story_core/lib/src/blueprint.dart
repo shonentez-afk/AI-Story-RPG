@@ -11,6 +11,8 @@ class StoryBlueprint {
   StoryBlueprint._({
     required this.bookId,
     required this.title,
+    required this.rightsStatus,
+    required this.sourceFingerprint,
     required this.entrySceneId,
     required this.blueprintHash,
     required this.scenes,
@@ -22,6 +24,8 @@ class StoryBlueprint {
 
   final String bookId;
   final String title;
+  final String rightsStatus;
+  final String? sourceFingerprint;
   final String entrySceneId;
   /// Exact canonical JSON blueprint SHA-256; not a source book fingerprint.
   final String blueprintHash;
@@ -44,10 +48,17 @@ class StoryBlueprint {
       'supported_modes', 'items', 'facts', 'actors',
       'initial_state', 'scenes',
     });
+    // v1 demo stays strict; private books require an independently verified
+    // v2 ZIP manifest and matching SHA256 source provenance at import time.
+    final rights = root['rights_status'];
+    final fingerprint = root['source_fingerprint'];
+    final isOriginal = rights == 'original_demo' && fingerprint == null;
+    final isPrivate = rights == 'private_adaptation' &&
+        fingerprint is String &&
+        RegExp(r'^[a-f0-9]{64}$').hasMatch(fingerprint);
     if (root['format'] != 'ai_story_blueprint_v1' ||
         root['schema_version'] != 1 ||
-        root['rights_status'] != 'original_demo' ||
-        root['source_fingerprint'] != null ||
+        (!isOriginal && !isPrivate) ||
         root['title'] is! String ||
         (root['title'] as String).trim().isEmpty ||
         (root['title'] as String).length > 256) {
@@ -74,7 +85,8 @@ class StoryBlueprint {
     if ((modes['roles'] as List).length != 1 ||
         (modes['roles'] as List).single != 'PROTAGONIST' ||
         (modes['plots'] as List).length != 1 ||
-        (modes['plots'] as List).single != 'CANON' ||
+        (modes['plots'] as List).single !=
+            (isOriginal ? 'CANON' : 'ALTER_FATE') ||
         (modes['interactions'] as List).length != 1 ||
         (modes['interactions'] as List).single != 'CLASSIC') {
       throw const FormatException('Unsupported M1.7 prototype modes');
@@ -161,6 +173,8 @@ class StoryBlueprint {
     return StoryBlueprint._(
       bookId: jsonId(root['book_id'], 'book_id'),
       title: root['title'] as String,
+      rightsStatus: rights as String,
+      sourceFingerprint: fingerprint as String?,
       entrySceneId: entry,
       blueprintHash: sha256.convert(utf8.encode(canonicalJson(root))).toString(),
       scenes: Map.unmodifiable(scenes),

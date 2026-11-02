@@ -3,6 +3,7 @@ import 'package:ai_story_reader/book_import.dart';
 import 'package:ai_story_reader/book_source_index.dart';
 import 'package:ai_story_reader/intermediate_story_blueprint.dart';
 import 'package:ai_story_reader/private_adaptation_preflight.dart';
+import 'package:ai_story_reader/private_classic_scenario_translator.dart';
 import 'package:ai_story_reader/source_evidence_graph.dart';
 import 'package:ai_story_reader/source_semantic_catalog.dart';
 import 'package:ai_story_reader/source_semantic_editorial_review.dart';
@@ -110,6 +111,101 @@ void main() {
         contains('Компилятор пользовательских .bworld ещё не реализован.'));
     expect(status.isStructurallyReady, false);
     expect(status.canSendToCloud, false);
+  });
+
+  test('M2d translates validated scenes and causality into inert rules',
+      () {
+    final editorial = SemanticEditorialReviewSession.create(index, catalog)
+        .decide(catalog, firstClaim.id, SemanticEditorialVerdict.canonCandidate)
+        .decide(catalog, lastClaim.id, SemanticEditorialVerdict.canonCandidate);
+    final compiled = PrivateClassicScenarioTranslator.translate(
+        index, graph, catalog, editorial, shortDraft());
+    final again = PrivateClassicScenarioTranslator.translate(
+        index, graph, catalog, editorial, shortDraft());
+
+    final payload = compiled.blueprintJson;
+    final provenance = compiled.provenanceJson;
+    expect(compiled.blueprintSha256, again.blueprintSha256);
+    expect(compiled.provenanceSha256, again.provenanceSha256);
+    expect(payload['rights_status'], 'private_adaptation');
+    expect(payload['source_fingerprint'], index.sourceFingerprint);
+    expect(payload['supported_modes']['interactions'], ['CLASSIC']);
+    expect(payload['supported_modes']['plots'], ['ALTER_FATE']);
+    expect(payload['initial_state']['scene_id'], 'entry');
+    expect(payload['initial_state']['flags'], isEmpty);
+    expect((payload['scenes'] as List).length, 3);
+    final start = (payload['scenes'] as List).first as Map;
+    expect((start['choices'] as List).length, 2);
+    expect((start['choices'] as List).first['effects'], isEmpty);
+    expect(provenance['source_chapters_total'], 2);
+    expect(provenance['model_provenance']['provider'], 'none');
+    expect(provenance['publication_authorized'], false);
+    final refs = (provenance['scene_origins'] as List).first['source_refs'] as List;
+    expect(refs, isNotEmpty);
+    expect(refs.first['quote_sha256'], hasLength(64));
+    expect(compiled.provenanceSource, isNot(contains('Дверь была закрыта')));
+    expect(compiled.isPackageBuilt, false);
+    expect(compiled.canDistributePublicly, false);
+    expect(compiled.canPublishBookworld, false);
+    payload['rights_status'] = 'hacked';
+    expect(compiled.blueprintJson['rights_status'], 'private_adaptation');
+  });
+
+  test('M2d translates truth-valued flags into typed conditions/effects',
+      () {
+    final editor = SemanticEditorialReviewSession.create(index, catalog)
+        .decide(catalog, firstClaim.id, SemanticEditorialVerdict.canonCandidate)
+        .decide(catalog, lastClaim.id, SemanticEditorialVerdict.canonCandidate);
+    final base = shortDraft();
+    final first = base.scenes.first;
+    final withFlags = IntermediateStoryBlueprint(
+      sourceFingerprint: index.sourceFingerprint, title: base.title,
+      entrySceneId: base.entrySceneId, rights: base.rights,
+      flags: const ['friend_saved'], initialFlags: const [],
+      scenes: [
+        DraftScene(
+          id: first.id, chapterIndex: first.chapterIndex,
+          text: first.text, origin: first.origin,
+          assertionIds: first.assertionIds, terminal: false,
+          choices: [
+            DraftChoice(id: 'follow_book', label: 'Вместе',
+                nextSceneId: 'canon_end', adds: ['friend_saved']),
+            DraftChoice(id: 'depart', label: 'Врозь',
+                nextSceneId: 'alternate_end', removes: ['friend_saved']),
+          ],
+        ),
+        ...base.scenes.skip(1),
+      ],
+    );
+    final translated = PrivateClassicScenarioTranslator.translate(
+        index, graph, catalog, editor, withFlags);
+    final blueprint = translated.blueprintJson;
+    expect(blueprint['initial_state']['flags'], {'friend_saved': false});
+    final choices = (blueprint['scenes'] as List).first['choices'] as List;
+    expect(choices.first['effects'], [
+      {'op': 'set_flag', 'id': 'friend_saved', 'value': true},
+    ]);
+    expect(choices.last['effects'], [
+      {'op': 'set_flag', 'id': 'friend_saved', 'value': false},
+    ]);
+  });
+
+  test('M2d translation refuses missing editorial review and unknown rights',
+      () {
+    final blank = SemanticEditorialReviewSession.create(index, catalog);
+    expect(() => PrivateClassicScenarioTranslator.translate(
+        index, graph, catalog, blank, shortDraft()), throwsFormatException);
+    final accepted = blank
+        .decide(catalog, firstClaim.id, SemanticEditorialVerdict.canonCandidate)
+        .decide(catalog, lastClaim.id, SemanticEditorialVerdict.canonCandidate);
+    expect(() => PrivateClassicScenarioTranslator.translate(
+        index, graph, catalog, accepted,
+        shortDraft(rights: PreparationRights.unknown)), throwsFormatException);
+    // Even a user's assertion that text is public-domain is insufficient
+    // for distribution without an independently audited rights record.
+    expect(() => PrivateClassicScenarioTranslator.translate(
+        index, graph, catalog, accepted,
+        shortDraft(rights: PreparationRights.publicDomain)), throwsFormatException);
   });
 
   test('missing decisions and rights are blockers even with valid quotes', () {

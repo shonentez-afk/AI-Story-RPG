@@ -29,6 +29,40 @@ void main() {
     expect(blueprint.actors, containsAll(['player', 'guard']));
   });
 
+  test('private sourced CLASSIC contract is isolated from original_demo',
+      () {
+    final raw = mutableFixture();
+    raw['rights_status'] = 'private_adaptation';
+    raw['source_fingerprint'] = 'a' * 64;
+    (raw['supported_modes'] as Map)['plots'] = ['ALTER_FATE'];
+    final private = StoryBlueprint.fromJson(raw);
+    expect(private.rightsStatus, 'private_adaptation');
+    expect(private.sourceFingerprint, 'a' * 64);
+    final world = StoryWorld(private);
+    expect(world.state.sceneId, 'gate');
+    final fallback = mutableFixture();
+    expect(StoryBlueprint.fromJson(fallback).rightsStatus, 'original_demo');
+    expect(StoryBlueprint.fromJson(fallback).sourceFingerprint, isNull);
+
+    final lyingDemo = mutableFixture();
+    lyingDemo['source_fingerprint'] = 'a' * 64;
+    expect(() => StoryBlueprint.fromJson(lyingDemo), throwsFormatException);
+    final falseRight = mutableFixture();
+    falseRight['rights_status'] = 'public_domain';
+    expect(() => StoryBlueprint.fromJson(falseRight), throwsFormatException);
+    final invalidPrivate = mutableFixture();
+    invalidPrivate['rights_status'] = 'private_adaptation';
+    invalidPrivate['source_fingerprint'] = 'not_sha';
+    expect(() => StoryBlueprint.fromJson(invalidPrivate),
+        throwsFormatException);
+    final fakeFreeMode = mutableFixture();
+    fakeFreeMode['rights_status'] = 'private_adaptation';
+    fakeFreeMode['source_fingerprint'] = 'a' * 64;
+    (fakeFreeMode['supported_modes'] as Map)['plots'] = ['FREE_WORLD'];
+    expect(() => StoryBlueprint.fromJson(fakeFreeMode),
+        throwsFormatException);
+  });
+
   test('denials have no side effects or fabricated items', () {
     final world = StoryWorld(originalBlueprint());
     final before = world.state.stateHash;

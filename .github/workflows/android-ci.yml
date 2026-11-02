@@ -117,6 +117,11 @@ jobs:
           python3 tools/bookworld/bookworld.py build --blueprint shared_schemas/fixtures/manor_world_m17.json --output artifacts/bookworld/manor_m17_original_demo.bworld
           python3 tools/bookworld/bookworld.py verify --input artifacts/bookworld/manor_m17_original_demo.bworld
           (cd artifacts/bookworld && sha256sum manor_m17_original_demo.bworld > SHA256SUMS.txt)
+      - name: Build and verify strict PRIVATE M2d synthetic BookWorld
+        run: |
+          python3 -c "import json; from pathlib import Path; from tools.bookworld.private_bookworld import build; data=json.loads(Path('shared_schemas/fixtures/private_classic_sample.json').read_text(encoding='utf-8')); Path('artifacts/bookworld/book_private_sample.bworld').write_bytes(build(data['blueprint'],data['provenance'],data['source_index']))"
+          python3 -m tools.bookworld.private_bookworld verify --input artifacts/bookworld/book_private_sample.bworld
+          (cd artifacts/bookworld && sha256sum book_private_sample.bworld >> SHA256SUMS.txt)
       - name: Analyze and test native Dart BookWorld reader
         working-directory: packages/bookworld_format
         run: |

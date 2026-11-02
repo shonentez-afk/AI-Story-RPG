@@ -1,0 +1,191 @@
+{
+  "blueprint": {
+    "format": "ai_story_blueprint_v1",
+    "schema_version": 1,
+    "book_id": "book_private_sample",
+    "title": "Мария и две дороги",
+    "entry_scene_id": "entry",
+    "rights_status": "private_adaptation",
+    "source_fingerprint": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "supported_modes": {
+      "roles": [
+        "PROTAGONIST"
+      ],
+      "plots": [
+        "ALTER_FATE"
+      ],
+      "interactions": [
+        "CLASSIC"
+      ]
+    },
+    "items": [],
+    "facts": [],
+    "actors": [
+      "player"
+    ],
+    "initial_state": {
+      "scene_id": "entry",
+      "revision": 0,
+      "tick": 0,
+      "stats": {},
+      "inventory": [],
+      "flags": {
+        "helped": false
+      },
+      "knowledge": {
+        "player": []
+      }
+    },
+    "scenes": [
+      {
+        "id": "entry",
+        "text": "Мария стоит перед дверью. Решение ещё не принято.",
+        "terminal": false,
+        "choices": [
+          {
+            "id": "wait",
+            "label": "Осмотреть двор и подумать",
+            "next_scene_id": "entry",
+            "conditions": [],
+            "effects": []
+          },
+          {
+            "id": "help",
+            "label": "Помочь Марии войти",
+            "next_scene_id": "canon_end",
+            "conditions": [],
+            "effects": [
+              {
+                "op": "set_flag",
+                "id": "helped",
+                "value": true
+              }
+            ]
+          },
+          {
+            "id": "leave",
+            "label": "Уйти и изменить судьбу",
+            "next_scene_id": "alternate_end",
+            "conditions": [],
+            "effects": [
+              {
+                "op": "set_flag",
+                "id": "helped",
+                "value": false
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "id": "canon_end",
+        "text": "Мария вошла в дом, и её встретил Иван.",
+        "terminal": true,
+        "choices": []
+      },
+      {
+        "id": "alternate_end",
+        "text": "Мария осталась во дворе, а герой отправился своей дорогой.",
+        "terminal": true,
+        "choices": []
+      }
+    ]
+  },
+  "provenance": {
+    "format": "ai_story_private_provenance_v1",
+    "bookworld_id": "book_private_sample",
+    "source_fingerprint": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "source_title": "Мария и две дороги",
+    "source_author": "Автор теста",
+    "source_chapters_total": 2,
+    "source_chapters_indexed": 2,
+    "semantic_catalog_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    "intermediate_draft_sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+    "rights_status": "private_use_only",
+    "publication_authorized": false,
+    "model_provenance": {
+      "provider": "none",
+      "model_id": null
+    },
+    "scene_origins": [
+      {
+        "scene_id": "entry",
+        "chapter_index": 0,
+        "origin": "SOURCE_PASSAGE",
+        "assertion_ids": [
+          "11111111111111111111111111111111"
+        ],
+        "source_refs": [
+          {
+            "id": "33333333333333333333333333333333",
+            "chunk_id": "chunk_0_0",
+            "chapter_id": "chapter_0",
+            "chapter_index": 0,
+            "block_index": 0,
+            "start_utf16": 0,
+            "end_utf16": 16,
+            "quote_sha256": "cf7fd59c0168f2041004a52c91029e1f62af7f9a1be756a628fbb6edcb75b94a",
+            "visible_after_chapter": 0
+          }
+        ]
+      },
+      {
+        "scene_id": "canon_end",
+        "chapter_index": 1,
+        "origin": "SOURCE_PASSAGE",
+        "assertion_ids": [
+          "22222222222222222222222222222222"
+        ],
+        "source_refs": [
+          {
+            "id": "44444444444444444444444444444444",
+            "chunk_id": "chunk_1_0",
+            "chapter_id": "chapter_1",
+            "chapter_index": 1,
+            "block_index": 0,
+            "start_utf16": 0,
+            "end_utf16": 16,
+            "quote_sha256": "bb5aab1a40caea8115c360ca4b88ab4646ae111da03b7f30133a58b52626f55a",
+            "visible_after_chapter": 1
+          }
+        ]
+      },
+      {
+        "scene_id": "alternate_end",
+        "chapter_index": 0,
+        "origin": "EXPLICIT_ADAPTATION",
+        "assertion_ids": [],
+        "source_refs": []
+      }
+    ]
+  },
+  "source_index": {
+    "source_fingerprint": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "chapter_count": 2,
+    "indexed_chapter_count": 2,
+    "text_total_utf16": 88,
+    "text_indexed_utf16": 88,
+    "chunks": [
+      {
+        "id": "chunk_0_0",
+        "chapter_index": 0,
+        "chapter_id": "chapter_0",
+        "block_index": 0,
+        "start_utf16": 0,
+        "end_utf16": 50,
+        "text": "Мария стояла перед дверью. Решение ещё не принято.",
+        "sha256_text": "5b4c7d808725bbdc22e713fddee27c12f961ecf01a688fb5d4b442b5969be553"
+      },
+      {
+        "id": "chunk_1_0",
+        "chapter_index": 1,
+        "chapter_id": "chapter_1",
+        "block_index": 0,
+        "start_utf16": 0,
+        "end_utf16": 38,
+        "text": "Мария вошла в дом, и её встретил Иван.",
+        "sha256_text": "60c375b3452e331c085e66839e9922cb7715b452b9ae7d7de50859aece0239ba"
+      }
+    ]
+  }
+}

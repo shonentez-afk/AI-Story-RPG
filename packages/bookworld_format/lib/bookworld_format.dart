@@ -7,7 +7,10 @@ import 'package:story_core/story_core.dart';
 import 'src/sqlite_v1.dart';
 import 'src/zip_v1.dart';
 
-/// Validated compiled original-demo world, not a game save or a reader book.
+export 'private_bookworld.dart' show PrivateBookworldImporter, VerifiedPrivateBookworld;
+
+/// Validated compiled game rules (legacy demo or explicit private source v2),
+/// not a game save, a reader book, or distribution permission.
 class VerifiedBookworld {
   const VerifiedBookworld({
     required this.blueprint,

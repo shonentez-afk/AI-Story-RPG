@@ -36,6 +36,55 @@ void main() {
         expectedRevision: store.loadCampaign(campaign).metadata.revision,
       );
 
+  test('private M2d book installs beside v1 and survives save/restart/transfer',
+      () {
+    final raw = File('../../artifacts/bookworld/book_private_sample.bworld')
+        .readAsBytesSync();
+    final private = store.installBookworld(raw);
+    expect(private.bookworldId, 'book_private_sample');
+    expect(store.installedWorlds().length, 2);
+    final first = store.createCampaign(private.archiveHash);
+    for (var i = 0; i < 20; i++) {
+      expect(take(first, 'private_wait_$i', 'wait').applied, isTrue);
+    }
+    final before = store.loadCampaign(first);
+    expect(before.metadata.revision, 20);
+    expect(before.coordinator.sceneId, 'entry');
+    final portable = store.exportPortable(first);
+    final archived = store.exportBookworld(private.archiveHash);
+    expect(archived, raw);
+
+    store.close();
+    store = BookworldCampaignStore.openPrivateDirectory(temp.path);
+    expect(store.installedWorlds().length, 2);
+    expect(store.loadCampaign(first).metadata.stateHash,
+        before.metadata.stateHash);
+    expect(take(first, 'private_help', 'help').applied, isTrue);
+    final rescued = store.loadCampaign(first);
+    expect(rescued.coordinator.isTerminal, isTrue);
+    expect(rescued.coordinator.state.flags['helped'], true);
+
+    final receiverPath = temp.path + Platform.pathSeparator + 'private_receiver';
+    final receiver = BookworldCampaignStore.openPrivateDirectory(receiverPath);
+    try {
+      expect(() => receiver.previewPortable(portable), throwsFormatException);
+      receiver.installBookworld(archived);
+      final importedId = receiver.importPortable(portable);
+      final recovered = receiver.loadCampaign(importedId);
+      expect(recovered.metadata.stateHash, before.metadata.stateHash);
+      expect(recovered.coordinator.sceneId, 'entry');
+      expect(receiver.commitChoice(importedId,
+          actionId: 'private_leave', choiceId: 'leave',
+          expectedRevision: 20).applied, isTrue);
+      final changed = receiver.loadCampaign(importedId);
+      expect(changed.coordinator.sceneId, 'alternate_end');
+      expect(changed.coordinator.state.flags['helped'], false);
+      expect(changed.metadata.stateHash, isNot(rescued.metadata.stateHash));
+    } finally {
+      receiver.close();
+    }
+  });
+
   test('BookWorld catalog deduplicates exact byte-identical package', () {
     expect(world.bookworldId, 'manor_m17_original_demo');
     expect(world.blueprintHash.length, 64);

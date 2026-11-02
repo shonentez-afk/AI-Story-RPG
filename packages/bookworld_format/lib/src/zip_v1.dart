@@ -17,7 +17,21 @@ class BworldZipV1 {
     'manifest.json', 'scenario/blueprint.json', 'world.sqlite',
   ];
 
-  static Map<String, Uint8List> read(Uint8List bytes) {
+  /// Exact v2 private archive entries. V1 read() is unchanged and rejects
+  /// v2 archives; the caller must explicitly opt into this format.
+  static const List<String> privatePaths = [
+    'manifest.json', 'scenario/blueprint.json',
+    'source/provenance.json', 'world.sqlite',
+  ];
+
+  static Map<String, Uint8List> read(Uint8List bytes) =>
+      _readExpected(bytes, paths);
+
+  static Map<String, Uint8List> readPrivate(Uint8List bytes) =>
+      _readExpected(bytes, privatePaths);
+
+  static Map<String, Uint8List> _readExpected(
+      Uint8List bytes, List<String> paths) {
     if (bytes.length < 22 || bytes.length > maxArchive) {
       throw const FormatException('Invalid .bworld archive size');
     }
