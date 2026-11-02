@@ -258,47 +258,52 @@ class _SourceIndexPreviewPageState extends State<SourceIndexPreviewPage> {
   Widget _preparationOverview(BookSourceIndex index) {
     final analysis = _analysis;
     final searchStatus = analysis == null || analysis.processedCount == 0
-        ? 'Ещё не запускался'
+        ? 'ещё не запускался'
         : analysis.pendingCount == 0 && analysis.failedCount == 0
-            ? 'Поиск завершён, находки требуют проверки'
-            : 'Просмотрено ${analysis.processedCount} из ${index.chunks.length} фрагментов';
+            ? 'завершён; проверьте находки'
+            : 'просмотрено ${analysis.processedCount} из ${index.chunks.length} фрагментов';
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(12),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text('Что делает подготовка?',
-                style: Theme.of(context).textTheme.titleLarge),
-            const SizedBox(height: 8),
-            const Text(
-              'Задача этого раздела — постепенно собрать проверенные '
-              'сведения из книги для будущей текстовой RPG. '
-              'В этой сборке мы пока анализируем текст: '
-              'готовой игры из вашей книги ещё не создаём.',
+                style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: 4),
+            const Text('В этой сборке проверяем текст, но '
+                'готовой игры из вашей книги ещё не создаём.'),
+            const SizedBox(height: 6),
+            Text('Текст разобран: ${index.chapterCount} разделов. '
+                'Поиск имён: $searchStatus.'),
+            const SizedBox(height: 4),
+            const Text('Создать игровую историю — пока недоступно'),
+            ExpansionTile(
+              key: const Key('prepare-how-it-works'),
+              tilePadding: EdgeInsets.zero,
+              title: const Text('Как это будет работать: 4 этапа'),
+              children: [
+                _preparationStep('1', 'Разобрать текст — готово',
+                    'Найдены ${index.chapterCount} разделов и '
+                    '${index.chunks.length} фрагментов. '
+                    'Иллюстрации отдельно не анализируются.'),
+                const SizedBox(height: 8),
+                _preparationStep('2', 'Найти имена и места',
+                    'Локальный поиск по простым правилам, '
+                    'часть упоминаний может быть пропущена.'),
+                const SizedBox(height: 8),
+                _preparationStep('3', 'Проверить найденное',
+                    'Можно вручную проверить имена, события, '
+                    'предполагаемые связи и спорные цитаты.'),
+                const SizedBox(height: 8),
+                _preparationStep('4', 'Собрать игровую историю',
+                    'Сцены, действия, выбор героя и альтернативы '
+                    'появятся после создания сценарного компилятора.'),
+                const SizedBox(height: 8),
+              ],
             ),
-            const SizedBox(height: 14),
-            _preparationStep('1', 'Разобрать текст — готово',
-                'Найдены ${index.chapterCount} разделов и '
-                '${index.chunks.length} текстовых фрагментов. '
-                'Иллюстрации пока не анализируются.'),
-            _preparationStep('2', 'Найти имена и места',
-                searchStatus + '. Используются простые правила, '
-                'поэтому часть героев и мест может быть пропущена.'),
-            const SizedBox(height: 8),
-            _preparationStep('3', 'Проверить найденное',
-                'Можно проверить упоминания, возможные события, '
-                'противоречия и связи. Это отдельные действия ниже, '
-                'а не подтверждённый сюжет.'),
-            const SizedBox(height: 8),
-            _preparationStep('4', 'Создать игровую историю — пока недоступно',
-                'Генерация сцен, игровых выборов и альтернативного сюжета '
-                'ещё разрабатывается. Завершение анализа не создаёт RPG.'),
-            const SizedBox(height: 12),
-            const Text(
-              'Весь текущий анализ работает без отправки текста в облако. '
-              'Книга, положение чтения и игровые сохранения не изменяются.',
-            ),
+            const Text('Текст не отправляется в облако; '
+                'книга и игровые сохранения не меняются.'),
           ],
         ),
       ),
