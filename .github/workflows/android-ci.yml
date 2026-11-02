@@ -215,34 +215,6 @@ jobs:
           path: artifacts/android/
           if-no-files-found: error
           retention-days: 14
-      - name: Publish direct-install APK to GitHub Releases
-        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
-        env:
-          GH_TOKEN: ${{ github.token }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          TAG="android-build-${GITHUB_RUN_NUMBER}"
-          gh release create "$TAG"             artifacts/android/AI-Story-RPG-M1-debug.apk             artifacts/android/SHA256SUMS.txt             --target "$GITHUB_SHA"             --title "Android test build #${GITHUB_RUN_NUMBER}"             --notes "Тестовая сборка Android (debug). APK можно скачивать и устанавливать напрямую с телефона. Commit: ${GITHUB_SHA}. Не предназначена для Google Play."             --prerelease
-
-      - name: Prune superseded Android test releases
-        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
-        env:
-          GH_TOKEN: ${{ github.token }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          KEEP_TAG="android-build-${GITHUB_RUN_NUMBER}"
-          gh release list --limit 100 --json tagName --jq '.[].tagName' | while IFS= read -r TAG; do
-            case "$TAG" in
-              android-build-*)
-                if [ "$TAG" != "$KEEP_TAG" ]; then
-                  gh release delete "$TAG" --cleanup-tag --yes
-                fi
-                ;;
-            esac
-          done
-
   windows-exe:
     name: Windows portable bundle (release)
     runs-on: windows-latest
@@ -286,3 +258,61 @@ jobs:
           path: artifacts/windows/AI-Story-RPG-Windows/
           if-no-files-found: error
           retention-days: 14
+
+  publish-release:
+    name: Publish Windows + Android test release
+    runs-on: ubuntu-latest
+    needs: [android-apk, windows-exe]
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    permissions:
+      contents: write
+    steps:
+      - name: Download tested Android APK
+        uses: actions/download-artifact@v4
+        with:
+          name: AI-Story-RPG-Android-debug
+          path: release/android
+      - name: Download tested Windows portable bundle
+        uses: actions/download-artifact@v4
+        with:
+          name: AI-Story-RPG-Windows-portable
+          path: release/windows/AI-Story-RPG-Windows
+      - name: Verify the complete bundles, make ZIP and checksums
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s release/android/AI-Story-RPG-M1-debug.apk
+          test -s release/windows/AI-Story-RPG-Windows/ai_story_reader.exe
+          test -d release/windows/AI-Story-RPG-Windows/data
+          (cd release/windows && zip -qr ../AI-Story-RPG-Windows-portable.zip AI-Story-RPG-Windows)
+          cp release/android/AI-Story-RPG-M1-debug.apk release/AI-Story-RPG-Android-debug.apk
+          (cd release && sha256sum AI-Story-RPG-Android-debug.apk AI-Story-RPG-Windows-portable.zip > SHA256SUMS.txt)
+          cat > release/RELEASE_NOTES_RU.md <<EOF
+          Тестовая сборка AI Story RPG для Windows и Android из одного проверенного коммита.
+          Commit: ${GITHUB_SHA}
+          CI: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}
+
+          Windows: скачайте AI-Story-RPG-Windows-portable.zip, распакуйте ВСЮ папку
+          AI-Story-RPG-Windows и запустите ai_story_reader.exe внутри неё.
+          Не переносите один exe без data и DLL.
+          Android: скачайте AI-Story-RPG-Android-debug.apk, установите APK.
+          SHA256SUMS.txt содержит контрольные суммы обоих файлов.
+
+          Это тестовый релиз, не Google Play и не проверка на физических устройствах.
+          EOF
+      - name: Publish both installers in one GitHub Release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          TAG="test-build-${GITHUB_RUN_NUMBER}"
+          gh release create "$TAG" \
+            release/AI-Story-RPG-Android-debug.apk \
+            release/AI-Story-RPG-Windows-portable.zip \
+            release/SHA256SUMS.txt \
+            --target "$GITHUB_SHA" \
+            --title "AI Story RPG test build #${GITHUB_RUN_NUMBER} (Windows + Android)" \
+            --notes-file release/RELEASE_NOTES_RU.md \
+            --prerelease
