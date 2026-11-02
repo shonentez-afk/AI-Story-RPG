@@ -373,7 +373,9 @@ class _SourceNarrativeReviewPanelState
             ),
           ],
         ),
-        if (review != null && review.graph.records.isNotEmpty) ...[
+        // A book with zero regex candidates still has chapters and an
+        // editorial chronology. Do not hide that workflow as 'unavailable'.
+        if (review != null) ...[
           const SizedBox(height: 8),
           TextButton.icon(
             onPressed: _busy ? null :
