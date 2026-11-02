@@ -148,14 +148,22 @@ void main() {
     expect(old.anchor, isNotNull);
     expect(old.anchor!.blockIndex, greaterThan(0));
 
-    await tester.pumpWidget(const SizedBox.shrink());
-    await tester.pumpAndSettle();
+    // Resize while the reader is still open: metrics must preserve the
+    // semantic source location, not just after an app restart.
     tester.view.physicalSize = const Size(350, 650);
     tester.view.devicePixelRatio = 1;
     addTearDown(() {
       tester.view.resetPhysicalSize();
       tester.view.resetDevicePixelRatio();
     });
+    await tester.pumpAndSettle();
+    expect(find.textContaining(
+      'Текст параграфа ${old.anchor!.blockIndex}.',
+    ), findsOneWidget);
+    expect(tester.takeException(), isNull);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pumpAndSettle();
     await ReadingSettingsStore().save(
       const ReadingPreferences(fontSize: 25, lineHeight: 1.9),
     );
