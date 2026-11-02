@@ -246,7 +246,10 @@ class _BookReaderPageState extends State<BookReaderPage> {
     try {
       final value = await _store.load();
       if (mounted) {
-        if (_progressReady) {
+        // Position and style load independently at startup. Do not
+        // replace a restored legacy pixel offset with scroll=0 while its
+        // first layout is still pending.
+        if (_progressReady && !_restoring) {
           _reflow(settings: value);
         } else {
           setState(() => _settings = value);
