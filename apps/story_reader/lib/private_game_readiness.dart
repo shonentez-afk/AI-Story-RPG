@@ -40,6 +40,51 @@ class PrivateGameReadinessVerifier {
       );
     }
 
+    if (!RegExp(r'^[a-f0-9]{64}
+    // Short-circuit unrelated worlds to avoid loading and verifying every
+    // stored archive on a large shared library. Private compilation uses
+    // book_<source fingerprint prefix>_<draft hash prefix>.
+    final prefix = 'book_${index.sourceFingerprint.substring(0, 12)}_';
+    var checked = 0;
+    for (final entry in worlds) {
+      if (!entry.bookworldId.startsWith(prefix)) continue;
+      if (++checked > 32) {
+        return const PrivateGameReadiness(
+          status: PrivatePlayability.notReady,
+          explanation: 'Слишком много вариантов этой книги: '
+              'проверьте нужный игровой пакет вручную.',
+        );
+      }
+      try {
+        final bytes = await gateway.exportWorld(entry.archiveHash);
+        final verified = const PrivateBookworldImporter().inspect(bytes);
+        if (verified.sourceFingerprint == index.sourceFingerprint &&
+            verified.bookworldId == entry.bookworldId &&
+            verified.archiveSha256 == entry.archiveHash) {
+          return PrivateGameReadiness(
+            status: PrivatePlayability.privatePlayable,
+            explanation: 'Проверена короткая личная адаптация. '
+                'Результат можно играть офлайн, но он не охватывает '
+                'автоматически все события книги и не подлежит публикации.',
+            world: entry,
+          );
+        }
+      } on FormatException {
+        // A corrupt or mismatched package must never be advertised as playable.
+      } on StateError {
+        // A package may have been deleted since the catalog was enumerated.
+      }
+    }
+    return const PrivateGameReadiness(
+      status: PrivatePlayability.notReady,
+      explanation: 'Пока нет проверенного игрового пакета по этой книге. '
+          'Подготовьте короткую личную адаптацию в редакторе.',
+    );
+  }
+}
+).hasMatch(index.sourceFingerprint)) {
+      throw const FormatException('Некорректный отпечаток книги');
+    }
     final worlds = await gateway.worlds();
     // Short-circuit unrelated worlds to avoid loading and verifying every
     // stored archive on a large shared library. Private compilation uses
