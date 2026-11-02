@@ -96,7 +96,9 @@ class SourceSemanticAssertion {
         !_safeValue.hasMatch(predicate) || predicate.trim().isEmpty ||
         object.length > 160 || uncertainty.trim().isEmpty ||
         uncertainty.length > 240 ||
-        (kind == SemanticAssertionKind.relation && object.trim().isEmpty)) {
+        ((kind == SemanticAssertionKind.relation ||
+            kind == SemanticAssertionKind.event ||
+            kind == SemanticAssertionKind.fact) && object.trim().isEmpty)) {
       throw const FormatException('Некорректное смысловое предложение');
     }
     if (object.isNotEmpty && !_safeValue.hasMatch(object)) {
