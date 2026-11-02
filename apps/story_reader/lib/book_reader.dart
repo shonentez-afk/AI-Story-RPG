@@ -125,12 +125,12 @@ class _BookReaderPageState extends State<BookReaderPage>
         if (_layoutAnchorIndex != null && anchor != null) {
           final target = _anchorParagraphKey.currentContext?.findRenderObject();
           if (target is RenderBox && target.hasSize) {
-            final viewport = RenderAbstractViewport.of(target);
-            // This is an absolute, frame-correct scroll offset. The center
-            // paragraph is mounted outside the lazy lists, so resizing
-            // cannot silently replace it with a later List child.
-            offset = viewport.getOffsetToReveal(target, 0.0).offset +
-                target.size.height * anchor.fraction.clamp(0.0, 0.85);
+            // CustomScrollView.center sets the anchor sliver's START to
+            // pixel zero, regardless of how much content precedes it.
+            // getOffsetToReveal includes earlier sliver extent and would
+            // double count that offset, hiding the target after resize.
+            offset = target.size.height *
+                anchor.fraction.clamp(0.0, 0.85);
           } else {
             offset = 0;
           }
