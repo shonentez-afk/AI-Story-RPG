@@ -7,6 +7,7 @@ import 'package:ai_story_reader/game_panels.dart';
 import 'package:ai_story_reader/game_progress.dart';
 import 'package:ai_story_reader/home_page.dart';
 import 'package:ai_story_reader/main.dart';
+import 'package:ai_story_reader/reading_preferences.dart';
 import 'package:ai_story_reader/save_store.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -83,7 +84,15 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('Настройки'));
     await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.text('0.1.0 · BookWorld · тестовая версия'), 150,
+      scrollable: find.byType(Scrollable).first,
+    );
     expect(find.text('0.1.0 · BookWorld · тестовая версия'), findsOneWidget);
+    await tester.scrollUntilVisible(
+      find.text('Мои прохождения'), -150,
+      scrollable: find.byType(Scrollable).first,
+    );
     await tester.tap(find.text('Мои прохождения'));
     await tester.pumpAndSettle();
     expect(find.text('Импортировать .bwsave'), findsOneWidget);
@@ -147,6 +156,10 @@ void main() {
     SharedPreferences.setMockInitialValues({
       'ai_story_reading_v1_palette': 3,
     });
+    // Explicit reader choice is separate from the app's light/dark mode.
+    await ReadingSettingsStore().save(const ReadingPreferences(
+      palette: ReadingPalette.oled,
+    ));
     await tester.pumpWidget(const AIStoryApp());
     await tester.pumpAndSettle();
     await tester.tap(find.text('Новая история'));

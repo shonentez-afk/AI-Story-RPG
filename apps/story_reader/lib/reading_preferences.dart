@@ -45,7 +45,17 @@ class ReadingPreferences {
 class ReadingSettingsStore {
   static const _prefix = 'ai_story_reading_v1_';
 
+  // Repeated slider changes and navigation used to cause overlapping
+  // preference writes. All callers share one ordered queue.
+  static Future<void> _writeFence = Future<void>.value();
+  static ReadingPreferences? _queuedView;
+
   Future<ReadingPreferences> load() async {
+    // Reading settings in a freshly opened page should not be blocked by
+    // outstanding slider writes. Present the last explicitly chosen style
+    // until its ordered persistence finishes.
+    final queued = _queuedView;
+    if (queued != null) return queued;
     final prefs = await SharedPreferences.getInstance();
     final theme = prefs.getInt('${_prefix}palette') ?? 1;
     final palette = theme >= 0 && theme < ReadingPalette.values.length
@@ -59,11 +69,28 @@ class ReadingSettingsStore {
     );
   }
 
-  Future<void> save(ReadingPreferences settings) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setInt('${_prefix}palette', settings.palette.index);
-    await prefs.setDouble('${_prefix}font', settings.fontSize);
-    await prefs.setDouble('${_prefix}line', settings.lineHeight);
-    await prefs.setDouble('${_prefix}padding', settings.horizontalPadding);
+  Future<void> save(ReadingPreferences settings) {
+    _queuedView = settings;
+    final previous = _writeFence;
+    final operation = previous.catchError((Object _) {}).then((_) async {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setInt('${_prefix}palette', settings.palette.index);
+      await prefs.setDouble('${_prefix}font', settings.fontSize);
+      await prefs.setDouble('${_prefix}line', settings.lineHeight);
+      await prefs.setDouble('${_prefix}padding', settings.horizontalPadding);
+    });
+    _writeFence = operation;
+    operation.then((_) {
+      if (identical(_queuedView, settings)) _queuedView = null;
+    }, onError: (Object _) {
+      if (identical(_queuedView, settings)) _queuedView = null;
+    });
+    return operation;
   }
+
+  /// Wait until all issued appearance writes have committed. Useful before
+  /// closing an editing session and for exact persistence regressions.
+  Future<void> flush() => _writeFence;
+
+  Future<void> reset() => save(const ReadingPreferences());
 }

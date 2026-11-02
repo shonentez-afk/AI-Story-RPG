@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:isolate';
 import 'dart:math';
 import 'package:path_provider/path_provider.dart';
 import 'book_import.dart';
@@ -11,9 +12,23 @@ class StoredBook {
   final ImportedBook book;
 }
 
+/// A corrupt or interrupted import is reported instead of silently
+/// disappearing from the library. No existing user file is removed.
+class BookLibraryScan {
+  const BookLibraryScan({required this.books, required this.unreadableCount});
+  final List<StoredBook> books;
+  final int unreadableCount;
+}
+
 class BookStorage {
+  BookStorage({this.rootDirectory});
+
+  /// Test-only directory override; production uses the app's Documents area.
+  final Future<Directory> Function()? rootDirectory;
+
   Future<Directory> _folder() async {
-    final base = await getApplicationDocumentsDirectory();
+    final base = await (rootDirectory?.call() ??
+        getApplicationDocumentsDirectory());
     final folder = Directory('${base.path}/ai_story_library');
     if (!await folder.exists()) await folder.create(recursive: true);
     return folder;
@@ -23,6 +38,7 @@ class BookStorage {
     final folder = await _folder();
     final id = '${DateTime.now().microsecondsSinceEpoch}_${Random.secure().nextInt(1 << 32)}';
     final file = File('${folder.path}/$id.json');
+    final temp = File('${folder.path}/$id.json.tmp');
     final payload = jsonEncode({
       'schema': 2,
       'structuredChapters': book.structuredChapters.map((ch) => ch.toJson()).toList(),
@@ -34,7 +50,13 @@ class BookStorage {
       'chapters': book.chapters,
       'coverBase64': book.cover == null ? null : base64Encode(book.cover!),
     });
-    await file.writeAsString(payload, flush: true);
+    try {
+      // A half-written JSON must never masquerade as an imported book.
+      await temp.writeAsString(payload, flush: true);
+      await temp.rename(file.path);
+    } finally {
+      if (await temp.exists()) await temp.delete();
+    }
   }
 
   /// Remove one imported library file; game saves stay separate.
@@ -48,14 +70,35 @@ class BookStorage {
     await file.delete();
   }
 
-  Future<List<StoredBook>> all() async {
+  /// Scan stored books off the main Flutter isolate. Parsing a large FB2
+  /// JSON with embedded images used to freeze navigation and opening.
+  Future<BookLibraryScan> scan() async {
     final folder = await _folder();
+    final path = folder.path;
+    return Isolate.run(() => _scanFiles(path));
+  }
+
+  Future<List<StoredBook>> all() async => (await scan()).books;
+
+  static Future<BookLibraryScan> _scanFiles(String directoryPath) async {
+    final folder = Directory(directoryPath);
     final records = <StoredBook>[];
+    var unreadable = 0;
     await for (final item in folder.list()) {
+      // The .tmp suffix is deliberately ignored until an atomic rename.
       if (item is! File || !item.path.endsWith('.json')) continue;
       try {
-        final data = jsonDecode(await item.readAsString()) as Map<String, dynamic>;
-        if (data['schema'] != 1 && data['schema'] != 2) continue;
+        // Keep unsafe/decompressed JSON from exhausting the worker memory.
+        if (await item.length() > 64 * 1024 * 1024) {
+          unreadable++;
+          continue;
+        }
+        final data = jsonDecode(await item.readAsString())
+            as Map<String, dynamic>;
+        if (data['schema'] != 1 && data['schema'] != 2) {
+          unreadable++;
+          continue;
+        }
         final cover64 = data['coverBase64'] as String?;
         records.add(StoredBook(
           id: item.uri.pathSegments.last,
@@ -81,10 +124,14 @@ class BookStorage {
           ),
         ));
       } catch (_) {
-        // Isolate corrupt records; keep all remaining books accessible.
+        // A bad file never hides other books and is not auto-deleted.
+        unreadable++;
       }
     }
     records.sort((a, b) => a.book.title.compareTo(b.book.title));
-    return records;
+    return BookLibraryScan(
+      books: List.unmodifiable(records),
+      unreadableCount: unreadable,
+    );
   }
 }

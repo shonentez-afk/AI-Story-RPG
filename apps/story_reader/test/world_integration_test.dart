@@ -10,6 +10,7 @@ import 'package:ai_story_reader/campaigns_page.dart';
 import 'package:ai_story_reader/world_campaigns_page.dart';
 import 'package:ai_story_reader/world_library_gateway.dart';
 import 'package:ai_story_reader/world_play_page.dart';
+import 'package:ai_story_reader/reading_preferences.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -519,6 +520,11 @@ void main() {
     expect(find.text('Размер текста: 18'), findsOneWidget);
     await tester.tap(find.text('Тёмная').last);
     await tester.pumpAndSettle();
+    // The theme chip updates the reader immediately; the ordered
+    // preference write may still be in flight after the last animation.
+    final reading = await ReadingSettingsStore().load();
+    expect(reading.palette, ReadingPalette.dark);
+    await tester.runAsync(() => ReadingSettingsStore().flush());
     final preferences = await SharedPreferences.getInstance();
     expect(preferences.getInt('ai_story_reading_v1_palette'), 2);
     expect((await gateway.load(id)).revision, 0);

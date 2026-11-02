@@ -307,16 +307,21 @@ class _HomeAction extends StatelessWidget {
 }
 
 class LibraryPage extends StatefulWidget {
-  const LibraryPage({super.key, this.worldGateway});
+  const LibraryPage({
+    super.key,
+    this.worldGateway,
+    this.bookStorage,
+  });
 
   final WorldLibraryGateway? worldGateway;
+  final BookStorage? bookStorage;
 
   @override
   State<LibraryPage> createState() => _LibraryPageState();
 }
 
 class _LibraryPageState extends State<LibraryPage> {
-  final BookStorage _storage = BookStorage();
+  late final BookStorage _storage = widget.bookStorage ?? BookStorage();
   final TextEditingController _searchController = TextEditingController();
   List<StoredBook> _books = [];
   List<WorldLibraryItem> _worlds = const [];
@@ -325,6 +330,7 @@ class _LibraryPageState extends State<LibraryPage> {
   bool _working = false;
   bool _loadingBooks = true;
   bool _libraryLoadError = false;
+  int _unreadableBooks = 0;
   String _query = '';
   bool _sortDescending = false;
   final Set<Timer> _loadDeadlines = <Timer>{};
@@ -384,7 +390,7 @@ class _LibraryPageState extends State<LibraryPage> {
 
   Future<void> _refresh() async {
     final generation = ++_loadGeneration;
-    final timeout = Completer<List<StoredBook>>();
+    final timeout = Completer<BookLibraryScan>();
     final deadline = Timer(const Duration(seconds: 8), () {
       if (!timeout.isCompleted) {
         timeout.completeError(
@@ -394,13 +400,14 @@ class _LibraryPageState extends State<LibraryPage> {
     });
     _loadDeadlines.add(deadline);
     try {
-      final books = await Future.any<List<StoredBook>>([
-        _storage.all(),
+      final scan = await Future.any<BookLibraryScan>([
+        _storage.scan(),
         timeout.future,
       ]);
       if (mounted && generation == _loadGeneration) {
         setState(() {
-          _books = books;
+          _books = scan.books;
+          _unreadableBooks = scan.unreadableCount;
           _libraryLoadError = false;
         });
       }
@@ -484,6 +491,20 @@ class _LibraryPageState extends State<LibraryPage> {
     } finally {
       if (mounted) setState(() => _working = false);
     }
+  }
+
+  void _readBook(StoredBook entry) {
+    if (_working) return;
+    Navigator.of(context).push<void>(MaterialPageRoute(
+      builder: (_) => BookReaderPage(book: entry.book, bookId: entry.id),
+    ));
+  }
+
+  void _prepareBook(StoredBook entry) {
+    if (_working) return;
+    Navigator.of(context).push<void>(MaterialPageRoute(
+      builder: (_) => SourceIndexPreviewPage(book: entry.book),
+    ));
   }
 
   Future<void> _deleteBook(StoredBook entry) async {
@@ -654,6 +675,33 @@ class _LibraryPageState extends State<LibraryPage> {
                       },
                     )),
                 ],
+                if (!_loadingBooks && !_libraryLoadError &&
+                    _unreadableBooks > 0)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    child: Card(
+                      child: Padding(
+                        padding: const EdgeInsets.all(12),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Не удалось прочитать книг: $_unreadableBooks',
+                              style: Theme.of(context).textTheme.titleSmall,
+                            ),
+                            const SizedBox(height: 6),
+                            const Text('Повреждённые или незавершённые '
+                                'записи не удалены. Остальные книги доступны.'),
+                            TextButton.icon(
+                              onPressed: _retryLibrary,
+                              icon: const Icon(Icons.refresh),
+                              label: const Text('Повторить чтение библиотеки'),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
                 if (_loadingBooks)
                   const LinearProgressIndicator(),
                 if (_loadingBooks)
@@ -689,10 +737,11 @@ class _LibraryPageState extends State<LibraryPage> {
                   ),
                 if (!_loadingBooks && !_libraryLoadError &&
                     term.isEmpty && _books.isEmpty && _worlds.isEmpty &&
+                    _unreadableBooks == 0 &&
                     !_worldLoading && !_worldLoadError)
                   const Padding(
                     padding: EdgeInsets.all(16),
-                    child: Text('Книг пока нет. Нажмите «Добавить книгу» '
+                    child: Text('Своих книг пока нет. Нажмите «Добавить книгу» '
                         'выше, чтобы импортировать TXT или FB2.'),
                   ),
               ]),
@@ -703,48 +752,67 @@ class _LibraryPageState extends State<LibraryPage> {
                 itemCount: filtered.length,
                 itemBuilder: (context, index) {
                   final entry = filtered[index];
-                  return Card(child: ListTile(
-                    leading: entry.book.cover == null
-                        ? const Icon(Icons.book_outlined)
-                        : Image.memory(entry.book.cover!,
-                            width: 48, height: 64, fit: BoxFit.cover,
-                            errorBuilder: (_, error, stack) =>
-                                const Icon(Icons.book_outlined)),
-                    title: Text(entry.book.title),
-                    subtitle: Text(entry.book.author.isEmpty
-                        ? 'Импортированная книга' : entry.book.author),
-                    trailing: PopupMenuButton<String>(
-                      tooltip: 'Действия с книгой',
-                      enabled: !_working,
-                      onSelected: (action) {
-                        if (action == 'index') {
-                          Navigator.of(context).push<void>(
-                            MaterialPageRoute(
-                              builder: (_) => SourceIndexPreviewPage(
-                                book: entry.book,
+                  return Card(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        ListTile(
+                          leading: entry.book.cover == null
+                              ? const Icon(Icons.book_outlined)
+                              : Image.memory(
+                                  entry.book.cover!,
+                                  width: 48,
+                                  height: 64,
+                                  fit: BoxFit.cover,
+                                  errorBuilder: (_, error, stack) =>
+                                      const Icon(Icons.book_outlined),
+                                ),
+                          title: Text(entry.book.title,
+                              maxLines: 2, overflow: TextOverflow.ellipsis),
+                          subtitle: Text(entry.book.author.isEmpty
+                              ? 'Импортированная книга · нажмите для чтения'
+                              : '${entry.book.author} · нажмите для чтения'),
+                          onTap: _working ? null : () => _readBook(entry),
+                          trailing: PopupMenuButton<String>(
+                            tooltip: 'Действия с книгой',
+                            enabled: !_working,
+                            onSelected: (action) {
+                              if (action == 'delete') _deleteBook(entry);
+                            },
+                            itemBuilder: (_) => const [
+                              PopupMenuItem(
+                                value: 'delete',
+                                child: Text('Удалить книгу'),
                               ),
-                            ),
-                          );
-                        } else if (action == 'delete') {
-                          _deleteBook(entry);
-                        }
-                      },
-                      itemBuilder: (_) => const [
-                        PopupMenuItem(
-                          value: 'index',
-                          child: Text('Подготовка книги · индекс текста'),
+                            ],
+                          ),
                         ),
-                        PopupMenuItem(
-                          value: 'delete',
-                          child: Text('Удалить книгу'),
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
+                          child: Wrap(
+                            spacing: 8,
+                            runSpacing: 6,
+                            children: [
+                              TextButton.icon(
+                                key: ValueKey('library-read-${entry.id}'),
+                                onPressed: _working ? null :
+                                    () => _readBook(entry),
+                                icon: const Icon(Icons.menu_book_outlined),
+                                label: const Text('Читать'),
+                              ),
+                              OutlinedButton.icon(
+                                key: ValueKey('library-prepare-${entry.id}'),
+                                onPressed: _working ? null :
+                                    () => _prepareBook(entry),
+                                icon: const Icon(Icons.auto_awesome_outlined),
+                                label: const Text('Подготовить к RPG'),
+                              ),
+                            ],
+                          ),
                         ),
                       ],
                     ),
-                    onTap: () => Navigator.of(context).push(
-                      MaterialPageRoute<void>(
-                        builder: (_) => BookReaderPage(
-                          book: entry.book, bookId: entry.id))),
-                  ));
+                  );
                 },
               ),
             ),
@@ -766,6 +834,8 @@ class SettingsPage extends StatefulWidget {
 
 class _SettingsPageState extends State<SettingsPage> {
   final controller = AppAppearanceController.instance;
+  final ReadingSettingsStore _readerStore = ReadingSettingsStore();
+  bool _resettingReader = false;
 
   @override
   void initState() {
@@ -773,7 +843,9 @@ class _SettingsPageState extends State<SettingsPage> {
     controller.addListener(_refresh);
   }
 
-  void _refresh() { if (mounted) setState(() {}); }
+  void _refresh() {
+    if (mounted) setState(() {});
+  }
 
   @override
   void dispose() {
@@ -781,26 +853,113 @@ class _SettingsPageState extends State<SettingsPage> {
     super.dispose();
   }
 
-  final ReadingSettingsStore _readerStore = ReadingSettingsStore();
-
   Future<void> _openReadingSettings() async {
-    try {
-      final current = await _readerStore.load();
-      if (!mounted) return;
-      showModalBottomSheet<void>(
-        context: context,
-        isScrollControlled: true,
-        builder: (_) => ReadingSettingsSheet(
-          preferences: current,
-          onChanged: (next) => _readerStore.save(next),
+    // Open the route immediately: a slow preferences plugin should display
+    // a recoverable loading/error state, not make the settings tap appear dead.
+    final loading = _readerStore.load();
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (sheetContext) => FutureBuilder<ReadingPreferences>(
+        future: loading,
+        builder: (context, snapshot) {
+          if (snapshot.connectionState != ConnectionState.done) {
+            return const SafeArea(child: SingleChildScrollView(
+              padding: EdgeInsets.all(24),
+              child: Column(mainAxisSize: MainAxisSize.min, children: [
+                Text('Настройки чтения'),
+                SizedBox(height: 16),
+                CircularProgressIndicator(),
+                SizedBox(height: 12),
+                Text('Загружаем оформление страниц…'),
+              ]),
+            ));
+          }
+          if (snapshot.hasError) {
+            return SafeArea(child: SingleChildScrollView(
+              padding: const EdgeInsets.all(24),
+              child: Column(mainAxisSize: MainAxisSize.min, children: [
+                Text('Не удалось загрузить оформление страниц: '
+                    '${snapshot.error}'),
+                const SizedBox(height: 12),
+                OutlinedButton.icon(
+                  onPressed: () {
+                    Navigator.of(sheetContext).pop();
+                    if (mounted) unawaited(_openReadingSettings());
+                  },
+                  icon: const Icon(Icons.refresh),
+                  label: const Text('Повторить'),
+                ),
+              ]),
+            ));
+          }
+          return ReadingSettingsSheet(
+            preferences: snapshot.requireData,
+            onChanged: (next) {
+              _readerStore.save(next).then((_) {},
+                  onError: (Object error) {
+                if (mounted) {
+                  ScaffoldMessenger.of(this.context).showSnackBar(
+                    SnackBar(content: Text(
+                      'Не удалось сохранить оформление страниц: $error')),
+                  );
+                }
+              });
+            },
+          );
+        },
+      ),
+    );
+  }
+
+  Future<void> _resetReader() async {
+    if (_resettingReader) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        scrollable: true,
+        title: const Text('Сбросить оформление чтения?'),
+        content: const Text(
+          'Вернутся стандартные шрифт, палитра, интервалы и поля. '
+          'Книги, закладки, позиция чтения и игровые сохранения не изменятся.',
         ),
-      );
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Отмена'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Сбросить оформление'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    setState(() => _resettingReader = true);
+    try {
+      await _readerStore.reset();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Оформление страниц восстановлено'),
+        ));
+      }
     } catch (error) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Не удалось открыть настройки чтения: $error')),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('Не удалось сбросить оформление: $error'),
+        ));
+      }
+    } finally {
+      if (mounted) setState(() => _resettingReader = false);
     }
+  }
+
+  void _navigate(Widget destination) {
+    Navigator.of(context).push<void>(MaterialPageRoute(
+      builder: (_) => destination,
+    ));
   }
 
   @override
@@ -810,53 +969,95 @@ class _SettingsPageState extends State<SettingsPage> {
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 650),
             child: ListView(
-              padding: const EdgeInsets.all(20),
+              padding: const EdgeInsets.fromLTRB(16, 14, 16, 32),
               children: [
                 Text('Внешний вид',
                     style: Theme.of(context).textTheme.titleMedium),
-                const SizedBox(height: 12),
+                const SizedBox(height: 8),
+                const Text('Тема окон приложения. Палитра страниц '
+                    'настраивается отдельно и не сбрасывается при смене темы.'),
+                const SizedBox(height: 10),
                 Wrap(
                   spacing: 8,
+                  runSpacing: 8,
                   children: [
-                    ChoiceChip(
-                      label: const Text('Светлая'),
-                      selected: controller.value == AppAppearance.light,
-                      onSelected: (_) => controller.change(AppAppearance.light),
-                    ),
-                    ChoiceChip(
-                      label: const Text('Тёмная'),
-                      selected: controller.value == AppAppearance.dark,
-                      onSelected: (_) => controller.change(AppAppearance.dark),
-                    ),
+                    for (final item in <(AppAppearance, String)>[
+                      (AppAppearance.system, 'Как в системе'),
+                      (AppAppearance.light, 'Светлая'),
+                      (AppAppearance.dark, 'Тёмная'),
+                    ])
+                      ChoiceChip(
+                        label: Text(item.$2),
+                        selected: controller.value == item.$1,
+                        onSelected: (_) => controller.change(item.$1),
+                      ),
                   ],
                 ),
-                const SizedBox(height: 12),
+                const Divider(height: 30),
+                Text('Чтение',
+                    style: Theme.of(context).textTheme.titleMedium),
                 ListTile(
+                  contentPadding: EdgeInsets.zero,
                   leading: const Icon(Icons.auto_stories_outlined),
                   title: const Text('Оформление страниц'),
-                  subtitle: const Text('Палитра, размер текста, интервалы и поля'),
+                  subtitle: const Text('Свет, сепия, тёмная и OLED · '
+                      'размер текста · интервалы · поля'),
                   trailing: const Icon(Icons.chevron_right),
                   onTap: _openReadingSettings,
                 ),
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: const Icon(Icons.restart_alt_outlined),
+                  title: const Text('Сбросить оформление чтения'),
+                  subtitle: const Text('Только внешний вид, не книги и закладки'),
+                  trailing: _resettingReader
+                      ? const SizedBox(width: 22, height: 22,
+                          child: CircularProgressIndicator(strokeWidth: 2))
+                      : const Icon(Icons.chevron_right),
+                  onTap: _resettingReader ? null : _resetReader,
+                ),
+                const Divider(height: 30),
+                Text('Игра и данные',
+                    style: Theme.of(context).textTheme.titleMedium),
                 const ListTile(
+                  contentPadding: EdgeInsets.zero,
                   leading: Icon(Icons.offline_bolt_outlined),
                   title: Text('Режим игры'),
-                  subtitle: Text('Классический офлайн • без ИИ'),
+                  subtitle: Text('Демо и подготовленные миры — офлайн. '
+                      'Свободный ИИ-режим пока не подключён.'),
                 ),
                 ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: const Icon(Icons.library_books_outlined),
+                  title: const Text('Моя библиотека'),
+                  subtitle: const Text('Импорт TXT/FB2 и .bworld, '
+                      'чтение и подготовка книг'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => _navigate(LibraryPage(
+                      worldGateway: widget.worldGateway)),
+                ),
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
                   leading: const Icon(Icons.save_outlined),
                   title: const Text('Мои прохождения'),
-                  subtitle: const Text('Сохранения RPG, импорт и экспорт .bwsave'),
+                  subtitle: const Text('Автосохранение RPG, '
+                      'импорт и экспорт .bwsave'),
                   trailing: const Icon(Icons.chevron_right),
-                  onTap: () => Navigator.of(context).push(
-                    MaterialPageRoute<void>(
-                      builder: (_) => CampaignsPage(
-                        worldGateway: widget.worldGateway,
-                      ),
-                    ),
-                  ),
+                  onTap: () => _navigate(CampaignsPage(
+                      worldGateway: widget.worldGateway)),
                 ),
                 const ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: Icon(Icons.privacy_tip_outlined),
+                  title: Text('Анализ книги и приватность'),
+                  subtitle: Text('Текущий анализ работает локально. '
+                      'Отправка текста внешнему ИИ ещё не реализована.'),
+                ),
+                const Divider(height: 30),
+                Text('О программе',
+                    style: Theme.of(context).textTheme.titleMedium),
+                const ListTile(
+                  contentPadding: EdgeInsets.zero,
                   leading: Icon(Icons.info_outline),
                   title: Text('Версия'),
                   subtitle: Text('0.1.0 · BookWorld · тестовая версия'),

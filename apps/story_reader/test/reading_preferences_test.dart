@@ -34,6 +34,25 @@ void main() {
     expect(restored.horizontalPadding, 36);
   });
 
+  test('rapid reading-style changes persist the last complete state',
+      () async {
+    SharedPreferences.setMockInitialValues({});
+    final store = ReadingSettingsStore();
+    final first = store.save(const ReadingPreferences(
+      palette: ReadingPalette.dark, fontSize: 20,
+    ));
+    final second = store.save(const ReadingPreferences(
+      palette: ReadingPalette.oled, fontSize: 27,
+      lineHeight: 1.95, horizontalPadding: 34,
+    ));
+    await Future.wait([first, second]);
+    final restored = await ReadingSettingsStore().load();
+    expect(restored.palette, ReadingPalette.oled);
+    expect(restored.fontSize, 27);
+    expect(restored.lineHeight, 1.95);
+    expect(restored.horizontalPadding, 34);
+  });
+
   test('invalid saved preferences fall back to safe values', () async {
     SharedPreferences.setMockInitialValues({
       'ai_story_reading_v1_palette': 999,

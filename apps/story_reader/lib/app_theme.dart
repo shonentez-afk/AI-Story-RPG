@@ -1,25 +1,33 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-enum AppAppearance { light, dark }
+enum AppAppearance { system, light, dark }
 
 class AppAppearanceController extends ChangeNotifier {
   AppAppearanceController._();
   static final instance = AppAppearanceController._();
 
+  // Retain the historical light default for an unconfigured installation.
+  // The explicit system option follows Android/Windows once selected.
   AppAppearance _value = AppAppearance.light;
   AppAppearance get value => _value;
 
+  static const _modeKey = 'ai_story_app_appearance_v2';
+  static const _legacyDarkKey = 'ai_story_app_dark_v1';
+
   Future<void> load() async {
     final prefs = await SharedPreferences.getInstance();
-    _value = prefs.getBool('ai_story_app_dark_v1') == true
-        ? AppAppearance.dark : AppAppearance.light;
-    // Repair the mismatch left by earlier builds, without replacing custom
-    // dark/OLED selections. A later manual book theme choice remains possible.
-    if (_value == AppAppearance.dark &&
-        (prefs.getInt('ai_story_reading_v1_palette') ?? 1) == 1) {
-      await prefs.setInt('ai_story_reading_v1_palette', 2);
-    }
+    final raw = prefs.getString(_modeKey);
+    _value = switch (raw) {
+      'system' => AppAppearance.system,
+      'light' => AppAppearance.light,
+      'dark' => AppAppearance.dark,
+      _ => prefs.getBool(_legacyDarkKey) == true
+          ? AppAppearance.dark : AppAppearance.light,
+    };
+    // App appearance and reading palette are independent settings:
+    // opening Settings must never silently overwrite a manually chosen
+    // sepia/OLED palette or its older saved value.
     notifyListeners();
   }
 
@@ -27,11 +35,12 @@ class AppAppearanceController extends ChangeNotifier {
     _value = next;
     notifyListeners();
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool('ai_story_app_dark_v1', next == AppAppearance.dark);
-    // Global appearance selection also changes the default reading palette.
-    // The in-reader palette control can subsequently override it.
-    await prefs.setInt('ai_story_reading_v1_palette',
-        next == AppAppearance.dark ? 2 : 1);
+    await prefs.setString(_modeKey, next.name);
+    // Keep legacy app theme selection readable by previous installations,
+    // but do NOT modify ai_story_reading_v1_palette.
+    if (next != AppAppearance.system) {
+      await prefs.setBool(_legacyDarkKey, next == AppAppearance.dark);
+    }
   }
 }
 

@@ -9,9 +9,17 @@ import 'reading_settings_sheet.dart';
 import 'reader_chrome.dart';
 
 class BookReaderPage extends StatefulWidget {
-  const BookReaderPage({super.key, required this.book, this.bookId});
+  const BookReaderPage({
+    super.key,
+    required this.book,
+    this.bookId,
+    this.readingStore,
+  });
   final ImportedBook book;
   final String? bookId;
+
+  /// Allows failure/retry testing without touching real on-device data.
+  final BookReadingStore? readingStore;
 
   @override
   State<BookReaderPage> createState() => _BookReaderPageState();
@@ -21,9 +29,12 @@ class _BookReaderPageState extends State<BookReaderPage>
     with WidgetsBindingObserver {
   final ReadingSettingsStore _store = ReadingSettingsStore();
   ReadingPreferences _settings = const ReadingPreferences();
-  final BookReadingStore _readingStore = BookReadingStore();
+  late final BookReadingStore _readingStore =
+      widget.readingStore ?? BookReadingStore();
   BookReadingState _reading = const BookReadingState();
   bool _progressReady = false;
+  bool _positionLoadFailed = false;
+  String? _positionLoadError;
   final ScrollController _scroll = ScrollController(keepScrollOffset: false);
   int _scrollEpoch = 0;
   final GlobalKey _viewportKey = GlobalKey();
@@ -177,22 +188,35 @@ class _BookReaderPageState extends State<BookReaderPage>
       ? widget.book.structuredChapters.length : widget.book.chapters.length;
 
   Future<void> _loadPosition() async {
-    if (widget.bookId == null) {
-      setState(() => _progressReady = true);
-      return;
+    try {
+      final saved = widget.bookId == null
+          ? const BookReadingState()
+          : await _readingStore.load(widget.bookId!)
+              .timeout(const Duration(seconds: 8));
+      if (!mounted) return;
+      setState(() {
+        _reading = saved.copyWith(chapter:
+            saved.chapter.clamp(0, _count > 0 ? _count - 1 : 0).toInt());
+        _layoutAnchorIndex = saved.anchor?.blockIndex;
+        _scrollEpoch++;
+        _priorBlocksKey = GlobalKey();
+        _currentBlocksKey = GlobalKey();
+        _centerSliverKey = GlobalKey();
+        _progressReady = true;
+        _positionLoadFailed = false;
+        _positionLoadError = null;
+      });
+      _restoreScroll();
+    } catch (error) {
+      if (!mounted) return;
+      // Fail closed. Displaying a brand-new chapter and writing its offset
+      // over an unreadable old record would silently destroy the bookmark.
+      setState(() {
+        _progressReady = false;
+        _positionLoadFailed = true;
+        _positionLoadError = error.toString();
+      });
     }
-    final saved = await _readingStore.load(widget.bookId!);
-    if (mounted) setState(() {
-      _reading = saved.copyWith(chapter:
-          saved.chapter.clamp(0, _count > 0 ? _count - 1 : 0).toInt());
-      _layoutAnchorIndex = saved.anchor?.blockIndex;
-      _scrollEpoch++;
-      _priorBlocksKey = GlobalKey();
-      _currentBlocksKey = GlobalKey();
-      _centerSliverKey = GlobalKey();
-      _progressReady = true;
-    });
-    _restoreScroll();
   }
 
   void _chapter(int index) {
@@ -361,6 +385,59 @@ class _BookReaderPageState extends State<BookReaderPage>
 
   @override
   Widget build(BuildContext context) {
+    if (_positionLoadFailed) {
+      return Scaffold(
+        appBar: AppBar(title: Text(widget.book.title,
+            maxLines: 1, overflow: TextOverflow.ellipsis)),
+        body: SafeArea(child: Center(child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 560),
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(24),
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              const Icon(Icons.warning_amber_outlined, size: 42),
+              const SizedBox(height: 14),
+              const Text('Не удалось восстановить место чтения. '
+                  'Книга и предыдущие закладки не изменены.',
+                  textAlign: TextAlign.center),
+              if (_positionLoadError != null) ...[
+                const SizedBox(height: 8),
+                SelectableText(_positionLoadError!,
+                    textAlign: TextAlign.center),
+              ],
+              const SizedBox(height: 16),
+              FilledButton.icon(
+                onPressed: () {
+                  setState(() {
+                    _positionLoadFailed = false;
+                    _positionLoadError = null;
+                  });
+                  _loadPosition();
+                },
+                icon: const Icon(Icons.refresh),
+                label: const Text('Повторить открытие'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.of(context).maybePop(),
+                child: const Text('Вернуться в библиотеку'),
+              ),
+            ]),
+          ),
+        ))),
+      );
+    }
+    if (!_progressReady) {
+      return Scaffold(
+        appBar: AppBar(title: Text(widget.book.title,
+            maxLines: 1, overflow: TextOverflow.ellipsis)),
+        body: const SafeArea(child: Center(
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            CircularProgressIndicator(),
+            SizedBox(height: 16),
+            Text('Открываем книгу и восстанавливаем место чтения…'),
+          ]),
+        )),
+      );
+    }
     final prefs = _settings;
     final readerText = TextStyle(
       fontSize: prefs.fontSize,
@@ -399,7 +476,8 @@ class _BookReaderPageState extends State<BookReaderPage>
       appBar: !_chrome.showTopBar ? null : AppBar(
         backgroundColor: prefs.background,
         foregroundColor: prefs.foreground,
-        title: Text(widget.book.title),
+        title: Text(widget.book.title,
+          maxLines: 1, overflow: TextOverflow.ellipsis),
         actions: [
           IconButton(
             tooltip: 'Оглавление',

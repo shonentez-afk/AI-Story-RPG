@@ -3,6 +3,28 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:ai_story_reader/book_reading_state.dart';
 
 void main() {
+  test('rapid cross-instance chapter and bookmark writes keep newest state',
+      () async {
+    SharedPreferences.setMockInitialValues({});
+    final first = BookReadingStore();
+    final second = BookReadingStore();
+    final before = first.save('ordered-book', const BookReadingState(
+      chapter: 0, scrollOffset: 490,
+    ));
+    final after = second.save('ordered-book', const BookReadingState(
+      chapter: 2, scrollOffset: 122,
+      bookmarks: [2], anchor: BookTextAnchor(blockIndex: 3, fraction: 0.25),
+    ));
+    final read = second.load('ordered-book');
+    await Future.wait([before, after]);
+    final state = await read;
+    expect(state.chapter, 2);
+    expect(state.scrollOffset, 122);
+    expect(state.bookmarks, [2]);
+    expect(state.anchor?.blockIndex, 3);
+  });
+
+
   TestWidgetsFlutterBinding.ensureInitialized();
 
   test('per-book reading chapter and bookmarks survive restart', () async {
