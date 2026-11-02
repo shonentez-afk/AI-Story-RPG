@@ -25,6 +25,14 @@ void main() {
 
   testWidgets('preparation explains real steps and never promises a playable RPG',
       (tester) async {
+    // The user flow is checked on desktop; compact screen checks are
+    // exercised in separate accessibility/responsive tests.
+    tester.view.physicalSize = const Size(900, 1750);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
     const book = ImportedBook(
       title: 'Тестовый рассказ', author: 'Автор',
       chapters: ['Его звали Артем. В городе Москва он увидел друга.'],
@@ -117,14 +125,37 @@ void main() {
     await tester.ensureVisible(find.text('Показано 13 из 13 упоминаний'));
     expect(find.text('Показано 13 из 13 упоминаний'), findsOneWidget);
 
-    await tester.scrollUntilVisible(
-        find.byKey(const Key('prepare-show-chapters')), 260,
-        scrollable: find.byType(Scrollable).first, maxScrolls:30);
-    await tester.tap(find.byKey(const Key('prepare-show-chapters')));
+    // The chapter switch has its own focused small-book test below.
+    expect(tester.takeException(), isNull);
+  });
+
+
+  testWidgets('chapters are opt-in and stay independent from source review',
+      (tester) async {
+    tester.view.physicalSize = const Size(900, 1750);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+    const book = ImportedBook(title: 'Тест разделов', author: 'Автор',
+        chapters: ['Первая глава', 'Вторая глава']);
+    final store = MemorySourceAnalysisCheckpointRepository();
+    await tester.pumpWidget(page(book, store));
     await tester.pumpAndSettle();
-    await tester.scrollUntilVisible(find.text('Глава 1'), 200,
-        scrollable: find.byType(Scrollable).first, maxScrolls:20);
+    expect(find.text('Глава 1'), findsNothing);
+    final toggle = find.byKey(const Key('prepare-show-chapters'));
+    await tester.ensureVisible(toggle);
+    await tester.pumpAndSettle();
+    await tester.tap(toggle);
+    await tester.pumpAndSettle();
     expect(find.text('Глава 1'), findsOneWidget);
+    expect(find.text('Глава 2'), findsOneWidget);
+    await tester.tap(toggle);
+    await tester.pumpAndSettle();
+    expect(find.text('Глава 1'), findsNothing);
+    expect(await store.read(BookSourceIndexer.index(book).sourceFingerprint),
+        isNull);
     expect(tester.takeException(), isNull);
   });
 }
