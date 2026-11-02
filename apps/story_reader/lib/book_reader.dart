@@ -88,6 +88,13 @@ class _BookReaderPageState extends State<BookReaderPage>
   final GlobalKey _viewportKey = GlobalKey();
   final GlobalKey _priorBlocksKey = GlobalKey();
   final GlobalKey _followingBlocksKey = GlobalKey();
+  // A small, fixed-size eagerly built window avoids RenderSliverList
+  // scrollOffsetCorrection next to a resized bidirectional center.
+  static const int _warmBlockLimit = 16;
+  final List<GlobalKey> _warmBlockKeys = List.generate(
+    _warmBlockLimit, (_) => GlobalKey(),
+  );
+  int _warmBlockCount = 0;
   final GlobalKey _anchorParagraphKey = GlobalKey();
   final GlobalKey _centerSliverKey = GlobalKey();
   Timer? _progressTimer;
@@ -153,8 +160,16 @@ class _BookReaderPageState extends State<BookReaderPage>
       final found = consider(anchorRender, _layoutAnchorIndex ?? 0);
       if (found != null || passedViewport) return found;
     }
+    for (var i = 0; i < _warmBlockCount; i++) {
+      final render = _warmBlockKeys[i].currentContext?.findRenderObject();
+      if (render is RenderBox) {
+        final found = consider(render, (_layoutAnchorIndex ?? 0) + 1 + i);
+        if (found != null || passedViewport) return found;
+      }
+    }
     final after = inLazyList(
-      _followingBlocksKey, (_layoutAnchorIndex ?? 0) + 1,
+      _followingBlocksKey,
+      (_layoutAnchorIndex ?? 0) + 1 + _warmBlockCount,
     );
     return after ?? trailing;
   }
@@ -539,6 +554,13 @@ class _BookReaderPageState extends State<BookReaderPage>
         ? _layoutAnchorIndex! : 0;
     final anchored = _layoutAnchorIndex != null &&
         _layoutAnchorIndex! < visibleBlocks.length;
+    // Bounded eager window; all remaining content still uses a lazy builder.
+    // During reflow a RenderSliverList immediately adjacent to the anchored
+    // paragraph can emit a bogus one-paragraph-height correction.
+    final warmCount = visibleBlocks.isEmpty ? 0
+        : (visibleBlocks.length - splitIndex - 1)
+            .clamp(0, _warmBlockLimit).toInt();
+    _warmBlockCount = warmCount;
 
 
     return ReaderChromeKeyboard(
@@ -665,14 +687,33 @@ class _BookReaderPageState extends State<BookReaderPage>
                 ),
                 SliverPadding(
                   padding: EdgeInsets.symmetric(horizontal: prefs.horizontalPadding),
+                  sliver: SliverToBoxAdapter(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        for (var index = 0; index < warmCount; index++)
+                          KeyedSubtree(
+                            key: _warmBlockKeys[index],
+                            child: _blockWidget(
+                              visibleBlocks[splitIndex + index + 1],
+                              readerText,
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
+                SliverPadding(
+                  padding: EdgeInsets.symmetric(horizontal: prefs.horizontalPadding),
                   sliver: SliverList.builder(
                     key: _followingBlocksKey,
-                    // Temporary diagnostic isolation of the forward lazy list.
-                    itemCount: anchored ? 0 : (visibleBlocks.isEmpty
-                        ? 0 : visibleBlocks.length - splitIndex - 1),
+                    itemCount: visibleBlocks.isEmpty ? 0
+                        : visibleBlocks.length - splitIndex - 1 - warmCount,
                     itemBuilder: (context, index) =>
-                        _blockWidget(visibleBlocks[splitIndex + index + 1],
-                            readerText),
+                        _blockWidget(
+                          visibleBlocks[splitIndex + 1 + warmCount + index],
+                          readerText,
+                        ),
                   ),
                 ),
                 SliverPadding(
