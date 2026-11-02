@@ -124,9 +124,18 @@ class _BookReaderPageState extends State<BookReaderPage>
 
   /// A font, width, line-height or reader-chrome change preserves a semantic
   /// paragraph location rather than reusing pixel offsets after reflow.
-  void _reflow({ReadingPreferences? settings, ReaderChromeMode? chrome}) {
+  void _reflow({
+    ReadingPreferences? settings,
+    ReaderChromeMode? chrome,
+    bool useLastKnownAnchor = false,
+  }) {
     _progressTimer?.cancel();
-    final next = _progressReady ? _snapshotPosition() : _reading;
+    // Window metrics may invalidate the previous RenderBox geometry before
+    // the callback runs. The scroll listener already cached the last actual
+    // visible paragraph. Preserve that source position across system reflow.
+    final next = useLastKnownAnchor
+        ? _reading
+        : (_progressReady ? _snapshotPosition() : _reading);
     _restoring = true;
     if (_scroll.hasClients) _scroll.jumpTo(0);
     setState(() {
@@ -249,12 +258,16 @@ class _BookReaderPageState extends State<BookReaderPage>
   void didChangeMetrics() {
     // Capture the paragraph location from the previous render tree BEFORE
     // the first frame lays out the new window size/orientation.
-    if (mounted && _progressReady && !_restoring) _reflow();
+    if (mounted && _progressReady && !_restoring) {
+      _reflow(useLastKnownAnchor: true);
+    }
   }
 
   @override
   void didChangeTextScaleFactor() {
-    if (mounted && _progressReady && !_restoring) _reflow();
+    if (mounted && _progressReady && !_restoring) {
+      _reflow(useLastKnownAnchor: true);
+    }
   }
 
   Future<void> _loadSettings() async {
