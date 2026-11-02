@@ -91,3 +91,6 @@
 
 ## M1.7.4b1 — новый игровой мир в единой библиотеке (2026-11-02)
 Постоянный SQLite `campaign_manager` подключён к Flutter через isolate gateway и `path_provider`. Один старый импорт TXT/FB2 расширен на проверенный .bworld, отдельный мир появляется рядом с книгами, открывает реальные SQLite-кампании и настоящие Hero/Items/Journal, импорт/экспорт BookWorld .bwsave v2. Сквозные Linux Flutter widget/SQLite 35-turn проверки: `world_integration_test.dart`. **Дальше M1.7.4b2:** единый список кампаний (включая пилотные), безопасное удаление/backup и явная migration policy, читательский chrome для новых сцен, физические Android↔Windows/a11y тесты. Подробности `M174B_FLUTTER_BOOKWORLD_RU.md`.
+
+## M1.7.4b2 — сведение новых/legacy кампаний в одном UX
+Один общий экран `Мои прохождения` и один главный «Продолжить»: приоритет существующего пилотного слота, при его отсутствии новый BookWorld, данные хранятся и проверяются раздельно. Нет разрушительной миграции, новой библиотеки или дополнительной CTA импорта книг. Новые тесты для обеих навигаций; следующий этап backup/delete/reader chrome и физический Android/Windows acceptance. См. `M174B_FLUTTER_BOOKWORLD_RU.md`.

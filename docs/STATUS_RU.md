@@ -285,3 +285,7 @@
 - Подготовлены четыре Flutter integration/widget проверки: реальный native sqlite3 gateway, 35 UI ходов с re-open после 23, отказ записи без ложного следующего кадра, интерфейс 320dp/200% текста. Flutter CI получает реальный собранный .bworld до тестов.
 - Миграция M1.6 не производилась; существующие `CampaignStore`, `SaveStore`, `GameProgress`, `BookStorage` не изменены. Новый v2 сохраняется отдельно в SQLite. Работа новых экранов на Android/Windows устройствах пока не подтверждена. Полный отчёт `docs/M174B_FLUTTER_BOOKWORLD_RU.md`.
 - **ВАЖНО:** QA нового SHA и итоговые PASS/FAIL/SKIP вписывать только после actual GitHub Actions; не считать наличие widget тестов доказательством PASS.
+
+## M1.7.4b2 — объединение сохранений без миграции
+- Общий экран `Мои прохождения` в `campaigns_page.dart` отображает вместе legacy M1.6 и native SQLite BookWorld-кампании, но каждую восстанавливает собственным runtime. HomePage теперь продолжает новый BookWorld, когда нет старого пилотного слота, и считает оба вида кампаний.
+- Два новых Flutter UI-теста: совместный список/проверка сохранности пилота, и продолжение BookWorld из Home. Полная таблица изменений `docs/M174B_FLUTTER_BOOKWORLD_RU.md`; **QA только после нового GitHub Actions**.

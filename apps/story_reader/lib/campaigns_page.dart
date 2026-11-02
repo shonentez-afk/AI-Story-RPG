@@ -1,13 +1,23 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 
 import 'campaign_store.dart';
 import 'pilot_save_codec.dart';
+import 'world_library_gateway.dart';
+import 'world_play_page.dart';
+import 'world_campaigns_page.dart';
 import 'main.dart' show StoryReaderPage, makePilotStory;
 
 /// Campaigns and source books are deliberately separate navigations.
 class CampaignsPage extends StatefulWidget {
-  const CampaignsPage({super.key});
+  const CampaignsPage({
+    super.key,
+    this.worldGateway = const DeviceWorldLibraryGateway(),
+  });
+
+  final WorldLibraryGateway worldGateway;
 
   @override
   State<CampaignsPage> createState() => _CampaignsPageState();
@@ -16,6 +26,10 @@ class CampaignsPage extends StatefulWidget {
 class _CampaignsPageState extends State<CampaignsPage> {
   final CampaignStore _store = CampaignStore();
   List<CampaignSummary> _campaigns = const [];
+  List<WorldCampaignItem> _worldCampaigns = const [];
+  Map<String, WorldLibraryItem> _worldCatalog = const {};
+  bool _worldError = false;
+  bool _worldLoading = true;
   bool _busy = false;
   bool _opening = false;
   bool _loading = true;
@@ -24,6 +38,62 @@ class _CampaignsPageState extends State<CampaignsPage> {
   void initState() {
     super.initState();
     _refresh();
+    unawaited(_refreshWorlds());
+  }
+
+  Future<void> _refreshWorlds() async {
+    try {
+      final worlds = await widget.worldGateway.worlds()
+          .timeout(const Duration(seconds: 8));
+      final campaigns = await widget.worldGateway.campaigns()
+          .timeout(const Duration(seconds: 8));
+      if (mounted) setState(() {
+        _worldCatalog = {
+          for (final world in worlds) world.archiveHash: world,
+        };
+        _worldCampaigns = campaigns;
+        _worldError = false;
+      });
+    } catch (_) {
+      // Existing pilot M1.6 slots must not disappear when a separate
+      // BookWorld database is unavailable or damaged.
+      if (mounted) setState(() => _worldError = true);
+    } finally {
+      if (mounted) setState(() => _worldLoading = false);
+    }
+  }
+
+  Future<void> _openWorld(WorldCampaignItem item) async {
+    if (_busy || _opening) return;
+    setState(() => _opening = true);
+    try {
+      await Navigator.of(context).push(MaterialPageRoute<void>(
+        builder: (_) => WorldPlayPage(
+          gateway: widget.worldGateway,
+          campaignId: item.id,
+        ),
+      ));
+      if (mounted) await _refreshWorlds();
+    } finally {
+      if (mounted) setState(() => _opening = false);
+    }
+  }
+
+  Future<void> _openWorldDetail(WorldCampaignItem item) async {
+    final world = _worldCatalog[item.worldHash];
+    if (world == null || _busy || _opening) return;
+    setState(() => _opening = true);
+    try {
+      await Navigator.of(context).push(MaterialPageRoute<void>(
+        builder: (_) => WorldCampaignsPage(
+          gateway: widget.worldGateway,
+          world: world,
+        ),
+      ));
+      if (mounted) await _refreshWorlds();
+    } finally {
+      if (mounted) setState(() => _opening = false);
+    }
   }
 
   Future<void> _refresh() async {
@@ -205,13 +275,22 @@ class _CampaignsPageState extends State<CampaignsPage> {
     body: Column(
       children: [
         if (_busy) const LinearProgressIndicator(minHeight: 2),
+        if (_worldLoading) const LinearProgressIndicator(minHeight: 2),
+        if (_worldError) Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+          child: Text(
+            'Игровые миры пока недоступны. '
+            'Старые прохождения не затронуты.',
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+        ),
         Expanded(
           child: Center(
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 680),
               child: _loading
                   ? const Center(child: CircularProgressIndicator())
-                  : _campaigns.isEmpty
+                  : _campaigns.isEmpty && _worldCampaigns.isEmpty
                       ? Center(child: Padding(
                           padding: const EdgeInsets.all(24),
                           child: Column(
@@ -233,9 +312,28 @@ class _CampaignsPageState extends State<CampaignsPage> {
                         ))
                       : ListView.builder(
                 padding: const EdgeInsets.all(16),
-                itemCount: _campaigns.length,
+                itemCount: _campaigns.length + _worldCampaigns.length,
                 itemBuilder: (context, index) {
-                  final item = _campaigns[index];
+                  if (index < _worldCampaigns.length) {
+                    final worldCampaign = _worldCampaigns[index];
+                    final world = _worldCatalog[worldCampaign.worldHash];
+                    return Card(child: ListTile(
+                      key: ValueKey('all-world-campaign-' + worldCampaign.id),
+                      leading: const Icon(Icons.auto_stories_outlined),
+                      title: Text(world?.title ?? 'Подготовленный мир'),
+                      subtitle: Text('BookWorld · ' +
+                          worldCampaign.revision.toString() +
+                          ' ходов · сохранение SQLite'),
+                      onTap: _busy ? null : () => _openWorld(worldCampaign),
+                      trailing: IconButton(
+                        tooltip: 'Прохождения этого игрового мира',
+                        onPressed: _busy || world == null
+                            ? null : () => _openWorldDetail(worldCampaign),
+                        icon: const Icon(Icons.more_horiz),
+                      ),
+                    ));
+                  }
+                  final item = _campaigns[index - _worldCampaigns.length];
                   final date = item.savedAt.toLocal();
                   final narrow = MediaQuery.sizeOf(context).width < 480 ||
                       MediaQuery.textScalerOf(context).scale(14) > 21;

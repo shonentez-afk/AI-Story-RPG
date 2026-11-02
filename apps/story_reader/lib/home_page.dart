@@ -7,6 +7,7 @@ import 'book_storage.dart';
 import 'book_reader.dart';
 import 'world_library_gateway.dart';
 import 'world_campaigns_page.dart';
+import 'world_play_page.dart';
 import 'campaign_store.dart';
 import 'campaigns_page.dart';
 import 'app_theme.dart';
@@ -26,6 +27,12 @@ class _HomePageState extends State<HomePage> {
   bool _opening = false;
   String? _recentCampaignId;
   int _campaignCount = 0;
+  int _pilotCount = 0;
+  int _worldCount = 0;
+  String? _recentWorldId;
+  String? _recentWorldTitle;
+  final WorldLibraryGateway _worldGateway =
+      const DeviceWorldLibraryGateway();
 
   @override
   void initState() {
@@ -43,15 +50,41 @@ class _HomePageState extends State<HomePage> {
         final healthy = campaigns.where((item) => !item.damaged).toList();
         _hasSave = healthy.isNotEmpty;
         _recentCampaignId = healthy.isEmpty ? null : healthy.first.id;
-        _campaignCount = campaigns.length;
+        _pilotCount = campaigns.length;
+        _campaignCount = _pilotCount + _worldCount;
       });
     } catch (_) {
       // Keep the last known save indicator; do not hide it because a read failed.
     } finally {
+      // Do not briefly show "New story" while a saved BookWorld is still
+      // being checked. Both independent stores are read before the preview
+      // is declared ready; errors in either leave the other intact.
+      await _refreshWorldCampaigns();
       if (mounted) setState(() => _saveLoading = false);
     }
-    // Book files are loaded only in LibraryPage. Home deliberately
-    // exposes one navigation entry instead of a second book shelf.
+  }
+
+  Future<void> _refreshWorldCampaigns() async {
+    try {
+      final worlds = await _worldGateway.worlds()
+          .timeout(const Duration(seconds: 8));
+      final campaigns = await _worldGateway.campaigns()
+          .timeout(const Duration(seconds: 8));
+      final titles = <String, String>{
+        for (final world in worlds) world.archiveHash: world.title,
+      };
+      if (!mounted) return;
+      setState(() {
+        _worldCount = campaigns.length;
+        _campaignCount = _pilotCount + _worldCount;
+        _recentWorldId = campaigns.isEmpty ? null : campaigns.first.id;
+        _recentWorldTitle = campaigns.isEmpty ? null :
+            titles[campaigns.first.worldHash];
+      });
+    } catch (_) {
+      // Keep prior counts; old saved games remain playable even if the new
+      // SQLite catalog is unavailable or damaged.
+    }
   }
 
   Future<void> _open(Widget page) async {
@@ -75,6 +108,8 @@ class _HomePageState extends State<HomePage> {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final text = Theme.of(context).textTheme;
+    final worldContinue = !_hasSave && _recentWorldId != null;
+    final canContinue = _hasSave || worldContinue;
     return Scaffold(
       appBar: AppBar(
         title: const Text('Живая книга'),
@@ -104,7 +139,7 @@ class _HomePageState extends State<HomePage> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(_saveLoading ? 'ПРОВЕРКА СОХРАНЕНИЙ' :
-                            (_hasSave ? 'СЕЙЧАС В ИСТОРИИ' : 'НАЧНИ СВОЮ ИСТОРИЮ'),
+                            (canContinue ? 'СЕЙЧАС В ИСТОРИИ' : 'НАЧНИ СВОЮ ИСТОРИЮ'),
                             style: text.labelLarge?.copyWith(color: scheme.primary)),
                         const SizedBox(height: 14),
                         Row(
@@ -123,11 +158,14 @@ class _HomePageState extends State<HomePage> {
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Text('Тайна особняка', style: text.titleLarge),
+                                  Text(worldContinue
+                                      ? (_recentWorldTitle ?? 'Подготовленный мир')
+                                      : 'Тайна особняка',
+                                      style: text.titleLarge),
                                   const SizedBox(height: 6),
                                   Text(_saveLoading
                                       ? 'Проверяем сохранённые прохождения'
-                                      : _hasSave
+                                      : canContinue
                                           ? 'Продолжить сохранённую игровую историю'
                                           : 'Демонстрационная история • офлайн',
                                       style: text.bodyMedium),
@@ -140,13 +178,24 @@ class _HomePageState extends State<HomePage> {
                         SizedBox(
                           width: double.infinity,
                           child: FilledButton.icon(
-                            onPressed: _saveLoading ? null : () => _open(StoryReaderPage(
-                              resume: _hasSave,
-                              campaignId: _hasSave ? _recentCampaignId : null,
-                            )),
-                            icon: Icon(_hasSave ? Icons.play_arrow : Icons.auto_stories),
+                            onPressed: _saveLoading ? null : () {
+                              if (worldContinue) {
+                                _open(WorldPlayPage(
+                                  gateway: _worldGateway,
+                                  campaignId: _recentWorldId!,
+                                ));
+                              } else {
+                                _open(StoryReaderPage(
+                                  resume: _hasSave,
+                                  campaignId: _hasSave
+                                      ? _recentCampaignId : null,
+                                ));
+                              }
+                            },
+                            icon: Icon(canContinue
+                                ? Icons.play_arrow : Icons.auto_stories),
                             label: Text(_saveLoading ? 'Загрузка…' :
-                                (_hasSave ? 'Продолжить' : 'Начать историю')),
+                                (canContinue ? 'Продолжить' : 'Начать историю')),
                           ),
                         ),
                       ],
