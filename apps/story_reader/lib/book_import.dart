@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 import 'package:xml/xml.dart';
 import 'book_model.dart';
+import 'book_text_decoder.dart';
 
 class ImportedBook {
   const ImportedBook({
@@ -32,15 +33,7 @@ class BookImporter {
     if (ext != 'txt' && ext != 'fb2') {
       throw const FormatException('Поддерживаются TXT и FB2');
     }
-    String text;
-    try {
-      text = utf8.decode(bytes, allowMalformed: false);
-    } on FormatException {
-      throw const FormatException(
-        'Пока поддерживается кодировка UTF-8. '
-        'Для других кодировок нужен отдельный декодер.',
-      );
-    }
+    final text = BookTextDecoder.decode(filename, bytes);
     if (ext == 'txt') {
       // Preserve all user-authored whitespace for exact TXT source ranges.
       // Strip only the UTF-8 BOM, which is an encoding marker, not content.
