@@ -417,3 +417,11 @@ Run `41332360623` (SHA `ef004a4`): Python/Dart/analyze PASS, Flutter FAIL из-�
 - Добавлены сменяемые типизированные semantic request/candidates, `OfflineRuleProvider`, `SemanticProviderGate`, fail-closed validator и негативные Flutter tests; локальная модель не настроена, cloud gate всегда закрыт. `SourceAnalysisSession.scanChunk` только read-only обёртка старого M2b1 сканера.
 - **Статус CODE ONLY / CI PENDING**: проверить PR #18 точный HEAD Flutter analyze/test, Python/world, Windows+Android. Важно: текущий код ещё не добавлен в UI и не имеет semantic checkpoints. Не заявлять готовым весь M2b4a и не объединять без CI.
 - Далее безопасные приватные semantic checkpoint/возобновление и UI строго внутри существующей страницы подготовки, после отдельного code/CI QA. Не трогать старую библиотеку, сохранения, M2b1/M2b3b/M2b3c, не отправлять книгу по сети и не объявлять playable BookWorld.
+
+
+## 2026-11-02 — Продолжение M2b4a после зелёного PR #18
+
+- Проверен actual PR #18 head `05a399c241670cda5d05e2bdda0d60cbe163812f`, CI `41427964306` completed/success: Flutter analyze/widget, Dart, Python/world, Windows portable и Android APK PASS; M0 `41427964385` PASS. PR #18 merged squash `13e9c0ebf4ab6e2cfbbcf306ad221b78cbcc7266`. Исторический статус «CI PENDING» для M2b4a1 закрыт.
+- Начата отдельная ветка `feature/m2b4a-semantic-checkpoints-ui-20261102`. Реализованы `source_semantic_review.dart` (проверяемые checkpoint/resume), scope `semanticProposals` в собственной приватной папке, top-level compute workers, `source_semantic_review_panel.dart` и подключение в существующей `source_index_preview_page.dart`. Тесты `source_semantic_review_test.dart`, `source_semantic_review_panel_test.dart`. Документ `docs/M2B4A2_SEMANTIC_CHECKPOINT_UI_RU.md`.
+- **M2b4a2 пока не принят: CODE / CI PENDING**. Сначала проверить точный SHA PR и Flutter analyze/test, Dart/Python/world, Windows+Android, исправить FAIL; только затем merge и main publish Release с точной кодовой ревизией. Пользователь просил продолжать строго по плану и обновлять этот handoff.
+- Не переписывать старые M2b1/M2b3b/M2b3c checkpoint, сохранения, настройки/ридер. В модели пока только offline-rule предложения, неизвестный canonical статус и запрещённый cloud. Нет реального AI, blueprint и готовой RPG для пользовательской книги.
