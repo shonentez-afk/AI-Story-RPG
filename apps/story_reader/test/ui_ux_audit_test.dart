@@ -83,7 +83,15 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('Настройки'));
     await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.text('0.1.0 · BookWorld · тестовая версия'), 150,
+      scrollable: find.byType(Scrollable).first,
+    );
     expect(find.text('0.1.0 · BookWorld · тестовая версия'), findsOneWidget);
+    await tester.scrollUntilVisible(
+      find.text('Мои прохождения'), -150,
+      scrollable: find.byType(Scrollable).first,
+    );
     await tester.tap(find.text('Мои прохождения'));
     await tester.pumpAndSettle();
     expect(find.text('Импортировать .bwsave'), findsOneWidget);
