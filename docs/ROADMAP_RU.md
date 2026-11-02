@@ -272,3 +272,8 @@
   - [Android APK](https://github.com/shonentez-afk/AI-Story-RPG/releases/download/test-build-260/AI-Story-RPG-Android-debug.apk), 167 209 424 bytes, SHA256 `b832b719b1612b1b0980ad281536632973b0101ecfb3d4442457eabaf041c610`.
   - `SHA256SUMS.txt` присутствует. Все три актива GitHub Release проверены, state=uploaded.
 - Старые test-build-258/256 **не содержат новую корзину**. Для проверки новой версии нужно переустановить/распаковать test-build-260. Ручной E2E на реальном устройстве остаётся SKIP; не путать CI PASS с проверкой всех физических устройств. Следующий функциональный план M2b4 semantic provider, но текущая UX-корзина уже завершена.
+
+
+## Обновление 2026-11-02 — следующий кусок M2b4
+
+M2b4a1 provider boundary: **ACCEPTED** (PR #18, exact head `05a399c2`, CI `41427964306` PASS, M0 `41427964385` PASS, merge `13e9c0eb`). M2b4a2 semantic checkpoint+возобновление+UI: **CODE / отдельный CI PENDING**. Затем M2b4b source-backed semantic extraction (с реальной проверенной моделью, только после настройки/согласия для облака); M2c validator+intermediate blueprint; исключительно после этого playable BookWorld для пользовательской книги. Пока никаких ложных «AI RPG готово».

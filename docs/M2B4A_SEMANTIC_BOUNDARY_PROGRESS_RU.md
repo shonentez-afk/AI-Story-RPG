@@ -20,3 +20,8 @@
 
 ## Дальше
 M2b4a-2: приватные атомарные semantic checkpoints, корректное возобновление после отмены и смены модели, обязательные негативные тесты; затем встроенная (а не отдельная библиотека) UI-панель и только после этого проверяемый M2b4b.
+
+
+## Принято: M2b4a1 / PR #18
+
+Точный head `05a399c241670cda5d05e2bdda0d60cbe163812f` проверен GitHub Actions `41427964306` (все core jobs PASS, в том числе Flutter analyze/widget, Windows/Android) и `41427964385` (M0 PASS). PR #18 объединён squash `13e9c0ebf4ab6e2cfbbcf306ad221b78cbcc7266`. Старый «CI PENDING» относится только к состоянию до приёмки. UI и semantic checkpoints — **новый отдельный этап M2b4a2**, см. `docs/M2B4A2_SEMANTIC_CHECKPOINT_UI_RU.md`; его CI не наследуется от M2b4a1.

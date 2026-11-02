@@ -8,6 +8,7 @@ import 'book_source_index.dart';
 import 'book_isolate_workers.dart';
 import 'source_analysis_checkpoint_repository.dart';
 import 'source_narrative_review_panel.dart';
+import 'source_semantic_review_panel.dart';
 
 /// The single preparation page already opened from Library. M2b2 adds local
 /// evidence review here, not a second library/import or an unverified RPG.
@@ -435,6 +436,11 @@ class _SourceIndexPreviewPageState extends State<SourceIndexPreviewPage> {
                           key: ValueKey(index.sourceFingerprint),
                           index: index,
                           sourceMentions: _analysis,
+                        ),
+                        const Divider(height: 28),
+                        SourceSemanticReviewPanel(
+                          key: ValueKey('semantic-${index.sourceFingerprint}'),
+                          index: index,
                         ),
                         const Divider(height: 28),
                         Text('Разделы произведения',
