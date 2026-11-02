@@ -3,9 +3,11 @@ import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter/material.dart';
 import 'package:ai_story_reader/book_import.dart';
 import 'package:ai_story_reader/book_model.dart';
 import 'package:ai_story_reader/book_source_index.dart';
+import 'package:ai_story_reader/source_index_preview_page.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -125,4 +127,50 @@ void main() {
     expect(result.chunks.single.chapterId, 'p2');
     expect(result.canPublishBookworld, false);
   });
+  testWidgets('source index preview never claims playable RPG', (tester) async {
+    const book = ImportedBook(
+      title: 'Оригинальная короткая история',
+      author: '',
+      chapters: ['Начало.', 'Конец.'],
+    );
+    await tester.pumpWidget(const MaterialApp(
+      home: SourceIndexPreviewPage(book: book),
+    ));
+    await tester.pumpAndSettle();
+    expect(find.text('Подготовка книги'), findsOneWidget);
+    expect(find.text('Главы с текстом: 2 из 2'), findsOneWidget);
+    expect(find.text('Текстовое покрытие индекса: 100.0%'),
+        findsOneWidget);
+    expect(find.textContaining('Готового игрового мира нет'), findsOneWidget);
+    expect(find.text('Глава 1'), findsOneWidget);
+    expect(find.text('Глава 2'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('source index error remains scrollable at 320dp/200%',
+      (tester) async {
+    tester.view.physicalSize = const Size(320, 640);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+    await tester.pumpWidget(MaterialApp(
+      builder: (context, child) => MediaQuery(
+        data: MediaQuery.of(context).copyWith(
+          textScaler: const TextScaler.linear(2),
+        ),
+        child: child!,
+      ),
+      home: const SourceIndexPreviewPage(book: ImportedBook(
+        title: 'Пустая', author: '', chapters: [''],
+      )),
+    ));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Не удалось проиндексировать'),
+        findsOneWidget);
+    expect(find.text('Повторить'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
 }
