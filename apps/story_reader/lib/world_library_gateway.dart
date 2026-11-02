@@ -103,6 +103,9 @@ abstract class WorldLibraryGateway {
     required int expectedRevision,
   });
   Future<String> exportSave(String campaignId);
+  Future<void> deleteCampaign(String campaignId, {required int expectedRevision});
+  Future<Uint8List> exportWorld(String worldHash);
+  Future<void> deleteWorld(String worldHash);
   Future<String> importSave(String text, {required String expectedWorldHash});
 }
 
@@ -238,6 +241,21 @@ class DeviceWorldLibraryGateway implements WorldLibraryGateway {
   @override
   Future<String> exportSave(String campaignId) =>
       _execute((store) => store.exportPortable(campaignId));
+
+  @override
+  Future<void> deleteCampaign(String campaignId, {
+    required int expectedRevision,
+  }) => _execute<void>((store) => store.deleteCampaign(
+    campaignId, expectedRevision: expectedRevision,
+  ));
+
+  @override
+  Future<Uint8List> exportWorld(String worldHash) =>
+      _execute((store) => store.exportBookworld(worldHash));
+
+  @override
+  Future<void> deleteWorld(String worldHash) =>
+      _execute<void>((store) => store.deleteBookworld(worldHash));
 
   @override
   Future<String> importSave(String text, {
