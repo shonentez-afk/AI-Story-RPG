@@ -115,7 +115,7 @@ void main() {
     final chunk = emojiIndex.chunks.single;
     final candidate = SemanticCandidate.propose(
       emojiIndex, chunk, category: SemanticCategory.event,
-      startUtf16: 8, endUtf16: 9, label: 'dragon',
+      startUtf16: 6, endUtf16: 7, label: 'dragon',
       uncertainty: 'Проверить',
     );
     expect(() => SemanticCandidateValidator.validateCandidate(
