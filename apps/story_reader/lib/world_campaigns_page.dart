@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 
+import 'world_backup_actions.dart';
 import 'world_library_gateway.dart';
 import 'world_play_page.dart';
 
@@ -163,6 +164,56 @@ class _WorldCampaignsPageState extends State<WorldCampaignsPage> {
     }
   }
 
+  Future<void> _deleteCampaign(WorldCampaignItem item) async {
+    if (_busy) return;
+    setState(() => _busy = true);
+    try {
+      final removed = await WorldBackupActions.deleteCampaignWithBackup(
+        context, widget.gateway, item,
+      );
+      if (removed && mounted) {
+        await _refresh();
+        _notice('Резервная копия сохранена, прохождение удалено');
+      }
+    } catch (error) {
+      _notice('Удаление отменено: $error');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _saveWorld() async {
+    if (_busy) return;
+    setState(() => _busy = true);
+    try {
+      final saved = await WorldBackupActions.saveWorld(
+        widget.gateway, widget.world,
+      );
+      if (saved) _notice('Копия .bworld сохранена');
+    } catch (error) {
+      _notice('Не удалось экспортировать мир: $error');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _deleteWorld() async {
+    if (_busy) return;
+    setState(() => _busy = true);
+    try {
+      final removed = await WorldBackupActions.deleteWorldWithBackup(
+        context, widget.gateway, widget.world,
+      );
+      if (removed && mounted) {
+        Navigator.of(context).pop();
+      }
+    } catch (error) {
+      _notice('Нельзя удалить мир: $error');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final typography = Theme.of(context).textTheme;
@@ -174,6 +225,25 @@ class _WorldCampaignsPageState extends State<WorldCampaignsPage> {
             tooltip: 'Импортировать .bwsave v2',
             onPressed: _busy ? null : _import,
             icon: const Icon(Icons.file_download_outlined),
+          ),
+          PopupMenuButton<String>(
+            tooltip: 'Действия с игровым миром',
+            enabled: !_busy,
+            onSelected: (action) {
+              if (action == 'backup') {
+                _saveWorld();
+              } else if (action == 'remove') {
+                _deleteWorld();
+              }
+            },
+            itemBuilder: (_) => const [
+              PopupMenuItem(
+                value: 'backup', child: Text('Экспортировать .bworld'),
+              ),
+              PopupMenuItem(
+                value: 'remove', child: Text('Удалить мир с резервной копией'),
+              ),
+            ],
           ),
         ],
       ),
@@ -232,6 +302,8 @@ class _WorldCampaignsPageState extends State<WorldCampaignsPage> {
                       _start(parentCampaignId: item.id);
                     } else if (action == 'export') {
                       _export(item);
+                    } else if (action == 'delete') {
+                      _deleteCampaign(item);
                     }
                   },
                   itemBuilder: (_) => const [
@@ -240,6 +312,9 @@ class _WorldCampaignsPageState extends State<WorldCampaignsPage> {
                     ),
                     PopupMenuItem(
                       value: 'export', child: Text('Экспортировать .bwsave'),
+                    ),
+                    PopupMenuItem(
+                      value: 'delete', child: Text('Удалить с резервной копией'),
                     ),
                   ],
                 ),

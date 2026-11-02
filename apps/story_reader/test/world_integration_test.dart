@@ -218,6 +218,59 @@ void main() {
     expect((await gateway.load(worldId)).revision, 1);
   });
 
+
+  test('gateway guards stale deletion and archive reinstall', () async {
+    final world = await install();
+    final worldBytes = await gateway.exportWorld(world.archiveHash);
+    expect(worldBytes, orderedEquals(File(fixture).readAsBytesSync()));
+    final id = await gateway.start(world.archiveHash);
+    await expectLater(gateway.deleteWorld(world.archiveHash),
+        throwsFormatException);
+    final choice = await gateway.choose(id,
+      actionId: 'predelete', choiceId: 'inspect_gate', expectedRevision: 0,
+    );
+    expect(choice.applied, isTrue);
+    final portable = await gateway.exportSave(id);
+    await expectLater(gateway.deleteCampaign(id, expectedRevision: 0),
+        throwsFormatException);
+    expect((await gateway.load(id)).revision, 1);
+    await gateway.deleteCampaign(id, expectedRevision: 1);
+    await expectLater(gateway.load(id), throwsFormatException);
+    await gateway.deleteWorld(world.archiveHash);
+    expect(await gateway.worlds(), isEmpty);
+    await gateway.install(worldBytes);
+    final restoredId = await gateway.importSave(
+      portable, expectedWorldHash: world.archiveHash,
+    );
+    expect(restoredId, isNot(id));
+    expect((await gateway.load(restoredId)).revision, 1);
+  });
+
+  testWidgets('cancelling BookWorld delete leaves real SQLite intact',
+      (tester) async {
+    final world = await install();
+    final id = await gateway.start(world.archiveHash);
+    await tester.pumpWidget(MaterialApp(
+      home: WorldCampaignsPage(world: world, gateway: gateway),
+    ));
+    await settleWorker(tester);
+    await tester.tap(find.byTooltip('Действия с прохождением'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Удалить с резервной копией'));
+    // The parent route intentionally displays an indeterminate busy bar
+    // while the confirmation dialog is open. pumpAndSettle cannot finish
+    // while that animation is active; pump the dialog transition explicitly.
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.text('Удалить прохождение?'), findsOneWidget);
+    await tester.tap(find.text('Отмена'));
+    await tester.pumpAndSettle();
+    expect((await gateway.campaigns(worldHash: world.archiveHash))
+        .single.id, id);
+    expect((await gateway.load(id)).revision, 0);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('storage failure does not optimistically advance RPG scene',
       (tester) async {
     final world = await install();

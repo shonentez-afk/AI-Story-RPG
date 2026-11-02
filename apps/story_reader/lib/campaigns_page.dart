@@ -5,6 +5,7 @@ import 'package:file_picker/file_picker.dart';
 
 import 'campaign_store.dart';
 import 'pilot_save_codec.dart';
+import 'world_backup_actions.dart';
 import 'world_library_gateway.dart';
 import 'world_play_page.dart';
 import 'world_campaigns_page.dart';
@@ -95,6 +96,24 @@ class _CampaignsPageState extends State<CampaignsPage> {
       if (mounted) await _refreshWorlds();
     } finally {
       if (mounted) setState(() => _opening = false);
+    }
+  }
+
+  Future<void> _deleteWorldCampaign(WorldCampaignItem item) async {
+    if (_busy || _opening) return;
+    setState(() => _busy = true);
+    try {
+      final removed = await WorldBackupActions.deleteCampaignWithBackup(
+        context, widget.worldGateway!, item,
+      );
+      if (removed && mounted) {
+        await _refreshWorlds();
+        _error('Резервная копия сохранена, прохождение удалено');
+      }
+    } catch (error) {
+      _error('Удаление отменено: $error');
+    } finally {
+      if (mounted) setState(() => _busy = false);
     }
   }
 
@@ -327,11 +346,27 @@ class _CampaignsPageState extends State<CampaignsPage> {
                           worldCampaign.revision.toString() +
                           ' ходов · сохранение SQLite'),
                       onTap: _busy ? null : () => _openWorld(worldCampaign),
-                      trailing: IconButton(
-                        tooltip: 'Прохождения этого игрового мира',
-                        onPressed: _busy || world == null
-                            ? null : () => _openWorldDetail(worldCampaign),
-                        icon: const Icon(Icons.more_horiz),
+                      trailing: PopupMenuButton<String>(
+                        tooltip: 'Действия с BookWorld-прохождением',
+                        enabled: !_busy,
+                        onSelected: (action) {
+                          if (action == 'details') {
+                            _openWorldDetail(worldCampaign);
+                          } else if (action == 'delete') {
+                            _deleteWorldCampaign(worldCampaign);
+                          }
+                        },
+                        itemBuilder: (_) => [
+                          PopupMenuItem(
+                            value: 'details',
+                            enabled: world != null,
+                            child: const Text('Открыть игровой мир'),
+                          ),
+                          const PopupMenuItem(
+                            value: 'delete',
+                            child: Text('Удалить с резервной копией'),
+                          ),
+                        ],
                       ),
                     ));
                   }
