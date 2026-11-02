@@ -124,6 +124,11 @@ class _WorldCampaignsPageState extends State<WorldCampaignsPage> {
       final bytes = file.bytes;
       if (bytes == null) throw const FormatException('Не удалось прочитать файл');
       final payload = utf8.decode(bytes, allowMalformed: false);
+      // Real read-only replay/CRC/hash validation BEFORE confirmation.
+      // A cancelled dialog must never add a campaign or overwrite a slot.
+      final preview = await widget.gateway.previewSave(
+        payload, expectedWorldHash: widget.world.archiveHash,
+      );
       if (!mounted) return;
       final confirmed = await showDialog<bool>(
         context: context,
@@ -131,10 +136,17 @@ class _WorldCampaignsPageState extends State<WorldCampaignsPage> {
           scrollable: true,
           title: const Text('Импортировать прохождение?'),
           content: Text(
-            'Мир: ' + widget.world.title + '\n\n'
-            'Будут проверены версия мира, журнал и контрольные суммы. '
-            'При успехе создастся отдельное прохождение. '
-            'Старые сохранения не изменятся.',
+            'Мир: ' + widget.world.title + '\n'
+            'Ходов: ' + preview.revision.toString() + '\n'
+            'Состояние: ' + (preview.isTerminal
+                ? 'история завершена' : 'можно продолжать') + '\n'
+            'Код мира: ' + preview.worldHash.substring(0, 12) + '…\n'
+            'Код состояния: ' + preview.stateHash.substring(0, 12) + '…\n\n'
+            'Файл уже проверен: контрольная сумма и полный журнал '
+            'совпадают с установленным игровым миром. '
+            'После подтверждения проверка повторится, '
+            'создастся новый независимый слот. '
+            'Существующие прохождения не изменятся.',
           ),
           actions: [
             TextButton(

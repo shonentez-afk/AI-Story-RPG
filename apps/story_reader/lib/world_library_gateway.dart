@@ -32,6 +32,24 @@ class WorldCampaignItem {
   final String? parentId;
 }
 
+/// Safe, replay-verified metadata shown before a portable import.
+/// Contains no book text and does not represent a committed campaign.
+class WorldSavePreview {
+  const WorldSavePreview({
+    required this.sourceCampaignId,
+    required this.worldHash,
+    required this.revision,
+    required this.stateHash,
+    required this.isTerminal,
+  });
+
+  final String sourceCampaignId;
+  final String worldHash;
+  final int revision;
+  final String stateHash;
+  final bool isTerminal;
+}
+
 class WorldChoiceView {
   const WorldChoiceView({
     required this.id, required this.label, this.lockReason,
@@ -103,6 +121,9 @@ abstract class WorldLibraryGateway {
     required int expectedRevision,
   });
   Future<String> exportSave(String campaignId);
+  Future<WorldSavePreview> previewSave(String text, {
+    required String expectedWorldHash,
+  });
   Future<void> deleteCampaign(String campaignId, {required int expectedRevision});
   Future<Uint8List> exportWorld(String worldHash);
   Future<void> deleteWorld(String worldHash);
@@ -256,6 +277,25 @@ class DeviceWorldLibraryGateway implements WorldLibraryGateway {
   @override
   Future<void> deleteWorld(String worldHash) =>
       _execute<void>((store) => store.deleteBookworld(worldHash));
+
+  @override
+  Future<WorldSavePreview> previewSave(String text, {
+    required String expectedWorldHash,
+  }) => _execute((store) {
+    final verified = store.previewPortable(text);
+    if (verified.worldHash != expectedWorldHash) {
+      throw const FormatException(
+        'Сохранение относится к другому игровому миру',
+      );
+    }
+    return WorldSavePreview(
+      sourceCampaignId: verified.sourceCampaignId,
+      worldHash: verified.worldHash,
+      revision: verified.revision,
+      stateHash: verified.stateHash,
+      isTerminal: verified.isTerminal,
+    );
+  });
 
   @override
   Future<String> importSave(String text, {

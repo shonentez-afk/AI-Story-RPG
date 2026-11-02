@@ -477,21 +477,27 @@ CREATE TABLE events(
     return jsonEncode({...body, 'checksum_sha256': _checksum(body)});
   }
 
-  /// Strictly verifies the save and replays it, then forks to a NEW local
-  /// campaign. No imported campaign ID is ever trusted as an SQL key.
-  String importPortable(String text) {
+
+  /// Read-only preflight: validate envelope, checksum, exact installed world,
+  /// event chain, and deterministic replay before offering to import.
+  /// Not a backup write and never creates or replaces a campaign.
+  PortableSavePreview previewPortable(String text) =>
+      _verifyPortable(text).preview;
+
+  _VerifiedPortable _verifyPortable(String text) {
     if (utf8.encode(text).length > 2 * 1024 * 1024) {
       throw const FormatException('Portable save exceeds size limit');
     }
-    final dynamic parsed;
+    final dynamic decoded;
     try {
-      parsed = jsonDecode(text);
+      decoded = jsonDecode(text);
     } on FormatException {
       throw const FormatException('Invalid portable save JSON');
     }
-    if (parsed is! Map<String, dynamic>) {
+    if (decoded is! Map<String, dynamic>) {
       throw const FormatException('Invalid portable save envelope');
     }
+    final parsed = Map<String, dynamic>.from(decoded);
     const keys = {
       'format', 'schema_version', 'source_campaign_id', 'world_sha256',
       'role', 'plot_mode', 'interaction', 'checkpoint', 'checksum_sha256',
@@ -513,16 +519,43 @@ CREATE TABLE events(
     _validId(sourceId, 'source_campaign_id');
     _validHash(archiveHash, 'world_sha256');
     final checksum = parsed.remove('checksum_sha256');
-    if (checksum != _checksum(parsed)) {
+    if (checksum is! String || !_hash.hasMatch(checksum) ||
+        checksum != _checksum(parsed)) {
       throw const FormatException('Portable save checksum mismatch');
+    }
+    final checkpoint = parsed['checkpoint'];
+    if (checkpoint is! Map<String, dynamic>) {
+      throw const FormatException('Invalid portable checkpoint');
     }
     final world = _world(archiveHash);
     final restored = StoryEngineCoordinator.restore(
-      world.blueprint, parsed['checkpoint'],
+      world.blueprint, checkpoint,
     );
     if (restored.events.length > maxTurns) {
       throw const FormatException('Too many portable events');
     }
+    if (restored.state.revision != restored.events.length) {
+      throw const FormatException('Portable event sequence mismatch');
+    }
+    return _VerifiedPortable(
+      restored,
+      PortableSavePreview(
+        sourceCampaignId: sourceId,
+        worldHash: archiveHash,
+        revision: restored.state.revision,
+        stateHash: restored.state.stateHash,
+        isTerminal: restored.isTerminal,
+      ),
+    );
+  }
+
+  /// Same strict preflight is re-run immediately before the transaction.
+  /// Never trust the source campaign ID as a local SQL key: import creates
+  /// an independent new slot without overwriting the source or its forks.
+  String importPortable(String text) {
+    final checked = _verifyPortable(text);
+    final restored = checked.coordinator;
+    final archiveHash = checked.preview.worldHash;
     final newId = _newId();
     _transaction(() {
       _db.execute(
@@ -546,6 +579,31 @@ CREATE TABLE events(
     });
     return newId;
   }
+
+}
+
+/// Verified, replayed portable save metadata for a user-facing preview.
+/// This does not import, mutate or remove any campaign.
+class PortableSavePreview {
+  const PortableSavePreview({
+    required this.sourceCampaignId,
+    required this.worldHash,
+    required this.revision,
+    required this.stateHash,
+    required this.isTerminal,
+  });
+
+  final String sourceCampaignId;
+  final String worldHash;
+  final int revision;
+  final String stateHash;
+  final bool isTerminal;
+}
+
+class _VerifiedPortable {
+  const _VerifiedPortable(this.coordinator, this.preview);
+  final StoryEngineCoordinator coordinator;
+  final PortableSavePreview preview;
 }
 
 class WorldCatalogEntry {

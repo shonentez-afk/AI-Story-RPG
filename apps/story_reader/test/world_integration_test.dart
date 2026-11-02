@@ -111,6 +111,13 @@ void main() {
         expectedRevision: 0);
     expect(chosen.applied, true);
     expect((await worker.load(id)).revision, 1);
+    final portable = await worker.exportSave(id);
+    final preview = await worker.previewSave(
+      portable, expectedWorldHash: world.archiveHash,
+    );
+    expect(preview.revision, 1);
+    expect(preview.worldHash, world.archiveHash);
+    expect((await worker.campaigns()).length, 1);
   });
 
   testWidgets('one library imports and displays verified worlds separately '
@@ -240,6 +247,53 @@ void main() {
     expect((await gateway.load(worldId)).revision, 1);
   });
 
+
+
+  test('BookWorld preflight checks replay without importing, then restores',
+      () async {
+    final world = await install();
+    final campaignId = await gateway.start(world.archiveHash);
+    final result = await gateway.choose(campaignId,
+      actionId: 'portable_preflight_first', choiceId: 'inspect_gate',
+      expectedRevision: 0,
+    );
+    expect(result.applied, isTrue);
+    final portable = await gateway.exportSave(campaignId);
+    final inspected = await gateway.previewSave(
+      portable, expectedWorldHash: world.archiveHash,
+    );
+    expect(inspected.sourceCampaignId, campaignId);
+    expect(inspected.worldHash, world.archiveHash);
+    expect(inspected.revision, 1);
+    expect(inspected.stateHash.length, 64);
+    expect(inspected.isTerminal, isFalse);
+    expect((await gateway.campaigns()).length, 1);
+    final wrongHash = List.filled(64, 'a').join();
+    await expectLater(
+      gateway.previewSave(portable, expectedWorldHash: wrongHash),
+      throwsFormatException,
+    );
+    await expectLater(
+      gateway.previewSave(
+        portable.replaceFirst('"schema_version":2', '"schema_version":3'),
+        expectedWorldHash: world.archiveHash,
+      ),
+      throwsFormatException,
+    );
+    expect((await gateway.campaigns()).length, 1);
+    final importedId = await gateway.importSave(
+      portable, expectedWorldHash: world.archiveHash,
+    );
+    expect(importedId, isNot(campaignId));
+    expect((await gateway.load(importedId)).revision, 1);
+    final importedPreview = await gateway.previewSave(
+      await gateway.exportSave(importedId),
+      expectedWorldHash: world.archiveHash,
+    );
+    expect(importedPreview.stateHash, inspected.stateHash);
+    expect((await gateway.campaigns()).length, 2);
+    expect((await gateway.load(campaignId)).revision, 1);
+  });
 
   test('gateway guards stale deletion and archive reinstall', () async {
     final world = await install();
