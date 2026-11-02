@@ -113,10 +113,14 @@ class SourceRelationReviewSession {
         b.status == EvidenceStatus.rejected) {
       throw const FormatException('Недопустимая пара упоминаний');
     }
-    final left = a.id.compareTo(b.id) <= 0 ? a : b;
+    final sortedIds = [a.id, b.id]..sort();
+    // Display explicit aliases in the book's textual order while the
+    // relation ID remains stable regardless of endpoint ordering.
+    final left = type == IdentityHintKind.explicitAlias || a.id.compareTo(b.id) <= 0
+        ? a : b;
     final right = identical(left, a) ? b : a;
     return IdentityHint(
-      id: _sha(type.name + '|' + left.id + '|' + right.id)
+      id: _sha(type.name + '|' + sortedIds[0] + '|' + sortedIds[1])
           .substring(0, 32),
       kind: type,
       firstId: left.id,
