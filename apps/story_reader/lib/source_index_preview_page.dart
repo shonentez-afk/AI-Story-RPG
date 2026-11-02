@@ -54,7 +54,7 @@ class _SourceIndexPreviewPageState extends State<SourceIndexPreviewPage> {
   bool _busy = false;
   bool _showCandidates = false;
   bool _showChapters = false;
-  int _candidatePage = 0;
+  int _visibleCandidates = 10;
   static const int _candidatesPerPage = 10;
   int _generation = 0;
 
@@ -72,7 +72,7 @@ class _SourceIndexPreviewPageState extends State<SourceIndexPreviewPage> {
     _loadingAnalysis = false;
     _showCandidates = false;
     _showChapters = false;
-    _candidatePage = 0;
+    _visibleCandidates = 10;
     final book = widget.book;
     final worker = widget.indexer;
     _result = worker == null
@@ -491,13 +491,10 @@ class _SourceIndexPreviewPageState extends State<SourceIndexPreviewPage> {
         final allPending = analysis?.mentions
             .where((mention) => mention.decision == MentionDecision.review)
             .toList() ?? <SourceMention>[];
-        final pageCount = allPending.isEmpty
-            ? 1 : (allPending.length + _candidatesPerPage - 1) ~/
-                _candidatesPerPage;
-        final page = _candidatePage.clamp(0, pageCount - 1).toInt();
+        // "Show more" never removes earlier cards or jumps the viewport
+        // backwards, unlike paging a shrinking sliver list on mobile.
         final pendingReview = allPending
-            .skip(page * _candidatesPerPage)
-            .take(_candidatesPerPage)
+            .take(_visibleCandidates)
             .toList();
         // Preserve the lazy chapter list on large books, but hide it until
         // explicitly requested. Source text is NEVER copied into this UI.
@@ -587,7 +584,7 @@ class _SourceIndexPreviewPageState extends State<SourceIndexPreviewPage> {
                       );
                     },
                   ),
-                if (_showCandidates && allPending.length > _candidatesPerPage)
+                if (_showCandidates && allPending.isNotEmpty)
                   SliverPadding(
                     padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
                     sliver: SliverToBoxAdapter(
@@ -596,19 +593,16 @@ class _SourceIndexPreviewPageState extends State<SourceIndexPreviewPage> {
                         runSpacing: 8,
                         crossAxisAlignment: WrapCrossAlignment.center,
                         children: [
-                          OutlinedButton(
-                            key: const Key('prepare-review-prev'),
-                            onPressed: page == 0 ? null :
-                                () => setState(() => _candidatePage = page - 1),
-                            child: const Text('Назад к находкам'),
-                          ),
-                          Text('Страница ${page + 1} из ${pageCount}'),
-                          OutlinedButton(
-                            key: const Key('prepare-review-next'),
-                            onPressed: page + 1 >= pageCount ? null :
-                                () => setState(() => _candidatePage = page + 1),
-                            child: const Text('Другие находки'),
-                          ),
+                          Text('Показано ${pendingReview.length} из '
+                              '${allPending.length} упоминаний'),
+                          if (pendingReview.length < allPending.length)
+                            OutlinedButton.icon(
+                              key: const Key('prepare-review-more'),
+                              onPressed: () => setState(
+                                  () => _visibleCandidates += _candidatesPerPage),
+                              icon: const Icon(Icons.expand_more),
+                              label: const Text('Показать ещё находки'),
+                            ),
                         ],
                       ),
                     ),
