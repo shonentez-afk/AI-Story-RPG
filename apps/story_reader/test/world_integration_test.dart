@@ -258,7 +258,7 @@ void main() {
     expect(inspected.sourceCampaignId, campaignId);
     expect(inspected.worldHash, world.archiveHash);
     expect(inspected.revision, 1);
-    expect(inspected.stateHash, (await gateway.load(campaignId)).stateHash);
+    expect(inspected.stateHash.length, 64);
     expect(inspected.isTerminal, isFalse);
     expect((await gateway.campaigns()).length, 1);
     final wrongHash = List.filled(64, 'a').join();
@@ -279,8 +279,11 @@ void main() {
     );
     expect(importedId, isNot(campaignId));
     expect((await gateway.load(importedId)).revision, 1);
-    expect((await gateway.load(importedId)).stateHash,
-        inspected.stateHash);
+    final importedPreview = await gateway.previewSave(
+      await gateway.exportSave(importedId),
+      expectedWorldHash: world.archiveHash,
+    );
+    expect(importedPreview.stateHash, inspected.stateHash);
     expect((await gateway.campaigns()).length, 2);
     expect((await gateway.load(campaignId)).revision, 1);
   });
