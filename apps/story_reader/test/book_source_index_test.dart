@@ -145,6 +145,14 @@ void main() {
   });
 
   testWidgets('source index preview never claims playable RPG', (tester) async {
+    // Desktop viewport: verify the expandable diagnostic section without
+    // brittle off-screen taps on eagerly built SliverToBoxAdapter children.
+    tester.view.physicalSize = const Size(900, 1750);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
     const book = ImportedBook(
       title: 'Оригинальная короткая история',
       author: '',
@@ -161,10 +169,6 @@ void main() {
     expect(find.text('Подготовка книги'), findsOneWidget);
     expect(find.text('Создать игровую историю — пока недоступно'),
         findsOneWidget);
-    await tester.scrollUntilVisible(
-      find.byKey(const Key('prepare-source-details')), 220,
-      scrollable: find.byType(Scrollable).first, maxScrolls:30,
-    );
     await tester.ensureVisible(find.text('Технические сведения о книге'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Технические сведения о книге'));
