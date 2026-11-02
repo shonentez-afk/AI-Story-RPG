@@ -59,7 +59,7 @@ void main() {
     await tester.scrollUntilVisible(find.text('Артем'), 220,
         scrollable: find.byType(Scrollable).first, maxScrolls:25);
     expect(find.text('Артем'), findsOneWidget);
-    expect(find.text('Это слово есть в книге'), findsOneWidget);
+    expect(find.text('Это имя персонажа'), findsOneWidget);
 
     await tester.scrollUntilVisible(
         find.text('Дополнительно: экспериментальный поиск'), 220,
