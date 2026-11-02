@@ -5,6 +5,7 @@ import 'package:ai_story_reader/intermediate_story_blueprint.dart';
 import 'package:ai_story_reader/private_adaptation_preflight.dart';
 import 'package:ai_story_reader/private_classic_scenario_translator.dart';
 import 'package:ai_story_reader/native_private_bookworld_compiler.dart';
+import 'package:ai_story_reader/reviewed_story_composer.dart';
 import 'package:bookworld_format/bookworld_format.dart';
 import 'package:ai_story_reader/source_evidence_graph.dart';
 import 'package:ai_story_reader/source_semantic_catalog.dart';
@@ -151,6 +152,54 @@ void main() {
     expect(compiled.canPublishBookworld, false);
     payload['rights_status'] = 'hacked';
     expect(compiled.blueprintJson['rights_status'], 'private_adaptation');
+  });
+
+  test('M2e2 explicitly authored two-ending story can compile without AI',
+      () async {
+    final editor = SemanticEditorialReviewSession.create(index, catalog)
+        .decide(catalog, firstClaim.id, SemanticEditorialVerdict.canonCandidate)
+        .decide(catalog, lastClaim.id, SemanticEditorialVerdict.canonCandidate);
+    final draft = ReviewedStoryComposer.compose(
+      index: index, evidence: graph, catalog: catalog, editorial: editor,
+      openingAssertionId: firstClaim.id,
+      endingAssertionId: lastClaim.id,
+      openingText: 'Вы стоите у закрытой двери.',
+      endingText: 'Мария встретила Ивана.',
+      alternateEndingText: 'Вы уходите и меняете ход событий.',
+      followBookChoice: 'Продолжить по книге',
+      changeFateChoice: 'Выбрать другой путь',
+    );
+    expect(draft.rights, PreparationRights.privateUse);
+    expect(draft.scenes.length, 3);
+    expect(draft.scenes.last.origin,
+        DraftSceneOrigin.explicitAdaptation);
+    final bytes = await compileReviewedPrivateBookworldInWorker(
+        index, graph, catalog, editor, draft);
+    expect(const PrivateBookworldImporter().inspect(bytes)
+        .blueprint.scenes.length, 3);
+  });
+
+  test('M2e2 refuses silent canon promotion or reversed source chapters', () {
+    final blank = SemanticEditorialReviewSession.create(index, catalog);
+    IntermediateStoryBlueprint attempt(
+            SemanticEditorialReviewSession editor,
+            String opening, String ending) =>
+        ReviewedStoryComposer.compose(
+          index: index, evidence: graph, catalog: catalog, editorial: editor,
+          openingAssertionId: opening, endingAssertionId: ending,
+          openingText: 'Начало', endingText: 'Финал',
+          alternateEndingText: 'Изменённый финал',
+          followBookChoice: 'По книге', changeFateChoice: 'Изменить',
+        );
+    expect(() => attempt(blank, firstClaim.id, lastClaim.id),
+        throwsFormatException);
+    final approved = blank
+        .decide(catalog, firstClaim.id, SemanticEditorialVerdict.canonCandidate)
+        .decide(catalog, lastClaim.id, SemanticEditorialVerdict.canonCandidate);
+    expect(() => attempt(approved, lastClaim.id, firstClaim.id),
+        throwsFormatException);
+    expect(() => attempt(approved, firstClaim.id, firstClaim.id),
+        throwsFormatException);
   });
 
   test('M2e Flutter isolate builds source-checked playable archive without Python',

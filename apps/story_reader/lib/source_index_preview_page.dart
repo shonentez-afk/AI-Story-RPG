@@ -10,6 +10,8 @@ import 'offline_preparation_coordinator.dart';
 import 'source_analysis_checkpoint_repository.dart';
 import 'source_narrative_review_panel.dart';
 import 'source_semantic_review_panel.dart';
+import 'reviewed_story_editor_page.dart';
+import 'world_library_gateway.dart';
 
 /// The single preparation page already opened from Library. M2b2 adds local
 /// evidence review here, not a second library/import or an unverified RPG.
@@ -23,6 +25,7 @@ class SourceIndexPreviewPage extends StatefulWidget {
     this.checkpointEncoder,
     this.checkpointDecoder,
     this.localPreparationCoordinator,
+    this.worldGateway,
   });
 
   final ImportedBook book;
@@ -40,6 +43,7 @@ class SourceIndexPreviewPage extends StatefulWidget {
 
   /// Optional seam for widget tests; production uses private scoped stores.
   final OfflinePreparationCoordinator? localPreparationCoordinator;
+  final WorldLibraryGateway? worldGateway;
 
   @override
   State<SourceIndexPreviewPage> createState() =>
@@ -785,6 +789,30 @@ class _SourceIndexPreviewPageState extends State<SourceIndexPreviewPage> {
                           ],
                         ),
                         const Divider(height: 28),
+                        Card(
+                          child: ListTile(
+                            key: const Key('prepare-open-story-editor'),
+                            leading: const Icon(Icons.edit_note),
+                            title: const Text('Редактор личной адаптации'),
+                            subtitle: const Text(
+                              'Выберите два проверенных события, напишите '
+                              'альтернативный финал и создайте короткую '
+                              'офлайн-RPG. Не создаёт игру по всей книге '
+                              'автоматически.'),
+                            trailing: const Icon(Icons.chevron_right),
+                            enabled: !_offlineWorking && !_busy,
+                            onTap: () => Navigator.of(context).push<void>(
+                              MaterialPageRoute(
+                                builder: (_) => ReviewedStoryEditorPage(
+                                  index: index,
+                                  gateway: widget.worldGateway ??
+                                      const DeviceWorldLibraryGateway(),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
                         Card(
                           child: ListTile(
                             leading: const Icon(Icons.lock_outline),

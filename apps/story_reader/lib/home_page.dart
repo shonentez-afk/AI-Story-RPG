@@ -502,7 +502,10 @@ class _LibraryPageState extends State<LibraryPage> {
   void _prepareBook(StoredBook entry) {
     if (_working) return;
     Navigator.of(context).push<void>(MaterialPageRoute(
-      builder: (_) => SourceIndexPreviewPage(book: entry.book),
+      builder: (_) => SourceIndexPreviewPage(
+        book: entry.book,
+        worldGateway: widget.worldGateway,
+      ),
     ));
   }
 
