@@ -34,7 +34,6 @@ void main() {
     expect(restored.horizontalPadding, 36);
   });
 
-  test('invalid saved preferences fall back to safe values', () async {
   test('rapid reading-style changes persist the last complete state',
       () async {
     SharedPreferences.setMockInitialValues({});
@@ -54,7 +53,7 @@ void main() {
     expect(restored.horizontalPadding, 34);
   });
 
-
+  test('invalid saved preferences fall back to safe values', () async {
     SharedPreferences.setMockInitialValues({
       'ai_story_reading_v1_palette': 999,
       'ai_story_reading_v1_font': 999.0,
