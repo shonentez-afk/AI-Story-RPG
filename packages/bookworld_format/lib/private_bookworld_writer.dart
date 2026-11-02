@@ -146,7 +146,7 @@ CREATE TABLE templates(template_id TEXT PRIMARY KEY,
       final db = sqlite3.open(file.path);
       try {
         db.execute('PRAGMA foreign_keys=ON');
-        db.execute('PRAGMA application_id=1113014098'); // 0x42574f52
+        db.execute('PRAGMA application_id=1113018194'); // 0x42574f52
         db.execute('PRAGMA user_version=1');
         db.execute(_schema);
         db.execute('BEGIN TRANSACTION');
