@@ -17,7 +17,8 @@ class BookReaderPage extends StatefulWidget {
   State<BookReaderPage> createState() => _BookReaderPageState();
 }
 
-class _BookReaderPageState extends State<BookReaderPage> {
+class _BookReaderPageState extends State<BookReaderPage>
+    with WidgetsBindingObserver {
   final ReadingSettingsStore _store = ReadingSettingsStore();
   ReadingPreferences _settings = const ReadingPreferences();
   final BookReadingStore _readingStore = BookReadingStore();
@@ -144,6 +145,7 @@ class _BookReaderPageState extends State<BookReaderPage> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _progressTimer?.cancel();
     if (widget.bookId != null && _scroll.hasClients && _progressReady) {
       final snapshot = _restoring ? _reading : _snapshotPosition();
@@ -237,9 +239,22 @@ class _BookReaderPageState extends State<BookReaderPage> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _loadSettings();
     _loadPosition();
     _scroll.addListener(_saveScroll);
+  }
+
+  @override
+  void didChangeMetrics() {
+    // Capture the paragraph location from the previous render tree BEFORE
+    // the first frame lays out the new window size/orientation.
+    if (mounted && _progressReady && !_restoring) _reflow();
+  }
+
+  @override
+  void didChangeTextScaleFactor() {
+    if (mounted && _progressReady && !_restoring) _reflow();
   }
 
   Future<void> _loadSettings() async {
