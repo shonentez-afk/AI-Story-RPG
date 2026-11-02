@@ -172,11 +172,27 @@ void main() {
     final targetParagraph = find.textContaining(
       'Текст параграфа ${old.anchor!.blockIndex}.',
     );
+    final mountedParagraph = find.textContaining(
+      'Текст параграфа ${old.anchor!.blockIndex}.',
+      skipOffstage: false,
+    );
+    final viewportRect = tester.getRect(find.byType(CustomScrollView));
+    String mountedRect = 'not mounted';
+    if (mountedParagraph.evaluate().isNotEmpty) {
+      try {
+        mountedRect = '${tester.getRect(mountedParagraph)}';
+      } catch (_) {
+        mountedRect = 'mounted, no rect';
+      }
+    }
+    final position = liveView.controller!.position;
     expect(targetParagraph, findsOneWidget, reason:
         'visible=$visibleParagraphs, saved=${old.anchor!.blockIndex}, '
         'fraction=${old.anchor!.fraction}, '
         'post=${afterResize.anchor?.blockIndex}, '
-        'scroll=${liveView.controller?.offset}');
+        'offset=${position.pixels}, min=${position.minScrollExtent}, '
+        'max=${position.maxScrollExtent}, viewport=$viewportRect, '
+        'mounted=$mountedRect, allSelectable=${find.byType(SelectableText, skipOffstage: false).evaluate().length}');
     expect(tester.getRect(targetParagraph).overlaps(
       tester.getRect(find.byType(CustomScrollView)),
     ), isTrue, reason: 'Target paragraph must actually intersect viewport');
