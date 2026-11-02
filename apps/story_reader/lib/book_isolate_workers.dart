@@ -7,6 +7,8 @@ import 'source_evidence_graph.dart';
 import 'story_evidence_review_session.dart';
 import 'source_narrative_chronology.dart';
 import 'source_relation_review.dart';
+import 'source_semantic_provider.dart';
+import 'source_semantic_review.dart';
 
 /// Entry points live OUTSIDE widget State methods. Flutter's native compute
 /// sends only the explicit message and this top-level function to the worker.
@@ -132,3 +134,33 @@ Future<SourceRelationReviewSession> decideRelationInWorker(
         String relationId, IdentityDecision choice) =>
     compute(_decideRelation, (index, graph, session, relationId, choice),
         debugLabel: 'story-relations-decision');
+
+
+// M2b4a: all new worker callbacks are top-level, never State closures.
+Future<SemanticReviewSession> _processSemanticReview(
+    (BookSourceIndex, SemanticReviewSession, int) request) =>
+    request.$2.processNext(
+      request.$1, const OfflineRuleProvider(), limit: request.$3,
+    );
+
+Future<SemanticReviewSession> processSemanticReviewInWorker(
+    BookSourceIndex index, SemanticReviewSession session, {int limit = 8}) =>
+    compute(_processSemanticReview, (index, session, limit),
+        debugLabel: 'story-semantic-batch');
+
+SemanticReviewSession _decodeSemanticReview(
+    (BookSourceIndex, String) request) =>
+    SemanticReviewSession.decode(
+        request.$1, const OfflineRuleProvider(), request.$2);
+
+Future<SemanticReviewSession> decodeSemanticReviewInWorker(
+    BookSourceIndex index, String raw) =>
+    compute(_decodeSemanticReview, (index, raw),
+        debugLabel: 'story-semantic-decode');
+
+String _encodeSemanticReview(SemanticReviewSession session) => session.encode();
+
+Future<String> encodeSemanticReviewInWorker(
+    SemanticReviewSession session) =>
+    compute(_encodeSemanticReview, session,
+        debugLabel: 'story-semantic-encode');
