@@ -41,8 +41,20 @@ void main() {
     final prefs = await SharedPreferences.getInstance();
     expect(prefs.getInt('ai_story_reading_v1_palette'), 3);
     expect(find.text('Как в системе'), findsOneWidget);
+    await tester.scrollUntilVisible(
+      find.text('Анализ книги и приватность'), 140,
+      scrollable: find.byType(Scrollable).first,
+    );
     expect(find.text('Анализ книги и приватность'), findsOneWidget);
+    await tester.scrollUntilVisible(
+      find.text('Сбросить оформление чтения'), -140,
+      scrollable: find.byType(Scrollable).first,
+    );
     expect(find.text('Сбросить оформление чтения'), findsOneWidget);
+    await tester.scrollUntilVisible(
+      find.text('Как в системе'), -140,
+      scrollable: find.byType(Scrollable).first,
+    );
     await tester.tap(find.text('Как в системе'));
     await tester.pumpAndSettle();
     expect(AppAppearanceController.instance.value, AppAppearance.system);
