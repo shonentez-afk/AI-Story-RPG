@@ -5,6 +5,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:ai_story_reader/book_import.dart';
 import 'package:ai_story_reader/book_model.dart';
 import 'package:ai_story_reader/book_reader.dart';
+import 'package:ai_story_reader/book_reading_state.dart';
+import 'package:ai_story_reader/reading_preferences.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -113,4 +115,63 @@ void main() {
     expect(scroll.controller!.offset, greaterThan(100));
   });
 
+  testWidgets('semantic source paragraph survives font and width reflow',
+      (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    final book = ImportedBook(
+      title: 'Длинная книга для проверки',
+      author: '',
+      chapters: const [''],
+      structuredChapters: [
+        BookChapter(
+          id: 'chapter_0',
+          blocks: List.generate(160, (i) => BookBlock(
+            kind: BookBlockKind.paragraph,
+            text: 'Текст параграфа $i. ' * 18,
+          )),
+        ),
+      ],
+    );
+    await tester.pumpWidget(MaterialApp(
+      home: BookReaderPage(book: book, bookId: 'semantic-test'),
+    ));
+    await tester.pumpAndSettle();
+    final scroll = find.byType(Scrollable).first;
+    await tester.scrollUntilVisible(
+      find.textContaining('Текст параграфа 64.'),
+      350,
+      scrollable: scroll,
+      maxScrolls: 120,
+    );
+    await tester.pump(const Duration(milliseconds: 450));
+    final old = await BookReadingStore().load('semantic-test');
+    expect(old.anchor, isNotNull);
+    expect(old.anchor!.blockIndex, greaterThan(0));
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pumpAndSettle();
+    tester.view.physicalSize = const Size(350, 650);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+    await ReadingSettingsStore().save(
+      const ReadingPreferences(fontSize: 25, lineHeight: 1.9),
+    );
+    await tester.pumpWidget(MaterialApp(
+      home: BookReaderPage(book: book, bookId: 'semantic-test'),
+    ));
+    await tester.pumpAndSettle();
+    final target = find.textContaining(
+      'Текст параграфа ${old.anchor!.blockIndex}.',
+    );
+    expect(target, findsOneWidget);
+    expect(tester.takeException(), isNull);
+
+    await tester.pump(const Duration(milliseconds: 450));
+    final after = await BookReadingStore().load('semantic-test');
+    expect(after.anchor, isNotNull);
+    expect(after.chapter, old.chapter);
+  });
 }
