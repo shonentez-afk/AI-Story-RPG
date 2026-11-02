@@ -100,6 +100,8 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('Настройки'));
     await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Оформление страниц'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Оформление страниц'));
     await tester.pumpAndSettle();
     expect(find.text('Настройки чтения'), findsOneWidget);
