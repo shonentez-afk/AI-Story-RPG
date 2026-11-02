@@ -476,7 +476,8 @@ class _BookReaderPageState extends State<BookReaderPage>
       appBar: !_chrome.showTopBar ? null : AppBar(
         backgroundColor: prefs.background,
         foregroundColor: prefs.foreground,
-        title: Text(widget.book.title),
+        title: Text(widget.book.title,
+          maxLines: 1, overflow: TextOverflow.ellipsis),
         actions: [
           IconButton(
             tooltip: 'Оглавление',
