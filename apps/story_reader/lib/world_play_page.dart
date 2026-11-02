@@ -33,6 +33,7 @@ class _WorldPlayPageState extends State<WorldPlayPage> {
   ReadingPreferences _reading = const ReadingPreferences();
   ReaderChromeMode _chrome = ReaderChromeMode.normal;
   bool _peekControls = false;
+  final ScrollController _sceneScroll = ScrollController();
 
   // Reader settings are UI-only. They never change the event log or SQLite.
   Future<void> _loadReading() async {
@@ -108,6 +109,12 @@ class _WorldPlayPageState extends State<WorldPlayPage> {
     unawaited(_loadReading());
   }
 
+  @override
+  void dispose() {
+    _sceneScroll.dispose();
+    super.dispose();
+  }
+
   Future<void> _reload() async {
     if (_choosing) return;
     try {
@@ -177,7 +184,13 @@ class _WorldPlayPageState extends State<WorldPlayPage> {
         ));
       }
     } finally {
-      if (mounted) setState(() => _choosing = false);
+      if (mounted) {
+        // A confirmed or rejected action must leave the beginning of the
+        // current scene, including turn count, visible. Chrome toggles do
+        // not reset scrolling; only actual choice attempts do.
+        if (_sceneScroll.hasClients) _sceneScroll.jumpTo(0);
+        setState(() => _choosing = false);
+      }
     }
   }
 
@@ -291,6 +304,7 @@ class _WorldPlayPageState extends State<WorldPlayPage> {
                             )
                           : ListView(
                               key: const ValueKey('world-scene-scroll'),
+                              controller: _sceneScroll,
                               padding: EdgeInsets.fromLTRB(
                                   prefs.horizontalPadding, 14,
                                   prefs.horizontalPadding, 112),
