@@ -486,6 +486,20 @@ class _LibraryPageState extends State<LibraryPage> {
     }
   }
 
+  void _readBook(StoredBook entry) {
+    if (_working) return;
+    Navigator.of(context).push<void>(MaterialPageRoute(
+      builder: (_) => BookReaderPage(book: entry.book, bookId: entry.id),
+    ));
+  }
+
+  void _prepareBook(StoredBook entry) {
+    if (_working) return;
+    Navigator.of(context).push<void>(MaterialPageRoute(
+      builder: (_) => SourceIndexPreviewPage(book: entry.book),
+    ));
+  }
+
   Future<void> _deleteBook(StoredBook entry) async {
     if (_working) return;
     final confirmed = await showDialog<bool>(
@@ -703,32 +717,68 @@ class _LibraryPageState extends State<LibraryPage> {
                 itemCount: filtered.length,
                 itemBuilder: (context, index) {
                   final entry = filtered[index];
-                  return Card(child: ListTile(
-                    leading: entry.book.cover == null
-                        ? const Icon(Icons.book_outlined)
-                        : Image.memory(entry.book.cover!,
-                            width: 48, height: 64, fit: BoxFit.cover,
-                            errorBuilder: (_, error, stack) =>
-                                const Icon(Icons.book_outlined)),
-                    title: Text(entry.book.title),
-                    subtitle: Text(entry.book.author.isEmpty
-                        ? 'Импортированная книга' : entry.book.author),
-                    trailing: PopupMenuButton<String>(
-                      tooltip: 'Действия с книгой',
-                      enabled: !_working,
-                      onSelected: (action) {
-                        if (action == 'index') {
-                          Navigator.of(context).push<void>(
-                            MaterialPageRoute(
-                              builder: (_) => SourceIndexPreviewPage(
-                                book: entry.book,
+                  return Card(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        ListTile(
+                          leading: entry.book.cover == null
+                              ? const Icon(Icons.book_outlined)
+                              : Image.memory(
+                                  entry.book.cover!,
+                                  width: 48,
+                                  height: 64,
+                                  fit: BoxFit.cover,
+                                  errorBuilder: (_, error, stack) =>
+                                      const Icon(Icons.book_outlined),
+                                ),
+                          title: Text(entry.book.title,
+                              maxLines: 2, overflow: TextOverflow.ellipsis),
+                          subtitle: Text(entry.book.author.isEmpty
+                              ? 'Импортированная книга · нажмите для чтения'
+                              : '${entry.book.author} · нажмите для чтения'),
+                          onTap: _working ? null : () => _readBook(entry),
+                          trailing: PopupMenuButton<String>(
+                            tooltip: 'Действия с книгой',
+                            enabled: !_working,
+                            onSelected: (action) {
+                              if (action == 'delete') _deleteBook(entry);
+                            },
+                            itemBuilder: (_) => const [
+                              PopupMenuItem(
+                                value: 'delete',
+                                child: Text('Удалить книгу'),
                               ),
-                            ),
-                          );
-                        } else if (action == 'delete') {
-                          _deleteBook(entry);
-                        }
-                      },
+                            ],
+                          ),
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
+                          child: Wrap(
+                            spacing: 8,
+                            runSpacing: 6,
+                            children: [
+                              TextButton.icon(
+                                key: ValueKey('library-read-${entry.id}'),
+                                onPressed: _working ? null :
+                                    () => _readBook(entry),
+                                icon: const Icon(Icons.menu_book_outlined),
+                                label: const Text('Читать'),
+                              ),
+                              OutlinedButton.icon(
+                                key: ValueKey('library-prepare-${entry.id}'),
+                                onPressed: _working ? null :
+                                    () => _prepareBook(entry),
+                                icon: const Icon(Icons.auto_awesome_outlined),
+                                label: const Text('Подготовить к RPG'),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                },
                       itemBuilder: (_) => const [
                         PopupMenuItem(
                           value: 'index',
