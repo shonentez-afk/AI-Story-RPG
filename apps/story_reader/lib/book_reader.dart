@@ -119,29 +119,61 @@ class _BookReaderPageState extends State<BookReaderPage>
     _restoring = true;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      if (_scroll.hasClients) {
-        final anchor = _reading.anchor;
-        double offset = _reading.scrollOffset;
-        if (_layoutAnchorIndex != null && anchor != null) {
-          final target = _anchorParagraphKey.currentContext?.findRenderObject();
-          if (target is RenderBox && target.hasSize) {
-            // CustomScrollView.center sets the anchor sliver's START to
-            // pixel zero, regardless of how much content precedes it.
-            // getOffsetToReveal includes earlier sliver extent and would
-            // double count that offset, hiding the target after resize.
-            offset = target.size.height *
-                anchor.fraction.clamp(0.0, 0.85);
-          } else {
-            offset = 0;
-          }
-        }
-        final pos = _scroll.position;
-        _scroll.jumpTo(offset.clamp(
-          pos.minScrollExtent, pos.maxScrollExtent,
-        ).toDouble());
+      if (!_scroll.hasClients) {
+        _restoring = false;
+        return;
       }
+      final anchor = _reading.anchor;
+      if (_layoutAnchorIndex != null && anchor != null) {
+        _alignVisibleParagraph(anchor, attempts: 4);
+        return;
+      }
+      final pos = _scroll.position;
+      _scroll.jumpTo(_reading.scrollOffset.clamp(
+        pos.minScrollExtent, pos.maxScrollExtent,
+      ).toDouble());
       _restoring = false;
     });
+  }
+
+  /// Align against ACTUAL rendered geometry after resize. ScrollView.center
+  /// may shift its coordinate origin when earlier slivers change size;
+  /// absolute offsets and a single jumpTo are not reliable across metrics.
+  void _alignVisibleParagraph(BookTextAnchor anchor, {required int attempts}) {
+    if (!mounted || !_scroll.hasClients) {
+      _restoring = false;
+      return;
+    }
+    final target = _anchorParagraphKey.currentContext?.findRenderObject();
+    final viewport = _viewportKey.currentContext?.findRenderObject();
+    if (target is RenderBox && target.hasSize &&
+        viewport is RenderBox && viewport.hasSize) {
+      final top = viewport.localToGlobal(Offset.zero).dy + 1;
+      final targetTop = target.localToGlobal(Offset.zero).dy;
+      // A tail-end saved position should still leave some paragraph visible.
+      final fraction = anchor.fraction.clamp(0.0, 0.85);
+      final desiredTop = top - target.size.height * fraction;
+      final correction = targetTop - desiredTop;
+      if (correction.abs() > 1 && attempts > 0) {
+        final pos = _scroll.position;
+        final next = (_scroll.offset + correction).clamp(
+          pos.minScrollExtent, pos.maxScrollExtent,
+        ).toDouble();
+        if ((next - _scroll.offset).abs() > 0.5) {
+          _scroll.jumpTo(next);
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            _alignVisibleParagraph(anchor, attempts: attempts - 1);
+          });
+          return;
+        }
+      }
+    } else if (attempts > 0) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _alignVisibleParagraph(anchor, attempts: attempts - 1);
+      });
+      return;
+    }
+    _restoring = false;
   }
 
   /// A font, width, line-height or reader-chrome change preserves a semantic
