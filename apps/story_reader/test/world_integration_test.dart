@@ -325,7 +325,7 @@ void main() {
     FilePicker? previousPicker;
     try {
       previousPicker = FilePicker.platform;
-    } on LateError {
+    } catch (_) {
       // No native plugin in the Flutter test runner.
     }
     FilePicker.platform = _FixtureSavePicker(Uint8List.fromList(utf8.encode(save)));
@@ -372,7 +372,7 @@ void main() {
     FilePicker? previousPicker;
     try {
       previousPicker = FilePicker.platform;
-    } on LateError {
+    } catch (_) {
       // No native plugin in the Flutter test runner.
     }
     FilePicker.platform = _FixtureSavePicker(Uint8List.fromList(utf8.encode(save)));
