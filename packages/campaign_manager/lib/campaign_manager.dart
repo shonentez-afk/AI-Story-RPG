@@ -164,10 +164,25 @@ CREATE TABLE events(
 
   void close() => _db.close();
 
+  /// Explicit v1/v2 dispatch; both paths independently validate every
+  /// archive entry and SQLite before the store begins a transaction.
+  /// No permissive ZIP fallback and no silent source/rights upgrade.
+  static VerifiedBookworld _inspectBookworld(Uint8List archive) {
+    try {
+      return const BookworldImporter().inspect(archive);
+    } on FormatException {
+      final private = const PrivateBookworldImporter().inspect(archive);
+      return VerifiedBookworld(
+        blueprint: private.blueprint,
+        archiveHash: private.archiveSha256,
+      );
+    }
+  }
+
   /// Verify the entire ZIP, CRC, hashes, all scenes and read-only SQLite
   /// before the first mutation of our private catalog.
   WorldCatalogEntry installBookworld(Uint8List package) {
-    final checked = const BookworldImporter().inspect(package);
+    final checked = _inspectBookworld(package);
     _validHash(checked.archiveHash, 'archive_sha256');
     final entry = WorldCatalogEntry(
       archiveHash: checked.archiveHash,
@@ -221,7 +236,7 @@ CREATE TABLE events(
     if (rows.length != 1 || rows.single.columnAt(0) is! Uint8List) {
       throw const FormatException('BookWorld is not installed');
     }
-    final checked = const BookworldImporter().inspect(
+    final checked = _inspectBookworld(
       rows.single.columnAt(0) as Uint8List,
     );
     if (checked.archiveHash != archiveHash ||

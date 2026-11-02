@@ -329,3 +329,11 @@ M2b4a1 provider boundary: **ACCEPTED** (PR #18, exact head `05a399c2`, CI `41427
 
 
 **Текущая M2d граница:** preflight PR #24 требует собственного CI. Пакетный compiler и playable .bworld реальной книги не реализованы; следующий этап требует независимых production validator/компиляции и E2E.
+
+
+## 2026-11-02 — M2d приватный v2 BookWorld: действующая рабочая ветка
+
+- Preflight PR #24 **MERGED** squash `5b71951361623fcb54a29c21b44fc80ba565e117`. Exact PR SHA `1d428e67c228d08379af4951d6a3f24052c0bf8b` принят GitHub Actions `41458429744` core 6/6 PASS (Flutter, Dart/Python, Windows, Android) + M0 `41458429984` PASS. Push(main) `41459581044` не завершил Android: скачивание Google NDK 28.2 оборвалось с ошибкой ZIP/sdmanager — это **сбой окружения**, не успех релизной сборки; Windows + Flutter/Python/Dart PASS. Последний реально опубликованный релиз прежний `test-build-289` (из PR #23); проверяйте новый релиз отдельно.
+- Ветка `feature/m2d-private-classic-scenario-translator-20261102` добавляет `private_classic_scenario_translator.dart`, `packages/bookworld_format/lib/private_bookworld.dart`, Python `tools/bookworld/private_bookworld.py`, строгое чтение ZIP v2 (четыре файла), source UTF-16 quote SHA от локального индекса, без публикации, с `private_use_only`. Допущен только `PROTAGONIST/ALTER_FATE/CLASSIC`. Исторический v1 `original_demo` остаётся строгим.
+- `packages/campaign_manager` учится принимать v2 **только через отдельный полный валидатор**, сохраняет старую SQLite-библиотеку/сейвы, в тесте 20 ходов, два финала, восстановление и экспорт/импорт. Добавлены оригинальные фикстуры, отрицательные тесты ZIP/rights/provenance/cycles, новый CI шаг Python→Dart.
+- Подробности `docs/M2D_PRIVATE_BOOKWORLD_V2_RU.md`. Статус **CODE / CI PENDING**, нельзя выдавать пакет v2 за установленную готовую RPG без exact-head CI и устройства. Последующий обязательный шаг: встроенный пользовательский M2d writer в Flutter для Windows+Android, редактор проверенного сценария, кнопка «Начать игру» только после успешного импорта; E2E на авторской книге. Реальная LLM не подключена, источник не отправляется в сеть.
