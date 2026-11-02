@@ -706,7 +706,7 @@ class _LibraryPageState extends State<LibraryPage> {
                     !_worldLoading && !_worldLoadError)
                   const Padding(
                     padding: EdgeInsets.all(16),
-                    child: Text('Книг пока нет. Нажмите «Добавить книгу» '
+                    child: Text('Своих книг пока нет. Нажмите «Добавить книгу» '
                         'выше, чтобы импортировать TXT или FB2.'),
                   ),
               ]),
@@ -778,23 +778,6 @@ class _LibraryPageState extends State<LibraryPage> {
                       ],
                     ),
                   );
-                },
-                      itemBuilder: (_) => const [
-                        PopupMenuItem(
-                          value: 'index',
-                          child: Text('Подготовка книги · индекс текста'),
-                        ),
-                        PopupMenuItem(
-                          value: 'delete',
-                          child: Text('Удалить книгу'),
-                        ),
-                      ],
-                    ),
-                    onTap: () => Navigator.of(context).push(
-                      MaterialPageRoute<void>(
-                        builder: (_) => BookReaderPage(
-                          book: entry.book, bookId: entry.id))),
-                  ));
                 },
               ),
             ),
