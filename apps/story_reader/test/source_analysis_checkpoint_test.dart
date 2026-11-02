@@ -136,6 +136,9 @@ void main() {
     await tester.tap(find.text('Сбросить поиск имён').last);
     await tester.pumpAndSettle();
     expect(await store.read(index.sourceFingerprint), isNull);
+    await tester.scrollUntilVisible(
+        find.text('Обработано фрагментов: 0 из 1'), 220,
+        scrollable: find.byType(Scrollable).first, maxScrolls:25);
     expect(find.text('Обработано фрагментов: 0 из 1'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
