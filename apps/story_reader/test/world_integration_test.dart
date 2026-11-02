@@ -320,9 +320,18 @@ void main() {
     final world = await install();
     final source = await gateway.start(world.archiveHash);
     final save = await gateway.exportSave(source);
-    final oldPicker = FilePicker.platform;
+    // FilePicker.platform is late-initialized only on installed device
+    // plugins; a pure widget-test host may have no previous instance.
+    FilePicker? previousPicker;
+    try {
+      previousPicker = FilePicker.platform;
+    } on LateError {
+      // No native plugin in the Flutter test runner.
+    }
     FilePicker.platform = _FixtureSavePicker(Uint8List.fromList(utf8.encode(save)));
-    addTearDown(() => FilePicker.platform = oldPicker);
+    addTearDown(() {
+      if (previousPicker != null) FilePicker.platform = previousPicker!;
+    });
     await tester.pumpWidget(MaterialApp(
       home: CampaignsPage(worldGateway: gateway),
     ));
@@ -358,9 +367,18 @@ void main() {
     final save = await gateway.exportSave(original);
     await gateway.deleteCampaign(original, expectedRevision: 0);
     await gateway.deleteWorld(world.archiveHash);
-    final oldPicker = FilePicker.platform;
+    // FilePicker.platform is late-initialized only on installed device
+    // plugins; a pure widget-test host may have no previous instance.
+    FilePicker? previousPicker;
+    try {
+      previousPicker = FilePicker.platform;
+    } on LateError {
+      // No native plugin in the Flutter test runner.
+    }
     FilePicker.platform = _FixtureSavePicker(Uint8List.fromList(utf8.encode(save)));
-    addTearDown(() => FilePicker.platform = oldPicker);
+    addTearDown(() {
+      if (previousPicker != null) FilePicker.platform = previousPicker!;
+    });
     await tester.pumpWidget(MaterialApp(
       home: CampaignsPage(worldGateway: gateway),
     ));

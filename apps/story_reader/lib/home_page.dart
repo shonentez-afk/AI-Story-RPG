@@ -677,23 +677,22 @@ class _LibraryPageState extends State<LibraryPage> {
                       ],
                     ),
                   )
-                else if (_books.isEmpty && _worlds.isEmpty &&
-                    !_worldLoading && !_worldLoadError)
-                  Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text('Книг пока нет. Нажмите «Добавить книгу» '
-                            'выше, чтобы импортировать TXT или FB2.'),
-                      ],
-                    ),
-                  )
-                else if (term.isNotEmpty &&
-                    filtered.isEmpty && filteredWorlds.isEmpty)
+                // Query feedback is independent from an error reading TXT/FB2.
+                // A verified BookWorld can still be searched and opened.
+                if (!_loadingBooks && term.isNotEmpty &&
+                    filtered.isEmpty && filteredWorlds.isEmpty &&
+                    !_worldLoading)
                   const Padding(
                     padding: EdgeInsets.all(16),
                     child: Text('По вашему запросу ничего не найдено.'),
+                  ),
+                if (!_loadingBooks && !_libraryLoadError &&
+                    term.isEmpty && _books.isEmpty && _worlds.isEmpty &&
+                    !_worldLoading && !_worldLoadError)
+                  const Padding(
+                    padding: EdgeInsets.all(16),
+                    child: Text('Книг пока нет. Нажмите «Добавить книгу» '
+                        'выше, чтобы импортировать TXT или FB2.'),
                   ),
               ]),
             ),
