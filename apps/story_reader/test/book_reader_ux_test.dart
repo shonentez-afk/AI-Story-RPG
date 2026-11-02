@@ -163,9 +163,18 @@ void main() {
       find.byType(CustomScrollView),
     );
     expect(liveView.center, isNotNull);
+    final afterResize = await BookReadingStore().load('semantic-test');
+    final visibleParagraphs = tester.widgetList<SelectableText>(
+      find.byType(SelectableText),
+    ).map((widget) => RegExp(r'Текст параграфа (\\d+)')
+        .firstMatch(widget.data ?? '')?.group(1))
+        .whereType<String>().take(16).join(', ');
     expect(find.textContaining(
       'Текст параграфа ${old.anchor!.blockIndex}.',
-    ), findsOneWidget);
+    ), findsOneWidget, reason:
+        'visible=$visibleParagraphs, saved=${old.anchor!.blockIndex}, '
+        'post=${afterResize.anchor?.blockIndex}, '
+        'scroll=${liveView.controller?.offset}');
     expect(tester.takeException(), isNull);
 
     await tester.pumpWidget(const SizedBox.shrink());
