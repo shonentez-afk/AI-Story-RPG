@@ -304,3 +304,10 @@ M2b4a1 provider boundary: **ACCEPTED** (PR #18, exact head `05a399c2`, CI `41427
 ## 2026-11-02 — уточнена последовательность до интеграции ИИ
 
 Сначала завершить M2b4b модельно-независимую семантическую схему и проверку первоисточника, M2c intermediate blueprint + причинный симулятор, затем M2d accepted book-derived `.bworld` builder/importer (не подменять `original_demo`), проверку приватности/прав и единый UI-оркестратор. Только ПОСЛЕ безопасного API/JSON/rights gate можно активировать настоящую модель; полная автоматическая смысловая экстракция до этого невозможна. Ветка `feature/m2b4b-m2c-pre-ai-validation-20261102`, аудит `docs/M2_PRE_AI_READINESS_AUDIT_RU.md`. Статус кодовой ветки CI PENDING.
+
+
+## 2026-11-02 — M2b4b/M2c validated scaffold accepted, M2c editorial continuation
+
+- PR #21 merged squash `a8b016e3bd4ebf6855fe7b81cc861b566b078a3b`; exact test head `69fc30289f0131b130bd448d56374b2ffc907fd8`. GitHub Actions `41447576581` 6/6 PASS, Flutter **187/187**, Windows portable and Android debug PASS. M0 `41447576604` PASS. Semantics remain INFERRED, draft can't publish.
+- Следующая ветка `feature/m2c-editorial-checkpoints-readiness-20261102`: `source_semantic_editorial_review.dart`, read-only `preparation_readiness_report.dart`, 3 приватных checkpoint scopes, regression `pre_ai_editorial_readiness_test.dart`, `docs/M2C_EDITORIAL_CHECKPOINTS_RU.md`. **Её CI ещё НЕ принят.**
+- Before AI important M2d separate: current Python+Dart `.bworld` allow only `original_demo`. Production personal adaptation must get separate package/rights/provenance validator, don't weaken old demo by just changing a string. Need usable one-button preparation flow and actual short-story E2E; no false "ready".

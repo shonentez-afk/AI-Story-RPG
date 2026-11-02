@@ -457,3 +457,10 @@ Run `41332360623` (SHA `ef004a4`): Python/Dart/analyze PASS, Flutter FAIL из-�
 2. Открыта `feature/m2b4b-m2c-pre-ai-validation-20261102`. Прочитать `docs/M2_PRE_AI_READINESS_AUDIT_RU.md`, `apps/story_reader/lib/source_semantic_catalog.dart`, `apps/story_reader/lib/intermediate_story_blueprint.dart`, `apps/story_reader/test/pre_ai_semantic_blueprint_test.dart`. Новые source-cited assertions и причинный preflight не меняют старые checkpoints/saves, не имеют сети, не умеют экспортировать готовую книгу в игру.
 3. Важно: `packages/bookworld_format/lib/bookworld_format.dart` и `tools/bookworld/bookworld.py` жёстко принимают лишь original-demo world. Нужно M2d для пользовательских адаптаций с полным validator, rights/source provenance; это отдельный обязательный пункт **перед** настоящим AI.
 4. Статус: CODE / отдельный PR CI PENDING. Продолжать создание тестов и закрытие M2b4b/M2c/M2d; не обещать, что arbitrary FB2 уже playable. Обязательно проверять actual exact SHA CI + Windows/Android, фиксировать release. Предыдущие навыки чтения/сохранения/цифровых прав не сбрасывать.
+
+
+## 2026-11-02 — M2b4b/M2c validated scaffold accepted, M2c editorial continuation
+
+- PR #21 merged squash `a8b016e3bd4ebf6855fe7b81cc861b566b078a3b`; exact test head `69fc30289f0131b130bd448d56374b2ffc907fd8`. GitHub Actions `41447576581` 6/6 PASS, Flutter **187/187**, Windows portable and Android debug PASS. M0 `41447576604` PASS. Semantics remain INFERRED, draft can't publish.
+- Следующая ветка `feature/m2c-editorial-checkpoints-readiness-20261102`: `source_semantic_editorial_review.dart`, read-only `preparation_readiness_report.dart`, 3 приватных checkpoint scopes, regression `pre_ai_editorial_readiness_test.dart`, `docs/M2C_EDITORIAL_CHECKPOINTS_RU.md`. **Её CI ещё НЕ принят.**
+- Before AI important M2d separate: current Python+Dart `.bworld` allow only `original_demo`. Production personal adaptation must get separate package/rights/provenance validator, don't weaken old demo by just changing a string. Need usable one-button preparation flow and actual short-story E2E; no false "ready".

@@ -554,3 +554,10 @@
 - Принят UX PR #20: code SHA `cdf64ff3c5da7cf52acaf9ee9767145a16d3d7d9`, exact head `f46d59a4798f158493e9d06d30e6fd753f2b2bcf`, Actions `41438307133` gated core/Windows/Android PASS, M0 `41438307091` PASS. Публикацию нового main release подтверждать отдельно.
 - Новая ветка `feature/m2b4b-m2c-pre-ai-validation-20261102`: `source_semantic_catalog.dart` + `intermediate_story_blueprint.dart`, точная валидация source citations, typed voice/time/polarity, причинное исследование альтернатив, тесты `pre_ai_semantic_blueprint_test.dart`. **CODE / CI PENDING**, это подготовка под ИИ, не реальный AI-провайдер и не публичный пользовательский .bworld.
 - Полный аудит незакрытых требований: `docs/M2_PRE_AI_READINESS_AUDIT_RU.md`; основной риск — импорт/построение .bworld принимает строго `original_demo` с null fingerprint, поэтому для произвольной книги M2d нужен отдельный безопасный production pipeline.
+
+
+## 2026-11-02 — M2b4b/M2c validated scaffold accepted, M2c editorial continuation
+
+- PR #21 merged squash `a8b016e3bd4ebf6855fe7b81cc861b566b078a3b`; exact test head `69fc30289f0131b130bd448d56374b2ffc907fd8`. GitHub Actions `41447576581` 6/6 PASS, Flutter **187/187**, Windows portable and Android debug PASS. M0 `41447576604` PASS. Semantics remain INFERRED, draft can't publish.
+- Следующая ветка `feature/m2c-editorial-checkpoints-readiness-20261102`: `source_semantic_editorial_review.dart`, read-only `preparation_readiness_report.dart`, 3 приватных checkpoint scopes, regression `pre_ai_editorial_readiness_test.dart`, `docs/M2C_EDITORIAL_CHECKPOINTS_RU.md`. **Её CI ещё НЕ принят.**
+- Before AI important M2d separate: current Python+Dart `.bworld` allow only `original_demo`. Production personal adaptation must get separate package/rights/provenance validator, don't weaken old demo by just changing a string. Need usable one-button preparation flow and actual short-story E2E; no false "ready".
