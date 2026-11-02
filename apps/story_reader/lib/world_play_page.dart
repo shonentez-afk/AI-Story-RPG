@@ -1,8 +1,13 @@
+import 'dart:async';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import 'game_panels.dart';
+import 'reader_chrome.dart';
+import 'reading_preferences.dart';
+import 'reading_settings_sheet.dart';
 import 'world_library_gateway.dart';
 
 /// Real RPG screen for a verified BookWorld; never mutates local game state
@@ -24,11 +29,83 @@ class _WorldPlayPageState extends State<WorldPlayPage> {
   bool _loading = true;
   bool _choosing = false;
   String? _errorText;
+  final ReadingSettingsStore _settingsStore = ReadingSettingsStore();
+  ReadingPreferences _reading = const ReadingPreferences();
+  ReaderChromeMode _chrome = ReaderChromeMode.normal;
+  bool _peekControls = false;
+
+  // Reader settings are UI-only. They never change the event log or SQLite.
+  Future<void> _loadReading() async {
+    try {
+      final settings = await _settingsStore.load();
+      if (mounted) setState(() => _reading = settings);
+    } catch (_) {
+      // Offline play remains usable when preferences are unavailable.
+    }
+  }
+
+  Future<void> _saveReading(ReadingPreferences settings) async {
+    try {
+      await _settingsStore.save(settings);
+    } catch (_) {
+      // A missing platform preferences service must not stop gameplay.
+    }
+  }
+
+  void _changeReading(ReadingPreferences settings) {
+    setState(() => _reading = settings);
+    unawaited(_saveReading(settings));
+  }
+
+  void _showReadingSettings() {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (_) => ReadingSettingsSheet(
+        preferences: _reading,
+        onChanged: _changeReading,
+      ),
+    );
+  }
+
+  void _changeChrome(ReaderChromeMode next) {
+    if (_chrome == next && !_peekControls) return;
+    setState(() {
+      _chrome = next;
+      _peekControls = false;
+    });
+  }
+
+  void _tapCanvas() {
+    if (_chrome != ReaderChromeMode.fullscreen || _view == null) return;
+    setState(() => _peekControls = !_peekControls);
+  }
+
+  KeyEventResult _handleReaderKey(FocusNode _, KeyEvent event) {
+    if (event is! KeyDownEvent || _view == null) {
+      return KeyEventResult.ignored;
+    }
+    // F11 switches reader chrome, not the native OS window state.
+    if (event.logicalKey == LogicalKeyboardKey.f11) {
+      _changeChrome(_chrome == ReaderChromeMode.fullscreen
+          ? ReaderChromeMode.normal : ReaderChromeMode.fullscreen);
+      return KeyEventResult.handled;
+    }
+    if (event.logicalKey == LogicalKeyboardKey.escape &&
+        _chrome != ReaderChromeMode.normal) {
+      _changeChrome(ReaderChromeMode.normal);
+      return KeyEventResult.handled;
+    }
+    // Tab/Shift+Tab/Enter retain Flutter's built-in focus and activation.
+    return KeyEventResult.ignored;
+  }
 
   @override
   void initState() {
     super.initState();
     _reload();
+    unawaited(_loadReading());
   }
 
   Future<void> _reload() async {
@@ -115,105 +192,219 @@ class _WorldPlayPageState extends State<WorldPlayPage> {
     );
   }
 
+
   @override
   Widget build(BuildContext context) {
     final view = _view;
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(view?.worldTitle ?? 'Игровой мир'),
-        actions: [
-          IconButton(
-            tooltip: 'Обновить сохранённое состояние',
-            onPressed: _choosing || _loading ? null : _reload,
-            icon: const Icon(Icons.refresh),
-          ),
-        ],
-      ),
-      bottomNavigationBar: view == null ? null : GameQuickBar(
-        onOpen: _openPanel,
-      ),
-      body: SafeArea(child: Center(child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 760),
-        child: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : view == null
-            ? Padding(
-                padding: const EdgeInsets.all(20),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const Icon(Icons.warning_amber_outlined, size: 36),
-                    const SizedBox(height: 12),
-                    Text(_errorText ?? 'Не удалось открыть прохождение',
-                        textAlign: TextAlign.center),
-                    const SizedBox(height: 12),
-                    OutlinedButton(
-                      onPressed: _reload,
-                      child: const Text('Повторить загрузку'),
-                    ),
-                  ],
+    final prefs = _reading;
+    final chrome = view == null ? ReaderChromeMode.normal : _chrome;
+    final ink = prefs.foreground;
+    final readerText = TextStyle(
+      color: ink, fontSize: prefs.fontSize, height: prefs.lineHeight,
+    );
+    return Focus(
+      autofocus: true,
+      onKeyEvent: _handleReaderKey,
+      child: Scaffold(
+        backgroundColor: prefs.background,
+        appBar: !chrome.showTopBar ? null : AppBar(
+          backgroundColor: prefs.background,
+          foregroundColor: ink,
+          title: Text(view?.worldTitle ?? 'Игровой мир',
+              overflow: TextOverflow.ellipsis),
+          actions: [
+            IconButton(
+              tooltip: 'Настройки чтения',
+              onPressed: _showReadingSettings,
+              icon: const Icon(Icons.text_fields),
+            ),
+            IconButton(
+              tooltip: 'Обновить сохранённое состояние',
+              onPressed: _choosing || _loading ? null : _reload,
+              icon: const Icon(Icons.refresh),
+            ),
+            PopupMenuButton<ReaderChromeMode>(
+              tooltip: 'Режим экрана',
+              icon: const Icon(Icons.tune_outlined),
+              onSelected: _changeChrome,
+              itemBuilder: (_) => const [
+                PopupMenuItem(
+                  value: ReaderChromeMode.normal,
+                  child: Text('Обычный режим'),
                 ),
-              )
-            : ListView(
-                padding: const EdgeInsets.fromLTRB(20, 12, 20, 32),
-                children: [
-                  Wrap(spacing: 8, runSpacing: 6, children: [
-                    const Chip(label: Text('Классический режим')),
-                    Chip(label: Text('Ходов: ' + view.revision.toString())),
-                  ]),
-                  const SizedBox(height: 18),
-                  Text(view.sceneText,
-                      style: Theme.of(context).textTheme.bodyLarge),
-                  const SizedBox(height: 24),
-                  if (view.isTerminal) ...[
-                    Text('История завершена',
-                        style: Theme.of(context).textTheme.headlineSmall),
-                    const SizedBox(height: 8),
-                    const Text('Решения и состояние сохранены в этой кампании.'),
-                    const SizedBox(height: 16),
-                    FilledButton.icon(
-                      onPressed: () => Navigator.pop(context),
-                      icon: const Icon(Icons.arrow_back),
-                      label: const Text('К прохождениям'),
-                    ),
-                  ] else ...[
-                    Text('Ваш выбор',
-                        style: Theme.of(context).textTheme.titleMedium),
-                    const SizedBox(height: 12),
-                    for (final choice in view.choices) ...[
-                      Semantics(
-                        label: choice.enabled ? choice.label :
-                            choice.label + '. ' + _reason(choice.lockReason),
-                        child: SizedBox(
-                          width: double.infinity,
-                          child: FilledButton(
-                            key: ValueKey('world-choice-' + choice.id),
-                            onPressed: _choosing || !choice.enabled
-                                ? null : () => _choose(choice),
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(vertical: 11),
-                              child: Text(choice.label,
-                                  textAlign: TextAlign.center),
-                            ),
-                          ),
-                        ),
-                      ),
-                      if (!choice.enabled)
-                        Padding(
-                          padding: const EdgeInsets.only(bottom: 8),
-                          child: Text(_reason(choice.lockReason),
-                            textAlign: TextAlign.center,
-                            style: Theme.of(context).textTheme.bodySmall),
-                        ),
-                      const SizedBox(height: 6),
-                    ],
-                    if (_choosing) const LinearProgressIndicator(
-                      key: ValueKey('world-saving'),
-                    ),
-                  ],
-                ],
+                PopupMenuItem(
+                  value: ReaderChromeMode.reading,
+                  child: Text('Режим чтения'),
+                ),
+                PopupMenuItem(
+                  value: ReaderChromeMode.fullscreen,
+                  child: Text('Полный экран'),
+                ),
+              ],
+            ),
+          ],
+        ),
+        floatingActionButton: view == null ? null : ReaderChromeButton(
+          mode: chrome,
+          background: ink,
+          foreground: prefs.background,
+          onChange: _changeChrome,
+        ),
+        bottomNavigationBar: view == null ||
+                !(chrome.showGameBar || _peekControls)
+            ? null
+            : ColoredBox(
+                color: prefs.background,
+                child: GameQuickBar(onOpen: _openPanel, color: ink),
               ),
-      ))),
+        body: ColoredBox(
+          color: prefs.background,
+          child: GestureDetector(
+            behavior: HitTestBehavior.translucent,
+            onTap: chrome == ReaderChromeMode.fullscreen
+                ? _tapCanvas : null,
+            child: SafeArea(
+              child: Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 760),
+                  child: _loading
+                      ? const Center(child: CircularProgressIndicator())
+                      : view == null
+                          ? Padding(
+                              padding: const EdgeInsets.all(20),
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  const Icon(Icons.warning_amber_outlined,
+                                      size: 36),
+                                  const SizedBox(height: 12),
+                                  Text(_errorText ??
+                                      'Не удалось открыть прохождение',
+                                      textAlign: TextAlign.center),
+                                  const SizedBox(height: 12),
+                                  OutlinedButton(
+                                    onPressed: _reload,
+                                    child: const Text('Повторить загрузку'),
+                                  ),
+                                ],
+                              ),
+                            )
+                          : ListView(
+                              key: const ValueKey('world-scene-scroll'),
+                              padding: EdgeInsets.fromLTRB(
+                                  prefs.horizontalPadding, 14,
+                                  prefs.horizontalPadding, 112),
+                              children: [
+                                if (!chrome.showTopBar) ...[
+                                  Text(view.worldTitle,
+                                      style: readerText.copyWith(
+                                        fontSize: prefs.fontSize + 6,
+                                        fontWeight: FontWeight.bold,
+                                      )),
+                                  const SizedBox(height: 12),
+                                ],
+                                Wrap(spacing: 8, runSpacing: 6, children: [
+                                  Chip(
+                                    label: Text('Классический режим',
+                                        style: TextStyle(color: ink)),
+                                    backgroundColor: prefs.background,
+                                    side: BorderSide(
+                                        color: ink.withValues(alpha: 0.25)),
+                                  ),
+                                  Chip(
+                                    label: Text('Ходов: ${view.revision}',
+                                        style: TextStyle(color: ink)),
+                                    backgroundColor: prefs.background,
+                                    side: BorderSide(
+                                        color: ink.withValues(alpha: 0.25)),
+                                  ),
+                                ]),
+                                const SizedBox(height: 18),
+                                Text(view.sceneText, style: readerText),
+                                const SizedBox(height: 24),
+                                if (view.isTerminal) ...[
+                                  Text('История завершена',
+                                      style: readerText.copyWith(
+                                        fontSize: prefs.fontSize + 4,
+                                        fontWeight: FontWeight.bold,
+                                      )),
+                                  const SizedBox(height: 8),
+                                  Text('Решения и состояние сохранены '
+                                      'в этой кампании.', style: readerText),
+                                  const SizedBox(height: 16),
+                                  FilledButton.icon(
+                                    onPressed: () => Navigator.pop(context),
+                                    icon: const Icon(Icons.arrow_back),
+                                    label: const Text('К прохождениям'),
+                                  ),
+                                ] else ...[
+                                  Text('Ваш выбор',
+                                      style: readerText.copyWith(
+                                        fontWeight: FontWeight.w600,
+                                      )),
+                                  const SizedBox(height: 12),
+                                  for (final choice in view.choices) ...[
+                                    Semantics(
+                                      label: choice.enabled
+                                          ? choice.label
+                                          : '${choice.label}. '
+                                              '${_reason(choice.lockReason)}',
+                                      child: SizedBox(
+                                        width: double.infinity,
+                                        child: FilledButton(
+                                          key: ValueKey(
+                                              'world-choice-${choice.id}'),
+                                          style: FilledButton.styleFrom(
+                                            backgroundColor: ink,
+                                            foregroundColor: prefs.background,
+                                            disabledBackgroundColor:
+                                                ink.withValues(alpha: 0.14),
+                                            disabledForegroundColor:
+                                                ink.withValues(alpha: 0.72),
+                                          ),
+                                          onPressed: _choosing ||
+                                                  !choice.enabled
+                                              ? null
+                                              : () => _choose(choice),
+                                          child: Padding(
+                                            padding: const EdgeInsets.symmetric(
+                                                vertical: 11),
+                                            child: Text(choice.label,
+                                                textAlign: TextAlign.center,
+                                                style: TextStyle(
+                                                  fontSize: prefs.fontSize * 0.9,
+                                                )),
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                    if (!choice.enabled)
+                                      Padding(
+                                        padding: const EdgeInsets.only(
+                                            bottom: 8),
+                                        child: Text(
+                                          _reason(choice.lockReason),
+                                          textAlign: TextAlign.center,
+                                          style: TextStyle(
+                                            color: ink,
+                                            fontSize: prefs.fontSize * 0.82,
+                                          ),
+                                        ),
+                                      ),
+                                    const SizedBox(height: 6),
+                                  ],
+                                  if (_choosing) const LinearProgressIndicator(
+                                    key: ValueKey('world-saving'),
+                                  ),
+                                ],
+                              ],
+                            ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
     );
   }
 }
