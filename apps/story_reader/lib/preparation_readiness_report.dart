@@ -138,7 +138,7 @@ class PreparationReadinessReport {
 
     add('compiler', 'Игровой .bworld из книги',
         PreparationGateStatus.blocked,
-        'Импортёр пока поддерживает только original_demo; нужен M2d');
+        'Компилятор есть, но нужен проверенный сценарий и успешная сборка пакета');
 
     add('ai', 'Подключённый ИИ',
         PreparationGateStatus.blocked,

@@ -128,6 +128,11 @@ jobs:
           dart pub get
           dart analyze
           dart test --reporter expanded
+      - name: Independently verify native Dart-created private BookWorld with Python
+        run: |
+          test -s artifacts/bookworld/book_private_sample_dart.bworld
+          python3 -m tools.bookworld.private_bookworld verify --input artifacts/bookworld/book_private_sample_dart.bworld
+          (cd artifacts/bookworld && sha256sum book_private_sample_dart.bworld >> SHA256SUMS.txt)
       - name: Analyze and test transactional SQLite BookWorld campaigns
         working-directory: packages/campaign_manager
         run: |

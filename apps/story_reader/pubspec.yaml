@@ -12,6 +12,8 @@ dependencies:
   story_engine: 0.1.0-alpha.1
   campaign_manager:
     path: ../../packages/campaign_manager
+  bookworld_format:
+    path: ../../packages/bookworld_format
   shared_preferences: ^2.5.3
   shared_preferences_platform_interface: ^2.4.2
   file_picker: ^10.3.3

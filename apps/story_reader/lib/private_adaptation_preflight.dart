@@ -56,7 +56,7 @@ class PrivateAdaptationAcceptance {
         AdaptationGateIssue.missingEditorialCatalog =>
           'Решения редактора относятся к другой редакции книги.',
         AdaptationGateIssue.productionBookworldNotImplemented =>
-          'Компилятор пользовательских .bworld ещё не реализован.',
+          'Пакет этой книги ещё не создан и не проверен.',
       },
     ...causal.blockers,
   ]);

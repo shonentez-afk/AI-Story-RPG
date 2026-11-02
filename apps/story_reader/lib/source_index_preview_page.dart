@@ -789,10 +789,10 @@ class _SourceIndexPreviewPageState extends State<SourceIndexPreviewPage> {
                           child: ListTile(
                             leading: const Icon(Icons.lock_outline),
                             title: const Text('Создать RPG по этой книге'),
-                            subtitle: const Text('Пока недоступно: нужны '
-                                'проверенные игровые сцены, развилки и '
-                                'сценарный компилятор. Даже полный '
-                                'поиск по книге не создаёт игровую историю.'),
+                            subtitle: const Text('Для запуска требуются проверенные сцены и выборы. '
+                                'Встроенная сборка .bworld ещё не связана '
+                                'с редактором книги; завершение поиска само '
+                                'по себе не создаёт игру.'),
                           ),
                         ),
                         const SizedBox(height: 8),

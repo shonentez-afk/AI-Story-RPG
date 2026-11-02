@@ -4,6 +4,8 @@ import 'package:ai_story_reader/book_source_index.dart';
 import 'package:ai_story_reader/intermediate_story_blueprint.dart';
 import 'package:ai_story_reader/private_adaptation_preflight.dart';
 import 'package:ai_story_reader/private_classic_scenario_translator.dart';
+import 'package:ai_story_reader/native_private_bookworld_compiler.dart';
+import 'package:bookworld_format/bookworld_format.dart';
 import 'package:ai_story_reader/source_evidence_graph.dart';
 import 'package:ai_story_reader/source_semantic_catalog.dart';
 import 'package:ai_story_reader/source_semantic_editorial_review.dart';
@@ -108,7 +110,7 @@ void main() {
     expect(status.userFacingBlockers,
         contains('Не указан статус прав на личную адаптацию книги.'));
     expect(status.userFacingBlockers,
-        contains('Компилятор пользовательских .bworld ещё не реализован.'));
+        contains('Пакет этой книги ещё не создан и не проверен.'));
     expect(status.isStructurallyReady, false);
     expect(status.canSendToCloud, false);
   });
@@ -149,6 +151,32 @@ void main() {
     expect(compiled.canPublishBookworld, false);
     payload['rights_status'] = 'hacked';
     expect(compiled.blueprintJson['rights_status'], 'private_adaptation');
+  });
+
+  test('M2e Flutter isolate builds source-checked playable archive without Python',
+      () async {
+    final editor = SemanticEditorialReviewSession.create(index, catalog)
+        .decide(catalog, firstClaim.id, SemanticEditorialVerdict.canonCandidate)
+        .decide(catalog, lastClaim.id, SemanticEditorialVerdict.canonCandidate);
+    final archive = await compileReviewedPrivateBookworldInWorker(
+        index, graph, catalog, editor, shortDraft());
+    final checked = const PrivateBookworldImporter().inspect(archive);
+    expect(checked.sourceFingerprint, index.sourceFingerprint);
+    expect(checked.blueprint.scenes.length, 3);
+    expect(checked.blueprint.rightsStatus, 'private_adaptation');
+    expect(checked.canDistributePublicly, false);
+    expect(checked.requiresNetwork, false);
+    // Source text is used only to verify citations, not copied into package.
+    expect(archive.length, lessThan(12 * 1024 * 1024));
+  });
+
+  test('M2e fail-closed isolate never builds an unreviewed book', () async {
+    final editor = SemanticEditorialReviewSession.create(index, catalog);
+    await expectLater(
+      compileReviewedPrivateBookworldInWorker(
+          index, graph, catalog, editor, shortDraft()),
+      throwsFormatException,
+    );
   });
 
   test('M2d translates truth-valued flags into typed conditions/effects',
