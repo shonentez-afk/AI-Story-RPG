@@ -1,0 +1,285 @@
+import 'dart:math';
+
+import 'package:flutter/material.dart';
+
+import 'game_panels.dart';
+import 'world_library_gateway.dart';
+
+/// Real RPG screen for a verified BookWorld; never mutates local game state
+/// before the SQLite transaction has committed on a worker isolate.
+class WorldPlayPage extends StatefulWidget {
+  const WorldPlayPage({
+    super.key, required this.gateway, required this.campaignId,
+  });
+
+  final WorldLibraryGateway gateway;
+  final String campaignId;
+
+  @override
+  State<WorldPlayPage> createState() => _WorldPlayPageState();
+}
+
+class _WorldPlayPageState extends State<WorldPlayPage> {
+  WorldGameView? _view;
+  bool _loading = true;
+  bool _choosing = false;
+  String? _errorText;
+
+  @override
+  void initState() {
+    super.initState();
+    _reload();
+  }
+
+  Future<void> _reload() async {
+    if (_choosing) return;
+    try {
+      final view = await widget.gateway.load(widget.campaignId);
+      if (mounted) setState(() {
+        _view = view;
+        _errorText = null;
+      });
+    } catch (error) {
+      if (mounted) setState(() {
+        _view = null;
+        _errorText = 'Сохранение не удалось открыть: $error';
+      });
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  static String _newActionId() {
+    final random = Random.secure();
+    return 'ui_' + List.generate(12, (_) => random.nextInt(256))
+        .map((part) => part.toRadixString(16).padLeft(2, '0')).join();
+  }
+
+  static String _reason(String? code) {
+    if (code == null) return 'Действие недоступно';
+    if (code.startsWith('condition_not_met:')) {
+      return switch (code.split(':').last) {
+        'has_item' => 'Для выбора необходим предмет',
+        'knows_fact' => 'Сначала требуется узнать новые сведения',
+        'stat_at_least' => 'Не хватает характеристики персонажа',
+        'tick_at_least' => 'Ещё не наступило время события',
+        _ => 'Пока не выполнены сюжетные условия',
+      };
+    }
+    return switch (code) {
+      'stale_revision' => 'История обновилась, повторите действие',
+      'terminal_scene' => 'История уже завершена',
+      _ => 'Выбор пока недоступен',
+    };
+  }
+
+  Future<void> _choose(WorldChoiceView choice) async {
+    final previous = _view;
+    if (previous == null || _choosing ||
+        !choice.enabled || previous.isTerminal) return;
+    setState(() => _choosing = true);
+    try {
+      final result = await widget.gateway.choose(
+        widget.campaignId,
+        actionId: _newActionId(),
+        choiceId: choice.id,
+        expectedRevision: previous.revision,
+      );
+      if (!mounted) return;
+      setState(() => _view = result.view);
+      if (!result.applied) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(_reason(result.reason))),
+        );
+      }
+    } catch (error) {
+      if (mounted) {
+        // Never update the UI optimistically after a failed write.
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('Ход не сохранён. Повторите попытку: $error'),
+        ));
+      }
+    } finally {
+      if (mounted) setState(() => _choosing = false);
+    }
+  }
+
+  void _openPanel(GamePanel panel) {
+    final view = _view;
+    if (view == null) return;
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (_) => _WorldInfoSheet(panel: panel, view: view),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final view = _view;
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(view?.worldTitle ?? 'Игровой мир'),
+        actions: [
+          IconButton(
+            tooltip: 'Обновить сохранённое состояние',
+            onPressed: _choosing || _loading ? null : _reload,
+            icon: const Icon(Icons.refresh),
+          ),
+        ],
+      ),
+      bottomNavigationBar: view == null ? null : GameQuickBar(
+        onOpen: _openPanel,
+      ),
+      body: SafeArea(child: Center(child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 760),
+        child: _loading
+          ? const Center(child: CircularProgressIndicator())
+          : view == null
+            ? Padding(
+                padding: const EdgeInsets.all(20),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(Icons.warning_amber_outlined, size: 36),
+                    const SizedBox(height: 12),
+                    Text(_errorText ?? 'Не удалось открыть прохождение',
+                        textAlign: TextAlign.center),
+                    const SizedBox(height: 12),
+                    OutlinedButton(
+                      onPressed: _reload,
+                      child: const Text('Повторить загрузку'),
+                    ),
+                  ],
+                ),
+              )
+            : ListView(
+                padding: const EdgeInsets.fromLTRB(20, 12, 20, 32),
+                children: [
+                  Wrap(spacing: 8, runSpacing: 6, children: [
+                    const Chip(label: Text('Классический режим')),
+                    Chip(label: Text('Ходов: ' + view.revision.toString())),
+                  ]),
+                  const SizedBox(height: 18),
+                  Text(view.sceneText,
+                      style: Theme.of(context).textTheme.bodyLarge),
+                  const SizedBox(height: 24),
+                  if (view.isTerminal) ...[
+                    Text('История завершена',
+                        style: Theme.of(context).textTheme.headlineSmall),
+                    const SizedBox(height: 8),
+                    const Text('Решения и состояние сохранены в этой кампании.'),
+                    const SizedBox(height: 16),
+                    FilledButton.icon(
+                      onPressed: () => Navigator.pop(context),
+                      icon: const Icon(Icons.arrow_back),
+                      label: const Text('К прохождениям'),
+                    ),
+                  ] else ...[
+                    Text('Ваш выбор',
+                        style: Theme.of(context).textTheme.titleMedium),
+                    const SizedBox(height: 12),
+                    for (final choice in view.choices) ...[
+                      Semantics(
+                        label: choice.enabled ? choice.label :
+                            choice.label + '. ' + _reason(choice.lockReason),
+                        child: SizedBox(
+                          width: double.infinity,
+                          child: FilledButton(
+                            key: ValueKey('world-choice-' + choice.id),
+                            onPressed: _choosing || !choice.enabled
+                                ? null : () => _choose(choice),
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 11),
+                              child: Text(choice.label,
+                                  textAlign: TextAlign.center),
+                            ),
+                          ),
+                        ),
+                      ),
+                      if (!choice.enabled)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 8),
+                          child: Text(_reason(choice.lockReason),
+                            textAlign: TextAlign.center,
+                            style: Theme.of(context).textTheme.bodySmall),
+                        ),
+                      const SizedBox(height: 6),
+                    ],
+                    if (_choosing) const LinearProgressIndicator(
+                      key: ValueKey('world-saving'),
+                    ),
+                  ],
+                ],
+              ),
+      ))),
+    );
+  }
+}
+
+class _WorldInfoSheet extends StatelessWidget {
+  const _WorldInfoSheet({required this.panel, required this.view});
+  final GamePanel panel;
+  final WorldGameView view;
+
+  @override
+  Widget build(BuildContext context) {
+    final heading = switch (panel) {
+      GamePanel.character => 'Герой',
+      GamePanel.inventory => 'Предметы',
+      GamePanel.journal => 'Журнал',
+    };
+    final entries = switch (panel) {
+      GamePanel.character => [
+        for (final stat in view.stats.entries)
+          stat.key + ': ' + stat.value.toString(),
+        'Игровое время: ' + view.tick.toString(),
+        'Открыто сведений: ' + view.knownFacts.length.toString(),
+      ],
+      GamePanel.inventory => view.inventory.isEmpty
+          ? <String>['Предметов пока нет']
+          : view.inventory,
+      GamePanel.journal => view.journal.isEmpty
+          ? <String>['Решений пока нет']
+          : [
+              for (final entry in view.journal)
+                entry.sequence.toString() + '. ' + entry.choiceLabel,
+            ],
+    };
+    return SafeArea(
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.sizeOf(context).height * 0.75,
+        ),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(children: [
+                Expanded(child: Text(heading,
+                    style: Theme.of(context).textTheme.titleLarge)),
+                IconButton(
+                  tooltip: 'Закрыть',
+                  onPressed: () => Navigator.pop(context),
+                  icon: const Icon(Icons.close),
+                ),
+              ]),
+              const SizedBox(height: 8),
+              Flexible(child: ListView.builder(
+                shrinkWrap: true,
+                itemCount: entries.length,
+                itemBuilder: (_, index) => Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 7),
+                  child: Text(entries[index]),
+                ),
+              )),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}

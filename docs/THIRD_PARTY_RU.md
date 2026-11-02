@@ -55,3 +55,6 @@
 
 ## M1.7.4a — новый store
 Чистый Dart `packages/campaign_manager` опирается на уже применённые в `bookworld_format` `sqlite3 ^3.8.0` (MIT, FFI), `crypto ^3.0.6` (BSD-3-Clause), собственные `story_core`, `story_runtime_adapter`, `bookworld_format`; `test` используется только в dev. Новых Python runtime и платных/облачных зависимостей нет. SQLite база создаётся только по privateDir path, предоставленному будущим приложением.
+
+## M1.7.4b1 — Flutter FFI SQLite
+В `apps/story_reader` теперь напрямую подключён собственный `campaign_manager` (path dependency), транзитивно `sqlite3` FFI (MIT) для Android/Windows native и `crypto` (BSD-3-Clause). `path_provider_platform_interface ^2.1.2` только в dev dependencies для тестового `ApplicationSupportDirectory`. Файловый picker/path_provider уже использовались в прошлых выпусках. Не добавлены Python runtime, облачные API и сторонние произведения в BookWorld.

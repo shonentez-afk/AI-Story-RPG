@@ -88,3 +88,6 @@
 
 ## M1.7.4a — автоматическая контрольная точка принята
 `cc69778586b45c3e82c4f1dc415ce2dc545b043e`, GitHub Actions `41340309393` (#145 SUCCESS 6/6). Чистый Dart SQLite `campaign_manager` 10/10 тестов, Python+Dart M0, core 10, adapter 9, BookWorld 5, schema 9, Flutter 71, Android+Windows PASS. Реальные UI-импорт/кампании в Flutter, legacy миграция и физические E2E остаются M1.7.4b. Подробности `M17_CAMPAIGN_SQLITE_RU.md`.
+
+## M1.7.4b1 — новый игровой мир в единой библиотеке (2026-11-02)
+Постоянный SQLite `campaign_manager` подключён к Flutter через isolate gateway и `path_provider`. Один старый импорт TXT/FB2 расширен на проверенный .bworld, отдельный мир появляется рядом с книгами, открывает реальные SQLite-кампании и настоящие Hero/Items/Journal, импорт/экспорт BookWorld .bwsave v2. Сквозные Linux Flutter widget/SQLite 35-turn проверки: `world_integration_test.dart`. **Дальше M1.7.4b2:** единый список кампаний (включая пилотные), безопасное удаление/backup и явная migration policy, читательский chrome для новых сцен, физические Android↔Windows/a11y тесты. Подробности `M174B_FLUTTER_BOOKWORLD_RU.md`.

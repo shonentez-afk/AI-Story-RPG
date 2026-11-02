@@ -10,6 +10,8 @@ dependencies:
   flutter:
     sdk: flutter
   story_engine: 0.1.0-alpha.1
+  campaign_manager:
+    path: ../../packages/campaign_manager
   shared_preferences: ^2.5.3
   shared_preferences_platform_interface: ^2.4.2
   file_picker: ^10.3.3
@@ -20,6 +22,7 @@ dependencies:
 dev_dependencies:
   flutter_test:
     sdk: flutter
+  path_provider_platform_interface: ^2.1.2
 
 flutter:
   uses-material-design: true

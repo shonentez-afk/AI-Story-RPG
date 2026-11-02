@@ -5,6 +5,8 @@ import 'package:file_picker/file_picker.dart';
 import 'book_import.dart';
 import 'book_storage.dart';
 import 'book_reader.dart';
+import 'world_library_gateway.dart';
+import 'world_campaigns_page.dart';
 import 'campaign_store.dart';
 import 'campaigns_page.dart';
 import 'app_theme.dart';
@@ -225,7 +227,12 @@ class _HomeAction extends StatelessWidget {
 }
 
 class LibraryPage extends StatefulWidget {
-  const LibraryPage({super.key});
+  const LibraryPage({
+    super.key,
+    this.worldGateway = const DeviceWorldLibraryGateway(),
+  });
+
+  final WorldLibraryGateway worldGateway;
 
   @override
   State<LibraryPage> createState() => _LibraryPageState();
@@ -235,6 +242,9 @@ class _LibraryPageState extends State<LibraryPage> {
   final BookStorage _storage = BookStorage();
   final TextEditingController _searchController = TextEditingController();
   List<StoredBook> _books = [];
+  List<WorldLibraryItem> _worlds = const [];
+  bool _worldLoading = true;
+  bool _worldLoadError = false;
   bool _working = false;
   bool _loadingBooks = true;
   bool _libraryLoadError = false;
@@ -247,6 +257,33 @@ class _LibraryPageState extends State<LibraryPage> {
   void initState() {
     super.initState();
     _refresh();
+    unawaited(_refreshWorlds());
+  }
+
+  Future<void> _refreshWorlds() async {
+    try {
+      final worlds = await widget.worldGateway.worlds()
+          .timeout(const Duration(seconds: 8));
+      if (mounted) setState(() {
+        _worlds = worlds;
+        _worldLoadError = false;
+      });
+    } catch (_) {
+      // A corrupt or unavailable BookWorld DB must not hide TXT/FB2 books
+      // or make the existing demo and legacy campaigns inaccessible.
+      if (mounted) setState(() => _worldLoadError = true);
+    } finally {
+      if (mounted) setState(() => _worldLoading = false);
+    }
+  }
+
+  void _retryWorlds() {
+    if (_worldLoading) return;
+    setState(() {
+      _worldLoading = true;
+      _worldLoadError = false;
+    });
+    unawaited(_refreshWorlds());
   }
 
   @override
@@ -321,23 +358,35 @@ class _LibraryPageState extends State<LibraryPage> {
     try {
       final selection = await FilePicker.platform.pickFiles(
         type: FileType.custom,
-        allowedExtensions: ['txt', 'fb2'],
+        allowedExtensions: ['txt', 'fb2', 'bworld'],
         withData: true,
       );
       if (selection == null || selection.files.isEmpty) return;
       final file = selection.files.single;
+      final extension = file.name.split('.').last.toLowerCase();
+      if (extension == 'bworld' && file.size > 12 * 1024 * 1024) {
+        throw const FormatException('Игровой мир больше 12 МБ');
+      }
       if (file.size > 20 * 1024 * 1024) {
         throw const FormatException('Книга слишком большая. Максимум — 20 МБ.');
       }
       final bytes = file.bytes;
       if (bytes == null) throw const FormatException('Не удалось прочитать файл');
-      final book = BookImporter.parse(file.name, bytes);
-      await _storage.add(book);
-      await _refresh();
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Добавлена книга: ${book.title}')),
-        );
+      if (extension == 'bworld') {
+        // Pure Dart/SQLite validation and persistence run on a worker isolate.
+        // A rejected package leaves existing books and campaigns untouched.
+        final installed = await widget.worldGateway.install(bytes);
+        await _refreshWorlds();
+        if (mounted) _error('Добавлен игровой мир: ' + installed.title);
+      } else {
+        final book = BookImporter.parse(file.name, bytes);
+        await _storage.add(book);
+        await _refresh();
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Добавлена книга: ${book.title}')),
+          );
+        }
       }
     } catch (error) {
       _error('Импорт не выполнен: $error');
@@ -379,6 +428,11 @@ class _LibraryPageState extends State<LibraryPage> {
 
   @override
   Widget build(BuildContext context) {
+    final term = _query.trim().toLowerCase();
+    final filteredWorlds = _worlds.where((world) =>
+      term.isEmpty || world.title.toLowerCase().contains(term)
+          || world.bookworldId.toLowerCase().contains(term)).toList()
+        ..sort((a, b) => a.title.compareTo(b.title));
     final filtered = _books.where((entry) {
       final term = _query.trim().toLowerCase();
       return term.isEmpty ||
@@ -423,7 +477,7 @@ class _LibraryPageState extends State<LibraryPage> {
                   ),
                 ),
                 const SizedBox(height: 6),
-                Text('TXT или FB2, до 20 МБ',
+                Text('TXT, FB2 (до 20 МБ) или подготовленный .bworld (до 12 МБ)',
                   style: Theme.of(context).textTheme.bodySmall),
                 if (_working)
                   const Padding(
@@ -462,6 +516,48 @@ class _LibraryPageState extends State<LibraryPage> {
                     label: Text(_sortDescending ? 'Я—А' : 'А—Я'),
                   ),
                 ]),
+                if (_worldLoading)
+                  const LinearProgressIndicator(),
+                if (_worldLoadError)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 6),
+                    child: Row(children: [
+                      const Expanded(child: Text(
+                        'Игровые миры временно недоступны; книги сохранены.',
+                      )),
+                      TextButton(
+                        onPressed: _retryWorlds,
+                        child: const Text('Повторить'),
+                      ),
+                    ]),
+                  ),
+                if (filteredWorlds.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  Text('Подготовленные игровые миры',
+                      style: Theme.of(context).textTheme.titleMedium),
+                  const SizedBox(height: 8),
+                  for (final world in filteredWorlds)
+                    Card(child: ListTile(
+                      key: ValueKey('library-world-' + world.bookworldId),
+                      leading: const Icon(Icons.auto_stories_outlined),
+                      title: Text(world.title),
+                      subtitle: const Text(
+                        'Подготовленная RPG · классический офлайн-режим',
+                      ),
+                      trailing: const Icon(Icons.chevron_right),
+                      onTap: () async {
+                        await Navigator.of(context).push<void>(
+                          MaterialPageRoute(
+                            builder: (_) => WorldCampaignsPage(
+                              world: world,
+                              gateway: widget.worldGateway,
+                            ),
+                          ),
+                        );
+                        if (mounted) unawaited(_refreshWorlds());
+                      },
+                    )),
+                ],
                 if (_loadingBooks)
                   const LinearProgressIndicator(),
                 if (_loadingBooks)
@@ -486,7 +582,7 @@ class _LibraryPageState extends State<LibraryPage> {
                       ],
                     ),
                   )
-                else if (_books.isEmpty)
+                else if (_books.isEmpty && _worlds.isEmpty)
                   Padding(
                     padding: const EdgeInsets.all(16),
                     child: Column(
