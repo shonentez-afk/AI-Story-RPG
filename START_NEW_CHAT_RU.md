@@ -449,3 +449,11 @@ Run `41332360623` (SHA `ef004a4`): Python/Dart/analyze PASS, Flutter FAIL из-�
 - Для уже установленного `test-build-266`: нажатие «Подготовить к RPG» создаёт индекс; «Обработать порцию» ищет упоминания по шаблонам; отдельные панели проверяют цитаты/связи; `OfflineRuleProvider` повторяет часть поиска. Ни один инструмент ещё не создаёт готовую RPG из загруженной книги.
 
 **Уточнение UX PR #20:** первые CI находили неверные offscreen tap и устаревшие ожидания в тестах. В ответ вводная карточка компактная, кнопка поиска выше, вывод находок через «Показать ещё» без скачка списка; тесты адаптированы к реальной прокрутке. Не объявлять PASS до нового exact-head CI, merge и проверки нового Windows+Android Release.
+
+
+## 2026-11-02 — пользователь потребовал закончить всю подготовку до ИИ
+
+1. PR #20 UX merged `cdf64ff3c5da7cf52acaf9ee9767145a16d3d7d9` после PR run `41438307133` gates PASS и M0 `41438307091` PASS; не путать с прежними CI FAIL по старому SHA.
+2. Открыта `feature/m2b4b-m2c-pre-ai-validation-20261102`. Прочитать `docs/M2_PRE_AI_READINESS_AUDIT_RU.md`, `apps/story_reader/lib/source_semantic_catalog.dart`, `apps/story_reader/lib/intermediate_story_blueprint.dart`, `apps/story_reader/test/pre_ai_semantic_blueprint_test.dart`. Новые source-cited assertions и причинный preflight не меняют старые checkpoints/saves, не имеют сети, не умеют экспортировать готовую книгу в игру.
+3. Важно: `packages/bookworld_format/lib/bookworld_format.dart` и `tools/bookworld/bookworld.py` жёстко принимают лишь original-demo world. Нужно M2d для пользовательских адаптаций с полным validator, rights/source provenance; это отдельный обязательный пункт **перед** настоящим AI.
+4. Статус: CODE / отдельный PR CI PENDING. Продолжать создание тестов и закрытие M2b4b/M2c/M2d; не обещать, что arbitrary FB2 уже playable. Обязательно проверять actual exact SHA CI + Windows/Android, фиксировать release. Предыдущие навыки чтения/сохранения/цифровых прав не сбрасывать.
