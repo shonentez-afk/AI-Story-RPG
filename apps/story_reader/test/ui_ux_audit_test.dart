@@ -7,6 +7,7 @@ import 'package:ai_story_reader/game_panels.dart';
 import 'package:ai_story_reader/game_progress.dart';
 import 'package:ai_story_reader/home_page.dart';
 import 'package:ai_story_reader/main.dart';
+import 'package:ai_story_reader/reading_preferences.dart';
 import 'package:ai_story_reader/save_store.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
