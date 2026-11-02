@@ -159,7 +159,11 @@ jobs:
           python3 tools/bookworld/bookworld.py build --blueprint shared_schemas/fixtures/manor_world_m17.json --output artifacts/bookworld/manor_m17_original_demo.bworld
           python3 tools/bookworld/bookworld.py verify --input artifacts/bookworld/manor_m17_original_demo.bworld
       - name: Widget tests
-        run: flutter test --reporter expanded --concurrency=1 --timeout 90s
+        timeout-minutes: 5
+        # A widget test blocked on a Future can ignore the Dart test-zone
+        # timeout. Stop the external test process rather than consuming a
+        # full CI runner for twenty minutes without diagnostic feedback.
+        run: timeout --signal=TERM --kill-after=10s 240s flutter test --reporter expanded --concurrency=1 --timeout 90s
         working-directory: apps/story_reader
 
   android-apk:
