@@ -59,7 +59,7 @@ CREATE TABLE templates(template_id TEXT PRIMARY KEY,
         provenance['source_fingerprint'] != fingerprint ||
         total is! int || total < 1 || total > 10000 ||
         provenance['source_chapters_total'] != total ||
-        indexed is! int || indexed < 1 || indexed > total ||
+        indexed is! int || indexed != total ||
         provenance['source_chapters_indexed'] != indexed ||
         textTotal is! int || textTotal < 1 ||
         sourceIndex['text_indexed_utf16'] != textTotal) {
@@ -71,6 +71,8 @@ CREATE TABLE templates(template_id TEXT PRIMARY KEY,
       throw const FormatException('Некорректный реестр фрагментов книги');
     }
     final byId = <String, Map<String, dynamic>>{};
+    final blockEnds = <String, int>{};
+    var coveredUnits = 0;
     for (final entry in chunks) {
       if (entry is! Map<String, dynamic>) {
         throw const FormatException('Некорректный фрагмент источника');
@@ -91,7 +93,22 @@ CREATE TABLE templates(template_id TEXT PRIMARY KEY,
         throw const FormatException(
             'Некорректные позиции или SHA-256 исходного фрагмента');
       }
+      // Reject missing/overlapping pieces even when a forged summary claims
+      // 100% coverage. Real BookSourceIndexer chunks are contiguous in block.
+      final key = '$chapter|' +
+          (entry['chapter_id'] as String) + '|' +
+          (entry['block_index'] as int).toString();
+      if (start != (blockEnds[key] ?? 0)) {
+        throw const FormatException(
+            'Пропуск или наложение текстовых фрагментов');
+      }
+      blockEnds[key] = end;
+      coveredUnits += content.length;
       byId[id] = entry;
+    }
+    if (coveredUnits != textTotal) {
+      throw const FormatException(
+          'Фактическое покрытие источника отличается от отчёта');
     }
     final origins = provenance['scene_origins'];
     if (origins is! List) {
