@@ -48,8 +48,11 @@ void main() {
         scrollable: find.byType(Scrollable).first);
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
-    await tester.scrollUntilVisible(find.text('Оформление страниц'), -160,
-        scrollable: find.byType(Scrollable).first);
+    await tester.ensureVisible(find.text('Оформление страниц'));
+    await tester.pumpAndSettle();
+    // The tile is now actually inside the 320dp viewport after scrolling.
+    expect(tester.getRect(find.text('Оформление страниц')).overlaps(
+        tester.getRect(find.byType(Scaffold))), isTrue);
     await tester.tap(find.text('Оформление страниц'));
     await tester.pumpAndSettle();
     expect(find.text('Настройки чтения'), findsOneWidget);
