@@ -27,6 +27,7 @@ class _BookReaderPageState extends State<BookReaderPage> {
   final GlobalKey _viewportKey = GlobalKey();
   final GlobalKey _priorBlocksKey = GlobalKey();
   final GlobalKey _currentBlocksKey = GlobalKey();
+  final GlobalKey _centerSliverKey = GlobalKey();
   Timer? _progressTimer;
   bool _restoring = false;
   int? _layoutAnchorIndex;
@@ -389,7 +390,7 @@ class _BookReaderPageState extends State<BookReaderPage> {
             constraints: const BoxConstraints(maxWidth: 800),
             child: CustomScrollView(
               controller: _scroll,
-              center: anchored ? _currentBlocksKey : null,
+              center: anchored ? _centerSliverKey : null,
               slivers: [
                 SliverPadding(
                   padding: EdgeInsets.fromLTRB(
@@ -441,6 +442,7 @@ class _BookReaderPageState extends State<BookReaderPage> {
                   ),
                 ),
                 SliverPadding(
+                  key: _centerSliverKey,
                   padding: EdgeInsets.symmetric(horizontal: prefs.horizontalPadding),
                   sliver: SliverList.builder(
                     key: _currentBlocksKey,
