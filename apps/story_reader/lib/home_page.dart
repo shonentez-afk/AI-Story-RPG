@@ -307,16 +307,21 @@ class _HomeAction extends StatelessWidget {
 }
 
 class LibraryPage extends StatefulWidget {
-  const LibraryPage({super.key, this.worldGateway});
+  const LibraryPage({
+    super.key,
+    this.worldGateway,
+    this.bookStorage,
+  });
 
   final WorldLibraryGateway? worldGateway;
+  final BookStorage? bookStorage;
 
   @override
   State<LibraryPage> createState() => _LibraryPageState();
 }
 
 class _LibraryPageState extends State<LibraryPage> {
-  final BookStorage _storage = BookStorage();
+  late final BookStorage _storage = widget.bookStorage ?? BookStorage();
   final TextEditingController _searchController = TextEditingController();
   List<StoredBook> _books = [];
   List<WorldLibraryItem> _worlds = const [];
@@ -325,6 +330,7 @@ class _LibraryPageState extends State<LibraryPage> {
   bool _working = false;
   bool _loadingBooks = true;
   bool _libraryLoadError = false;
+  int _unreadableBooks = 0;
   String _query = '';
   bool _sortDescending = false;
   final Set<Timer> _loadDeadlines = <Timer>{};
@@ -384,7 +390,7 @@ class _LibraryPageState extends State<LibraryPage> {
 
   Future<void> _refresh() async {
     final generation = ++_loadGeneration;
-    final timeout = Completer<List<StoredBook>>();
+    final timeout = Completer<BookLibraryScan>();
     final deadline = Timer(const Duration(seconds: 8), () {
       if (!timeout.isCompleted) {
         timeout.completeError(
@@ -394,13 +400,14 @@ class _LibraryPageState extends State<LibraryPage> {
     });
     _loadDeadlines.add(deadline);
     try {
-      final books = await Future.any<List<StoredBook>>([
-        _storage.all(),
+      final scan = await Future.any<BookLibraryScan>([
+        _storage.scan(),
         timeout.future,
       ]);
       if (mounted && generation == _loadGeneration) {
         setState(() {
-          _books = books;
+          _books = scan.books;
+          _unreadableBooks = scan.unreadableCount;
           _libraryLoadError = false;
         });
       }
@@ -668,6 +675,33 @@ class _LibraryPageState extends State<LibraryPage> {
                       },
                     )),
                 ],
+                if (!_loadingBooks && !_libraryLoadError &&
+                    _unreadableBooks > 0)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    child: Card(
+                      child: Padding(
+                        padding: const EdgeInsets.all(12),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Не удалось прочитать книг: $_unreadableBooks',
+                              style: Theme.of(context).textTheme.titleSmall,
+                            ),
+                            const SizedBox(height: 6),
+                            const Text('Повреждённые или незавершённые '
+                                'записи не удалены. Остальные книги доступны.'),
+                            TextButton.icon(
+                              onPressed: _retryLibrary,
+                              icon: const Icon(Icons.refresh),
+                              label: const Text('Повторить чтение библиотеки'),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
                 if (_loadingBooks)
                   const LinearProgressIndicator(),
                 if (_loadingBooks)
@@ -703,6 +737,7 @@ class _LibraryPageState extends State<LibraryPage> {
                   ),
                 if (!_loadingBooks && !_libraryLoadError &&
                     term.isEmpty && _books.isEmpty && _worlds.isEmpty &&
+                    _unreadableBooks == 0 &&
                     !_worldLoading && !_worldLoadError)
                   const Padding(
                     padding: EdgeInsets.all(16),
