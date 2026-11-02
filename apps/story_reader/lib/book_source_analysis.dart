@@ -337,7 +337,7 @@ class SourceAnalysisSession {
   }
 
   SourceAnalysisSession processBatch(
-    BookSourceIndex index, {int limit = 24},
+    BookSourceIndex index, {int limit = 24}
   ) {
     if (limit < 1 || limit > 100) {
       throw RangeError.range(limit, 1, 100, 'limit');
