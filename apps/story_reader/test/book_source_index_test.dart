@@ -165,8 +165,11 @@ void main() {
       find.byKey(const Key('prepare-source-details')), 220,
       scrollable: find.byType(Scrollable).first, maxScrolls:30,
     );
-    await tester.tap(find.byKey(const Key('prepare-source-details')));
+    await tester.ensureVisible(find.text('Технические сведения о книге'));
     await tester.pumpAndSettle();
+    await tester.tap(find.text('Технические сведения о книге'));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Глав с текстом: 2 из 2'));
     expect(find.text('Глав с текстом: 2 из 2'), findsOneWidget);
     expect(find.text('Текстовое покрытие индекса: 100.0%'),
         findsOneWidget);
