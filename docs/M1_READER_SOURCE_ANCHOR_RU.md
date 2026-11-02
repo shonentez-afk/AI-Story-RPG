@@ -1,6 +1,6 @@
 # M1 final — source-anchor чтения без пиксельного смещения
 
-Дата: 2026-11-02. PR #5. Статус: новая реализация и тесты есть, финальный платформенный CI необходимо подтвердить на последнем кодовом SHA.
+Дата: 2026-11-02. PR #5. **Статус: ПРИНЯТО.** PR #5 объединён в `main` (squash `a1f0124fffa2817ba8c6f5b6d8d8a45bd3445413`). Финальный CI #211 — 6/6 PASS, Flutter 103/103 PASS, Windows portable и Android debug PASS.
 
 ## Причина
 Ранее `BookReaderPage` запоминал только `scrollOffset` в пикселях. После увеличения текста, смены межстрочного интервала, размера окна или поворота телефона такой offset перестаёт означать то же место в книге.
@@ -20,4 +20,14 @@
 Пользователь уточнил: реальных прежних игр не было. Демо-сохранения M1.6 не являются предметом миграции и не требуют дополнительного защитного механизма перед M2. Их старый код остаётся тестовым/демонстрационным, но **не удаляется автоматически** при обновлении. Рабочие новые игровые миры и сохранения используют BookWorld/SQLite/v2.
 
 ## Следом
-После полного зелёного CI закрыть M1 code baseline и вести новые функции в M2 Book Compiler. Текущая M2a работа: `feat/m2a-offline-source-index-20261102`, PR #6, offline TXT/FB2 source chunks, provenance, coverage и первая страница подготовки в существующей библиотеке.
+M1 code baseline **закрыт**. M2a PR #6 **уже принят** в main; следующая функция — M2b, работа с каноном, сущностями, хронологией и проверенными source spans. Подробный итог ниже.
+
+
+## Зафиксировано: M1 reader исправлен, M2a принят; следующий этап M2b (2026-11-02)
+
+**Это актуальное состояние, более позднее, чем старые заметки M1/PR #5, которые выше могли иметь статус «в работе».**
+- PR [#5](https://github.com/shonentez-afk/AI-Story-RPG/pull/5) **MERGED** в `main` (squash `a1f0124fffa2817ba8c6f5b6d8d8a45bd3445413`). Проверенный source HEAD `af2932a64455bdc78fc8edb23df34b604d75a1d6`; [GitHub Actions #211](https://github.com/shonentez-afk/AI-Story-RPG/actions/runs/41388339089): **6/6 PASS** (Flutter analyze, **103/103 Flutter widget tests**, Dart, Python, story-core/SQLite, Android debug APK, Windows portable).
+- Исправлена реальная Flutter-регрессия `semantic source paragraph survives font and width reflow`: после `CustomScrollView.center` прежние глобальные ключи lazy-sliver сохраняли старые сведения о смещениях и `RenderViewport.correctBy` добавлял высоту абзаца (например +822 px). Для reflow, смены главы и initial restore теперь пересоздаются ключи `RenderSliverList` и ключ `CustomScrollView`, корректный порядок pre-center (обратная `GrowthDirection`). **Не возвращать** прежние циклы align/scrollOffsetCorrection, диагностические `AR-DBG`/`AR-POS`, eager-window эксперименты и скрытие следующих абзацев — этих элементов в принятом коде нет.
+- Сохранение позиции: `anchorBlock`/`anchorFraction`, совместимый fallback `scrollOffset` для старых книг; закладки сохраняются. Коды/слоты демонстрационного M1.6 **не мигрировать**, не тратить M2 на backup демо, но и не удалять автоматически пользовательские файлы.
+- PR [#6](https://github.com/shonentez-afk/AI-Story-RPG/pull/6) M2a **MERGED**, squash `61de63fb3688421d5ff2d76762fd8c5096e4ee95`, [CI #187](https://github.com/shonentez-afk/AI-Story-RPG/actions/runs/41383438946) **6/6 PASS**. Уже есть offline TXT/FB2 `BookSourceIndexer`, exact parsed UTF-16 spans, SHA-256, индекс/coverage и экран подготовки книги **в существующей библиотеке**. Исходный индекс **не является** готовой игровой историей: `SOURCE_INDEX_ONLY`, `gameplay_coverage=0`, `can_publish_bookworld=false`.
+- **Следующее M2b:** продолжать **с нового фактического `main`**, реализация очереди `SourceChunk` (PENDING/RUNNING/DONE/FAILED/REVIEW, resume), извлечение сущностей, имён и вариантов, фактов, мест, событий, их источников и тайны/спойлеров, cross-chapter сопоставление и human review. Никакой ложной 100% RPG-готовности; позже — проверяемый intermediate blueprint → `.bworld`. Сохранить единую библиотеку, **одну кнопку «Добавить книгу»**, настройки, читалку, M1 SQLite/v2. Физические Windows/Android E2E, FilePicker, OS accessibility/rotation на устройствах остаются **не проведены** (CI ≠ аппаратное тестирование).
