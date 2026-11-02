@@ -474,10 +474,19 @@ class _SourceIndexPreviewPageState extends State<SourceIndexPreviewPage> {
         }
         final index = snapshot.requireData;
         final analysis = _analysis;
-        final pendingReview = analysis?.mentions
+        final allPending = analysis?.mentions
             .where((mention) => mention.decision == MentionDecision.review)
-            .take(40).toList() ?? <SourceMention>[];
-        // Pre-compute chapter progress once, not O(chunks²) per tile.
+            .toList() ?? <SourceMention>[];
+        final pageCount = allPending.isEmpty
+            ? 1 : (allPending.length + _candidatesPerPage - 1) ~/
+                _candidatesPerPage;
+        final page = _candidatePage.clamp(0, pageCount - 1);
+        final pendingReview = allPending
+            .skip(page * _candidatesPerPage)
+            .take(_candidatesPerPage)
+            .toList();
+        // Preserve the lazy chapter list on large books, but hide it until
+        // explicitly requested. Source text is NEVER copied into this UI.
         final chapterProgress = List<int>.filled(index.chapters.length, 0);
         if (analysis != null) {
           for (var j = 0; j < analysis.tasks.length; j++) {
@@ -501,80 +510,24 @@ class _SourceIndexPreviewPageState extends State<SourceIndexPreviewPage> {
                       children: [
                         Text(widget.book.title,
                             style: Theme.of(context).textTheme.headlineSmall),
-                        const SizedBox(height: 8),
-                        const Text('Этап M2 — индекс и локальный анализ'),
-                        const SizedBox(height: 14),
-                        Text('Главы с текстом: '
-                            '${index.indexedChapterCount} из ${index.chapterCount}'),
-                        Text('Индексировано символов: '
-                            '${index.indexedTextUtf16} из ${index.totalTextUtf16}'),
-                        Text('Текстовое покрытие индекса: '
-                            '${(index.textIndexCoverage * 100).toStringAsFixed(1)}%'),
-                        Text('Иллюстраций на отдельную проверку: '
-                            '${index.unindexedMediaBlocks}'),
                         const SizedBox(height: 12),
-                        const Text(
-                          'Это только подготовка исходных фрагментов. '
-                          'Персонажи, сюжет и игровые сцены ещё не созданы. '
-                          'Готового игрового мира нет; текст никуда не отправлялся.',
-                        ),
-                        const SizedBox(height: 12),
-                        Text('Фрагментов на последующий анализ: '
-                            '${index.chunks.length}'),
-                        const Divider(height: 28),
+                        _preparationOverview(index),
+                        const SizedBox(height: 18),
                         _analysisControls(index),
-                        const Divider(height: 28),
-                        SourceNarrativeReviewPanel(
-                          key: ValueKey(index.sourceFingerprint),
-                          index: index,
-                          sourceMentions: _analysis,
-                        ),
-                        const Divider(height: 28),
-                        SourceSemanticReviewPanel(
-                          key: ValueKey('semantic-${index.sourceFingerprint}'),
-                          index: index,
-                        ),
-                        const Divider(height: 28),
-                        Text('Разделы произведения',
-                            style: Theme.of(context).textTheme.titleMedium),
+                        if (_showCandidates && allPending.isNotEmpty) ...[
+                          const SizedBox(height: 12),
+                          Text('Проверка найденных слов',
+                              style: Theme.of(context).textTheme.titleMedium),
+                          const SizedBox(height: 4),
+                          Text('Непроверенных упоминаний: ${allPending.length}. '
+                              'Подтверждается только наличие слова в книге, '
+                              'а не личность персонажа или истина события.'),
+                        ],
                       ],
                     ),
                   ),
                 ),
-                SliverList.builder(
-                  itemCount: index.chapters.length,
-                  itemBuilder: (context, i) {
-                    final chapter = index.chapters[i];
-                    final done = chapterProgress[i];
-                    return ListTile(
-                      title: Text('Глава ${chapter.chapterIndex + 1}'),
-                      subtitle: Text(
-                        'Фрагментов: ${chapter.sourceChunks} · '
-                        'Статус анализа: $done из ${chapter.sourceChunks}' +
-                            (chapter.hasUnindexedMedia
-                                ? ' · Иллюстрации требуют проверки'
-                                : ''),
-                      ),
-                      leading: Icon(
-                        chapter.fullyIndexed
-                            ? Icons.check_circle_outline
-                            : Icons.report_gmailerrorred_outlined,
-                      ),
-                    );
-                  },
-                ),
                 if (_showCandidates && pendingReview.isNotEmpty)
-                  SliverPadding(
-                    padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
-                    sliver: SliverToBoxAdapter(
-                      child: Text(
-                        'Кандидаты на проверку · первые '
-                        '${pendingReview.length} из ${analysis!.reviewCount}',
-                        style: Theme.of(context).textTheme.titleMedium,
-                      ),
-                    ),
-                  ),
-                if (_showCandidates)
                   SliverList.builder(
                     itemCount: pendingReview.length,
                     itemBuilder: (context, i) {
@@ -593,7 +546,7 @@ class _SourceIndexPreviewPageState extends State<SourceIndexPreviewPage> {
                               Text(mention.label,
                                   style: Theme.of(context).textTheme.titleSmall),
                               const SizedBox(height: 4),
-                              Text('$kindLabel · '
+                              Text('${kindLabel} · '
                                   'глава ${mention.chapterIndex + 1}, '
                                   'блок ${mention.blockIndex + 1}'),
                               const SizedBox(height: 6),
@@ -608,11 +561,155 @@ class _SourceIndexPreviewPageState extends State<SourceIndexPreviewPage> {
                                 FilledButton(
                                   onPressed: _busy ? null : () => _decide(
                                       mention, MentionDecision.accepted),
-                                  child: const Text('Подтвердить упоминание'),
+                                  child: const Text('Это слово есть в книге'),
                                 ),
                               ]),
                             ],
                           ),
+                        ),
+                      );
+                    },
+                  ),
+                if (_showCandidates && allPending.length > _candidatesPerPage)
+                  SliverPadding(
+                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+                    sliver: SliverToBoxAdapter(
+                      child: Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        children: [
+                          OutlinedButton(
+                            key: const Key('prepare-review-prev'),
+                            onPressed: page == 0 ? null :
+                                () => setState(() => _candidatePage = page - 1),
+                            child: const Text('Назад к находкам'),
+                          ),
+                          Text('Страница ${page + 1} из ${pageCount}'),
+                          OutlinedButton(
+                            key: const Key('prepare-review-next'),
+                            onPressed: page + 1 >= pageCount ? null :
+                                () => setState(() => _candidatePage = page + 1),
+                            child: const Text('Другие находки'),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                SliverPadding(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+                  sliver: SliverToBoxAdapter(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Divider(height: 28),
+                        Text('Шаг 3. Проверка событий, фактов и связей',
+                            style: Theme.of(context).textTheme.titleMedium),
+                        const SizedBox(height: 6),
+                        const Text('Откройте этот раздел, чтобы найти '
+                            'отдельные фразы о событиях и сопоставить '
+                            'их с текстом. Вы сами решаете, какие цитаты '
+                            'сохранить для последующей проверки. '
+                            'Внутри есть раздел связей персонажей и хронологии.'),
+                        const SizedBox(height: 10),
+                        SourceNarrativeReviewPanel(
+                          key: ValueKey(index.sourceFingerprint),
+                          index: index,
+                          sourceMentions: _analysis,
+                        ),
+                        const Divider(height: 28),
+                        ExpansionTile(
+                          key: ValueKey('prepare-experimental-${index.sourceFingerprint}'),
+                          tilePadding: EdgeInsets.zero,
+                          childrenPadding: const EdgeInsets.only(bottom: 12),
+                          leading: const Icon(Icons.science_outlined),
+                          title: const Text('Дополнительно: экспериментальный поиск'),
+                          subtitle: const Text('Повторно ищет отдельные имена '
+                              'и места; это не полноценный ИИ. '
+                              'Для обычной подготовки необязателен.'),
+                          children: [
+                            SourceSemanticReviewPanel(
+                              key: ValueKey('semantic-${index.sourceFingerprint}'),
+                              index: index,
+                            ),
+                          ],
+                        ),
+                        const Divider(height: 28),
+                        Card(
+                          child: ListTile(
+                            leading: const Icon(Icons.lock_outline),
+                            title: const Text('Создать RPG по этой книге'),
+                            subtitle: const Text('Пока недоступно: нужны '
+                                'проверенные игровые сцены, развилки и '
+                                'сценарный компилятор. Даже полный '
+                                'поиск по книге не создаёт игровую историю.'),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        ExpansionTile(
+                          key: const Key('prepare-source-details'),
+                          tilePadding: EdgeInsets.zero,
+                          title: const Text('Технические сведения о книге'),
+                          subtitle: const Text('Индексация, фрагменты '
+                              'и иллюстрации — для диагностики'),
+                          children: [
+                            Align(
+                              alignment: Alignment.centerLeft,
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text('Глав с текстом: '
+                                      '${index.indexedChapterCount} из ${index.chapterCount}'),
+                                  Text('Индексировано символов: '
+                                      '${index.indexedTextUtf16} из '
+                                      '${index.totalTextUtf16}'),
+                                  Text('Текстовое покрытие индекса: '
+                                      '${(index.textIndexCoverage * 100).toStringAsFixed(1)}%'),
+                                  Text('Изображений на проверку: '
+                                      '${index.unindexedMediaBlocks}'),
+                                  Text('Фрагментов: ${index.chunks.length}'),
+                                  const Text('Покрытие индекса не означает '
+                                      'готовность сюжетной RPG.'),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 6),
+                        TextButton.icon(
+                          key: const Key('prepare-show-chapters'),
+                          onPressed: () => setState(
+                              () => _showChapters = !_showChapters),
+                          icon: Icon(_showChapters
+                              ? Icons.expand_less : Icons.expand_more),
+                          label: Text(_showChapters
+                              ? 'Скрыть разделы книги'
+                              : 'Показать разделы книги '
+                                  '(${index.chapters.length})'),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                if (_showChapters)
+                  SliverList.builder(
+                    itemCount: index.chapters.length,
+                    itemBuilder: (context, i) {
+                      final chapter = index.chapters[i];
+                      final done = chapterProgress[i];
+                      return ListTile(
+                        title: Text('Глава ${chapter.chapterIndex + 1}'),
+                        subtitle: Text(
+                          'Фрагментов: ${chapter.sourceChunks} · '
+                          'Статус поиска: ${done} из ${chapter.sourceChunks}' +
+                              (chapter.hasUnindexedMedia
+                                  ? ' · Иллюстрации не проанализированы'
+                                  : ''),
+                        ),
+                        leading: Icon(
+                          chapter.fullyIndexed
+                              ? Icons.check_circle_outline
+                              : Icons.report_gmailerrorred_outlined,
                         ),
                       );
                     },
