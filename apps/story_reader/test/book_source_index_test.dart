@@ -18,9 +18,9 @@ void main() {
     final book = BookImporter.parse(
       'story.txt', Uint8List.fromList(utf8.encode(original)),
     );
-    // Current TXT importer intentionally trims outer whitespace; the M2a
-    // index promises lossless coverage of the *parsed* canonical book.
+    // The importer preserves the complete TXT text including whitespace.
     final parsedText = book.chapters.single;
+    expect(parsedText, original);
     final a = BookSourceIndexer.index(book, maxChunkUtf16: 257);
     final b = BookSourceIndexer.index(book, maxChunkUtf16: 257);
     expect(jsonEncode(a.toJson()), jsonEncode(b.toJson()));
