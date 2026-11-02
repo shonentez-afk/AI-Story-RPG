@@ -319,3 +319,13 @@ M2b4a1 provider boundary: **ACCEPTED** (PR #18, exact head `05a399c2`, CI `41427
 - Ветка `feature/m2-preparation-one-click-offline-20261102` содержит **ещё не принятый** one-click offline local-preparation coordinator (mentions M2b1 → M2b3b events → source-cited M2b4b catalog), сохранение каждой порции, pause/resume, worker isolates, UI `prepare-offline-all`. Добавлены отдельные тесты и документ `docs/M2_OFFLINE_PREPARATION_PIPELINE_RU.md`. Персонажи, локации, alias hints, встречи, события и состояния — только INFERRED, не канон.
 - M2d компилятор пользовательского `.bworld` на короткой книге, типизированный перевод intermediate scene → StoryBlueprint, права/верификация источников и полноценный ИИ **ещё не завершены**. Ни один кодовый путь не помечает произвольную книгу готовой.
 - Не мержить этот следующий этап без exact-head Flutter analyze/test, Python/Dart/world, Windows/Android; не удалять старые сохранения, приватные checkpoints, отдельный импорт.
+
+## 2026-11-02 — M2d private adaptation preflight before AI
+
+- M2b4b/M2c semantic and causal scaffold merged PR #21 `a8b016e3`, M2c editorial/status gate merged PR #22 `95c99fb7`, Windows/Android and 187+ Flutter regression CI passed on their exact branches.
+- Ветка `feature/m2d-private-source-preflight-20261102`: `apps/story_reader/lib/private_adaptation_preflight.dart`, `test/private_adaptation_preflight_test.dart`, `docs/M2D_PRIVATE_ADAPTATION_PREFLIGHT_RU.md`. Новый preflight требует ручной canonCandidate, confirmed exact source passage, права, подтверждённые переходы/альтернативы; явные blockers при пропусках. **CODE / CI PENDING**, не компилятор ZIP, `canCompilePlayableBookworld=false`.
+- PR #23 принят в `main` кодом `a22eaf291ffa11e847d4b542eab3b8e1a4920646` после 6/6 CI `41451512164`, M0 `41451512064`; реализует единый локальный one-click pipeline с checkpoint/resume, но ещё не превращает inference в канон.
+- Для полноценного M2d нужно новый безопасный production-format/provenance, Python/Dart importer parity, playable author-owned short story Windows/Android и сохранения; затем явный API consent, модельный benchmark и без скрытого fallback.
+
+
+**Текущая M2d граница:** preflight PR #24 требует собственного CI. Пакетный compiler и playable .bworld реальной книги не реализованы; следующий этап требует независимых production validator/компиляции и E2E.
