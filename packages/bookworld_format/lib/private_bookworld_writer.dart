@@ -1,0 +1,345 @@
+import 'dart:convert';
+import 'dart:io';
+import 'dart:typed_data';
+
+import 'package:crypto/crypto.dart';
+import 'package:sqlite3/sqlite3.dart';
+import 'package:story_core/story_core.dart';
+
+import 'private_bookworld.dart';
+import 'src/zip_v1.dart';
+
+/// Offline, native-Dart PRIVATE package compiler for Windows and Android.
+///
+/// Inputs must have passed M2c human review and source-edition verification.
+/// This writer checks every citation against an exact local UTF-16 source
+/// slice, then builds ZIP+SQLite and reopens the result through the independent
+/// PrivateBookworldImporter. No network, Python, shell, or cloud fallback.
+class PrivateBookworldWriter {
+  const PrivateBookworldWriter();
+
+  static const _schema = '''
+CREATE TABLE world_meta(key TEXT PRIMARY KEY, value TEXT NOT NULL);
+CREATE TABLE scenes(scene_id TEXT PRIMARY KEY, body TEXT NOT NULL,
+ terminal INTEGER NOT NULL CHECK(terminal IN (0,1)));
+CREATE TABLE choices(choice_id TEXT PRIMARY KEY,
+ scene_id TEXT NOT NULL REFERENCES scenes(scene_id),
+ sort_order INTEGER NOT NULL, label TEXT NOT NULL,
+ next_scene_id TEXT NOT NULL REFERENCES scenes(scene_id),
+ conditions_json TEXT NOT NULL, effects_json TEXT NOT NULL,
+ UNIQUE(scene_id,sort_order));
+CREATE TABLE actors(actor_id TEXT PRIMARY KEY);
+CREATE TABLE items(item_id TEXT PRIMARY KEY);
+CREATE TABLE canon_facts(fact_id TEXT PRIMARY KEY);
+CREATE TABLE source_refs(ref_id TEXT PRIMARY KEY,
+ scene_id TEXT NOT NULL REFERENCES scenes(scene_id),
+ chapter_id TEXT NOT NULL, start_offset INTEGER NOT NULL,
+ end_offset INTEGER NOT NULL);
+CREATE TABLE event_dependencies(choice_id TEXT NOT NULL
+ REFERENCES choices(choice_id), dependency_id TEXT NOT NULL,
+ PRIMARY KEY(choice_id,dependency_id));
+CREATE TABLE templates(template_id TEXT PRIMARY KEY,
+ template TEXT NOT NULL);
+''';
+
+  static String _hash(List<int> bytes) => sha256.convert(bytes).toString();
+  static Uint8List _jsonBytes(Object? value) =>
+      Uint8List.fromList(utf8.encode(canonicalJson(value)));
+
+  /// Must be built from the actual BookSourceIndex, not an untrusted model
+  /// response or an archive manifest with self-asserted citations.
+  void _checkOriginalSource(Map<String, dynamic> blueprint,
+      Map<String, dynamic> provenance, Map<String, dynamic> sourceIndex) {
+    final fingerprint = blueprint['source_fingerprint'];
+    final total = sourceIndex['chapter_count'];
+    final indexed = sourceIndex['indexed_chapter_count'];
+    final textTotal = sourceIndex['text_total_utf16'];
+    if (fingerprint is! String ||
+        sourceIndex['source_fingerprint'] != fingerprint ||
+        provenance['source_fingerprint'] != fingerprint ||
+        total is! int || total < 1 || total > 10000 ||
+        provenance['source_chapters_total'] != total ||
+        indexed is! int || indexed < 1 || indexed > total ||
+        provenance['source_chapters_indexed'] != indexed ||
+        textTotal is! int || textTotal < 1 ||
+        sourceIndex['text_indexed_utf16'] != textTotal) {
+      throw const FormatException(
+          'Нельзя собрать RPG: неполный или чужой исходный текст');
+    }
+    final chunks = sourceIndex['chunks'];
+    if (chunks is! List || chunks.isEmpty || chunks.length > 30000) {
+      throw const FormatException('Некорректный реестр фрагментов книги');
+    }
+    final byId = <String, Map<String, dynamic>>{};
+    for (final entry in chunks) {
+      if (entry is! Map<String, dynamic>) {
+        throw const FormatException('Некорректный фрагмент источника');
+      }
+      final id = entry['id'];
+      final content = entry['text'];
+      final chapter = entry['chapter_index'];
+      final start = entry['start_utf16'];
+      final end = entry['end_utf16'];
+      if (id is! String || id.isEmpty || id.length > 120 ||
+          byId.containsKey(id) || content is! String ||
+          chapter is! int || chapter < 0 || chapter >= total ||
+          entry['chapter_id'] is! String ||
+          entry['block_index'] is! int ||
+          start is! int || end is! int ||
+          start < 0 || end - start != content.length ||
+          entry['sha256_text'] != _hash(utf8.encode(content))) {
+        throw const FormatException(
+            'Некорректные позиции или SHA-256 исходного фрагмента');
+      }
+      byId[id] = entry;
+    }
+    final origins = provenance['scene_origins'];
+    if (origins is! List) {
+      throw const FormatException('Отсутствует происхождение игровых сцен');
+    }
+    for (final raw in origins) {
+      if (raw is! Map<String, dynamic> || raw['source_refs'] is! List) {
+        throw const FormatException('Неверная запись источника сцены');
+      }
+      for (final value in raw['source_refs'] as List) {
+        if (value is! Map<String, dynamic>) {
+          throw const FormatException('Неверная ссылка на цитату');
+        }
+        final chunk = byId[value['chunk_id']];
+        if (chunk == null ||
+            chunk['chapter_index'] != value['chapter_index'] ||
+            chunk['chapter_id'] != value['chapter_id'] ||
+            chunk['block_index'] != value['block_index']) {
+          throw const FormatException('Цитата ссылается на другую главу');
+        }
+        final start = value['start_utf16'];
+        final end = value['end_utf16'];
+        final chunkStart = chunk['start_utf16'] as int;
+        final chunkEnd = chunk['end_utf16'] as int;
+        if (start is! int || end is! int || start < chunkStart ||
+            end > chunkEnd || end <= start || end - start > 180) {
+          throw const FormatException('Цитата вне исходного фрагмента');
+        }
+        final text = chunk['text'] as String;
+        final from = start - chunkStart;
+        final to = end - chunkStart;
+        bool low(int v) => v >= 0xdc00 && v <= 0xdfff;
+        if ((from > 0 && low(text.codeUnitAt(from))) ||
+            (to < text.length && low(text.codeUnitAt(to)))) {
+          throw const FormatException(
+              'Цитата разрезает составной символ Unicode');
+        }
+        final quote = text.substring(from, to);
+        if (quote.trim().isEmpty ||
+            value['quote_sha256'] != _hash(utf8.encode(quote))) {
+          throw const FormatException(
+              'Хеш цитаты не соответствует оригиналу книги');
+        }
+      }
+    }
+  }
+
+  Uint8List _writeSqlite(Map<String, dynamic> raw, String blueprintHash) {
+    final dir = Directory.systemTemp.createTempSync('asr_private_m2e_');
+    try {
+      final file = File('${dir.path}${Platform.pathSeparator}world.sqlite');
+      final db = sqlite3.open(file.path);
+      try {
+        db.execute('PRAGMA foreign_keys=ON');
+        db.execute('PRAGMA application_id=1113014098'); // 0x42574f52
+        db.execute('PRAGMA user_version=1');
+        db.execute(_schema);
+        db.execute('BEGIN TRANSACTION');
+        final meta = <String, String>{
+          'schema_version': '1',
+          'bookworld_id': raw['book_id'] as String,
+          'blueprint_sha256': blueprintHash,
+          'initial_state_json': canonicalJson(raw['initial_state']),
+        };
+        final keys = meta.keys.toList()..sort();
+        for (final key in keys) {
+          db.execute('INSERT INTO world_meta VALUES (?, ?)',
+              [key, meta[key]]);
+        }
+        final scenes = raw['scenes'] as List<dynamic>;
+        for (final scene in scenes) {
+          final row = scene as Map<String, dynamic>;
+          db.execute('INSERT INTO scenes VALUES (?, ?, ?)', [
+            row['id'], row['text'], row['terminal'] == true ? 1 : 0,
+          ]);
+        }
+        for (final scene in scenes) {
+          final row = scene as Map<String, dynamic>;
+          final choices = row['choices'] as List<dynamic>;
+          for (var i = 0; i < choices.length; i++) {
+            final c = choices[i] as Map<String, dynamic>;
+            db.execute(
+                'INSERT INTO choices VALUES (?, ?, ?, ?, ?, ?, ?)', [
+              c['id'], row['id'], i, c['label'], c['next_scene_id'],
+              canonicalJson(c['conditions']), canonicalJson(c['effects']),
+            ]);
+          }
+        }
+        for (final entry in const [
+          ('actors', 'actors', 'actor_id'),
+          ('items', 'items', 'item_id'),
+          ('canon_facts', 'facts', 'fact_id'),
+        ]) {
+          final table = entry.$1;
+          final items = raw[entry.$2] as List<dynamic>;
+          for (final id in items) {
+            db.execute('INSERT INTO $table(${entry.$3}) VALUES (?)', [id]);
+          }
+        }
+        db.execute('COMMIT');
+      } finally {
+        db.close();
+      }
+      final bytes = file.readAsBytesSync();
+      if (bytes.length > BworldZipV1.maxEntry) {
+        throw const FormatException('SQLite превышает лимит .bworld');
+      }
+      return Uint8List.fromList(bytes);
+    } on SqliteException catch (error) {
+      throw FormatException('Не удалось создать SQLite: $error');
+    } finally {
+      dir.deleteSync(recursive: true);
+    }
+  }
+
+  static void _u16(BytesBuilder out, int value) =>
+      out.add([value & 255, (value >>> 8) & 255]);
+
+  static void _u32(BytesBuilder out, int value) => out.add([
+    value & 255, (value >>> 8) & 255,
+    (value >>> 16) & 255, (value >>> 24) & 255,
+  ]);
+
+  static final _crcTable = List<int>.generate(256, (i) {
+    var n = i;
+    for (var k = 0; k < 8; k++) {
+      n = n & 1 != 0 ? 0xedb88320 ^ (n >>> 1) : n >>> 1;
+    }
+    return n;
+  });
+
+  static int _crc32(List<int> bytes) {
+    var crc = 0xffffffff;
+    for (final b in bytes) {
+      crc = _crcTable[(crc ^ b) & 255] ^ (crc >>> 8);
+    }
+    return (crc ^ 0xffffffff) & 0xffffffff;
+  }
+
+  Uint8List _storedZip(Map<String, Uint8List> files) {
+    final out = BytesBuilder(copy: false);
+    final central = BytesBuilder(copy: false);
+    var total = 0;
+    for (final path in BworldZipV1.privatePaths) {
+      final data = files[path]!;
+      final name = ascii.encode(path);
+      if (data.length > BworldZipV1.maxEntry || name.length > 65535) {
+        throw const FormatException('Слишком большой элемент игрового пакета');
+      }
+      total += data.length;
+      final offset = out.length;
+      final crc = _crc32(data);
+      // 30-byte local header, ZIP_STORED, DOS date 1980-01-01.
+      _u32(out, 0x04034b50);
+      _u16(out, 20); _u16(out, 0); _u16(out, 0);
+      _u16(out, 0); _u16(out, 33);
+      _u32(out, crc); _u32(out, data.length);
+      _u32(out, data.length); _u16(out, name.length); _u16(out, 0);
+      out.add(name); out.add(data);
+      // 46-byte central directory header; mode 0100600, no extras.
+      _u32(central, 0x02014b50);
+      _u16(central, 0x0314); _u16(central, 20);
+      _u16(central, 0); _u16(central, 0);
+      _u16(central, 0); _u16(central, 33);
+      _u32(central, crc); _u32(central, data.length);
+      _u32(central, data.length); _u16(central, name.length);
+      _u16(central, 0); _u16(central, 0); _u16(central, 0);
+      _u16(central, 0); _u32(central, 0x81800000);
+      _u32(central, offset); central.add(name);
+    }
+    if (total > BworldZipV1.maxTotal) {
+      throw const FormatException('Общий объём ZIP слишком велик');
+    }
+    final centralStart = out.length;
+    final centralBytes = central.takeBytes();
+    out.add(centralBytes);
+    _u32(out, 0x06054b50);
+    _u16(out, 0); _u16(out, 0);
+    _u16(out, BworldZipV1.privatePaths.length);
+    _u16(out, BworldZipV1.privatePaths.length);
+    _u32(out, centralBytes.length); _u32(out, centralStart);
+    _u16(out, 0);
+    if (out.length > BworldZipV1.maxArchive) {
+      throw const FormatException('Игровой архив превышает лимит');
+    }
+    return out.takeBytes();
+  }
+
+  /// Requires a reviewed local source index; never accepts JSON from an LLM
+  /// as independently verified evidence. Returns only a private game package.
+  Uint8List build({
+    required Map<String, dynamic> blueprint,
+    required Map<String, dynamic> provenance,
+    required Map<String, dynamic> sourceIndex,
+  }) {
+    final checked = StoryBlueprint.fromJson(blueprint);
+    if (checked.rightsStatus != 'private_adaptation' ||
+        checked.sourceFingerprint == null) {
+      throw const FormatException('Разрешена только частная адаптация');
+    }
+    _checkOriginalSource(blueprint, provenance, sourceIndex);
+    final scenario = _jsonBytes(blueprint);
+    final origin = _jsonBytes(provenance);
+    final sqlite = _writeSqlite(blueprint, checked.blueprintHash);
+    final payloads = <String, Uint8List>{
+      'scenario/blueprint.json': scenario,
+      'source/provenance.json': origin,
+      'world.sqlite': sqlite,
+    };
+    final hashes = <String, String>{};
+    final sizes = <String, int>{};
+    for (final entry in payloads.entries) {
+      hashes[entry.key] = _hash(entry.value);
+      sizes[entry.key] = entry.value.length;
+    }
+    final manifest = <String, dynamic>{
+      'format': 'ai_story_bookworld',
+      'format_version': 2,
+      'bookworld_id': checked.bookId,
+      'source_fingerprint': checked.sourceFingerprint,
+      'title': checked.title,
+      'author': provenance['source_author'],
+      'languages': ['ru'],
+      'engine_min_version': '0.1.0',
+      'scenario_format': 'ai_story_blueprint_v1',
+      'scenario_format_version': 1,
+      'content_capabilities': blueprint['supported_modes'],
+      'build_status': 'private_classic_structural',
+      'rights_status': 'private_use_only',
+      'build_tool': {
+        'name': 'ai_story_private_bookworld', 'version': '2.0',
+      },
+      'model_provenance': {'provider': 'none', 'model_id': null},
+      'hashes': hashes,
+      'sizes': sizes,
+      'blueprint_sha256': _hash(scenario),
+    };
+    final packed = _storedZip({
+      'manifest.json': _jsonBytes(manifest),
+      ...payloads,
+    });
+    // Independent importer inspects manifest, all ZIP and SQLite bytes,
+    // source reference structure, rights and exhaustive causal reachability.
+    final inspected = const PrivateBookworldImporter().inspect(packed);
+    if (inspected.sourceFingerprint != checked.sourceFingerprint ||
+        inspected.blueprint.blueprintHash != checked.blueprintHash) {
+      throw const FormatException('Самопроверка игрового пакета не пройдена');
+    }
+    return packed;
+  }
+}
