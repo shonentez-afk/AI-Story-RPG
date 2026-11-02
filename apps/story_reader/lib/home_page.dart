@@ -713,7 +713,22 @@ class _LibraryPageState extends State<LibraryPage> {
                     title: Text(entry.book.title),
                     subtitle: Text(entry.book.author.isEmpty
                         ? 'Импортированная книга' : entry.book.author),
-                    trailing: PopupMenuButton<String>(
+                    trailing: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        IconButton(
+                          tooltip: 'Подготовить книгу',
+                          icon: const Icon(Icons.auto_stories_outlined),
+                          onPressed: _working ? null : () =>
+                              Navigator.of(context).push<void>(
+                                MaterialPageRoute(
+                                  builder: (_) => SourceIndexPreviewPage(
+                                    book: entry.book,
+                                  ),
+                                ),
+                              ),
+                        ),
+                        PopupMenuButton<String>(
                       tooltip: 'Действия с книгой',
                       enabled: !_working,
                       onSelected: (action) {
@@ -738,6 +753,8 @@ class _LibraryPageState extends State<LibraryPage> {
                           value: 'delete',
                           child: Text('Удалить книгу'),
                         ),
+                      ],
+                    ),
                       ],
                     ),
                     onTap: () => Navigator.of(context).push(
@@ -841,7 +858,15 @@ class _SettingsPageState extends State<SettingsPage> {
                 const ListTile(
                   leading: Icon(Icons.offline_bolt_outlined),
                   title: Text('Режим игры'),
-                  subtitle: Text('Классический офлайн • без ИИ'),
+                  subtitle: Text('Офлайн RPG. Автоматическое создание '
+                      'игрового мира из книги пока недоступно.'),
+                ),
+                const ListTile(
+                  leading: Icon(Icons.fact_check_outlined),
+                  title: Text('Подготовка и анализ книг'),
+                  subtitle: Text('Библиотека → значок подготовки у книги. '
+                      'Поиск цитат и связей работает локально; '
+                      'это ещё не генерация RPG.'),
                 ),
                 ListTile(
                   leading: const Icon(Icons.save_outlined),
@@ -859,7 +884,8 @@ class _SettingsPageState extends State<SettingsPage> {
                 const ListTile(
                   leading: Icon(Icons.info_outline),
                   title: Text('Версия'),
-                  subtitle: Text('0.1.0 · BookWorld · тестовая версия'),
+                  subtitle: Text('Тестовая версия · BookWorld · '
+                      'локальный анализ книг (M2b3c)'),
                 ),
               ],
             ),
