@@ -8,6 +8,60 @@ import 'reading_preferences.dart';
 import 'reading_settings_sheet.dart';
 import 'reader_chrome.dart';
 
+/// Test-only diagnostics: identify which Flutter layout path shifts pixels
+/// by the full paragraph extent after the viewport is resized.
+class _ReaderProbeController extends ScrollController {
+  _ReaderProbeController() : super(keepScrollOffset: false);
+
+  @override
+  ScrollPosition createScrollPosition(
+    ScrollPhysics physics,
+    ScrollContext context,
+    ScrollPosition? oldPosition,
+  ) => _ReaderProbePosition(
+    physics: physics,
+    context: context,
+    oldPosition: oldPosition,
+  );
+}
+
+class _ReaderProbePosition extends ScrollPositionWithSingleContext {
+  _ReaderProbePosition({
+    required super.physics,
+    required super.context,
+    super.oldPosition,
+  }) : super(initialPixels: 0.0, keepScrollOffset: false);
+
+  void _trace(String message) {
+    assert(() {
+      debugPrint('AR-POS $message STACK ${StackTrace.current.toString().split("\\n").take(7).join(" | ")}');
+      return true;
+    }());
+  }
+
+  @override
+  void correctBy(double correction) {
+    if (correction.abs() > 300) _trace('correctBy $correction from=$pixels');
+    super.correctBy(correction);
+  }
+
+  @override
+  void correctPixels(double value) {
+    if (hasPixels && (value - pixels).abs() > 300) {
+      _trace('correctPixels $value from=$pixels');
+    }
+    super.correctPixels(value);
+  }
+
+  @override
+  void jumpTo(double value) {
+    if (hasPixels && pixels < 3500 && value < 3500) {
+      _trace('jumpTo $value from=$pixels');
+    }
+    super.jumpTo(value);
+  }
+}
+
 class BookReaderPage extends StatefulWidget {
   const BookReaderPage({super.key, required this.book, this.bookId});
   final ImportedBook book;
@@ -25,7 +79,7 @@ class _BookReaderPageState extends State<BookReaderPage>
   BookReadingState _reading = const BookReadingState();
   bool _progressReady = false;
   // Do not resurrect pixel offsets from PageStorage after a semantic reflow.
-  final ScrollController _scroll = ScrollController(keepScrollOffset: false);
+  final ScrollController _scroll = _ReaderProbeController();
   int _scrollLayoutEpoch = 0;
   bool _anchorCorrectionPending = false;
   bool _anchorCorrectionScheduled = false;
