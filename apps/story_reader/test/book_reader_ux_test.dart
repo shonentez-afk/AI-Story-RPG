@@ -169,13 +169,17 @@ void main() {
     ).map((widget) => RegExp(r'Текст параграфа (\\d+)')
         .firstMatch(widget.data ?? '')?.group(1))
         .whereType<String>().take(16).join(', ');
-    expect(find.textContaining(
+    final targetParagraph = find.textContaining(
       'Текст параграфа ${old.anchor!.blockIndex}.',
-    ), findsOneWidget, reason:
+    );
+    expect(targetParagraph, findsOneWidget, reason:
         'visible=$visibleParagraphs, saved=${old.anchor!.blockIndex}, '
         'fraction=${old.anchor!.fraction}, '
         'post=${afterResize.anchor?.blockIndex}, '
         'scroll=${liveView.controller?.offset}');
+    expect(tester.getRect(targetParagraph).overlaps(
+      tester.getRect(find.byType(CustomScrollView)),
+    ), isTrue, reason: 'Target paragraph must actually intersect viewport');
     expect(tester.takeException(), isNull);
 
     await tester.pumpWidget(const SizedBox.shrink());
