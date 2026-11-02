@@ -92,8 +92,8 @@ class DraftScene {
         id: map['id'] as String,
         chapterIndex: map['chapter_index'] as int,
         text: map['text'] as String,
-        origin: DraftSceneOrigin.values.byName(
-            (map['origin'] as String).toLowerCase()),
+        origin: DraftSceneOrigin.values.firstWhere(
+            (value) => value.name.toUpperCase() == map['origin']),
         assertionIds: (map['assertion_ids'] as List).cast<String>(),
         terminal: map['terminal'] as bool,
         choices: (map['choices'] as List).map((choice) =>
@@ -194,8 +194,8 @@ class IntermediateStoryBlueprint {
         sourceFingerprint: map['source_fingerprint'] as String,
         title: map['title'] as String,
         entrySceneId: map['entry_scene_id'] as String,
-        rights: PreparationRights.values.byName(
-            (map['rights'] as String).toLowerCase()),
+        rights: PreparationRights.values.firstWhere(
+            (value) => value.name.toUpperCase() == map['rights']),
         flags: (map['flags'] as List).cast<String>(),
         initialFlags: (map['initial_flags'] as List).cast<String>(),
         scenes: (map['scenes'] as List).map((raw) =>
