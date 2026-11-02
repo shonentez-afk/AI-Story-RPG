@@ -30,15 +30,25 @@ class _FixtureSavePicker extends FilePicker {
   _FixtureSavePicker(this.bytes);
   final Uint8List bytes;
 
+  // file_picker 10.3.x already implements a concrete pickFiles method which
+  // throws UnimplementedError. noSuchMethod cannot intercept that method.
   @override
-  dynamic noSuchMethod(Invocation invocation) {
-    if (invocation.memberName == #pickFiles) {
-      return Future<FilePickerResult?>.value(FilePickerResult([
+  Future<FilePickerResult?> pickFiles({
+    String? dialogTitle,
+    String? initialDirectory,
+    FileType type = FileType.any,
+    List<String>? allowedExtensions,
+    Function(FilePickerStatus)? onFileLoading,
+    bool allowCompression = false,
+    int compressionQuality = 0,
+    bool allowMultiple = false,
+    bool withData = false,
+    bool withReadStream = false,
+    bool lockParentWindow = false,
+    bool readSequential = false,
+  }) async => FilePickerResult([
         PlatformFile(name: 'portable.bwsave', size: bytes.length, bytes: bytes),
-      ]));
-    }
-    return super.noSuchMethod(invocation);
-  }
+      ]);
 }
 
 class _FailingChoiceGateway extends DeviceWorldLibraryGateway {
