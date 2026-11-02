@@ -424,6 +424,10 @@ class SourceAnalysisSession {
     )),
   ];
 
+  /// Read-only reuse by M2b4a's offline provider. Never mutates checkpoints.
+  static List<SourceMention> scanChunk(SourceChunk chunk) =>
+      List.unmodifiable(_scan(chunk));
+
   static List<SourceMention> _scan(SourceChunk chunk) {
     final hits = <SourceMention>[];
     final unique = <String>{};
