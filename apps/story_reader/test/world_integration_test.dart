@@ -26,7 +26,7 @@ class _PrivatePaths extends PathProviderPlatform {
 }
 
 /// Test the actual shared system-file entry point without touching devices.
-class _FixtureSavePicker implements FilePicker {
+class _FixtureSavePicker extends FilePicker {
   const _FixtureSavePicker(this.bytes);
   final Uint8List bytes;
 
