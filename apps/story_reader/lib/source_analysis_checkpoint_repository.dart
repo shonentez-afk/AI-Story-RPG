@@ -15,7 +15,15 @@ abstract class SourceAnalysisCheckpointRepository {
 }
 
 /// Two isolated folders. Existing M2b1 files keep their original path.
-enum SourceCheckpointScope { mentions, narrativeEvidence, identityRelations, semanticProposals }
+enum SourceCheckpointScope {
+  mentions,
+  narrativeEvidence,
+  identityRelations,
+  semanticProposals,
+  semanticCatalog,
+  semanticEditorial,
+  intermediateDraft,
+}
 
 /// Private app-support storage shared by Android and Windows.
 /// The temporary file is flushed and renamed on the SAME filesystem; an
@@ -37,6 +45,9 @@ class FileSourceAnalysisCheckpointRepository
   static const _evidenceFolder = 'ai_story_evidence_review_v1';
   static const _relationsFolder = 'ai_story_relation_review_v1';
   static const _semanticFolder = 'ai_story_semantic_review_m2b4a_v1';
+  static const _catalogFolder = 'ai_story_semantic_catalog_m2b4b_v1';
+  static const _editorialFolder = 'ai_story_semantic_editorial_m2c_v1';
+  static const _draftFolder = 'ai_story_intermediate_draft_m2c_v1';
 
   static void _checkFingerprint(String fingerprint) {
     if (!_validFingerprint.hasMatch(fingerprint)) {
@@ -52,6 +63,9 @@ class FileSourceAnalysisCheckpointRepository
       SourceCheckpointScope.narrativeEvidence => _evidenceFolder,
       SourceCheckpointScope.identityRelations => _relationsFolder,
       SourceCheckpointScope.semanticProposals => _semanticFolder,
+      SourceCheckpointScope.semanticCatalog => _catalogFolder,
+      SourceCheckpointScope.semanticEditorial => _editorialFolder,
+      SourceCheckpointScope.intermediateDraft => _draftFolder,
     };
     final folder = Directory('${base.path}/$name');
     if (!await folder.exists()) await folder.create(recursive: true);
