@@ -633,7 +633,9 @@ class _BookReaderPageState extends State<BookReaderPage>
                   padding: EdgeInsets.symmetric(horizontal: prefs.horizontalPadding),
                   sliver: SliverList.builder(
                     key: _priorBlocksKey,
-                    itemCount: splitIndex,
+                    // Temporary diagnostic isolation: exclude preceding
+                    // sliver to identify which list requests correction.
+                    itemCount: anchored ? 0 : splitIndex,
                     // Pre-center slivers use reverse GrowthDirection. Item 0
                     // is next to the center, not the start of the chapter.
                     itemBuilder: (context, index) =>
