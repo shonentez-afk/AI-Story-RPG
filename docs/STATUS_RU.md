@@ -525,3 +525,17 @@
 - M2b4a1 PR #18 MERGED squash `13e9c0ebf4ab6e2cfbbcf306ad221b78cbcc7266`; exact tested head `05a399c241670cda5d05e2bdda0d60cbe163812f`, CI `41427964306` core PASS, `41427964385` M0 PASS. Offline semantic provider boundary и fail-closed source-backed validation приняты; **это не работающая LLM и не компиляция произвольной книги**.
 - M2b4a2 branch `feature/m2b4a-semantic-checkpoints-ui-20261102`, новый приватный checkpoint+возобновление, top-level workers, панель в одной подготовке, ручные метки без canon, отдельный reset. Отчёт: `docs/M2B4A2_SEMANTIC_CHECKPOINT_UI_RU.md`.
 - Статус M2b4a2 **CODE/CI PENDING**: до отдельного полного PR CI+Windows+Android+M0 не принимать. Исторические M2b1/M2b3b/M2b3c, SQLite/BookWorld/.bwsave, библиотека, настройки и ридер не мигрируются. `gameplayCoverage=0`, `canPublishBookworld=false`.
+
+
+## ПРИНЯТО: M2b4a2 — 2026-11-02, полный CI и Release
+
+- PR #19 https://github.com/shonentez-afk/AI-Story-RPG/pull/19 **MERGED**, кодовый squash `5c8eeb63a8aff47649107fe35a6cbfb6df729c14`; проверенный PR head `d163bf68b49436e62b381316fa9cc96377f780f9`.
+- PR Actions `41430335297` **6/6 PASS**: Python, Dart, BookWorld, Flutter analyze, **176/176 Flutter tests**, Android debug APK, Windows portable. M0 `41430335058` PASS.
+- Push(main) Actions `41431317114` **7/7 PASS**, включая публикацию GitHub Release; дополнительный M0 `41431317020` PASS.
+- Проверенный выпуск: https://github.com/shonentez-afk/AI-Story-RPG/releases/tag/test-build-266, опубликован 2026-11-02T10:52:37Z, target exact code SHA `5c8eeb63a8aff47649107fe35a6cbfb6df729c14`. Три актива имеют состояние `uploaded`:
+  - Windows portable ZIP 13 264 516 bytes, SHA256 `6ddf5318eb95e915eb9e44db264f45b107a1345f14dac702a88106d7d6a234c8` (распаковывать полную папку exe+DLL+data).
+  - Android debug APK 167 253 204 bytes, SHA256 `3e2de1b4a217b7a4d3d15ae21877bb5f2754bceca000e55d55d05d2c0af49b66`.
+  - `SHA256SUMS.txt` присутствует.
+- В интерфейсе: Библиотека → книга → «Подготовить к RPG» → «Семантические предложения · M2b4a» → «Открыть локальный анализ». Старая библиотека/настройки/книги/читательские позиции и M2b1/M2b3b/M2b3c и SQLite игровые сохранения не мигрировали и не удалялись.
+- Это **локальный regexp-provider**, а не полноценный AI Book Compiler. Нет живой модели, облачных запросов, `IntermediateStoryBlueprint` или playable BookWorld из пользовательской книги; `gameplayCoverage=0`, `canPublishBookworld=false`. Ручной Windows/Android E2E на физическом устройстве, долгие книги 20 MiB/30k, экранный диктор, power-loss остаются **SKIP**.
+- Следующая разработка: M2b4b источник проверяемых смысловых фактов/событий и отдельная интеграция модели с приватностью/правами, затем M2c causal blueprint/validator.
