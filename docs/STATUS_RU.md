@@ -293,3 +293,12 @@
 ## M1.7.4b QA исправления до приёмки
 - CI `41372278079` по `cca53c4`: Python/Dart/BookWorld PASS, но Flutter widget **FAIL 21**, Android/Windows SKIP. Причины: legacy tests без native plugin зависали на Isolate.run, fakeAsync worker, 320dp overflow в GameQuickBar.
 - Следующий hotfix: DI gateway в production main, nullable gateway в legacy Home/Library/Campaigns/Settings, реальный SQLite в widget test inline и отдельная проверка Isolate.run, равные ширины для GameQuickBar. Нужен повторный полный CI нового SHA. Подробности `docs/M174B_FLUTTER_BOOKWORLD_RU.md`.
+
+## M1.7.4b — кодовый QA исправленного UI
+`f4bf62c156abb9cc0a1b4a4a4851cdb33312994a`, Actions #148 `41372851607`: Python/Dart и story-core PASS; Flutter analyze PASS; **78/78 Flutter tests PASS** (71 старых + 6 новых widget + 1 isolate). Реальный SQLite/BookWorld 35 ходов с UI re-open на 23-м, единый список кампаний и Home Continue прошли; 320dp/200% и откат UI при ошибке записи также PASS. GitHub Actions #148 `41372851607` **completed/success (6/6 PASS)**, Android debug APK PASS, Windows portable PASS. Android prerelease `android-build-148`, отдельный artifact проверенного BookWorld. Физические Android/Windows E2E и legacy миграция всё ещё SKIP. Полный `docs/M174B_FLUTTER_BOOKWORLD_RU.md`.
+
+## M1.7.4b — окончательная автоматическая приёмка
+- **Исходный SHA `f4bf62c156abb9cc0a1b4a4a4851cdb33312994a`**, [GitHub Actions #148](https://github.com/shonentez-afk/AI-Story-RPG/actions/runs/41372851607) `completed/success`, 6/6 jobs PASS.
+- Python/Dart M0 PASS; story_core 10/10, adapter 9/9, JSON Schema 9/9, Python BookWorld 12/12, BookWorld Dart 5/5, campaign_manager 10/10, Flutter analyze PASS и **78/78 tests PASS** (в том числе 35 UI ходов, reopen на 23-м, native worker isolate, старые пилотные UI).
+- Android APK PASS, Windows portable PASS, demo .bworld artifact PASS. [Android prerelease #148](https://github.com/shonentez-afk/AI-Story-RPG/releases/tag/android-build-148).
+- SKIP: Android/Windows physical E2E, real cross-device .bwsave transfer, legacy migration, power-loss, safe delete/backup. Общая UI-интеграция M1.7.4b принята **только по автоматическим QA**, полный M1.7 acceptance ещё требует аппаратной проверки и остаточных функций. См. `docs/M174B_FLUTTER_BOOKWORLD_RU.md`.

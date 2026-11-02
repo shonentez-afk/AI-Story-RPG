@@ -69,3 +69,23 @@ CI на `cca53c4` обнаружил реальную регрессию: native
 Также общий `GameQuickBar` исправлен для 320dp/200% — действия равномерно распределяются по ширине и подписи могут занять 2 строки. Test scrollUntilVisible не требует наличия элемента до ленивого построения в SliverList.
  
 **Фактический статус нового коммита** всегда брать по последнему CI; старый run `41372278079` FAIL Flutter-widget, поэтому не объявлять его PASS. Приоритет последнего SHA — отсутствие регрессий всех предыдущих 71 widget-теста и успешное выполнение нового набора.
+
+## M1.7.4b — CI gate / verified UI regression (2026-11-02)
+
+- **Текущий проверяемый кодовый SHA:** `f4bf62c156abb9cc0a1b4a4a4851cdb33312994a`; [GitHub Actions #148, run `41372851607`](https://github.com/shonentez-afk/AI-Story-RPG/actions/runs/41372851607).
+- **Python reference:** PASS; **Dart M0 story_engine и ink_dart:** PASS.
+- **Native story_core:** 10/10 PASS; **StoryRuntimeAdapter:** 9/9 PASS; **JSON Schema 2020-12:** 9/9 PASS; **Python ZIP+SQLite security:** 12/12 PASS; **Dart BookWorld importer:** 5/5 PASS; **transactional campaign_manager:** 10/10 PASS; весь `dart analyze`: PASS.
+- **Flutter analyze + widget regression:** **78/78 PASS**. Включая 71 прежний тест, 6 новых `testWidgets` (единая библиотека, 35 UI ходов, объединённые кампании, Home Continue, безопасный отказ записи, 320dp/200%), плюс 1 обычный test настоящего `Isolate.run`.
+- **Ошибки предыдущего CI:** `41372278079` завершился Flutter FAIL 21, platform SKIP (некорректный запуск isolate из старых widget hosts, fakeAsync таймеры, overflow GameQuickBar). Исправлено в SHA `f4bf62c`, подтверждено текущим PASS Flutter 78/78. Не считать `cca53c4` принятой версией.
+- **Android APK:** PASS; **Windows portable bundle:** PASS. GitHub Actions #148 `41372851607` — **completed/success, все 6/6 jobs PASS**. Android prerelease [`android-build-148`](https://github.com/shonentez-afk/AI-Story-RPG/releases/tag/android-build-148) содержит `AI-Story-RPG-M1-debug.apk` и `SHA256SUMS.txt`. Artifacts: `AI-Story-RPG-Android-debug`, `AI-Story-RPG-Windows-portable`, `AI-Story-RPG-BookWorld-demo`. Это подтверждает сборку платформ, но не аппаратный E2E запуск SQLite на устройствах.
+- **SKIP:** фактическое открытие .bworld на физических Android/Windows устройствах, межплатформенный перенос настоящего .bwsave v2, power-loss recovery, backup, физический a11y/gesture QA, миграция несовместимых M1.6 сохранений.
+ 
+**Scope:** в пользовательском GUI подготовленный `.bworld` теперь появляется через единую старую кнопку импорта в библиотеке, отображается отдельной RPG-карточкой, запускает SQLite кампании через story_engine/story_core и предоставляет реальные Hero/Items/Journal. Главный Continue и общий «Мои прохождения» учитывают новые и прежние истории без смешивания данных. Это НЕ компилятор произвольной TXT/FB2 книги в сюжет и НЕ реализованный AI режим.
+
+### Итоговый verdict M1.7.4b (автоматический QA)
+
+**PASS:** исправленный код `f4bf62c156abb9cc0a1b4a4a4851cdb33312994a`, [Actions #148](https://github.com/shonentez-afk/AI-Story-RPG/actions/runs/41372851607), все шесть jobs completed/success, Android APK/Windows portable artifacts опубликованы; Flutter 78/78 PASS. Новая подготовленная RPG действительно подключена к Flutter через единую библиотеку и реальные SQLite сохранения. Старые M1.6 книги и сохранения не мигрированы и не изменены.
+
+**SKIP:** проверка открытия .bworld и sqlite3 на физических Android/Windows устройствах, перенос одного .bwsave v2 между физическими системами, UX полное сопровождение reader chrome в новом RPG, безопасное удаление/backup BookWorld и legacy миграция. Следующий технический этап — M1.7.4c: backup/restore, права удаления, оставшиеся UX-инварианты; после него можно переходить к реальному Book Compiler M2.
+
+Документационный коммит с пометкой `[skip ci]` располагается поверх проверенного SHA и не меняет исходники.
