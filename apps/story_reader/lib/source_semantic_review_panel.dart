@@ -49,6 +49,8 @@ class _SourceSemanticReviewPanelState extends State<SourceSemanticReviewPanel> {
   bool _pause = false;
   String? _error;
   int _generation = 0;
+  int _page = 0;
+  static const _pageSize = 12;
 
   @override
   void didUpdateWidget(covariant SourceSemanticReviewPanel oldWidget) {
@@ -58,6 +60,7 @@ class _SourceSemanticReviewPanelState extends State<SourceSemanticReviewPanel> {
       _session = null;
       _expanded = false;
       _showQuotes = false;
+      _page = 0;
       _pause = true;
       _error = null;
     }
@@ -86,6 +89,7 @@ class _SourceSemanticReviewPanelState extends State<SourceSemanticReviewPanel> {
       _busy = true;
       _error = null;
       _showQuotes = false;
+      _page = 0;
     });
     try {
       final raw = await _repository.read(widget.index.sourceFingerprint);
@@ -204,6 +208,7 @@ class _SourceSemanticReviewPanelState extends State<SourceSemanticReviewPanel> {
         setState(() {
           _session = SemanticReviewSession.create(widget.index, _provider);
           _showQuotes = false;
+          _page = 0;
         });
       }
     } catch (error) {
@@ -293,7 +298,8 @@ class _SourceSemanticReviewPanelState extends State<SourceSemanticReviewPanel> {
                 const Text('Цитаты скрыты до явного открытия. '
                     'Все предложения имеют статус INFERRED.'),
               if (_showQuotes)
-                ...session.candidates.take(12).map((item) {
+                ...session.candidates.skip(_page * _pageSize)
+                    .take(_pageSize).map((item) {
                   final decision = session.decisions[item.id];
                   return Card(
                     child: Padding(
@@ -335,9 +341,23 @@ class _SourceSemanticReviewPanelState extends State<SourceSemanticReviewPanel> {
                     ),
                   );
                 }),
-              if (_showQuotes && session.candidates.length > 12)
-                Text('Показаны первые 12 из ${session.candidates.length}. '
-                    'Полный список сохранён в локальном checkpoint.'),
+              if (_showQuotes && session.candidates.length > _pageSize)
+                Wrap(spacing: 8, runSpacing: 6, children: [
+                  OutlinedButton(
+                    key: const Key('semantic-prev'),
+                    onPressed: _page == 0 ? null :
+                        () => setState(() => _page--),
+                    child: const Text('Предыдущие предложения'),
+                  ),
+                  Text('Страница ${_page + 1} из '
+                      '${(session.candidates.length + _pageSize - 1) ~/ _pageSize}'),
+                  OutlinedButton(
+                    key: const Key('semantic-next'),
+                    onPressed: (_page + 1) * _pageSize >= session.candidates.length
+                        ? null : () => setState(() => _page++),
+                    child: const Text('Следующие предложения'),
+                  ),
+                ]),
             ],
           ] else if (!_busy) ...[
             const SizedBox(height: 8),
