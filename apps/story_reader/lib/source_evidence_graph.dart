@@ -220,7 +220,8 @@ class SourceEvidence {
     'start_utf16': startUtf16,
     'end_utf16': endUtf16,
     'status': status.name.toUpperCase(),
-    'spoiler_gate': spoilerGate.name.toUpperCase(),
+    'spoiler_gate': spoilerGate == EvidenceSpoilerGate.afterEvent
+        ? 'AFTER_EVENT' : spoilerGate.name.toUpperCase(),
     'visible_after_chapter': visibleAfterChapter,
     'reveal_event_id': revealEventId,
   };
@@ -230,8 +231,12 @@ class SourceEvidence {
     try {
       final kind = EvidenceKind.values.byName(
           (json['kind'] as String).toLowerCase());
-      final gate = EvidenceSpoilerGate.values.byName(
-          (json['spoiler_gate'] as String).toLowerCase());
+      final gate = switch (json['spoiler_gate']) {
+        'CHAPTER' => EvidenceSpoilerGate.chapter,
+        'AFTER_EVENT' => EvidenceSpoilerGate.afterEvent,
+        'HIDDEN' => EvidenceSpoilerGate.hidden,
+        _ => throw const FormatException('Недопустимый spoiler gate'),
+      };
       final base = SourceEvidence.propose(index,
         chunkId: json['chunk_id'] as String,
         kind: kind,
