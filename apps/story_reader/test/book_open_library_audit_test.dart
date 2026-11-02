@@ -87,11 +87,15 @@ void main() {
         findsOneWidget);
     await tester.ensureVisible(find.text('Подготовить к RPG'));
     await tester.tap(find.text('Подготовить к RPG'));
-    await tester.pumpAndSettle();
-    // Wait for MaterialPageRoute's transition before asserting its AppBar.
+    // Preparation uses a real background isolate; pumpAndSettle would wait
+    // for the pending worker under FakeAsync. The navigation itself should
+    // be verified independently from worker completion.
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
     expect(find.text('Подготовка книги'), findsOneWidget);
     await tester.pageBack();
-    await tester.pumpAndSettle();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
 
     await tester.ensureVisible(find.text('Читать'));
     await tester.tap(find.text('Читать'));
