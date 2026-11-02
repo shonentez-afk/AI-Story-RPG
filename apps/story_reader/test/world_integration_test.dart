@@ -1,5 +1,4 @@
 import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:ai_story_reader/home_page.dart';
 import 'package:ai_story_reader/campaign_store.dart';
@@ -9,6 +8,7 @@ import 'package:ai_story_reader/world_campaigns_page.dart';
 import 'package:ai_story_reader/world_library_gateway.dart';
 import 'package:ai_story_reader/world_play_page.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -70,6 +70,28 @@ void main() {
       );
     } else {
       await tester.ensureVisible(finder);
+    }
+    await tester.pump();
+    // At 200% accessibility text scale, the button can be built and only
+    // partly inside the viewport. A real player scrolls farther before
+    // tapping; do that here instead of sending a false off-screen click.
+    final scroll = find.byKey(const ValueKey('world-scene-scroll'));
+    if (scroll.evaluate().isNotEmpty) {
+      final viewport = tester.getRect(scroll);
+      final center = tester.getCenter(finder);
+      if (center.dy > viewport.bottom - 24) {
+        await tester.drag(
+          scroll,
+          Offset(0, viewport.bottom - 90 - center.dy),
+        );
+        await tester.pumpAndSettle();
+      } else if (center.dy < viewport.top + 24) {
+        await tester.drag(
+          scroll,
+          Offset(0, viewport.top + 90 - center.dy),
+        );
+        await tester.pumpAndSettle();
+      }
     }
     await tester.tap(finder);
     await settleWorker(tester);
@@ -268,6 +290,123 @@ void main() {
     expect((await gateway.campaigns(worldHash: world.archiveHash))
         .single.id, id);
     expect((await gateway.load(id)).revision, 0);
+    expect(tester.takeException(), isNull);
+  });
+
+
+  testWidgets('BookWorld shares palette and typography with the book reader',
+      (tester) async {
+    final world = await install();
+    final id = await gateway.start(world.archiveHash);
+    await tester.pumpWidget(MaterialApp(
+      home: WorldPlayPage(gateway: gateway, campaignId: id),
+    ));
+    await settleWorker(tester);
+    expect(find.byTooltip('Настройки чтения'), findsOneWidget);
+    await tester.tap(find.byTooltip('Настройки чтения'));
+    await tester.pumpAndSettle();
+    expect(find.text('Размер текста: 18'), findsOneWidget);
+    await tester.tap(find.text('Тёмная').last);
+    await tester.pumpAndSettle();
+    final preferences = await SharedPreferences.getInstance();
+    expect(preferences.getInt('ai_story_reading_v1_palette'), 2);
+    expect((await gateway.load(id)).revision, 0);
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pumpAndSettle();
+    await tester.pumpWidget(MaterialApp(
+      home: WorldPlayPage(gateway: gateway, campaignId: id),
+    ));
+    await settleWorker(tester);
+    final page = tester.widget<Scaffold>(find.byType(Scaffold));
+    expect(page.backgroundColor, const Color(0xFF272727));
+    expect((await gateway.load(id)).revision, 0);
+    expect(find.byKey(const ValueKey('world-choice-inspect_gate')),
+        findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('BookWorld chrome modes keep choices and real SQLite journal',
+      (tester) async {
+    final world = await install();
+    final id = await gateway.start(world.archiveHash);
+    await tester.pumpWidget(MaterialApp(
+      home: WorldPlayPage(gateway: gateway, campaignId: id),
+    ));
+    await settleWorker(tester);
+    expect(find.byTooltip('Режим экрана'), findsOneWidget);
+    expect(find.text('Герой'), findsOneWidget);
+    await tester.tap(find.byTooltip('Режим экрана'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Режим чтения').last);
+    await tester.pumpAndSettle();
+    expect(find.byTooltip('Настройки чтения'), findsNothing);
+    expect(find.text('Предметы'), findsOneWidget);
+    expect(find.byKey(const ValueKey('world-choice-inspect_gate')),
+        findsOneWidget);
+    await tester.sendKeyEvent(LogicalKeyboardKey.f11);
+    await tester.pumpAndSettle();
+    expect(find.text('Предметы'), findsNothing);
+    expect(find.byTooltip('Показать управление'), findsOneWidget);
+    const scene = 'У ворот тихо. Вы можете осмотреть камни или пройти к рынку.';
+    expect(find.text(scene), findsOneWidget);
+    final locked = tester.widget<FilledButton>(
+        find.byKey(const ValueKey('world-choice-enter_hall')));
+    expect(locked.onPressed, isNull);
+    // A tap on noninteractive narrative text peeks the game panels; it does
+    // not submit an action or alter the saved checkpoint.
+    await tester.tap(find.text(scene));
+    await tester.pumpAndSettle();
+    expect(find.text('Журнал'), findsOneWidget);
+    expect((await gateway.load(id)).revision, 0);
+    await tester.tap(find.text('Журнал'));
+    await tester.pumpAndSettle();
+    expect(find.text('Решений пока нет'), findsOneWidget);
+    await tester.tap(find.byTooltip('Закрыть'));
+    await tester.pumpAndSettle();
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pumpAndSettle();
+    expect(find.byTooltip('Настройки чтения'), findsOneWidget);
+    expect(find.text('Герой'), findsOneWidget);
+    await tapChoice(tester, 'inspect_gate');
+    expect((await gateway.load(id)).revision, 1);
+    expect((await gateway.load(id)).journal.length, 1);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('BookWorld fullscreen remains playable at 320dp and 200% text',
+      (tester) async {
+    final world = await install();
+    final id = await gateway.start(world.archiveHash);
+    tester.view.physicalSize = const Size(320, 640);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+    await tester.pumpWidget(MaterialApp(
+      builder: (context, child) => MediaQuery(
+        data: MediaQuery.of(context).copyWith(
+          textScaler: const TextScaler.linear(2),
+        ),
+        child: child!,
+      ),
+      home: WorldPlayPage(gateway: gateway, campaignId: id),
+    ));
+    await settleWorker(tester);
+    expect(tester.takeException(), isNull);
+    await tester.sendKeyEvent(LogicalKeyboardKey.f11);
+    await tester.pumpAndSettle();
+    expect(find.byTooltip('Настройки чтения'), findsNothing);
+    expect(find.byTooltip('Показать управление'), findsOneWidget);
+    await tapChoice(tester, 'inspect_gate');
+    expect((await gateway.load(id)).revision, 1);
+    expect(tester.takeException(), isNull);
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pumpAndSettle();
+    expect(find.byTooltip('Режим экрана'), findsOneWidget);
+    expect(find.text('Герой'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
