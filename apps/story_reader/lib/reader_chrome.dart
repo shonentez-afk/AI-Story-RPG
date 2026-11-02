@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart';
 
 /// Shared visibility contract for both the book and RPG reader.
 /// Story choices and book navigation remain in the page body in all modes.

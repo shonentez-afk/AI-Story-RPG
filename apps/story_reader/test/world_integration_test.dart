@@ -177,7 +177,7 @@ void main() {
     expect(find.text('Ходов: 1'), findsOneWidget);
     await tester.tap(find.text('Герой'));
     await settleWorker(tester);
-    expect(find.text('insight: 1'), findsOneWidget);
+    expect(find.text('Наблюдательность: 1'), findsOneWidget);
     await tester.tap(find.byTooltip('Закрыть'));
     await settleWorker(tester);
     await tester.tap(find.text('Журнал'));

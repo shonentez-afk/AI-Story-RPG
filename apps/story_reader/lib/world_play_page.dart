@@ -431,6 +431,16 @@ class _WorldPlayPageState extends State<WorldPlayPage> {
 
 class _WorldInfoSheet extends StatelessWidget {
   const _WorldInfoSheet({required this.panel, required this.view});
+
+  // Only translate known stat identifiers; authored unknown ones stay intact.
+  static String _statLabel(String id) => switch (id) {
+    'insight' => 'Наблюдательность',
+    'courage' => 'Смелость',
+    'strength' => 'Сила',
+    'intelligence' => 'Интеллект',
+    'charisma' => 'Харизма',
+    _ => id,
+  };
   final GamePanel panel;
   final WorldGameView view;
 
@@ -444,7 +454,7 @@ class _WorldInfoSheet extends StatelessWidget {
     final entries = switch (panel) {
       GamePanel.character => [
         for (final stat in view.stats.entries)
-          stat.key + ': ' + stat.value.toString(),
+          _statLabel(stat.key) + ': ' + stat.value.toString(),
         'Игровое время: ' + view.tick.toString(),
         'Открыто сведений: ' + view.knownFacts.length.toString(),
       ],

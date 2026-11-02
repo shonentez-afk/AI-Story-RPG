@@ -212,7 +212,8 @@ class _WorldCampaignsPageState extends State<WorldCampaignsPage> {
     final typography = Theme.of(context).textTheme;
     return Scaffold(
       appBar: AppBar(
-        title: Text(widget.world.title),
+        title: Text(widget.world.title,
+          maxLines: 1, overflow: TextOverflow.ellipsis),
         actions: [
           IconButton(
             tooltip: 'Импортировать .bwsave v2',
