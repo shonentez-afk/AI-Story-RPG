@@ -41,7 +41,17 @@ class BookReadingState {
 class BookReadingStore {
   static String _key(String bookId) => 'ai_story_book_state_v1_$bookId';
 
+  // A quick chapter change, bookmark tap, route pop and subsequent reopen
+  // must never allow an older write to overwrite the latest reading place.
+  // The queue is scoped by book ID so unrelated books do not block each other.
+  static final Map<String, Future<void>> _pending = {};
+
   Future<BookReadingState> load(String bookId) async {
+    final pending = _pending[bookId];
+    if (pending != null) {
+      // A failed write must not prevent a read of the last good value.
+      try { await pending; } catch (_) {}
+    }
     final prefs = await SharedPreferences.getInstance();
     final raw = prefs.getString(_key(bookId));
     if (raw == null) return const BookReadingState();
@@ -77,9 +87,9 @@ class BookReadingStore {
     }
   }
 
-  Future<void> save(String bookId, BookReadingState state) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_key(bookId), jsonEncode({
+  Future<void> save(String bookId, BookReadingState state) {
+    // Serialize immutable bytes NOW, not the mutable UI at write time.
+    final payload = jsonEncode({
       'chapter': state.chapter,
       'scrollOffset': state.scrollOffset.isFinite
           ? state.scrollOffset : 0,
@@ -88,6 +98,20 @@ class BookReadingStore {
         'anchorBlock': state.anchor!.blockIndex,
         'anchorFraction': state.anchor!.fraction,
       },
-    }));
+    });
+    final previous = _pending[bookId] ?? Future<void>.value();
+    final operation = previous.catchError((Object _) {}).then((_) async {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_key(bookId), payload);
+    });
+    _pending[bookId] = operation;
+    // Clean up after both successful and failed writes, with no unhandled
+    // future errors; callers still receive the original failure.
+    operation.then((_) {
+      if (identical(_pending[bookId], operation)) _pending.remove(bookId);
+    }, onError: (Object _) {
+      if (identical(_pending[bookId], operation)) _pending.remove(bookId);
+    });
+    return operation;
   }
 }
