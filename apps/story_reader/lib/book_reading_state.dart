@@ -45,15 +45,14 @@ class BookReadingStore {
   // must never allow an older write to overwrite the latest reading place.
   // The queue is scoped by book ID so unrelated books do not block each other.
   static final Map<String, Future<void>> _pending = {};
+  static final Map<String, String> _queuedSnapshot = {};
 
   Future<BookReadingState> load(String bookId) async {
-    final pending = _pending[bookId];
-    if (pending != null) {
-      // A failed write must not prevent a read of the last good value.
-      try { await pending; } catch (_) {}
-    }
+    // Never block a book's first frame on a queued platform-channel write.
+    // The latest explicitly requested snapshot is available in this process
+    // while persistence catches up, including immediate reopen on navigation.
     final prefs = await SharedPreferences.getInstance();
-    final raw = prefs.getString(_key(bookId));
+    final raw = _queuedSnapshot[bookId] ?? prefs.getString(_key(bookId));
     if (raw == null) return const BookReadingState();
     try {
       final map = jsonDecode(raw) as Map<String, dynamic>;
@@ -99,6 +98,7 @@ class BookReadingStore {
         'anchorFraction': state.anchor!.fraction,
       },
     });
+    _queuedSnapshot[bookId] = payload;
     final previous = _pending[bookId] ?? Future<void>.value();
     final operation = previous.catchError((Object _) {}).then((_) async {
       final prefs = await SharedPreferences.getInstance();
@@ -109,8 +109,15 @@ class BookReadingStore {
     // future errors; callers still receive the original failure.
     operation.then((_) {
       if (identical(_pending[bookId], operation)) _pending.remove(bookId);
+      if (_queuedSnapshot[bookId] == payload) {
+        _queuedSnapshot.remove(bookId);
+      }
     }, onError: (Object _) {
       if (identical(_pending[bookId], operation)) _pending.remove(bookId);
+      // Never present a failed write as persistent on the next open.
+      if (_queuedSnapshot[bookId] == payload) {
+        _queuedSnapshot.remove(bookId);
+      }
     });
     return operation;
   }
