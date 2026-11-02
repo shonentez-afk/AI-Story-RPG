@@ -24,7 +24,9 @@ class _BookReaderPageState extends State<BookReaderPage>
   final BookReadingStore _readingStore = BookReadingStore();
   BookReadingState _reading = const BookReadingState();
   bool _progressReady = false;
-  final ScrollController _scroll = ScrollController();
+  // Do not resurrect pixel offsets from PageStorage after a semantic reflow.
+  final ScrollController _scroll = ScrollController(keepScrollOffset: false);
+  int _scrollLayoutEpoch = 0;
   final GlobalKey _viewportKey = GlobalKey();
   final GlobalKey _priorBlocksKey = GlobalKey();
   final GlobalKey _followingBlocksKey = GlobalKey();
@@ -113,67 +115,34 @@ class _BookReaderPageState extends State<BookReaderPage>
     });
   }
 
-  /// Reconstruct an anchored layout with the target paragraph as the sliver
-  /// center. Earlier blocks remain scrollable backwards, even in long books.
+  /// On each semantic reflow the Scrollable gets a fresh ScrollPosition.
+  /// Reusing the old ScrollPosition when changing CustomScrollView.center
+  /// causes Flutter to preserve pixel coordinates from the old sliver origin,
+  /// which can shift the target paragraph thousands of pixels off screen.
+  /// The source paragraph is a mounted sliver at the NEW scroll origin.
   void _restoreScroll() {
     _restoring = true;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      if (!_scroll.hasClients) {
-        _restoring = false;
-        return;
+      if (_scroll.hasClients) {
+        final pos = _scroll.position;
+        final anchor = _reading.anchor;
+        double requested = _reading.scrollOffset;
+        if (_layoutAnchorIndex != null && anchor != null) {
+          final target = _anchorParagraphKey.currentContext?.findRenderObject();
+          // Use only the paragraph's size relative to the fresh center.
+          // Clamping the fraction keeps a portion of it visible even when
+          // the font/window makes a single paragraph taller than the screen.
+          requested = target is RenderBox && target.hasSize
+              ? target.size.height * anchor.fraction.clamp(0.0, 0.75)
+              : 0.0;
+        }
+        _scroll.jumpTo(requested.clamp(
+          pos.minScrollExtent, pos.maxScrollExtent,
+        ).toDouble());
       }
-      final anchor = _reading.anchor;
-      if (_layoutAnchorIndex != null && anchor != null) {
-        _alignSourceInViewport(anchor, 4);
-        return;
-      }
-      final pos = _scroll.position;
-      _scroll.jumpTo(_reading.scrollOffset.clamp(
-        pos.minScrollExtent, pos.maxScrollExtent,
-      ).toDouble());
       _restoring = false;
     });
-  }
-
-  /// Reconcile the actual world-space coordinates once layout has changed.
-  /// Scroll offsets may be shifted by RenderViewport as negative slivers
-  /// before CustomScrollView.center resize. Merely jumping to zero is not
-  /// enough: keep the selected paragraph within the *visible* screen.
-  void _alignSourceInViewport(BookTextAnchor anchor, int remaining) {
-    if (!mounted || !_scroll.hasClients) {
-      _restoring = false;
-      return;
-    }
-    final target = _anchorParagraphKey.currentContext?.findRenderObject();
-    final viewport = _viewportKey.currentContext?.findRenderObject();
-    if (target is RenderBox && target.hasSize &&
-        viewport is RenderBox && viewport.hasSize) {
-      final screenTop = viewport.localToGlobal(Offset.zero).dy + 1;
-      final actualTop = target.localToGlobal(Offset.zero).dy;
-      final desiredTop = screenTop -
-          target.size.height * anchor.fraction.clamp(0.0, 0.85);
-      // Increase pixels when target appears too far down, decrease them
-      // when it has fallen above the visible viewport.
-      final correction = actualTop - desiredTop;
-      final pos = _scroll.position;
-      final adjusted = (_scroll.offset + correction).clamp(
-        pos.minScrollExtent, pos.maxScrollExtent,
-      ).toDouble();
-      if (remaining > 0 && (adjusted - pos.pixels).abs() > 0.5) {
-        _scroll.jumpTo(adjusted);
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          _alignSourceInViewport(anchor, remaining - 1);
-        });
-        return;
-      }
-    } else if (remaining > 0) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        _alignSourceInViewport(anchor, remaining - 1);
-      });
-      return;
-    }
-    _restoring = false;
   }
 
   /// A font, width, line-height or reader-chrome change preserves a semantic
@@ -193,6 +162,7 @@ class _BookReaderPageState extends State<BookReaderPage>
     _restoring = true;
     if (_scroll.hasClients) _scroll.jumpTo(0);
     setState(() {
+      _scrollLayoutEpoch++;
       _reading = next;
       _layoutAnchorIndex = next.anchor?.blockIndex;
       if (settings != null) _settings = settings;
@@ -233,6 +203,7 @@ class _BookReaderPageState extends State<BookReaderPage>
       _reading = saved.copyWith(chapter:
           saved.chapter.clamp(0, _count > 0 ? _count - 1 : 0).toInt());
       _layoutAnchorIndex = saved.anchor?.blockIndex;
+      _scrollLayoutEpoch++;
       _progressReady = true;
     });
     _restoreScroll();
@@ -248,6 +219,7 @@ class _BookReaderPageState extends State<BookReaderPage>
         chapter: index, scrollOffset: 0, clearAnchor: true,
       );
       _layoutAnchorIndex = null;
+      _scrollLayoutEpoch++;
     });
     _restoreScroll();
     if (widget.bookId != null) {
@@ -474,6 +446,7 @@ class _BookReaderPageState extends State<BookReaderPage>
             key: _viewportKey,
             constraints: const BoxConstraints(maxWidth: 800),
             child: CustomScrollView(
+              key: ValueKey('reader-scroll-$_scrollLayoutEpoch'),
               controller: _scroll,
               center: anchored ? _centerSliverKey : null,
               slivers: [
