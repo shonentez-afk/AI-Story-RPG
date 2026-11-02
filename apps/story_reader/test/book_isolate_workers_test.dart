@@ -9,7 +9,6 @@ import 'package:ai_story_reader/book_import.dart';
 import 'package:ai_story_reader/book_storage.dart';
 import 'package:ai_story_reader/book_isolate_workers.dart';
 import 'package:ai_story_reader/book_source_analysis.dart';
-import 'package:ai_story_reader/book_source_index.dart';
 import 'package:ai_story_reader/source_evidence_graph.dart';
 import 'package:ai_story_reader/source_narrative_extractor.dart';
 import 'package:ai_story_reader/source_relation_review.dart';
