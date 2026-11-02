@@ -110,7 +110,7 @@ void main() {
     expect(status.userFacingBlockers,
         contains('Не указан статус прав на личную адаптацию книги.'));
     expect(status.userFacingBlockers,
-        contains('Компилятор пользовательских .bworld ещё не реализован.'));
+        contains('Пакет этой книги ещё не создан и не проверен.'));
     expect(status.isStructurallyReady, false);
     expect(status.canSendToCloud, false);
   });
