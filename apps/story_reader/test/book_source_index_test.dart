@@ -11,6 +11,28 @@ import 'package:ai_story_reader/book_source_index.dart';
 import 'package:ai_story_reader/source_index_preview_page.dart';
 import 'package:ai_story_reader/source_analysis_checkpoint_repository.dart';
 
+// Scroll lazy slivers as a user would. ensureVisible() alone can target an
+// eagerly built child of an off-screen SliverToBoxAdapter.
+Future<void> revealInViewport(WidgetTester tester, Finder target) async {
+  for (var attempt = 0; attempt < 32; attempt++) {
+    if (target.evaluate().isNotEmpty) {
+      final y = tester.getCenter(target).dy;
+      final height = tester.view.physicalSize.height /
+          tester.view.devicePixelRatio;
+      // A control near the bottom edge is still tappable. Requiring
+      // 85 px of blank space can be impossible at maxScrollExtent.
+      if (y >= 72 && y <= height - 4) return;
+      await tester.drag(find.byType(CustomScrollView).first,
+          Offset(0, y > height - 4 ? -260 : 260));
+    } else {
+      await tester.drag(find.byType(CustomScrollView).first,
+          const Offset(0, -260));
+    }
+    await tester.pumpAndSettle();
+  }
+  throw StateError('Target is not reachable in source preparation scroll');
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -177,19 +199,13 @@ void main() {
     expect(find.text('Глав с текстом: 2 из 2'), findsOneWidget);
     expect(find.text('Текстовое покрытие индекса: 100.0%'),
         findsOneWidget);
-    await tester.ensureVisible(
+    await revealInViewport(tester,
         find.byKey(const Key('prepare-show-chapters')));
     await tester.tap(find.byKey(const Key('prepare-show-chapters')));
     await tester.pumpAndSettle();
-    await tester.scrollUntilVisible(
-      find.text('Глава 1'), 180,
-      scrollable: find.byType(Scrollable).first, maxScrolls:30,
-    );
+    await revealInViewport(tester, find.text('Глава 1'));
     expect(find.text('Глава 1'), findsOneWidget);
-    await tester.scrollUntilVisible(
-      find.text('Глава 2'), 180,
-      scrollable: find.byType(Scrollable).first, maxScrolls:30,
-    );
+    await revealInViewport(tester, find.text('Глава 2'));
     expect(find.text('Глава 2'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });

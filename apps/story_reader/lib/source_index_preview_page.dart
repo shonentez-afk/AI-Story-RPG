@@ -6,6 +6,7 @@ import 'book_import.dart';
 import 'book_source_analysis.dart';
 import 'book_source_index.dart';
 import 'book_isolate_workers.dart';
+import 'offline_preparation_coordinator.dart';
 import 'source_analysis_checkpoint_repository.dart';
 import 'source_narrative_review_panel.dart';
 import 'source_semantic_review_panel.dart';
@@ -21,6 +22,7 @@ class SourceIndexPreviewPage extends StatefulWidget {
     this.batchProcessor,
     this.checkpointEncoder,
     this.checkpointDecoder,
+    this.localPreparationCoordinator,
   });
 
   final ImportedBook book;
@@ -35,6 +37,9 @@ class SourceIndexPreviewPage extends StatefulWidget {
   final Future<String> Function(SourceAnalysisSession)? checkpointEncoder;
   final Future<SourceAnalysisSession> Function(
       BookSourceIndex, String)? checkpointDecoder;
+
+  /// Optional seam for widget tests; production uses private scoped stores.
+  final OfflinePreparationCoordinator? localPreparationCoordinator;
 
   @override
   State<SourceIndexPreviewPage> createState() =>
@@ -52,6 +57,11 @@ class _SourceIndexPreviewPageState extends State<SourceIndexPreviewPage> {
   String? _analysisError;
   bool _loadingAnalysis = false;
   bool _busy = false;
+  bool _offlineWorking = false;
+  bool _offlinePause = false;
+  OfflinePreparationProgress? _offlineProgress;
+  String? _offlineMessage;
+  int _narrativeRefresh = 0;
   bool _showCandidates = false;
   bool _showChapters = false;
   int _visibleCandidates = 10;
@@ -70,6 +80,9 @@ class _SourceIndexPreviewPageState extends State<SourceIndexPreviewPage> {
     _analysis = null;
     _analysisError = null;
     _loadingAnalysis = false;
+    _offlinePause = true;
+    _offlineProgress = null;
+    _offlineMessage = null;
     _showCandidates = false;
     _showChapters = false;
     _visibleCandidates = 10;
@@ -162,6 +175,127 @@ class _SourceIndexPreviewPageState extends State<SourceIndexPreviewPage> {
     } finally {
       if (mounted) setState(() => _busy = false);
     }
+  }
+
+  /// Run existing local stages with one button, never a model/network call.
+  /// Cancellation occurs at a saved batch boundary and resumes by fingerprint.
+  Future<void> _runLocalPreparation() async {
+    final index = _index;
+    if (_busy || _offlineWorking || _loadingAnalysis ||
+        index == null || _analysis == null) return;
+    final generation = _generation;
+    final coordinator = widget.localPreparationCoordinator ??
+        OfflinePreparationCoordinator(
+          mentionsRepository: _repository,
+          narrativeRepository: const FileSourceAnalysisCheckpointRepository(
+              scope: SourceCheckpointScope.narrativeEvidence),
+          catalogRepository: const FileSourceAnalysisCheckpointRepository(
+              scope: SourceCheckpointScope.semanticCatalog),
+        );
+    setState(() {
+      _offlineWorking = true;
+      _offlinePause = false;
+      _busy = true;
+      _analysisError = null;
+      _offlineMessage = 'Локальная подготовка выполняется…';
+    });
+    try {
+      final result = await coordinator.run(index,
+          shouldPause: () => _offlinePause ||
+              !mounted || generation != _generation,
+          onProgress: (progress) {
+            if (!mounted || generation != _generation) return;
+            setState(() {
+              _offlineProgress = progress;
+              if (progress.mentions != null) {
+                _analysis = progress.mentions;
+              }
+            });
+          });
+      if (!mounted || generation != _generation) return;
+      setState(() {
+        _analysis = result.mentions;
+        _narrativeRefresh++;
+        _offlineMessage = result.paused
+            ? 'Остановлено после сохранённой порции. '
+                'Нажмите «Продолжить локальную подготовку».'
+            : 'Локальный анализ завершён: '
+                '${result.catalog?.assertions.length ?? 0} '
+                'предполагаемых событий и фактов. '
+                'Это ещё не готовая RPG, необходимы проверка канона и сценарий.';
+      });
+    } catch (error) {
+      if (mounted && generation == _generation) {
+        setState(() {
+          _offlineMessage = 'Локальная подготовка прервана: $error. '
+              'Последний сохранённый этап остаётся в приватном checkpoint.';
+        });
+      }
+    } finally {
+      if (mounted && generation == _generation) {
+        setState(() {
+          _offlineWorking = false;
+          _busy = false;
+        });
+      }
+    }
+  }
+
+  Widget _offlinePreparationControls(BookSourceIndex index) {
+    final progress = _offlineProgress;
+    final label = _offlineWorking ? 'Остановить после порции'
+        : _offlineMessage?.startsWith('Остановлено') == true
+            ? 'Продолжить локальную подготовку'
+            : 'Выполнить локальную подготовку';
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Локальная подготовка книги',
+                style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: 6),
+            const Text('Одна кнопка: ищем имена, затем цитаты событий и '
+                'локальные смысловые предложения. Результаты сохраняются '
+                'после каждой порции, их можно проверить и уточнить ниже. '
+                'Полноценная ИИ-модель не используется.'),
+            const SizedBox(height: 8),
+            FilledButton.icon(
+              key: const Key('prepare-offline-all'),
+              onPressed: _offlineWorking
+                  ? () => setState(() => _offlinePause = true)
+                  : _busy || _loadingAnalysis || _analysis == null
+                      ? null : _runLocalPreparation,
+              icon: Icon(_offlineWorking
+                  ? Icons.pause_circle_outline : Icons.play_arrow),
+              label: Text(label),
+            ),
+            if (progress != null) ...[
+              const SizedBox(height: 8),
+              Text(switch (progress.stage) {
+                OfflinePreparationStage.names => 'Ищем имена и места',
+                OfflinePreparationStage.narrative => 'Ищем цитаты событий',
+                OfflinePreparationStage.semantics => 'Составляем смысловой каталог',
+                OfflinePreparationStage.completed => 'Локальный поиск закончен',
+                OfflinePreparationStage.paused => 'Остановлено',
+              }),
+              LinearProgressIndicator(value: progress.fraction),
+              Text('${progress.completed} из ${progress.total} порций/фрагментов'),
+            ],
+            if (_offlineMessage != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Text(_offlineMessage!),
+              ),
+            const SizedBox(height: 6),
+            const Text('Результат этой кнопки — проверяемые предположения, '
+                'не готовая игра. Текст не отправляется в облако, '
+                'старые игровые сохранения не меняются.'),
+          ],
+        ),
+      ),
+    );
   }
 
   Future<void> _retryFailed() async {
@@ -523,6 +657,8 @@ class _SourceIndexPreviewPageState extends State<SourceIndexPreviewPage> {
                             style: Theme.of(context).textTheme.headlineSmall),
                         const SizedBox(height: 12),
                         _preparationOverview(index),
+                        const SizedBox(height: 12),
+                        _offlinePreparationControls(index),
                         const SizedBox(height: 18),
                         _analysisControls(index),
                         if (_showCandidates && allPending.isNotEmpty) ...[
@@ -623,10 +759,13 @@ class _SourceIndexPreviewPageState extends State<SourceIndexPreviewPage> {
                             'сохранить для последующей проверки. '
                             'Внутри есть раздел связей персонажей и хронологии.'),
                         const SizedBox(height: 10),
-                        SourceNarrativeReviewPanel(
-                          key: ValueKey(index.sourceFingerprint),
+                        IgnorePointer(
+                          ignoring: _offlineWorking,
+                          child: SourceNarrativeReviewPanel(
+                          key: ValueKey('${index.sourceFingerprint}-${_narrativeRefresh}'),
                           index: index,
                           sourceMentions: _analysis,
+                          ),
                         ),
                         const Divider(height: 28),
                         ExpansionTile(
