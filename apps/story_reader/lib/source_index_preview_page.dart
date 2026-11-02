@@ -27,7 +27,8 @@ class _SourceIndexPreviewPageState extends State<SourceIndexPreviewPage> {
   void _buildIndex() {
     // Native Dart runs offline on Windows and Android. Large TXT/FB2 books
     // are processed outside the UI isolate.
-    _result = Isolate.run(() => BookSourceIndexer.index(widget.book));
+    final book = widget.book;
+    _result = Isolate.run(() => BookSourceIndexer.index(book));
   }
 
   void _retry() => setState(_buildIndex);
