@@ -124,6 +124,7 @@ class _BookReaderPageState extends State<BookReaderPage>
   /// can still correct sliver extents after the first layout pass, so verify
   /// the actual paragraph rectangle for a bounded number of frames.
   void _restoreScroll() {
+    assert(() { debugPrint('AR-DBG RESTORE start epoch=$_scrollLayoutEpoch anchor=${_reading.anchor?.blockIndex} fraction=${_reading.anchor?.fraction} positions=${_scroll.positions.length} offset=${_scroll.hasClients ? _scroll.offset : "none"}'); return true; }());
     _restoring = true;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || !_scroll.hasClients) {
@@ -137,6 +138,7 @@ class _BookReaderPageState extends State<BookReaderPage>
         final paragraphOffset = target is RenderBox && target.hasSize
             ? target.size.height * anchor.fraction.clamp(0.0, 0.75)
             : 0.0;
+        assert(() { debugPrint('AR-DBG RESTORE layout epoch=$_scrollLayoutEpoch size=${target is RenderBox ? target.size.height : -1} requested=$paragraphOffset current=${pos.pixels} min=${pos.minScrollExtent} max=${pos.maxScrollExtent}'); return true; }());
         _scroll.jumpTo(paragraphOffset.clamp(
           pos.minScrollExtent, pos.maxScrollExtent,
         ).toDouble());
@@ -154,6 +156,7 @@ class _BookReaderPageState extends State<BookReaderPage>
   /// new dimensions. A didChangeMetrics-only fix runs too early and Flutter
   /// can then move the old center by the height of one rendered paragraph.
   bool _onScrollMetrics(ScrollMetricsNotification notice) {
+    assert(() { debugPrint('AR-DBG METRICS epoch=$_scrollLayoutEpoch depth=${notice.depth} pending=$_anchorCorrectionPending pixel=${notice.metrics.pixels} viewport=${notice.metrics.viewportDimension}'); return true; }());
     if (notice.depth == 0 && _anchorCorrectionPending &&
         _reading.anchor != null && mounted) {
       if (_anchorCorrectionBudget < 2) _anchorCorrectionBudget = 2;
@@ -194,6 +197,7 @@ class _BookReaderPageState extends State<BookReaderPage>
         final nextOffset = (pos.pixels + correction).clamp(
           pos.minScrollExtent, pos.maxScrollExtent,
         ).toDouble();
+        assert(() { debugPrint('AR-DBG ALIGN epoch=$_scrollLayoutEpoch pass=$_anchorCorrectionPasses pixel=${pos.pixels} target=$paragraphTop expected=$desiredTop delta=$correction next=$nextOffset'); return true; }());
         if (correction.abs() > 1 && (nextOffset - pos.pixels).abs() > 0.5) {
           _scroll.jumpTo(nextOffset);
         }
@@ -206,6 +210,7 @@ class _BookReaderPageState extends State<BookReaderPage>
         WidgetsBinding.instance.scheduleFrame();
         _scheduleAnchorCorrection();
       } else {
+        assert(() { debugPrint('AR-DBG ALIGN DONE epoch=$_scrollLayoutEpoch pixel=${_scroll.hasClients ? _scroll.offset : "none"}'); return true; }());
         _anchorCorrectionPending = false;
         _restoring = false;
       }
@@ -223,6 +228,7 @@ class _BookReaderPageState extends State<BookReaderPage>
     // Window metrics may invalidate the previous RenderBox geometry before
     // the callback runs. The scroll listener already cached the last actual
     // visible paragraph. Preserve that source position across system reflow.
+    assert(() { debugPrint('AR-DBG REFLOW start epoch=$_scrollLayoutEpoch current=${_scroll.hasClients ? _scroll.offset : "none"} last=${_reading.anchor?.blockIndex} usingLast=$useLastKnownAnchor'); return true; }());
     final next = useLastKnownAnchor
         ? _reading
         : (_progressReady ? _snapshotPosition() : _reading);
@@ -349,6 +355,7 @@ class _BookReaderPageState extends State<BookReaderPage>
 
   @override
   void didChangeMetrics() {
+    assert(() { debugPrint('AR-DBG DIDMETRICS epoch=$_scrollLayoutEpoch restoring=$_restoring'); return true; }());
     // Capture the paragraph location from the previous render tree BEFORE
     // the first frame lays out the new window size/orientation.
     if (mounted && _progressReady && !_restoring) {
