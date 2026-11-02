@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'book_import.dart';
 import 'book_model.dart';
 import 'book_reading_state.dart';
@@ -16,54 +17,161 @@ class BookReaderPage extends StatefulWidget {
   State<BookReaderPage> createState() => _BookReaderPageState();
 }
 
-class _BookReaderPageState extends State<BookReaderPage> {
+class _BookReaderPageState extends State<BookReaderPage>
+    with WidgetsBindingObserver {
   final ReadingSettingsStore _store = ReadingSettingsStore();
   ReadingPreferences _settings = const ReadingPreferences();
   final BookReadingStore _readingStore = BookReadingStore();
   BookReadingState _reading = const BookReadingState();
   bool _progressReady = false;
-  final ScrollController _scroll = ScrollController();
+  final ScrollController _scroll = ScrollController(keepScrollOffset: false);
+  int _scrollEpoch = 0;
+  final GlobalKey _viewportKey = GlobalKey();
+  GlobalKey _priorBlocksKey = GlobalKey();
+  GlobalKey _currentBlocksKey = GlobalKey();
+  GlobalKey _centerSliverKey = GlobalKey();
   Timer? _progressTimer;
   bool _restoring = false;
+  int? _layoutAnchorIndex;
+  int _visibleBlockCount = 0;
+
+  /// Locate the first paragraph intersecting the viewport top using only
+  /// Flutter's currently rendered lazy sliver children (O(visible items)).
+  /// No GlobalKey per paragraph, eager measuring or full-book layout.
+  BookTextAnchor? _visibleTextAnchor() {
+    final viewport = _viewportKey.currentContext?.findRenderObject();
+    if (viewport is! RenderBox || !viewport.hasSize) return null;
+    final top = viewport.localToGlobal(Offset.zero).dy + 1;
+    BookTextAnchor? lastVisible;
+    for (final pair in [
+      (_priorBlocksKey, _layoutAnchorIndex == null ? 0 : _layoutAnchorIndex! - 1),
+      (_currentBlocksKey, _layoutAnchorIndex ?? 0),
+    ]) {
+      final sliver = pair.$1.currentContext?.findRenderObject();
+      if (sliver is! RenderSliverList) continue;
+      var child = sliver.firstChild;
+      while (child != null) {
+        final y = child.localToGlobal(Offset.zero).dy;
+        final height = child.size.height;
+        final index = pair.$1 == _priorBlocksKey && _layoutAnchorIndex != null
+            ? pair.$2 - sliver.indexOf(child)
+            : pair.$2 + sliver.indexOf(child);
+        if (index >= _visibleBlockCount) break;
+        if (height > 0 && y + height > top && y <= top) {
+          final fraction = ((top - y) / height).clamp(0.0, 1.0).toDouble();
+          return BookTextAnchor(blockIndex: index, fraction: fraction);
+        }
+        if (y > top) {
+          // A title, header or cover is at the top, not this paragraph.
+          return null;
+        }
+        if (height > 0 && y <= top) {
+          lastVisible = BookTextAnchor(blockIndex: index, fraction: 1);
+        }
+        child = sliver.childAfter(child);
+      }
+    }
+    // At the navigation footer, retain the final source block.
+    return lastVisible;
+  }
+
+  BookReadingState _snapshotPosition() {
+    if (!_scroll.hasClients) return _reading;
+    final anchor = _visibleTextAnchor();
+    return _reading.copyWith(
+      scrollOffset: _scroll.offset.clamp(0.0, 100000000.0).toDouble(),
+      anchor: anchor,
+      clearAnchor: anchor == null,
+    );
+  }
 
   void _saveScroll() {
-    if (!_progressReady || _restoring || widget.bookId == null || !_scroll.hasClients) return;
+    if (!_progressReady || _restoring || widget.bookId == null ||
+        !_scroll.hasClients) return;
+    final snapshot = _snapshotPosition();
+    _reading = snapshot;
     _progressTimer?.cancel();
-    final offset = _scroll.offset;
     _progressTimer = Timer(const Duration(milliseconds: 350), () {
-      _readingStore.save(widget.bookId!, _reading.copyWith(scrollOffset: offset));
+      if (widget.bookId != null) {
+        unawaited(_readingStore.save(widget.bookId!, snapshot));
+      }
     });
   }
 
+  /// Reconstruct an anchored layout with the target paragraph as the sliver
+  /// center. Earlier blocks remain scrollable backwards, even in long books.
   void _restoreScroll() {
     _restoring = true;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       if (_scroll.hasClients) {
-        final max = _scroll.position.maxScrollExtent;
-        _scroll.jumpTo(_reading.scrollOffset.clamp(0.0, max));
+        final anchor = _reading.anchor;
+        double offset = _reading.scrollOffset;
+        if (_layoutAnchorIndex != null && anchor != null) {
+          final sliver = _currentBlocksKey.currentContext?.findRenderObject();
+          if (sliver is RenderSliverList && sliver.firstChild != null) {
+            offset = sliver.firstChild!.size.height *
+                anchor.fraction.clamp(0.0, 1.0);
+          } else {
+            offset = 0;
+          }
+        }
+        final pos = _scroll.position;
+        _scroll.jumpTo(offset.clamp(
+          pos.minScrollExtent, pos.maxScrollExtent,
+        ).toDouble());
       }
       _restoring = false;
     });
+  }
+
+  /// A font, width, line-height or reader-chrome change preserves a semantic
+  /// paragraph location rather than reusing pixel offsets after reflow.
+  void _reflow({
+    ReadingPreferences? settings,
+    ReaderChromeMode? chrome,
+    bool useLastKnownAnchor = false,
+  }) {
+    _progressTimer?.cancel();
+    final next = useLastKnownAnchor
+        ? _reading : (_progressReady ? _snapshotPosition() : _reading);
+    _restoring = true;
+    if (_scroll.hasClients) _scroll.jumpTo(0);
+    setState(() {
+      // IMPORTANT: sliver GlobalKeys must be regenerated when a center is
+      // introduced or moved. Reparenting the old RenderSliverList preserves
+      // dead-reckoned child offsets from the previous chapter layout,
+      // causing RenderViewport.correctBy(paragraphHeight) on every frame.
+      _scrollEpoch++;
+      _priorBlocksKey = GlobalKey();
+      _currentBlocksKey = GlobalKey();
+      _centerSliverKey = GlobalKey();
+      _reading = next;
+      _layoutAnchorIndex = next.anchor?.blockIndex;
+      if (settings != null) _settings = settings;
+      if (chrome != null) _chrome = chrome;
+    });
+    _restoreScroll();
+    if (widget.bookId != null && _progressReady) {
+      unawaited(_readingStore.save(widget.bookId!, next));
+    }
   }
   ReaderChromeMode _chrome = ReaderChromeMode.normal;
 
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _progressTimer?.cancel();
-    if (widget.bookId != null && _scroll.hasClients) {
-      _readingStore.save(widget.bookId!, _reading.copyWith(scrollOffset: _scroll.offset));
+    if (widget.bookId != null && _scroll.hasClients && _progressReady) {
+      final snapshot = _restoring ? _reading : _snapshotPosition();
+      unawaited(_readingStore.save(widget.bookId!, snapshot));
     }
     _scroll.dispose();
     super.dispose();
   }
 
-  void _changeChrome(ReaderChromeMode next) {
-    setState(() {
-      _chrome = next;
-    });
-  }
+  void _changeChrome(ReaderChromeMode next) => _reflow(chrome: next);
 
   int get _count => widget.book.structuredChapters.isNotEmpty
       ? widget.book.structuredChapters.length : widget.book.chapters.length;
@@ -75,7 +183,13 @@ class _BookReaderPageState extends State<BookReaderPage> {
     }
     final saved = await _readingStore.load(widget.bookId!);
     if (mounted) setState(() {
-      _reading = saved.copyWith(chapter: saved.chapter.clamp(0, _count > 0 ? _count - 1 : 0).toInt());
+      _reading = saved.copyWith(chapter:
+          saved.chapter.clamp(0, _count > 0 ? _count - 1 : 0).toInt());
+      _layoutAnchorIndex = saved.anchor?.blockIndex;
+      _scrollEpoch++;
+      _priorBlocksKey = GlobalKey();
+      _currentBlocksKey = GlobalKey();
+      _centerSliverKey = GlobalKey();
       _progressReady = true;
     });
     _restoreScroll();
@@ -84,7 +198,18 @@ class _BookReaderPageState extends State<BookReaderPage> {
   void _chapter(int index) {
     if (index < 0 || index >= _count) return;
     _progressTimer?.cancel();
-    setState(() => _reading = _reading.copyWith(chapter: index, scrollOffset: 0));
+    _restoring = true;
+    if (_scroll.hasClients) _scroll.jumpTo(0);
+    setState(() {
+      _reading = _reading.copyWith(
+        chapter: index, scrollOffset: 0, clearAnchor: true,
+      );
+      _layoutAnchorIndex = null;
+      _scrollEpoch++;
+      _priorBlocksKey = GlobalKey();
+      _currentBlocksKey = GlobalKey();
+      _centerSliverKey = GlobalKey();
+    });
     _restoreScroll();
     if (widget.bookId != null) {
       _readingStore.save(widget.bookId!, _reading);
@@ -138,23 +263,47 @@ class _BookReaderPageState extends State<BookReaderPage> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _loadSettings();
     _loadPosition();
     _scroll.addListener(_saveScroll);
   }
 
+  @override
+  void didChangeMetrics() {
+    if (mounted && _progressReady && !_restoring) {
+      _reflow(useLastKnownAnchor: true);
+    }
+  }
+
+  @override
+  void didChangeTextScaleFactor() {
+    if (mounted && _progressReady && !_restoring) {
+      _reflow(useLastKnownAnchor: true);
+    }
+  }
+
   Future<void> _loadSettings() async {
     try {
       final value = await _store.load();
-      if (mounted) setState(() => _settings = value);
+      if (mounted) {
+        // Position and style load independently at startup. Do not
+        // replace a restored legacy pixel offset with scroll=0 while its
+        // first layout is still pending.
+        if (_progressReady && !_restoring) {
+          _reflow(settings: value);
+        } else {
+          setState(() => _settings = value);
+        }
+      }
     } catch (_) {
       // Defaults remain usable when preferences cannot be read.
     }
   }
 
   void _change(ReadingPreferences next) {
-    setState(() => _settings = next);
-    _store.save(next);
+    _reflow(settings: next);
+    unawaited(_store.save(next));
   }
 
   void _showReaderSettings() {
@@ -233,6 +382,14 @@ class _BookReaderPageState extends State<BookReaderPage> {
             blocks.first.text.trim() == _chapterLabel(_reading.chapter)
         ? blocks.skip(1).toList()
         : blocks;
+    _visibleBlockCount = visibleBlocks.length;
+    final splitIndex = _layoutAnchorIndex != null &&
+            _layoutAnchorIndex! >= 0 &&
+            _layoutAnchorIndex! < visibleBlocks.length
+        ? _layoutAnchorIndex! : 0;
+    final anchored = _layoutAnchorIndex != null &&
+        _layoutAnchorIndex! < visibleBlocks.length;
+
 
     return ReaderChromeKeyboard(
       mode: _chrome,
@@ -273,9 +430,12 @@ class _BookReaderPageState extends State<BookReaderPage> {
         color: prefs.background,
         child: Center(
           child: ConstrainedBox(
+            key: _viewportKey,
             constraints: const BoxConstraints(maxWidth: 800),
             child: CustomScrollView(
+              key: ValueKey('book-scroll-$_scrollEpoch'),
               controller: _scroll,
+              center: anchored ? _centerSliverKey : null,
               slivers: [
                 SliverPadding(
                   padding: EdgeInsets.fromLTRB(
@@ -320,9 +480,23 @@ class _BookReaderPageState extends State<BookReaderPage> {
                 SliverPadding(
                   padding: EdgeInsets.symmetric(horizontal: prefs.horizontalPadding),
                   sliver: SliverList.builder(
-                    itemCount: visibleBlocks.length,
-                    itemBuilder: (context, index) => _blockWidget(
-                      visibleBlocks[index], readerText),
+                    key: _priorBlocksKey,
+                    itemCount: splitIndex,
+                    // Reverse-growth sliver: index zero must be the paragraph
+                    // immediately BEFORE the selected source paragraph.
+                    itemBuilder: (context, index) =>
+                        _blockWidget(
+                            visibleBlocks[splitIndex - 1 - index], readerText),
+                  ),
+                ),
+                SliverPadding(
+                  key: _centerSliverKey,
+                  padding: EdgeInsets.symmetric(horizontal: prefs.horizontalPadding),
+                  sliver: SliverList.builder(
+                    key: _currentBlocksKey,
+                    itemCount: visibleBlocks.length - splitIndex,
+                    itemBuilder: (context, index) =>
+                        _blockWidget(visibleBlocks[splitIndex + index], readerText),
                   ),
                 ),
                 SliverPadding(

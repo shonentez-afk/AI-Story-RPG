@@ -5,6 +5,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:ai_story_reader/book_import.dart';
 import 'package:ai_story_reader/book_model.dart';
 import 'package:ai_story_reader/book_reader.dart';
+import 'package:ai_story_reader/book_reading_state.dart';
+import 'package:ai_story_reader/reading_preferences.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -113,4 +115,107 @@ void main() {
     expect(scroll.controller!.offset, greaterThan(100));
   });
 
+  testWidgets('semantic source paragraph survives font and width reflow',
+      (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    final book = ImportedBook(
+      title: 'Длинная книга для проверки',
+      author: '',
+      chapters: const [''],
+      structuredChapters: [
+        BookChapter(
+          id: 'chapter_0',
+          blocks: List.generate(160, (i) => BookBlock(
+            kind: BookBlockKind.paragraph,
+            text: 'Текст параграфа $i. ' * 18,
+          )),
+        ),
+      ],
+    );
+    await tester.pumpWidget(MaterialApp(
+      home: BookReaderPage(book: book, bookId: 'semantic-test'),
+    ));
+    await tester.pumpAndSettle();
+    final scroll = find.byType(Scrollable).first;
+    await tester.scrollUntilVisible(
+      find.textContaining('Текст параграфа 64.'),
+      350,
+      scrollable: scroll,
+      maxScrolls: 120,
+    );
+    await tester.pump(const Duration(milliseconds: 450));
+    final old = await BookReadingStore().load('semantic-test');
+    expect(old.anchor, isNotNull);
+    expect(old.anchor!.blockIndex, greaterThan(0));
+
+    // Resize while the reader is still open: metrics must preserve the
+    // semantic source location, not just after an app restart.
+    tester.view.physicalSize = const Size(350, 650);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+    await tester.pumpAndSettle();
+    // A direct centered sliver is required for an anchored reflow;
+    // a legacy raw pixel offset is not sufficient after resize.
+    final liveView = tester.widget<CustomScrollView>(
+      find.byType(CustomScrollView),
+    );
+    expect(liveView.center, isNotNull);
+    final afterResize = await BookReadingStore().load('semantic-test');
+    final visibleParagraphs = tester.widgetList<SelectableText>(
+      find.byType(SelectableText),
+    ).map((widget) => RegExp(r'Текст параграфа (\\d+)')
+        .firstMatch(widget.data ?? '')?.group(1))
+        .whereType<String>().take(16).join(', ');
+    final targetParagraph = find.textContaining(
+      'Текст параграфа ${old.anchor!.blockIndex}.',
+    );
+    final mountedParagraph = find.textContaining(
+      'Текст параграфа ${old.anchor!.blockIndex}.',
+      skipOffstage: false,
+    );
+    final viewportRect = tester.getRect(find.byType(CustomScrollView));
+    String mountedRect = 'not mounted';
+    if (mountedParagraph.evaluate().isNotEmpty) {
+      try {
+        mountedRect = '${tester.getRect(mountedParagraph)}';
+      } catch (_) {
+        mountedRect = 'mounted, no rect';
+      }
+    }
+    final position = liveView.controller!.position;
+    expect(targetParagraph, findsOneWidget, reason:
+        'visible=$visibleParagraphs, saved=${old.anchor!.blockIndex}, '
+        'fraction=${old.anchor!.fraction}, '
+        'post=${afterResize.anchor?.blockIndex}, '
+        'offset=${position.pixels}, min=${position.minScrollExtent}, '
+        'max=${position.maxScrollExtent}, viewport=$viewportRect, '
+        'mounted=$mountedRect, allSelectable=${find.byType(SelectableText, skipOffstage: false).evaluate().length}');
+    expect(tester.getRect(targetParagraph).overlaps(
+      tester.getRect(find.byType(CustomScrollView)),
+    ), isTrue, reason: 'Target paragraph must actually intersect viewport');
+    expect(tester.takeException(), isNull);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pumpAndSettle();
+    await ReadingSettingsStore().save(
+      const ReadingPreferences(fontSize: 25, lineHeight: 1.9),
+    );
+    await tester.pumpWidget(MaterialApp(
+      home: BookReaderPage(book: book, bookId: 'semantic-test'),
+    ));
+    await tester.pumpAndSettle();
+    final target = find.textContaining(
+      'Текст параграфа ${old.anchor!.blockIndex}.',
+    );
+    expect(target, findsOneWidget);
+    expect(tester.takeException(), isNull);
+
+    await tester.pump(const Duration(milliseconds: 450));
+    final after = await BookReadingStore().load('semantic-test');
+    expect(after.anchor, isNotNull);
+    expect(after.chapter, old.chapter);
+  });
 }

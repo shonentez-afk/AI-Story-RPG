@@ -22,6 +22,46 @@ void main() {
     expect(other.bookmarks, isEmpty);
   });
 
+
+  test('semantic paragraph anchor persists; old records stay readable',
+      () async {
+    SharedPreferences.setMockInitialValues({
+      'ai_story_book_state_v1_old': '{"chapter":2,'
+          '"scrollOffset":96.5,"bookmarks":[0,2]}',
+    });
+    final store = BookReadingStore();
+    final old = await store.load('old');
+    expect(old.anchor, isNull);
+    expect(old.scrollOffset, 96.5);
+    await store.save('old', old.copyWith(
+      anchor: const BookTextAnchor(blockIndex: 43, fraction: 0.375),
+    ));
+    final upgraded = await BookReadingStore().load('old');
+    expect(upgraded.anchor!.blockIndex, 43);
+    expect(upgraded.anchor!.fraction, 0.375);
+    expect(upgraded.scrollOffset, 96.5);
+    expect(upgraded.bookmarks, [0, 2]);
+    final cleared = upgraded.copyWith(clearAnchor: true, chapter: 3);
+    await store.save('old', cleared);
+    final changed = await store.load('old');
+    expect(changed.anchor, isNull);
+    expect(changed.chapter, 3);
+  });
+
+  test('invalid semantic anchors fall back to legacy pixels, not loss of book',
+      () async {
+    SharedPreferences.setMockInitialValues({
+      'ai_story_book_state_v1_badAnchor': '{"chapter":1,'
+          '"scrollOffset":125,"anchorBlock":1000000000,'
+          '"anchorFraction":0.5,"bookmarks":[1]}',
+    });
+    final state = await BookReadingStore().load('badAnchor');
+    expect(state.anchor, isNull);
+    expect(state.chapter, 1);
+    expect(state.scrollOffset, 125);
+    expect(state.bookmarks, [1]);
+  });
+
   test('invalid reading state falls back without modifying game saves', () async {
     SharedPreferences.setMockInitialValues({
       'ai_story_book_state_v1_broken': '{bad json',

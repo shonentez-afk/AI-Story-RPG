@@ -154,3 +154,11 @@
 
 ### Freeze существующего UX/UI перед M2
 Для M2 запрещено воссоздавать второе главное меню, вторую библиотеку или второй импорт TXT/FB2. Конверсия текста в игровой мир должна быть новой функцией **той же библиотеки**, с отдельными состояниями `not compiled / processing / verified / failed` и честными отчётами coverage. Любые новые экраны компилятора принимаются адресным UX-тестом, а не повтором полного аудита M1. Схема и сохранения M1 сохраняются.
+
+
+## M1 финальная читательская доработка / переход M2 (2026-11-02)
+- Пользователь подтвердил, что реальных старых игр/прохождений M1.6 не было. **Не тратить работу на миграцию/дополнительный backup демо-сейвов M1.6**, не удалять автоматически прежние файлы/ключи; рабочий формат новых игр — BookWorld SQLite и `.bwsave v2`.
+- PR [#5](https://github.com/shonentez-afk/AI-Story-RPG/pull/5), ветка `feat/m1-reader-anchor-and-m2-foundation-20261102`: `BookReadingState.anchorBlock/anchorFraction`, lazy `CustomScrollView.center`, восстановление позиции по абзацу после font/line/width/rotation, fallback pixel-only и тесты. Отчёт [M1_READER_SOURCE_ANCHOR_RU.md](M1_READER_SOURCE_ANCHOR_RU.md).
+- **Приёмка:** проверить последний Github Actions run PR #5: анализатор, Flutter widget, native/story_core, Android APK, Windows portable. Предыдущий PR тест первого патча ошибочно сбрасывал старый offset; проблема исправлена, и тест сохранён. Не объявлять весь этап PASS до окончательной проверки.
+- Следующий M2a уже выполняется в отдельном [PR #6](https://github.com/shonentez-afk/AI-Story-RPG/pull/6) (`feat/m2a-offline-source-index-20261102`). Offline Dart chunks для TXT/FB2, Unicode UTF-16 source spans, sha256 и честное покрытие текста при `gameplay_coverage=0`; первый экран подготовки в единой библиотеке. Это **не генерация BookWorld**, не ИИ. См. `docs/M2A_SOURCE_INDEX_RU.md` в PR #6.
+- M2 не должен создавать второе меню/библиотеку/дублирующую CTA импорта, не должен ломать принятую M1 UX и не должен обходить `rights_status`/проверку источников ради публикации пользовательских произведений.
