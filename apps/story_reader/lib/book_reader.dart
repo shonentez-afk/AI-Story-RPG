@@ -119,35 +119,61 @@ class _BookReaderPageState extends State<BookReaderPage>
     _restoring = true;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      if (_scroll.hasClients) {
-        final anchor = _reading.anchor;
-        final pos = _scroll.position;
-        // CustomScrollView.center pins the selected source paragraph to
-        // scroll coordinate zero. Do NOT combine it with old pixel offsets
-        // or viewport-reveal offsets: those refer to a different layout.
-        // On reflow, reliably show the same paragraph from its beginning.
-        // The fine fraction remains stored for future reading-position work.
-        final offset = _layoutAnchorIndex != null && anchor != null
-            ? 0.0 : _reading.scrollOffset;
-        _scroll.jumpTo(offset.clamp(
-          pos.minScrollExtent, pos.maxScrollExtent,
-        ).toDouble());
-      }
-      // Flutter's viewport may run a final anchor correction in the frame
-      // after a window-metrics change. Apply one last centered alignment
-      // after that correction; never add the old absolute pixel offset.
-      if (_layoutAnchorIndex != null && _reading.anchor != null) {
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (!mounted) return;
-          if (_scroll.hasClients && _scroll.offset != 0) {
-            _scroll.jumpTo(0);
-          }
-          _restoring = false;
-        });
-      } else {
+      if (!_scroll.hasClients) {
         _restoring = false;
+        return;
       }
+      final anchor = _reading.anchor;
+      if (_layoutAnchorIndex != null && anchor != null) {
+        _alignSourceInViewport(anchor, 4);
+        return;
+      }
+      final pos = _scroll.position;
+      _scroll.jumpTo(_reading.scrollOffset.clamp(
+        pos.minScrollExtent, pos.maxScrollExtent,
+      ).toDouble());
+      _restoring = false;
     });
+  }
+
+  /// Reconcile the actual world-space coordinates once layout has changed.
+  /// Scroll offsets may be shifted by RenderViewport as negative slivers
+  /// before CustomScrollView.center resize. Merely jumping to zero is not
+  /// enough: keep the selected paragraph within the *visible* screen.
+  void _alignSourceInViewport(BookTextAnchor anchor, int remaining) {
+    if (!mounted || !_scroll.hasClients) {
+      _restoring = false;
+      return;
+    }
+    final target = _anchorParagraphKey.currentContext?.findRenderObject();
+    final viewport = _viewportKey.currentContext?.findRenderObject();
+    if (target is RenderBox && target.hasSize &&
+        viewport is RenderBox && viewport.hasSize) {
+      final screenTop = viewport.localToGlobal(Offset.zero).dy + 1;
+      final actualTop = target.localToGlobal(Offset.zero).dy;
+      final desiredTop = screenTop -
+          target.size.height * anchor.fraction.clamp(0.0, 0.85);
+      // Increase pixels when target appears too far down, decrease them
+      // when it has fallen above the visible viewport.
+      final correction = actualTop - desiredTop;
+      final pos = _scroll.position;
+      final adjusted = (_scroll.offset + correction).clamp(
+        pos.minScrollExtent, pos.maxScrollExtent,
+      ).toDouble();
+      if (remaining > 0 && (adjusted - pos.pixels).abs() > 0.5) {
+        _scroll.jumpTo(adjusted);
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          _alignSourceInViewport(anchor, remaining - 1);
+        });
+        return;
+      }
+    } else if (remaining > 0) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _alignSourceInViewport(anchor, remaining - 1);
+      });
+      return;
+    }
+    _restoring = false;
   }
 
   /// A font, width, line-height or reader-chrome change preserves a semantic
