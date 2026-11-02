@@ -1,6 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
-import 'dart:isolate';
+import 'package:flutter/foundation.dart' show compute;
 import 'dart:math';
 import 'package:path_provider/path_provider.dart';
 import 'book_import.dart';
@@ -75,7 +75,7 @@ class BookStorage {
   Future<BookLibraryScan> scan() async {
     final folder = await _folder();
     final path = folder.path;
-    return Isolate.run(() => _scanFiles(path));
+    return compute(_scanFiles, path, debugLabel: 'story-library-scan');
   }
 
   Future<List<StoredBook>> all() async => (await scan()).books;

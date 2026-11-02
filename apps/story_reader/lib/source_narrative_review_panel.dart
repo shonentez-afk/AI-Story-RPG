@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:isolate';
 
 import 'package:flutter/material.dart';
 
@@ -9,6 +8,7 @@ import 'source_analysis_checkpoint_repository.dart';
 import 'source_evidence_graph.dart';
 import 'source_narrative_extractor.dart';
 import 'story_evidence_review_session.dart';
+import 'book_isolate_workers.dart';
 import 'source_relations_review_panel.dart';
 
 /// A collapsible addition to the EXISTING preparation page. Opening this
@@ -73,7 +73,7 @@ class _SourceNarrativeReviewPanelState
   Future<void> _persist(StoryEvidenceReviewSession next) async {
     final encoder = widget.checkpointEncoder;
     final raw = encoder == null
-        ? await Isolate.run(() => next.encode())
+        ? await encodeNarrativeEvidenceInWorker(next)
         : await encoder(next);
     await _repository.write(widget.index.sourceFingerprint, raw);
     if (mounted) setState(() => _review = next);
@@ -93,8 +93,7 @@ class _SourceNarrativeReviewPanelState
       final restored = raw == null
           ? StoryEvidenceReviewSession.create(widget.index)
           : decoder == null
-              ? await Isolate.run(() =>
-                  StoryEvidenceReviewSession.decode(widget.index, raw))
+              ? await decodeNarrativeEvidenceInWorker(widget.index, raw)
               : await decoder(widget.index, raw);
       final updated = restored.syncAcceptedMentions(
           widget.index, widget.sourceMentions);
@@ -159,8 +158,7 @@ class _SourceNarrativeReviewPanelState
           current.scannedChunks < widget.index.chunks.length) {
         final worker = widget.scanProcessor;
         final next = worker == null
-            ? await Isolate.run(
-                () => current.scanNext(widget.index, limit: 24))
+            ? await scanNarrativeEvidenceInWorker(widget.index, current, limit: 24)
             : await worker(widget.index, current);
         if (next.scannedChunks <= current.scannedChunks ||
             next.sourceFingerprint != current.sourceFingerprint) {

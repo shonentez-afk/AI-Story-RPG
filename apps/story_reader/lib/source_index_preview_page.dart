@@ -1,11 +1,11 @@
 import 'dart:async';
-import 'dart:isolate';
 
 import 'package:flutter/material.dart';
 
 import 'book_import.dart';
 import 'book_source_analysis.dart';
 import 'book_source_index.dart';
+import 'book_isolate_workers.dart';
 import 'source_analysis_checkpoint_repository.dart';
 import 'source_narrative_review_panel.dart';
 
@@ -28,7 +28,7 @@ class SourceIndexPreviewPage extends StatefulWidget {
   final Future<BookSourceIndex> Function(ImportedBook)? indexer;
   final SourceAnalysisCheckpointRepository? checkpointRepository;
 
-  /// Deterministic test seams. Production uses Isolate.run.
+  /// Deterministic test seams. Production uses top-level compute workers.
   final Future<SourceAnalysisSession> Function(
       BookSourceIndex, SourceAnalysisSession)? batchProcessor;
   final Future<String> Function(SourceAnalysisSession)? checkpointEncoder;
@@ -70,7 +70,7 @@ class _SourceIndexPreviewPageState extends State<SourceIndexPreviewPage> {
     final book = widget.book;
     final worker = widget.indexer;
     _result = worker == null
-        ? Isolate.run(() => BookSourceIndexer.index(book))
+        ? indexImportedBookInWorker(book)
         : worker(book);
     _result.then((index) {
       if (!mounted || generation != _generation) return;
@@ -91,9 +91,7 @@ class _SourceIndexPreviewPageState extends State<SourceIndexPreviewPage> {
       final restored = checkpoint == null
           ? SourceAnalysisSession.create(index)
           : decoder == null
-              ? await Isolate.run(
-                  () => SourceAnalysisSession.decode(index, checkpoint),
-                )
+              ? await decodeSourceAnalysisInWorker(index, checkpoint)
               : await decoder(index, checkpoint);
       if (!mounted || generation != _generation) return;
       setState(() {
@@ -129,7 +127,7 @@ class _SourceIndexPreviewPageState extends State<SourceIndexPreviewPage> {
     final index = _index!;
     final encoder = widget.checkpointEncoder;
     final encoded = encoder == null
-        ? await Isolate.run(() => candidate.encode())
+        ? await encodeSourceAnalysisInWorker(candidate)
         : await encoder(candidate);
     await _repository.write(index.sourceFingerprint, encoded);
     if (mounted) setState(() => _analysis = candidate);
@@ -148,9 +146,7 @@ class _SourceIndexPreviewPageState extends State<SourceIndexPreviewPage> {
       // Never scan a long novel synchronously on the Flutter UI isolate.
       final processor = widget.batchProcessor;
       final updated = processor == null
-          ? await Isolate.run(
-              () => current.processBatch(index, limit: 24),
-            )
+          ? await processSourceBatchInWorker(index, current, limit: 24)
           : await processor(index, current);
       await _persist(updated);
     } catch (error) {
