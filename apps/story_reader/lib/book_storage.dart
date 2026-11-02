@@ -21,8 +21,14 @@ class BookLibraryScan {
 }
 
 class BookStorage {
+  BookStorage({this.rootDirectory});
+
+  /// Test-only directory override; production uses the app's Documents area.
+  final Future<Directory> Function()? rootDirectory;
+
   Future<Directory> _folder() async {
-    final base = await getApplicationDocumentsDirectory();
+    final base = await (rootDirectory?.call() ??
+        getApplicationDocumentsDirectory());
     final folder = Directory('${base.path}/ai_story_library');
     if (!await folder.exists()) await folder.create(recursive: true);
     return folder;
