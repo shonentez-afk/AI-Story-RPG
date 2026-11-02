@@ -51,8 +51,11 @@ class _AIStoryAppState extends State<AIStoryApp> {
         debugShowCheckedModeBanner: false,
         theme: AppTheme.light(),
         darkTheme: AppTheme.dark(),
-        themeMode: AppAppearanceController.instance.value == AppAppearance.dark
-            ? ThemeMode.dark : ThemeMode.light,
+        themeMode: switch (AppAppearanceController.instance.value) {
+          AppAppearance.system => ThemeMode.system,
+          AppAppearance.light => ThemeMode.light,
+          AppAppearance.dark => ThemeMode.dark,
+        },
         home: HomePage(worldGateway: widget.worldGateway),
       );
 }
