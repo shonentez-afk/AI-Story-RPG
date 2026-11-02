@@ -86,3 +86,6 @@ ZIP/JSON+SQLite экспорт, включающий `schema_version, book_id, b
 
 ## M1.7.4c3 — кодовая автоматическая приёмка
 PR #3 merged в `main` как `48d5659c85ed6c42c05053f28ac88544827cda91`. [CI #157](https://github.com/shonentez-afk/AI-Story-RPG/actions/runs/41377701471) completed/success 6/6, Flutter 84/84, Windows/Android PASS. Две независимые SQLite базы в тесте подтверждают перенос одной пары `.bworld/.bwsave v2` и продолжение журнала без перезаписи source; это **симуляция двух устройств**, а не физический Android↔Windows QA. Legacy M1.6 не мигрируется, блокирующих записей на этапе preflight нет.
+
+## UX/UI code freeze M1.7 (2026-11-02)
+[Полный отчёт](UI_UX_FINAL_AUDIT_M174C3_RU.md): PR #4 squash `88a7c42091888bb81a62c68db49b7cd26f60f5e3`, Actions #170 `41380322453` 6/6 PASS, Flutter 92/92, Android/Windows PASS. Для `.bwsave v1/v2` глобальный picker общий, но пилотный SharedPreferences и новый SQLite/BookWorld остаются разными хранилищами; `WorldSaveImportFlow` переиспользует верифицированный preflight `.bwsave v2`. `shouldContinueWorld` сравнивает savedAt обоих источников. `ReaderChromeKeyboard` даёт F11/Esc только для активной страницы. M2 обязан повторно использовать единственную библиотеку, а не переписывать старые сцены и сохранения. Физические screen-reader/FilePicker проверки остаются отдельными ручными QA gates.
