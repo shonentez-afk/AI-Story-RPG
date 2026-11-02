@@ -65,6 +65,15 @@ class _ReadingSettingsSheetState extends State<ReadingSettingsSheet> {
         Text('Поля: ${value.horizontalPadding.toStringAsFixed(0)}'),
         Slider(value: value.horizontalPadding, min: 12, max: 48, divisions: 18,
           onChanged: (next) => apply(value.copyWith(horizontalPadding: next))),
+        const SizedBox(height: 12),
+        Align(
+          alignment: Alignment.centerRight,
+          child: TextButton.icon(
+            onPressed: () => Navigator.of(context).pop(),
+            icon: const Icon(Icons.check),
+            label: const Text('Готово'),
+          ),
+        ),
       ]),
     ),
   );
