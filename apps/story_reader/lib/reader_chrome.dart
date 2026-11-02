@@ -64,8 +64,16 @@ class ReaderChromeButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Semantics(
-    hint: 'Нажмите для переключения. Удерживайте или нажмите '
-        'правой кнопкой мыши для выбора трёх режимов чтения.',
+    label: mode == ReaderChromeMode.normal
+        ? 'Скрыть управление чтением'
+        : 'Показать управление чтением',
+    hint: 'Нажатие переключает управление. Долгое нажатие или '
+        'контекстное действие открывает все три режима.',
+    onLongPress: () => _showModes(context),
+    customSemanticsActions: {
+      const CustomSemanticsAction(label: 'Выбрать режим экрана'):
+          () => _showModes(context),
+    },
     child: Tooltip(
     message: mode == ReaderChromeMode.normal
         ? 'Скрыть управление' : 'Показать управление',

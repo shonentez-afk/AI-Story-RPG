@@ -131,18 +131,18 @@ void main() {
     expect(find.text('Добавить книгу'), findsOneWidget);
     expect(find.textContaining('TXT, FB2'), findsOneWidget);
     await tester.scrollUntilVisible(
-      find.byKey(ValueKey('library-world-' + world.bookworldId)),
+      find.byKey(ValueKey('library-world-' + world.archiveHash)),
       160,
       scrollable: find.byType(Scrollable).first,
     );
-    expect(find.byKey(ValueKey('library-world-' + world.bookworldId)),
+    expect(find.byKey(ValueKey('library-world-' + world.archiveHash)),
         findsOneWidget);
     // Existing pilot is still present and world is NOT a BookReaderPage.
     expect(find.text('Демо RPG • начать новое прохождение'), findsOneWidget);
     await tester.ensureVisible(find.byKey(
-      ValueKey('library-world-' + world.bookworldId)));
+      ValueKey('library-world-' + world.archiveHash)));
     await tester.tap(find.byKey(
-      ValueKey('library-world-' + world.bookworldId)));
+      ValueKey('library-world-' + world.archiveHash)));
     await settleWorker(tester);
     expect(find.text('Подготовленный игровой мир'), findsOneWidget);
     await tester.tap(find.byKey(const ValueKey('world-start')));

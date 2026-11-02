@@ -468,7 +468,8 @@ class _LibraryPageState extends State<LibraryPage> {
       } else {
         // TXT/FB2 may be up to 20 MiB. Parsing off the UI isolate prevents
         // long synchronous frames on both Android and Windows.
-        final book = await Isolate.run(() => BookImporter.parse(file.name, bytes));
+        final sourceName = file.name;
+        final book = await Isolate.run(() => BookImporter.parse(sourceName, bytes));
         await _storage.add(book);
         await _refresh();
         if (mounted) {

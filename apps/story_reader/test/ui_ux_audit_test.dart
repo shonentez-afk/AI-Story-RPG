@@ -59,7 +59,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('Настройки'));
     await tester.pumpAndSettle();
-    expect(find.text('0.1.0 · M1.6 · тестовая версия'), findsOneWidget);
+    expect(find.text('0.1.0 · BookWorld · тестовая версия'), findsOneWidget);
     await tester.tap(find.text('Мои прохождения'));
     await tester.pumpAndSettle();
     expect(find.text('Импортировать .bwsave'), findsOneWidget);
