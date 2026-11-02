@@ -519,6 +519,11 @@ void main() {
     expect(find.text('Размер текста: 18'), findsOneWidget);
     await tester.tap(find.text('Тёмная').last);
     await tester.pumpAndSettle();
+    // The theme chip updates the reader immediately; the ordered
+    // preference write may still be in flight after the last animation.
+    final reading = await ReadingSettingsStore().load();
+    expect(reading.palette, ReadingPalette.dark);
+    await tester.runAsync(() => ReadingSettingsStore().flush());
     final preferences = await SharedPreferences.getInstance();
     expect(preferences.getInt('ai_story_reading_v1_palette'), 2);
     expect((await gateway.load(id)).revision, 0);
