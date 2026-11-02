@@ -133,7 +133,20 @@ class _BookReaderPageState extends State<BookReaderPage>
           pos.minScrollExtent, pos.maxScrollExtent,
         ).toDouble());
       }
-      _restoring = false;
+      // Flutter's viewport may run a final anchor correction in the frame
+      // after a window-metrics change. Apply one last centered alignment
+      // after that correction; never add the old absolute pixel offset.
+      if (_layoutAnchorIndex != null && _reading.anchor != null) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          if (_scroll.hasClients && _scroll.offset != 0) {
+            _scroll.jumpTo(0);
+          }
+          _restoring = false;
+        });
+      } else {
+        _restoring = false;
+      }
     });
   }
 
