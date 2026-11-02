@@ -339,10 +339,12 @@ class SemanticCandidateValidator {
       BookSourceIndex index, SemanticCandidate item, {
       required Set<String> allowedChunkIds,
       required Set<SemanticCategory> categories,
+      SourceChunk? sourceChunk,
   }) {
-    final chunks = {for (final c in index.chunks) c.id: c};
-    final chunk = chunks[item.chunkId];
-    if (chunk == null || !allowedChunkIds.contains(item.chunkId) ||
+    final chunk = sourceChunk ??
+        ({for (final c in index.chunks) c.id: c})[item.chunkId];
+    if (chunk == null || chunk.id != item.chunkId ||
+        !allowedChunkIds.contains(item.chunkId) ||
         item.sourceFingerprint != index.sourceFingerprint ||
         !categories.contains(item.category) ||
         item.status != 'INFERRED' || item.spoilerGate != 'CHAPTER' ||
@@ -394,12 +396,14 @@ class SemanticCandidateValidator {
     }
     final ids = <String>{};
     final allowed = batch.chunkIds.toSet();
+    final sourceChunks = {for (final c in request.chunks) c.id: c};
     for (final item in batch.candidates) {
       if (!ids.add(item.id)) {
         throw const FormatException('Дублирующийся semantic-кандидат');
       }
       validateCandidate(request.index, item,
-          allowedChunkIds: allowed, categories: request.categories);
+          allowedChunkIds: allowed, categories: request.categories,
+          sourceChunk: sourceChunks[item.chunkId]);
     }
   }
 }
