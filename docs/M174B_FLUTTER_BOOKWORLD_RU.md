@@ -59,3 +59,13 @@
 ### Исправление исполнения Flutter-тестов с native SQLite isolates
 
 `tester.runAsync` используется только **в тестовом коде**, чтобы дождаться реального event loop для операций `Isolate.run`/SQLite и затем выполнить `pumpAndSettle` для UI. Без этого Flutter fakeAsync может бесконечно ожидать внешний worker. Никакие UI действия, сценарный runtime, SQLite store или 35 игровых переходов из теста не подменяются заглушкой. Тест также сохраняет реальный `PathProviderPlatform` в отдельной временной директории и восстанавливает платформу после проверки.
+
+## QA correction — native plugin isolation and widget test host
+
+CI на `cca53c4` обнаружил реальную регрессию: native `Isolate.run` стартовал из старых `HomePage/CampaignsPage` widget тестов без платформенного окружения и оставлял 8-секундные таймеры. Исправлено контрактом DI: только production `main()` явно передаёт `DeviceWorldLibraryGateway`, отдельные host-виджеты `AIStoryApp()` и legacy тесты обходятся без подключения нового native backend; работа старого `CampaignStore` остаётся неизменной.
+ 
+Для widget-тестов с реальной базой используется `DeviceWorldLibraryGateway(background:false)`, который исполняет **тот же `BookworldCampaignStore` с настоящим SQLite и полным replay**, но inline в Flutter fakeAsync; для приложения `background:true` по умолчанию, SQLite остаётся в `Isolate.run`. Отдельный обычный `test()` в `world_integration_test.dart` проверяет реальный `Isolate.run` без fakeAsync. Ни сценарные условия, ни верификатор, ни запись кампаний не подменяются заглушками.
+ 
+Также общий `GameQuickBar` исправлен для 320dp/200% — действия равномерно распределяются по ширине и подписи могут занять 2 строки. Test scrollUntilVisible не требует наличия элемента до ленивого построения в SliverList.
+ 
+**Фактический статус нового коммита** всегда брать по последнему CI; старый run `41372278079` FAIL Flutter-widget, поэтому не объявлять его PASS. Приоритет последнего SHA — отсутствие регрессий всех предыдущих 71 widget-теста и успешное выполнение нового набора.

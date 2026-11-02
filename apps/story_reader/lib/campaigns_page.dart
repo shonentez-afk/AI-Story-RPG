@@ -12,12 +12,9 @@ import 'main.dart' show StoryReaderPage, makePilotStory;
 
 /// Campaigns and source books are deliberately separate navigations.
 class CampaignsPage extends StatefulWidget {
-  const CampaignsPage({
-    super.key,
-    this.worldGateway = const DeviceWorldLibraryGateway(),
-  });
+  const CampaignsPage({super.key, this.worldGateway});
 
-  final WorldLibraryGateway worldGateway;
+  final WorldLibraryGateway? worldGateway;
 
   @override
   State<CampaignsPage> createState() => _CampaignsPageState();
@@ -29,7 +26,7 @@ class _CampaignsPageState extends State<CampaignsPage> {
   List<WorldCampaignItem> _worldCampaigns = const [];
   Map<String, WorldLibraryItem> _worldCatalog = const {};
   bool _worldError = false;
-  bool _worldLoading = true;
+  bool _worldLoading = false;
   bool _busy = false;
   bool _opening = false;
   bool _loading = true;
@@ -38,14 +35,19 @@ class _CampaignsPageState extends State<CampaignsPage> {
   void initState() {
     super.initState();
     _refresh();
-    unawaited(_refreshWorlds());
+    if (widget.worldGateway != null) {
+      _worldLoading = true;
+      unawaited(_refreshWorlds());
+    }
   }
 
   Future<void> _refreshWorlds() async {
+    final gateway = widget.worldGateway;
+    if (gateway == null) return;
     try {
-      final worlds = await widget.worldGateway.worlds()
+      final worlds = await gateway.worlds()
           .timeout(const Duration(seconds: 8));
-      final campaigns = await widget.worldGateway.campaigns()
+      final campaigns = await gateway.campaigns()
           .timeout(const Duration(seconds: 8));
       if (mounted) setState(() {
         _worldCatalog = {
@@ -69,7 +71,7 @@ class _CampaignsPageState extends State<CampaignsPage> {
     try {
       await Navigator.of(context).push(MaterialPageRoute<void>(
         builder: (_) => WorldPlayPage(
-          gateway: widget.worldGateway,
+          gateway: widget.worldGateway!,
           campaignId: item.id,
         ),
       ));
@@ -86,7 +88,7 @@ class _CampaignsPageState extends State<CampaignsPage> {
     try {
       await Navigator.of(context).push(MaterialPageRoute<void>(
         builder: (_) => WorldCampaignsPage(
-          gateway: widget.worldGateway,
+          gateway: widget.worldGateway!,
           world: world,
         ),
       ));

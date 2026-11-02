@@ -289,3 +289,7 @@
 ## M1.7.4b2 — объединение сохранений без миграции
 - Общий экран `Мои прохождения` в `campaigns_page.dart` отображает вместе legacy M1.6 и native SQLite BookWorld-кампании, но каждую восстанавливает собственным runtime. HomePage теперь продолжает новый BookWorld, когда нет старого пилотного слота, и считает оба вида кампаний.
 - Два новых Flutter UI-теста: совместный список/проверка сохранности пилота, и продолжение BookWorld из Home. Полная таблица изменений `docs/M174B_FLUTTER_BOOKWORLD_RU.md`; **QA только после нового GitHub Actions**.
+
+## M1.7.4b QA исправления до приёмки
+- CI `41372278079` по `cca53c4`: Python/Dart/BookWorld PASS, но Flutter widget **FAIL 21**, Android/Windows SKIP. Причины: legacy tests без native plugin зависали на Isolate.run, fakeAsync worker, 320dp overflow в GameQuickBar.
+- Следующий hotfix: DI gateway в production main, nullable gateway в legacy Home/Library/Campaigns/Settings, реальный SQLite в widget test inline и отдельная проверка Isolate.run, равные ширины для GameQuickBar. Нужен повторный полный CI нового SHA. Подробности `docs/M174B_FLUTTER_BOOKWORLD_RU.md`.

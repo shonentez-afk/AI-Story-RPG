@@ -101,11 +101,13 @@ class GameQuickBar extends StatelessWidget {
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 3),
           child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
             children: [
-              _item(context, Icons.person_outline, 'Герой', GamePanel.character),
-              _item(context, Icons.backpack_outlined, 'Предметы', GamePanel.inventory),
-              _item(context, Icons.menu_book_outlined, 'Журнал', GamePanel.journal),
+              Expanded(child: _item(context,
+                  Icons.person_outline, 'Герой', GamePanel.character)),
+              Expanded(child: _item(context,
+                  Icons.backpack_outlined, 'Предметы', GamePanel.inventory)),
+              Expanded(child: _item(context,
+                  Icons.menu_book_outlined, 'Журнал', GamePanel.journal)),
             ],
           ),
         ),
@@ -127,7 +129,13 @@ class GameQuickBar extends StatelessWidget {
                 children: [
                   Icon(icon, size: 21, color: color),
                   const SizedBox(height: 2),
-                  Text(name, style: Theme.of(context).textTheme.labelSmall?.copyWith(color: color)),
+                  Text(name,
+                    textAlign: TextAlign.center,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.labelSmall
+                        ?.copyWith(color: color),
+                  ),
                 ],
               ),
             ),

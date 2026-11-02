@@ -23,7 +23,7 @@ class _PrivatePaths extends PathProviderPlatform {
 }
 
 class _FailingChoiceGateway extends DeviceWorldLibraryGateway {
-  const _FailingChoiceGateway();
+  const _FailingChoiceGateway() : super(background: false);
   @override
   Future<WorldChoiceResult> choose(String campaignId, {
     required String actionId, required String choiceId,
@@ -35,7 +35,7 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   late Directory temp;
   late PathProviderPlatform previous;
-  const gateway = DeviceWorldLibraryGateway();
+  const gateway = DeviceWorldLibraryGateway(background: false);
   const fixture = '../../artifacts/bookworld/manor_m17_original_demo.bworld';
 
   setUp(() async {
@@ -50,34 +50,50 @@ void main() {
     temp.deleteSync(recursive: true);
   });
 
-  Future<WorldLibraryItem> install(WidgetTester tester) async {
-    // Native SQLite and isolate responses use the real event loop; Flutter
-    // fakeAsync does not drive them without tester.runAsync.
-    final result = await tester.runAsync(() async {
-      final bytes = Uint8List.fromList(File(fixture).readAsBytesSync());
-      return gateway.install(bytes);
-    });
-    return result!;
+  Future<WorldLibraryItem> install() async {
+    final bytes = Uint8List.fromList(File(fixture).readAsBytesSync());
+    // The in-process test host runs the real SQLite store; production runs
+    // that identical code in Isolate.run by default.
+    return gateway.install(bytes);
   }
 
   Future<void> settleWorker(WidgetTester tester) async {
-    await tester.runAsync(() async {
-      await Future<void>.delayed(const Duration(milliseconds: 250));
-    });
+    await tester.pump();
     await tester.pumpAndSettle();
   }
 
   Future<void> tapChoice(WidgetTester tester, String id) async {
     final finder = find.byKey(ValueKey('world-choice-' + id));
-    await tester.ensureVisible(finder);
+    if (finder.evaluate().isEmpty) {
+      await tester.scrollUntilVisible(
+        finder, 160, scrollable: find.byType(Scrollable).first,
+      );
+    } else {
+      await tester.ensureVisible(finder);
+    }
     await tester.tap(finder);
     await settleWorker(tester);
     expect(tester.takeException(), isNull);
   }
 
+  test('default worker isolate reads and writes exact BookWorld', () async {
+    const worker = DeviceWorldLibraryGateway();
+    final bytes = Uint8List.fromList(File(fixture).readAsBytesSync());
+    final world = await worker.install(bytes);
+    final id = await worker.start(world.archiveHash);
+    final first = await worker.load(id);
+    expect(first.sceneId, 'gate');
+    expect(first.revision, 0);
+    final chosen = await worker.choose(id,
+        actionId: 'worker_first', choiceId: 'inspect_gate',
+        expectedRevision: 0);
+    expect(chosen.applied, true);
+    expect((await worker.load(id)).revision, 1);
+  });
+
   testWidgets('one library imports and displays verified worlds separately '
       'from legacy books and reading', (tester) async {
-    final world = await install(tester);
+    final world = await install();
     await tester.pumpWidget(const MaterialApp(
       home: LibraryPage(worldGateway: gateway),
     ));
@@ -85,6 +101,11 @@ void main() {
     expect(find.byKey(const ValueKey('library-import')), findsOneWidget);
     expect(find.text('Добавить книгу'), findsOneWidget);
     expect(find.textContaining('TXT, FB2'), findsOneWidget);
+    await tester.scrollUntilVisible(
+      find.byKey(ValueKey('library-world-' + world.bookworldId)),
+      160,
+      scrollable: find.byType(Scrollable).first,
+    );
     expect(find.byKey(ValueKey('library-world-' + world.bookworldId)),
         findsOneWidget);
     // Existing pilot is still present and world is NOT a BookReaderPage.
@@ -119,7 +140,7 @@ void main() {
 
   testWidgets('35 real UI choices commit to SQLite and reopen after 23',
       (tester) async {
-    final world = await install(tester);
+    final world = await install();
     await tester.pumpWidget(MaterialApp(
       home: WorldCampaignsPage(world: world, gateway: gateway),
     ));
@@ -132,7 +153,7 @@ void main() {
     expect(find.text('Ходов: 23'), findsOneWidget);
     await tester.pageBack();
     await settleWorker(tester);
-    final saved = (await tester.runAsync(() => gateway.campaigns(worldHash: world.archiveHash)))!.single;
+    final saved = (await gateway.campaigns(worldHash: world.archiveHash)).single;
     expect(saved.revision, 23);
     await tester.tap(find.byKey(ValueKey('world-campaign-' + saved.id)));
     await settleWorker(tester);
@@ -146,7 +167,7 @@ void main() {
     }
     expect(find.text('Ходов: 35'), findsOneWidget);
     expect(find.text('История завершена'), findsOneWidget);
-    final restored = (await tester.runAsync(() => gateway.load(saved.id)))!;
+    final restored = await gateway.load(saved.id);
     expect(restored.revision, 35);
     expect(restored.isTerminal, isTrue);
     expect(restored.flags['revealed'], isTrue);
@@ -157,8 +178,8 @@ void main() {
 
   testWidgets('unified saved campaigns list keeps legacy and BookWorld '
       'independent without a second library', (tester) async {
-    final world = await install(tester);
-    final worldId = (await tester.runAsync(() => gateway.start(world.archiveHash)))!;
+    final world = await install();
+    final worldId = await gateway.start(world.archiveHash);
     await CampaignStore().write(
       'campaign_pilot_existing',
       const GameSaveRecord('old pilot snapshot', []),
@@ -178,14 +199,14 @@ void main() {
     expect(find.text('Ходов: 0'), findsOneWidget);
     await tapChoice(tester, 'inspect_gate');
     expect((await CampaignStore().all()).length, 1);
-    expect((await tester.runAsync(() => gateway.load(worldId)))!.revision, 1);
+    expect((await gateway.load(worldId)).revision, 1);
   });
 
   testWidgets('home continues last BookWorld when no pilot slot exists',
       (tester) async {
-    final world = await install(tester);
-    final worldId = (await tester.runAsync(() => gateway.start(world.archiveHash)))!;
-    await tester.pumpWidget(const MaterialApp(home: HomePage()));
+    final world = await install();
+    final worldId = await gateway.start(world.archiveHash);
+    await tester.pumpWidget(const MaterialApp(home: HomePage(worldGateway: gateway)));
     await settleWorker(tester);
     expect(find.text(world.title), findsOneWidget);
     expect(find.text('Продолжить'), findsOneWidget);
@@ -194,13 +215,13 @@ void main() {
     await settleWorker(tester);
     expect(find.text('Ходов: 0'), findsOneWidget);
     await tapChoice(tester, 'inspect_gate');
-    expect((await tester.runAsync(() => gateway.load(worldId)))!.revision, 1);
+    expect((await gateway.load(worldId)).revision, 1);
   });
 
   testWidgets('storage failure does not optimistically advance RPG scene',
       (tester) async {
-    final world = await install(tester);
-    final id = (await tester.runAsync(() => gateway.start(world.archiveHash)))!;
+    final world = await install();
+    final id = await gateway.start(world.archiveHash);
     await tester.pumpWidget(MaterialApp(
       home: WorldPlayPage(
         gateway: const _FailingChoiceGateway(), campaignId: id,
@@ -210,13 +231,13 @@ void main() {
     await tapChoice(tester, 'inspect_gate');
     expect(find.text('Ходов: 0'), findsOneWidget);
     expect(find.textContaining('Ход не сохранён'), findsOneWidget);
-    expect((await tester.runAsync(() => gateway.load(id)))!.revision, 0);
-    expect((await tester.runAsync(() => gateway.load(id)))!.journal, isEmpty);
+    expect((await gateway.load(id)).revision, 0);
+    expect((await gateway.load(id)).journal, isEmpty);
   });
 
   testWidgets('compact screen keeps world journal accessible', (tester) async {
-    final world = await install(tester);
-    final id = (await tester.runAsync(() => gateway.start(world.archiveHash)))!;
+    final world = await install();
+    final id = await gateway.start(world.archiveHash);
     tester.view.physicalSize = const Size(320, 640);
     tester.view.devicePixelRatio = 1;
     addTearDown(() {

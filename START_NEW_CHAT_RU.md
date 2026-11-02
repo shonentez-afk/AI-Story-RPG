@@ -171,3 +171,6 @@ Run `41332360623` (SHA `ef004a4`): Python/Dart/analyze PASS, Flutter FAIL из-�
 
 ### Особенность Flutter CI M1.7.4b
 Новый `world_integration_test.dart` вызывает native `Isolate.run`+SQLite. Для запуска внутри Flutter `testWidgets` тест обязан ожидать такие операции через `WidgetTester.runAsync`, затем `pumpAndSettle` — иначе fakeAsync может зависнуть на настоящем worker. Исправлен только тестовый код, сценарная логика и сохранения оставлены настоящими. Сверить CI по последнему SHA, исходный `f6b325e` может быть отменён как устаревший.
+
+### M1.7.4b CI correction, проверять
+На `cca53c4` Flutter tests FAIL (21) из-за преждевременного запуска native SQLite в legacy widget host, ожидания isolate в fakeAsync и переполнения GameQuickBar на 320dp. Исправлено explicit production gateway injection через `AIStoryApp(worldGateway: DeviceWorldLibraryGateway())` в `main()`; старый `AIStoryApp()` не запускает неустановленный native сервис. Widget tests используют реальную SQLite через `DeviceWorldLibraryGateway(background:false)`, плюс отдельный normal `test` проверяет default `background:true` isolate. Патч GameQuickBar (Expanded + maxLines2). Старые user saves не менялись. **СНАЧАЛА проверить свежий HEAD/CI, не считать FAIL на cca53c4 положительным результатом.**

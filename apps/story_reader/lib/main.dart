@@ -10,13 +10,20 @@ import 'game_panels.dart';
 import 'game_progress.dart';
 import 'reading_settings_sheet.dart';
 import 'reader_chrome.dart';
+import 'world_library_gateway.dart';
 
 void main() {
-  runApp(const AIStoryApp());
+  // Production explicitly opts in to native BookWorld/SQLite. Lightweight
+  // hosts and legacy widget tests can instantiate AIStoryApp without plugins.
+  runApp(const AIStoryApp(
+    worldGateway: DeviceWorldLibraryGateway(),
+  ));
 }
 
 class AIStoryApp extends StatefulWidget {
-  const AIStoryApp({super.key});
+  const AIStoryApp({super.key, this.worldGateway});
+
+  final WorldLibraryGateway? worldGateway;
 
   @override
   State<AIStoryApp> createState() => _AIStoryAppState();
@@ -46,7 +53,7 @@ class _AIStoryAppState extends State<AIStoryApp> {
         darkTheme: AppTheme.dark(),
         themeMode: AppAppearanceController.instance.value == AppAppearance.dark
             ? ThemeMode.dark : ThemeMode.light,
-        home: const HomePage(),
+        home: HomePage(worldGateway: widget.worldGateway),
       );
 }
 

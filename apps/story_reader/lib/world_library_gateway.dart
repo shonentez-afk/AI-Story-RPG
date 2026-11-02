@@ -110,13 +110,17 @@ abstract class WorldLibraryGateway {
 /// Each request is a short independent isolate with its own DB connection;
 /// previous M1.6 SharedPreferences are never opened or migrated.
 class DeviceWorldLibraryGateway implements WorldLibraryGateway {
-  const DeviceWorldLibraryGateway();
+  const DeviceWorldLibraryGateway({this.background = true});
+
+  /// Production uses worker isolates. Host-based widget tests may explicitly
+  /// run the same real SQLite store inline to avoid fakeAsync deadlock.
+  final bool background;
 
   Future<T> _execute<T>(T Function(BookworldCampaignStore store) action) async {
     final support = await getApplicationSupportDirectory();
     final privateDirectory =
         support.path + Platform.pathSeparator + 'ai_story_bookworld';
-    return Isolate.run(() {
+    T runStore() {
       final store = BookworldCampaignStore.openPrivateDirectory(
         privateDirectory,
       );
@@ -125,7 +129,10 @@ class DeviceWorldLibraryGateway implements WorldLibraryGateway {
       } finally {
         store.close();
       }
-    });
+    }
+
+    if (!background) return runStore();
+    return Isolate.run(runStore);
   }
 
   static WorldLibraryItem _world(WorldCatalogEntry entry) => WorldLibraryItem(

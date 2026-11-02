@@ -16,7 +16,9 @@ import 'reading_settings_sheet.dart';
 import 'main.dart' show StoryReaderPage;
 
 class HomePage extends StatefulWidget {
-  const HomePage({super.key});
+  const HomePage({super.key, this.worldGateway});
+
+  final WorldLibraryGateway? worldGateway;
   @override
   State<HomePage> createState() => _HomePageState();
 }
@@ -31,8 +33,7 @@ class _HomePageState extends State<HomePage> {
   int _worldCount = 0;
   String? _recentWorldId;
   String? _recentWorldTitle;
-  final WorldLibraryGateway _worldGateway =
-      const DeviceWorldLibraryGateway();
+  WorldLibraryGateway? get _worldGateway => widget.worldGateway;
 
   @override
   void initState() {
@@ -65,10 +66,12 @@ class _HomePageState extends State<HomePage> {
   }
 
   Future<void> _refreshWorldCampaigns() async {
+    final gateway = _worldGateway;
+    if (gateway == null) return;
     try {
-      final worlds = await _worldGateway.worlds()
+      final worlds = await gateway.worlds()
           .timeout(const Duration(seconds: 8));
-      final campaigns = await _worldGateway.campaigns()
+      final campaigns = await gateway.campaigns()
           .timeout(const Duration(seconds: 8));
       final titles = <String, String>{
         for (final world in worlds) world.archiveHash: world.title,
@@ -117,7 +120,7 @@ class _HomePageState extends State<HomePage> {
           IconButton(
             tooltip: 'Настройки',
             icon: const Icon(Icons.settings_outlined),
-            onPressed: () => _open(const SettingsPage()),
+            onPressed: () => _open(SettingsPage(worldGateway: _worldGateway)),
           ),
         ],
       ),
@@ -181,7 +184,7 @@ class _HomePageState extends State<HomePage> {
                             onPressed: _saveLoading ? null : () {
                               if (worldContinue) {
                                 _open(WorldPlayPage(
-                                  gateway: _worldGateway,
+                                  gateway: _worldGateway!,
                                   campaignId: _recentWorldId!,
                                 ));
                               } else {
@@ -209,7 +212,7 @@ class _HomePageState extends State<HomePage> {
                     icon: Icons.library_books_outlined,
                     title: 'Библиотека',
                     subtitle: 'Книги и миры',
-                    onTap: () => _open(const LibraryPage()),
+                    onTap: () => _open(LibraryPage(worldGateway: _worldGateway)),
                   );
                   final story = _HomeAction(
                     icon: Icons.add_circle_outline,
@@ -230,7 +233,7 @@ class _HomePageState extends State<HomePage> {
                   icon: Icons.history_outlined,
                   title: 'Мои прохождения',
                   subtitle: 'Сохранённые кампании: $_campaignCount',
-                  onTap: () => _open(const CampaignsPage()),
+                  onTap: () => _open(CampaignsPage(worldGateway: _worldGateway)),
                 ),
               ],
             ),
@@ -276,12 +279,9 @@ class _HomeAction extends StatelessWidget {
 }
 
 class LibraryPage extends StatefulWidget {
-  const LibraryPage({
-    super.key,
-    this.worldGateway = const DeviceWorldLibraryGateway(),
-  });
+  const LibraryPage({super.key, this.worldGateway});
 
-  final WorldLibraryGateway worldGateway;
+  final WorldLibraryGateway? worldGateway;
 
   @override
   State<LibraryPage> createState() => _LibraryPageState();
@@ -292,7 +292,7 @@ class _LibraryPageState extends State<LibraryPage> {
   final TextEditingController _searchController = TextEditingController();
   List<StoredBook> _books = [];
   List<WorldLibraryItem> _worlds = const [];
-  bool _worldLoading = true;
+  bool _worldLoading = false;
   bool _worldLoadError = false;
   bool _working = false;
   bool _loadingBooks = true;
@@ -306,12 +306,17 @@ class _LibraryPageState extends State<LibraryPage> {
   void initState() {
     super.initState();
     _refresh();
-    unawaited(_refreshWorlds());
+    if (widget.worldGateway != null) {
+      _worldLoading = true;
+      unawaited(_refreshWorlds());
+    }
   }
 
   Future<void> _refreshWorlds() async {
+    final gateway = widget.worldGateway;
+    if (gateway == null) return;
     try {
-      final worlds = await widget.worldGateway.worlds()
+      final worlds = await gateway.worlds()
           .timeout(const Duration(seconds: 8));
       if (mounted) setState(() {
         _worlds = worlds;
@@ -424,7 +429,13 @@ class _LibraryPageState extends State<LibraryPage> {
       if (extension == 'bworld') {
         // Pure Dart/SQLite validation and persistence run on a worker isolate.
         // A rejected package leaves existing books and campaigns untouched.
-        final installed = await widget.worldGateway.install(bytes);
+        final gateway = widget.worldGateway;
+        if (gateway == null) {
+          throw const FormatException(
+            'Импорт игровых миров недоступен в этом режиме',
+          );
+        }
+        final installed = await gateway.install(bytes);
         await _refreshWorlds();
         if (mounted) _error('Добавлен игровой мир: ' + installed.title);
       } else {
@@ -599,7 +610,7 @@ class _LibraryPageState extends State<LibraryPage> {
                           MaterialPageRoute(
                             builder: (_) => WorldCampaignsPage(
                               world: world,
-                              gateway: widget.worldGateway,
+                              gateway: widget.worldGateway!,
                             ),
                           ),
                         );
@@ -686,7 +697,9 @@ class _LibraryPageState extends State<LibraryPage> {
 }
 
 class SettingsPage extends StatefulWidget {
-  const SettingsPage({super.key});
+  const SettingsPage({super.key, this.worldGateway});
+
+  final WorldLibraryGateway? worldGateway;
 
   @override
   State<SettingsPage> createState() => _SettingsPageState();
@@ -778,7 +791,9 @@ class _SettingsPageState extends State<SettingsPage> {
                   trailing: const Icon(Icons.chevron_right),
                   onTap: () => Navigator.of(context).push(
                     MaterialPageRoute<void>(
-                      builder: (_) => const CampaignsPage(),
+                      builder: (_) => CampaignsPage(
+                        worldGateway: widget.worldGateway,
+                      ),
                     ),
                   ),
                 ),
