@@ -224,12 +224,13 @@ class _SourceSemanticReviewPanelState extends State<SourceSemanticReviewPanel> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Семантические предложения · M2b4a',
+        Text('Экспериментальный повторный поиск',
             style: Theme.of(context).textTheme.titleMedium),
         const SizedBox(height: 6),
-        const Text('Работает только локальный поиск по явным шаблонам. '
-            'Полноценная ИИ-модель ещё не подключена. '
-            'Книга не отправляется в сеть и не становится игровой RPG.'),
+        const Text('Использует почти те же шаблоны, что и поиск имён выше, '
+            'но сохраняет результаты отдельно. Это эксперимент: '
+            'необязателен для обычной подготовки и не создаёт RPG. '
+            'Текст книги в сеть не отправляется.'),
         const SizedBox(height: 8),
         OutlinedButton.icon(
           key: const Key('semantic-open'),
