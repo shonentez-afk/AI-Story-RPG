@@ -518,3 +518,10 @@
   - [Android APK](https://github.com/shonentez-afk/AI-Story-RPG/releases/download/test-build-260/AI-Story-RPG-Android-debug.apk), 167 209 424 bytes, SHA256 `b832b719b1612b1b0980ad281536632973b0101ecfb3d4442457eabaf041c610`.
   - `SHA256SUMS.txt` присутствует. Все три актива GitHub Release проверены, state=uploaded.
 - Старые test-build-258/256 **не содержат новую корзину**. Для проверки новой версии нужно переустановить/распаковать test-build-260. Ручной E2E на реальном устройстве остаётся SKIP; не путать CI PASS с проверкой всех физических устройств. Следующий функциональный план M2b4 semantic provider, но текущая UX-корзина уже завершена.
+
+
+## 2026-11-02 — M2b4a1 принят, M2b4a2 checkpoint/UI в отдельной ветке
+
+- M2b4a1 PR #18 MERGED squash `13e9c0ebf4ab6e2cfbbcf306ad221b78cbcc7266`; exact tested head `05a399c241670cda5d05e2bdda0d60cbe163812f`, CI `41427964306` core PASS, `41427964385` M0 PASS. Offline semantic provider boundary и fail-closed source-backed validation приняты; **это не работающая LLM и не компиляция произвольной книги**.
+- M2b4a2 branch `feature/m2b4a-semantic-checkpoints-ui-20261102`, новый приватный checkpoint+возобновление, top-level workers, панель в одной подготовке, ручные метки без canon, отдельный reset. Отчёт: `docs/M2B4A2_SEMANTIC_CHECKPOINT_UI_RU.md`.
+- Статус M2b4a2 **CODE/CI PENDING**: до отдельного полного PR CI+Windows+Android+M0 не принимать. Исторические M2b1/M2b3b/M2b3c, SQLite/BookWorld/.bwsave, библиотека, настройки и ридер не мигрируются. `gameplayCoverage=0`, `canPublishBookworld=false`.
