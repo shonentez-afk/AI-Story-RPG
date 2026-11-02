@@ -53,6 +53,9 @@ void main() {
       (data) => (data['source_index'] as Map<String, dynamic>)['source_fingerprint'] =
           'f' * 64,
       (data) => (data['source_index'] as Map<String, dynamic>)['text_indexed_utf16'] = 0,
+      (data) => (data['source_index'] as Map<String, dynamic>)['indexed_chapter_count'] = 1,
+      (data) => ((data['source_index'] as Map<String, dynamic>)['chunks'] as List).removeLast(),
+      (data) => ((data['source_index'] as Map<String, dynamic>)['chunks'] as List).first['start_utf16'] = 1,
       (data) => ((data['source_index'] as Map<String, dynamic>)['chunks'] as List).first
           ['sha256_text'] = 'f' * 64,
       (data) => (((data['provenance'] as Map<String, dynamic>)['scene_origins'] as List).first
