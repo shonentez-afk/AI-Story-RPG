@@ -241,6 +241,50 @@ void main() {
   });
 
 
+
+  test('BookWorld preflight checks replay without importing, then restores',
+      () async {
+    final world = await install();
+    final campaignId = await gateway.start(world.archiveHash);
+    final result = await gateway.choose(campaignId,
+      actionId: 'portable_preflight_first', choiceId: 'inspect_gate',
+      expectedRevision: 0,
+    );
+    expect(result.applied, isTrue);
+    final portable = await gateway.exportSave(campaignId);
+    final inspected = await gateway.previewSave(
+      portable, expectedWorldHash: world.archiveHash,
+    );
+    expect(inspected.sourceCampaignId, campaignId);
+    expect(inspected.worldHash, world.archiveHash);
+    expect(inspected.revision, 1);
+    expect(inspected.stateHash, (await gateway.load(campaignId)).stateHash);
+    expect(inspected.isTerminal, isFalse);
+    expect((await gateway.campaigns()).length, 1);
+    final wrongHash = List.filled(64, 'a').join();
+    await expectLater(
+      gateway.previewSave(portable, expectedWorldHash: wrongHash),
+      throwsFormatException,
+    );
+    await expectLater(
+      gateway.previewSave(
+        portable.replaceFirst('"schema_version":2', '"schema_version":3'),
+        expectedWorldHash: world.archiveHash,
+      ),
+      throwsFormatException,
+    );
+    expect((await gateway.campaigns()).length, 1);
+    final importedId = await gateway.importSave(
+      portable, expectedWorldHash: world.archiveHash,
+    );
+    expect(importedId, isNot(campaignId));
+    expect((await gateway.load(importedId)).revision, 1);
+    expect((await gateway.load(importedId)).stateHash,
+        inspected.stateHash);
+    expect((await gateway.campaigns()).length, 2);
+    expect((await gateway.load(campaignId)).revision, 1);
+  });
+
   test('gateway guards stale deletion and archive reinstall', () async {
     final world = await install();
     final worldBytes = await gateway.exportWorld(world.archiveHash);
