@@ -87,6 +87,17 @@ void main() {
     expect(saved.canPublishBookworld, false);
     expect(saved.decisionFor(saved.hints.single.id), IdentityDecision.same);
 
+    final dropdown = find.byType(DropdownButton<ChapterTimeDecision>).first;
+    await tester.ensureVisible(dropdown);
+    await tester.pumpAndSettle();
+    await tester.tap(dropdown);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Флешбэк').last);
+    await tester.pumpAndSettle();
+    final voted = SourceRelationReviewSession.decode(index, graph,
+        (await store.read(index.sourceFingerprint))!);
+    expect(voted.temporalDecision(0), ChapterTimeDecision.flashback);
+
     await tester.pumpWidget(const MaterialApp(home: SizedBox()));
     await tester.pumpAndSettle();
     await tester.pumpWidget(page(index, graph, store));
