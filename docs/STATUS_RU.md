@@ -547,3 +547,10 @@
 - Ветка `ux/preparation-guided-flow-20261102`. Полный отчёт `docs/UX_PREPARATION_GUIDED_FLOW_2026-11-02_RU.md`. Реализованы читабельная карта реальных шагов, граница «создать RPG пока недоступно», понятные действия локального поиска, счётчики проверенных упоминаний, скрытие спойлеров, последовательное раскрытие дополнительных находок, отдельный необязательный экспериментальный повторный поиск, свернутая диагностика и главы. Исторические M2b1/M2b3b/M2b3c/M2b4a2 и игровые сохранения не переписывались.
 - Обновлён `source_analysis_checkpoint_test.dart`, добавлен `preparation_guided_ux_test.dart`. **Статус пока CODE / CI PENDING**, не переносить оценку CI `test-build-266` на новый UX код. Требуется Flutter analyze/widget, Dart/Python/world и обе платформенные сборки по SHA PR, затем merge, push(main) полный CI и новый проверенный Release. Ручной UX Windows/Android отдельно SKIP.
 - Для уже установленного `test-build-266`: нажатие «Подготовить к RPG» создаёт индекс; «Обработать порцию» ищет упоминания по шаблонам; отдельные панели проверяют цитаты/связи; `OfflineRuleProvider` повторяет часть поиска. Ни один инструмент ещё не создаёт готовую RPG из загруженной книги.
+
+
+## 2026-11-02 — pre-AI аудит M2b4b/M2c
+
+- Принят UX PR #20: code SHA `cdf64ff3c5da7cf52acaf9ee9767145a16d3d7d9`, exact head `f46d59a4798f158493e9d06d30e6fd753f2b2bcf`, Actions `41438307133` gated core/Windows/Android PASS, M0 `41438307091` PASS. Публикацию нового main release подтверждать отдельно.
+- Новая ветка `feature/m2b4b-m2c-pre-ai-validation-20261102`: `source_semantic_catalog.dart` + `intermediate_story_blueprint.dart`, точная валидация source citations, typed voice/time/polarity, причинное исследование альтернатив, тесты `pre_ai_semantic_blueprint_test.dart`. **CODE / CI PENDING**, это подготовка под ИИ, не реальный AI-провайдер и не публичный пользовательский .bworld.
+- Полный аудит незакрытых требований: `docs/M2_PRE_AI_READINESS_AUDIT_RU.md`; основной риск — импорт/построение .bworld принимает строго `original_demo` с null fingerprint, поэтому для произвольной книги M2d нужен отдельный безопасный production pipeline.
