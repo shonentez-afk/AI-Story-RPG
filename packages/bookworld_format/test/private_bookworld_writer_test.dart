@@ -50,17 +50,17 @@ void main() {
   test('native compiler rejects wrong edition, incomplete source and fake quote',
       () {
     for (final change in <void Function(Map<String, dynamic>)>[
-      (data) => object(data['source_index'])['source_fingerprint'] =
+      (data) => (data['source_index'] as Map<String, dynamic>)['source_fingerprint'] =
           'f' * 64,
-      (data) => object(data['source_index'])['text_indexed_utf16'] = 0,
-      (data) => (object(data['source_index'])['chunks'] as List).first
+      (data) => (data['source_index'] as Map<String, dynamic>)['text_indexed_utf16'] = 0,
+      (data) => ((data['source_index'] as Map<String, dynamic>)['chunks'] as List).first
           ['sha256_text'] = 'f' * 64,
-      (data) => ((object(data['provenance'])['scene_origins'] as List).first
+      (data) => (((data['provenance'] as Map<String, dynamic>)['scene_origins'] as List).first
           ['source_refs'] as List).first['quote_sha256'] = '0' * 64,
-      (data) => ((object(data['provenance'])['scene_origins'] as List).first
+      (data) => (((data['provenance'] as Map<String, dynamic>)['scene_origins'] as List).first
           ['source_refs'] as List).first['start_utf16'] = 9999,
-      (data) => object(data['blueprint'])['rights_status'] = 'original_demo',
-      (data) => object(data['provenance'])['publication_authorized'] = true,
+      (data) => (data['blueprint'] as Map<String, dynamic>)['rights_status'] = 'original_demo',
+      (data) => (data['provenance'] as Map<String, dynamic>)['publication_authorized'] = true,
     ]) {
       final data = loadFixture();
       change(data);
