@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 
 import 'world_backup_actions.dart';
 import 'world_library_gateway.dart';
+import 'world_save_import_flow.dart';
 import 'world_play_page.dart';
 
 /// Detail of a verified RPG world within the ONE existing library.
@@ -124,47 +125,13 @@ class _WorldCampaignsPageState extends State<WorldCampaignsPage> {
       final bytes = file.bytes;
       if (bytes == null) throw const FormatException('Не удалось прочитать файл');
       final payload = utf8.decode(bytes, allowMalformed: false);
-      // Real read-only replay/CRC/hash validation BEFORE confirmation.
-      // A cancelled dialog must never add a campaign or overwrite a slot.
-      final preview = await widget.gateway.previewSave(
-        payload, expectedWorldHash: widget.world.archiveHash,
-      );
-      if (!mounted) return;
-      final confirmed = await showDialog<bool>(
+      final importedId = await WorldSaveImportFlow.confirmAndImport(
         context: context,
-        builder: (context) => AlertDialog(
-          scrollable: true,
-          title: const Text('Импортировать прохождение?'),
-          content: Text(
-            'Мир: ' + widget.world.title + '\n'
-            'Ходов: ' + preview.revision.toString() + '\n'
-            'Состояние: ' + (preview.isTerminal
-                ? 'история завершена' : 'можно продолжать') + '\n'
-            'Код мира: ' + preview.worldHash.substring(0, 12) + '…\n'
-            'Код состояния: ' + preview.stateHash.substring(0, 12) + '…\n\n'
-            'Файл уже проверен: контрольная сумма и полный журнал '
-            'совпадают с установленным игровым миром. '
-            'После подтверждения проверка повторится, '
-            'создастся новый независимый слот. '
-            'Существующие прохождения не изменятся.',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('Отмена'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.pop(context, true),
-              child: const Text('Импортировать'),
-            ),
-          ],
-        ),
+        gateway: widget.gateway,
+        world: widget.world,
+        payload: payload,
       );
-      if (confirmed != true) return;
-      await widget.gateway.importSave(
-        payload,
-        expectedWorldHash: widget.world.archiveHash,
-      );
+      if (importedId == null) return;
       if (mounted) {
         await _refresh();
         _notice('Сохранение импортировано как новая кампания');

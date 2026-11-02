@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
@@ -7,6 +8,7 @@ import 'campaign_store.dart';
 import 'pilot_save_codec.dart';
 import 'world_backup_actions.dart';
 import 'world_library_gateway.dart';
+import 'world_save_import_flow.dart';
 import 'world_play_page.dart';
 import 'world_campaigns_page.dart';
 import 'main.dart' show StoryReaderPage, makePilotStory;
@@ -202,8 +204,50 @@ class _CampaignsPageState extends State<CampaignsPage> {
           'Не удалось получить байты файла через системный выбор',
         );
       }
-      // No local campaign is touched until the full checksum, schema,
-      // pilot identity and story_engine restore contract have passed.
+      // One system picker accepts both .bwsave v1 (pilot) and v2 (BookWorld).
+      // The format comes from the verified envelope, never the filename.
+      final dynamic envelope;
+      try {
+        envelope = jsonDecode(utf8.decode(bytes, allowMalformed: false));
+      } on FormatException {
+        throw const FormatException('Сохранение не является корректным UTF-8 JSON');
+      }
+      if (envelope is Map && envelope['format'] == 'ai_story_bwsave_v2') {
+        final gateway = widget.worldGateway;
+        if (gateway == null) {
+          throw const FormatException(
+            'Подготовленные игровые миры недоступны в этом режиме',
+          );
+        }
+        if (file.size > 2 * 1024 * 1024) {
+          throw const FormatException('Сохранение BookWorld больше 2 МБ');
+        }
+        final worldHash = envelope['world_sha256'];
+        if (worldHash is! String) {
+          throw const FormatException('В сохранении не указан игровой мир');
+        }
+        final worlds = await gateway.worlds();
+        final matches = worlds.where(
+          (world) => world.archiveHash == worldHash,
+        ).toList();
+        if (matches.isEmpty) {
+          throw const FormatException(
+            'Для этого прохождения сначала добавьте соответствующий '
+            '.bworld через Библиотеку. Существующие данные не изменены.',
+          );
+        }
+        final importedId = await WorldSaveImportFlow.confirmAndImport(
+          context: context,
+          gateway: gateway,
+          world: matches.single,
+          payload: utf8.decode(bytes, allowMalformed: false),
+        );
+        if (importedId == null || !mounted) return;
+        await _refreshWorlds();
+        _error('BookWorld-прохождение импортировано как новый слот');
+        return;
+      }
+      // Legacy v1 still uses exactly the existing runtime verifier and store.
       final imported = PilotSaveCodec.decode(bytes, project: makePilotStory());
       if (!mounted) return;
       final confirmed = await showDialog<bool>(
