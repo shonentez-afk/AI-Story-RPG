@@ -766,6 +766,8 @@ class SettingsPage extends StatefulWidget {
 
 class _SettingsPageState extends State<SettingsPage> {
   final controller = AppAppearanceController.instance;
+  final ReadingSettingsStore _readerStore = ReadingSettingsStore();
+  bool _resettingReader = false;
 
   @override
   void initState() {
@@ -773,7 +775,9 @@ class _SettingsPageState extends State<SettingsPage> {
     controller.addListener(_refresh);
   }
 
-  void _refresh() { if (mounted) setState(() {}); }
+  void _refresh() {
+    if (mounted) setState(() {});
+  }
 
   @override
   void dispose() {
@@ -781,18 +785,27 @@ class _SettingsPageState extends State<SettingsPage> {
     super.dispose();
   }
 
-  final ReadingSettingsStore _readerStore = ReadingSettingsStore();
-
   Future<void> _openReadingSettings() async {
     try {
       final current = await _readerStore.load();
       if (!mounted) return;
-      showModalBottomSheet<void>(
+      await showModalBottomSheet<void>(
         context: context,
         isScrollControlled: true,
+        showDragHandle: true,
         builder: (_) => ReadingSettingsSheet(
           preferences: current,
-          onChanged: (next) => _readerStore.save(next),
+          onChanged: (next) {
+            _readerStore.save(next).then((_) {},
+                onError: (Object error) {
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text(
+                    'Не удалось сохранить оформление страниц: $error')),
+                );
+              }
+            });
+          },
         ),
       );
     } catch (error) {
@@ -803,6 +816,55 @@ class _SettingsPageState extends State<SettingsPage> {
     }
   }
 
+  Future<void> _resetReader() async {
+    if (_resettingReader) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        scrollable: true,
+        title: const Text('Сбросить оформление чтения?'),
+        content: const Text(
+          'Вернутся стандартные шрифт, палитра, интервалы и поля. '
+          'Книги, закладки, позиция чтения и игровые сохранения не изменятся.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Отмена'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Сбросить оформление'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    setState(() => _resettingReader = true);
+    try {
+      await _readerStore.reset();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Оформление страниц восстановлено'),
+        ));
+      }
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('Не удалось сбросить оформление: $error'),
+        ));
+      }
+    } finally {
+      if (mounted) setState(() => _resettingReader = false);
+    }
+  }
+
+  void _navigate(Widget destination) {
+    Navigator.of(context).push<void>(MaterialPageRoute(
+      builder: (_) => destination,
+    ));
+  }
+
   @override
   Widget build(BuildContext context) => Scaffold(
         appBar: AppBar(title: const Text('Настройки')),
@@ -810,53 +872,95 @@ class _SettingsPageState extends State<SettingsPage> {
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 650),
             child: ListView(
-              padding: const EdgeInsets.all(20),
+              padding: const EdgeInsets.fromLTRB(16, 14, 16, 32),
               children: [
                 Text('Внешний вид',
                     style: Theme.of(context).textTheme.titleMedium),
-                const SizedBox(height: 12),
+                const SizedBox(height: 8),
+                const Text('Тема окон приложения. Палитра страниц '
+                    'настраивается отдельно и не сбрасывается при смене темы.'),
+                const SizedBox(height: 10),
                 Wrap(
                   spacing: 8,
+                  runSpacing: 8,
                   children: [
-                    ChoiceChip(
-                      label: const Text('Светлая'),
-                      selected: controller.value == AppAppearance.light,
-                      onSelected: (_) => controller.change(AppAppearance.light),
-                    ),
-                    ChoiceChip(
-                      label: const Text('Тёмная'),
-                      selected: controller.value == AppAppearance.dark,
-                      onSelected: (_) => controller.change(AppAppearance.dark),
-                    ),
+                    for (final item in <(AppAppearance, String)>[
+                      (AppAppearance.system, 'Как в системе'),
+                      (AppAppearance.light, 'Светлая'),
+                      (AppAppearance.dark, 'Тёмная'),
+                    ])
+                      ChoiceChip(
+                        label: Text(item.$2),
+                        selected: controller.value == item.$1,
+                        onSelected: (_) => controller.change(item.$1),
+                      ),
                   ],
                 ),
-                const SizedBox(height: 12),
+                const Divider(height: 30),
+                Text('Чтение',
+                    style: Theme.of(context).textTheme.titleMedium),
                 ListTile(
+                  contentPadding: EdgeInsets.zero,
                   leading: const Icon(Icons.auto_stories_outlined),
                   title: const Text('Оформление страниц'),
-                  subtitle: const Text('Палитра, размер текста, интервалы и поля'),
+                  subtitle: const Text('Свет, сепия, тёмная и OLED · '
+                      'размер текста · интервалы · поля'),
                   trailing: const Icon(Icons.chevron_right),
                   onTap: _openReadingSettings,
                 ),
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: const Icon(Icons.restart_alt_outlined),
+                  title: const Text('Сбросить оформление чтения'),
+                  subtitle: const Text('Только внешний вид, не книги и закладки'),
+                  trailing: _resettingReader
+                      ? const SizedBox(width: 22, height: 22,
+                          child: CircularProgressIndicator(strokeWidth: 2))
+                      : const Icon(Icons.chevron_right),
+                  onTap: _resettingReader ? null : _resetReader,
+                ),
+                const Divider(height: 30),
+                Text('Игра и данные',
+                    style: Theme.of(context).textTheme.titleMedium),
                 const ListTile(
+                  contentPadding: EdgeInsets.zero,
                   leading: Icon(Icons.offline_bolt_outlined),
                   title: Text('Режим игры'),
-                  subtitle: Text('Классический офлайн • без ИИ'),
+                  subtitle: Text('Демо и подготовленные миры — офлайн. '
+                      'Свободный ИИ-режим пока не подключён.'),
                 ),
                 ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: const Icon(Icons.library_books_outlined),
+                  title: const Text('Моя библиотека'),
+                  subtitle: const Text('Импорт TXT/FB2 и .bworld, '
+                      'чтение и подготовка книг'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => _navigate(LibraryPage(
+                      worldGateway: widget.worldGateway)),
+                ),
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
                   leading: const Icon(Icons.save_outlined),
                   title: const Text('Мои прохождения'),
-                  subtitle: const Text('Сохранения RPG, импорт и экспорт .bwsave'),
+                  subtitle: const Text('Автосохранение RPG, '
+                      'импорт и экспорт .bwsave'),
                   trailing: const Icon(Icons.chevron_right),
-                  onTap: () => Navigator.of(context).push(
-                    MaterialPageRoute<void>(
-                      builder: (_) => CampaignsPage(
-                        worldGateway: widget.worldGateway,
-                      ),
-                    ),
-                  ),
+                  onTap: () => _navigate(CampaignsPage(
+                      worldGateway: widget.worldGateway)),
                 ),
                 const ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: Icon(Icons.privacy_tip_outlined),
+                  title: Text('Анализ книги и приватность'),
+                  subtitle: Text('Текущий анализ работает локально. '
+                      'Отправка текста внешнему ИИ ещё не реализована.'),
+                ),
+                const Divider(height: 30),
+                Text('О программе',
+                    style: Theme.of(context).textTheme.titleMedium),
+                const ListTile(
+                  contentPadding: EdgeInsets.zero,
                   leading: Icon(Icons.info_outline),
                   title: Text('Версия'),
                   subtitle: Text('0.1.0 · BookWorld · тестовая версия'),
