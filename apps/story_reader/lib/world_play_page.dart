@@ -27,6 +27,7 @@ class WorldPlayPage extends StatefulWidget {
 class _WorldPlayPageState extends State<WorldPlayPage> {
   WorldGameView? _view;
   bool _loading = true;
+  bool _refreshing = false;
   bool _choosing = false;
   String? _errorText;
   final ReadingSettingsStore _settingsStore = ReadingSettingsStore();
@@ -84,7 +85,8 @@ class _WorldPlayPageState extends State<WorldPlayPage> {
   }
 
   KeyEventResult _handleReaderKey(FocusNode _, KeyEvent event) {
-    if (event is! KeyDownEvent || _view == null) {
+    if (event is! KeyDownEvent || _view == null ||
+        ModalRoute.of(context)?.isCurrent != true) {
       return KeyEventResult.ignored;
     }
     // F11 switches reader chrome, not the native OS window state.
@@ -116,7 +118,8 @@ class _WorldPlayPageState extends State<WorldPlayPage> {
   }
 
   Future<void> _reload() async {
-    if (_choosing) return;
+    if (_choosing || _refreshing) return;
+    if (mounted) setState(() => _refreshing = true);
     try {
       final view = await widget.gateway.load(widget.campaignId);
       if (mounted) setState(() {
@@ -129,7 +132,10 @@ class _WorldPlayPageState extends State<WorldPlayPage> {
         _errorText = 'Сохранение не удалось открыть: $error';
       });
     } finally {
-      if (mounted) setState(() => _loading = false);
+      if (mounted) setState(() {
+        _loading = false;
+        _refreshing = false;
+      });
     }
   }
 
@@ -233,7 +239,7 @@ class _WorldPlayPageState extends State<WorldPlayPage> {
             ),
             IconButton(
               tooltip: 'Обновить сохранённое состояние',
-              onPressed: _choosing || _loading ? null : _reload,
+              onPressed: _choosing || _loading || _refreshing ? null : _reload,
               icon: const Icon(Icons.refresh),
             ),
             PopupMenuButton<ReaderChromeMode>(
@@ -280,13 +286,13 @@ class _WorldPlayPageState extends State<WorldPlayPage> {
               child: Center(
                 child: ConstrainedBox(
                   constraints: const BoxConstraints(maxWidth: 760),
-                  child: _loading
+                  child: _loading || _refreshing
                       ? const Center(child: CircularProgressIndicator())
                       : view == null
-                          ? Padding(
+                          ? SingleChildScrollView(
                               padding: const EdgeInsets.all(20),
                               child: Column(
-                                mainAxisAlignment: MainAxisAlignment.center,
+                                mainAxisSize: MainAxisSize.min,
                                 children: [
                                   const Icon(Icons.warning_amber_outlined,
                                       size: 36),
@@ -425,6 +431,16 @@ class _WorldPlayPageState extends State<WorldPlayPage> {
 
 class _WorldInfoSheet extends StatelessWidget {
   const _WorldInfoSheet({required this.panel, required this.view});
+
+  // Only translate known stat identifiers; authored unknown ones stay intact.
+  static String _statLabel(String id) => switch (id) {
+    'insight' => 'Наблюдательность',
+    'courage' => 'Смелость',
+    'strength' => 'Сила',
+    'intelligence' => 'Интеллект',
+    'charisma' => 'Харизма',
+    _ => id,
+  };
   final GamePanel panel;
   final WorldGameView view;
 
@@ -438,7 +454,7 @@ class _WorldInfoSheet extends StatelessWidget {
     final entries = switch (panel) {
       GamePanel.character => [
         for (final stat in view.stats.entries)
-          stat.key + ': ' + stat.value.toString(),
+          _statLabel(stat.key) + ': ' + stat.value.toString(),
         'Игровое время: ' + view.tick.toString(),
         'Открыто сведений: ' + view.knownFacts.length.toString(),
       ],

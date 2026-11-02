@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:isolate';
 
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
@@ -14,6 +15,21 @@ import 'app_theme.dart';
 import 'reading_preferences.dart';
 import 'reading_settings_sheet.dart';
 import 'main.dart' show StoryReaderPage;
+
+/// Prefer the most recently saved campaign regardless of its storage type.
+/// Invalid or unknown timestamps never overwrite a known newer pilot.
+bool shouldContinueWorld({
+  required bool hasPilot,
+  required bool hasWorld,
+  DateTime? pilotSavedAt,
+  DateTime? worldSavedAt,
+}) {
+  if (!hasWorld) return false;
+  if (!hasPilot) return true;
+  if (worldSavedAt == null) return false;
+  if (pilotSavedAt == null) return true;
+  return worldSavedAt.isAfter(pilotSavedAt);
+}
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key, this.worldGateway});
@@ -33,6 +49,8 @@ class _HomePageState extends State<HomePage> {
   int _worldCount = 0;
   String? _recentWorldId;
   String? _recentWorldTitle;
+  DateTime? _recentPilotSavedAt;
+  DateTime? _recentWorldSavedAt;
   WorldLibraryGateway? get _worldGateway => widget.worldGateway;
 
   @override
@@ -51,6 +69,8 @@ class _HomePageState extends State<HomePage> {
         final healthy = campaigns.where((item) => !item.damaged).toList();
         _hasSave = healthy.isNotEmpty;
         _recentCampaignId = healthy.isEmpty ? null : healthy.first.id;
+        _recentPilotSavedAt =
+            healthy.isEmpty ? null : healthy.first.savedAt;
         _pilotCount = campaigns.length;
         _campaignCount = _pilotCount + _worldCount;
       });
@@ -81,6 +101,8 @@ class _HomePageState extends State<HomePage> {
         _worldCount = campaigns.length;
         _campaignCount = _pilotCount + _worldCount;
         _recentWorldId = campaigns.isEmpty ? null : campaigns.first.id;
+        _recentWorldSavedAt = campaigns.isEmpty ? null :
+            DateTime.tryParse(campaigns.first.savedAt)?.toUtc();
         _recentWorldTitle = campaigns.isEmpty ? null :
             titles[campaigns.first.worldHash];
       });
@@ -111,7 +133,12 @@ class _HomePageState extends State<HomePage> {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final text = Theme.of(context).textTheme;
-    final worldContinue = !_hasSave && _recentWorldId != null;
+    final worldContinue = shouldContinueWorld(
+      hasPilot: _hasSave,
+      hasWorld: _recentWorldId != null,
+      pilotSavedAt: _recentPilotSavedAt,
+      worldSavedAt: _recentWorldSavedAt,
+    );
     final canContinue = _hasSave || worldContinue;
     return Scaffold(
       appBar: AppBar(
@@ -439,7 +466,10 @@ class _LibraryPageState extends State<LibraryPage> {
         await _refreshWorlds();
         if (mounted) _error('Добавлен игровой мир: ' + installed.title);
       } else {
-        final book = BookImporter.parse(file.name, bytes);
+        // TXT/FB2 may be up to 20 MiB. Parsing off the UI isolate prevents
+        // long synchronous frames on both Android and Windows.
+        final sourceName = file.name;
+        final book = await Isolate.run(() => BookImporter.parse(sourceName, bytes));
         await _storage.add(book);
         await _refresh();
         if (mounted) {
@@ -492,7 +522,11 @@ class _LibraryPageState extends State<LibraryPage> {
     final filteredWorlds = _worlds.where((world) =>
       term.isEmpty || world.title.toLowerCase().contains(term)
           || world.bookworldId.toLowerCase().contains(term)).toList()
-        ..sort((a, b) => a.title.compareTo(b.title));
+        ..sort((a, b) {
+          final comparison = a.title.toLowerCase()
+              .compareTo(b.title.toLowerCase());
+          return _sortDescending ? -comparison : comparison;
+        });
     final filtered = _books.where((entry) {
       final term = _query.trim().toLowerCase();
       return term.isEmpty ||
@@ -566,7 +600,8 @@ class _LibraryPageState extends State<LibraryPage> {
                 const SizedBox(height: 8),
                 Row(children: [
                   Expanded(child: Text(
-                    'Импортированные книги: ${filtered.length} из ${_books.length}',
+                    'Книги: ${filtered.length} из ${_books.length} · '
+                    'Миры: ${filteredWorlds.length} из ${_worlds.length}',
                     style: Theme.of(context).textTheme.bodySmall,
                   )),
                   TextButton.icon(
@@ -598,7 +633,7 @@ class _LibraryPageState extends State<LibraryPage> {
                   const SizedBox(height: 8),
                   for (final world in filteredWorlds)
                     Card(child: ListTile(
-                      key: ValueKey('library-world-' + world.bookworldId),
+                      key: ValueKey('library-world-' + world.archiveHash),
                       leading: const Icon(Icons.auto_stories_outlined),
                       title: Text(world.title),
                       subtitle: const Text(
@@ -641,22 +676,23 @@ class _LibraryPageState extends State<LibraryPage> {
                         ),
                       ],
                     ),
-                  )
-                else if (_books.isEmpty && _worlds.isEmpty)
-                  Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text('Книг пока нет. Нажмите «Добавить книгу» '
-                            'выше, чтобы импортировать TXT или FB2.'),
-                      ],
-                    ),
-                  )
-                else if (filtered.isEmpty)
+                  ),
+                // Query feedback is independent from an error reading TXT/FB2.
+                // A verified BookWorld can still be searched and opened.
+                if (!_loadingBooks && term.isNotEmpty &&
+                    filtered.isEmpty && filteredWorlds.isEmpty &&
+                    !_worldLoading)
                   const Padding(
                     padding: EdgeInsets.all(16),
-                    child: Text('По вашему запросу книги не найдены.'),
+                    child: Text('По вашему запросу ничего не найдено.'),
+                  ),
+                if (!_loadingBooks && !_libraryLoadError &&
+                    term.isEmpty && _books.isEmpty && _worlds.isEmpty &&
+                    !_worldLoading && !_worldLoadError)
+                  const Padding(
+                    padding: EdgeInsets.all(16),
+                    child: Text('Книг пока нет. Нажмите «Добавить книгу» '
+                        'выше, чтобы импортировать TXT или FB2.'),
                   ),
               ]),
             ),
@@ -800,7 +836,7 @@ class _SettingsPageState extends State<SettingsPage> {
                 const ListTile(
                   leading: Icon(Icons.info_outline),
                   title: Text('Версия'),
-                  subtitle: Text('0.1.0 · M1.6 · тестовая версия'),
+                  subtitle: Text('0.1.0 · BookWorld · тестовая версия'),
                 ),
               ],
             ),

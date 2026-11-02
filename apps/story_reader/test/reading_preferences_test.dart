@@ -5,6 +5,18 @@ import 'package:ai_story_reader/reading_preferences.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  test('all reader palettes exceed WCAG 7:1 text contrast', () {
+    for (final palette in ReadingPalette.values) {
+      final colors = ReadingPreferences(palette: palette);
+      final fg = colors.foreground.computeLuminance();
+      final bg = colors.background.computeLuminance();
+      final maxL = fg > bg ? fg : bg;
+      final minL = fg > bg ? bg : fg;
+      final ratio = (maxL + 0.05) / (minL + 0.05);
+      expect(ratio, greaterThanOrEqualTo(7.0), reason: palette.name);
+    }
+  });
+
   test('reading palette, font, spacing and margins persist', () async {
     SharedPreferences.setMockInitialValues({});
     final store = ReadingSettingsStore();

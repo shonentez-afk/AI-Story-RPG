@@ -425,7 +425,10 @@ class _StoryReaderPageState extends State<StoryReaderPage> {
     }
     final event = _engine.currentEvent;
     final done = _engine.status == StoryEngineStatus.terminated;
-    return Scaffold(
+    return ReaderChromeKeyboard(
+      mode: _chrome,
+      onChange: _changeChrome,
+      child: Scaffold(
       backgroundColor: _reading.background,
       appBar: !_chrome.showTopBar ? null : AppBar(
         backgroundColor: _reading.background,
@@ -554,7 +557,7 @@ class _StoryReaderPageState extends State<StoryReaderPage> {
       ),
       ),
       ),
-    );
+    ));
   }
 }
 

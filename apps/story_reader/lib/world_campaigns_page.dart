@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
@@ -6,6 +7,7 @@ import 'package:flutter/material.dart';
 
 import 'world_backup_actions.dart';
 import 'world_library_gateway.dart';
+import 'world_save_import_flow.dart';
 import 'world_play_page.dart';
 
 /// Detail of a verified RPG world within the ONE existing library.
@@ -25,6 +27,7 @@ class _WorldCampaignsPageState extends State<WorldCampaignsPage> {
   List<WorldCampaignItem> _items = const [];
   bool _loading = true;
   bool _busy = false;
+  bool _opening = false;
   String? _failure;
 
   @override
@@ -60,17 +63,26 @@ class _WorldCampaignsPageState extends State<WorldCampaignsPage> {
   }
 
   Future<void> _open(String id) async {
-    await Navigator.of(context).push<void>(MaterialPageRoute(
-      builder: (_) => WorldPlayPage(
-        gateway: widget.gateway,
-        campaignId: id,
-      ),
-    ));
-    if (mounted) await _refresh();
+    if (_opening) return;
+    setState(() => _opening = true);
+    try {
+      await Navigator.of(context).push<void>(MaterialPageRoute(
+        builder: (_) => WorldPlayPage(
+          gateway: widget.gateway,
+          campaignId: id,
+        ),
+      ));
+    } finally {
+      if (mounted) {
+        setState(() => _opening = false);
+        // Release the navigation lock before potentially slow disk refresh.
+        unawaited(_refresh());
+      }
+    }
   }
 
   Future<void> _start({String? parentCampaignId}) async {
-    if (_busy) return;
+    if (_busy || _opening) return;
     setState(() => _busy = true);
     try {
       final id = await widget.gateway.start(
@@ -78,6 +90,9 @@ class _WorldCampaignsPageState extends State<WorldCampaignsPage> {
         parentCampaignId: parentCampaignId,
       );
       if (!mounted) return;
+      // Creating a campaign has finished. Do not leave the busy animation
+      // active under the entire game route.
+      setState(() => _busy = false);
       await _open(id);
     } catch (error) {
       _notice('Не удалось создать прохождение: $error');
@@ -124,47 +139,13 @@ class _WorldCampaignsPageState extends State<WorldCampaignsPage> {
       final bytes = file.bytes;
       if (bytes == null) throw const FormatException('Не удалось прочитать файл');
       final payload = utf8.decode(bytes, allowMalformed: false);
-      // Real read-only replay/CRC/hash validation BEFORE confirmation.
-      // A cancelled dialog must never add a campaign or overwrite a slot.
-      final preview = await widget.gateway.previewSave(
-        payload, expectedWorldHash: widget.world.archiveHash,
-      );
-      if (!mounted) return;
-      final confirmed = await showDialog<bool>(
+      final importedId = await WorldSaveImportFlow.confirmAndImport(
         context: context,
-        builder: (context) => AlertDialog(
-          scrollable: true,
-          title: const Text('Импортировать прохождение?'),
-          content: Text(
-            'Мир: ' + widget.world.title + '\n'
-            'Ходов: ' + preview.revision.toString() + '\n'
-            'Состояние: ' + (preview.isTerminal
-                ? 'история завершена' : 'можно продолжать') + '\n'
-            'Код мира: ' + preview.worldHash.substring(0, 12) + '…\n'
-            'Код состояния: ' + preview.stateHash.substring(0, 12) + '…\n\n'
-            'Файл уже проверен: контрольная сумма и полный журнал '
-            'совпадают с установленным игровым миром. '
-            'После подтверждения проверка повторится, '
-            'создастся новый независимый слот. '
-            'Существующие прохождения не изменятся.',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('Отмена'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.pop(context, true),
-              child: const Text('Импортировать'),
-            ),
-          ],
-        ),
+        gateway: widget.gateway,
+        world: widget.world,
+        payload: payload,
       );
-      if (confirmed != true) return;
-      await widget.gateway.importSave(
-        payload,
-        expectedWorldHash: widget.world.archiveHash,
-      );
+      if (importedId == null) return;
       if (mounted) {
         await _refresh();
         _notice('Сохранение импортировано как новая кампания');
@@ -231,7 +212,8 @@ class _WorldCampaignsPageState extends State<WorldCampaignsPage> {
     final typography = Theme.of(context).textTheme;
     return Scaffold(
       appBar: AppBar(
-        title: Text(widget.world.title),
+        title: Text(widget.world.title,
+          maxLines: 1, overflow: TextOverflow.ellipsis),
         actions: [
           IconButton(
             tooltip: 'Импортировать .bwsave v2',
@@ -305,10 +287,10 @@ class _WorldCampaignsPageState extends State<WorldCampaignsPage> {
                 subtitle: Text(item.parentId == null
                     ? 'Самостоятельная история'
                     : 'Ответвление другого прохождения'),
-                onTap: _busy ? null : () => _open(item.id),
+                onTap: _busy || _opening ? null : () => _open(item.id),
                 trailing: PopupMenuButton<String>(
                   tooltip: 'Действия с прохождением',
-                  enabled: !_busy,
+                  enabled: !_busy && !_opening,
                   onSelected: (action) {
                     if (action == 'fork') {
                       _start(parentCampaignId: item.id);
