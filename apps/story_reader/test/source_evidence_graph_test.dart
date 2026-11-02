@@ -78,6 +78,9 @@ void main() {
     );
     var graph = SourceEvidenceGraph.empty(index).addAll(index, [proposed]);
     graph = graph.review(index, proposed.id, EvidenceStatus.confirmed);
+    final restored = SourceEvidenceGraph.decode(index, graph.encode());
+    expect(restored.records.single.spoilerGate, EvidenceSpoilerGate.afterEvent);
+    expect(restored.records.single.revealEventId, 'player_found_letter');
     expect(graph.visibleToPlayer(currentChapter: 0,
         knownEvents: {'player_found_letter'}), isEmpty);
     expect(graph.visibleToPlayer(currentChapter: 1), isEmpty);
