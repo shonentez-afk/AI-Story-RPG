@@ -11,6 +11,7 @@ import 'source_analysis_checkpoint_repository.dart';
 import 'source_narrative_review_panel.dart';
 import 'source_semantic_review_panel.dart';
 import 'reviewed_story_editor_page.dart';
+import 'private_game_readiness_panel.dart';
 import 'world_library_gateway.dart';
 
 /// The single preparation page already opened from Library. M2b2 adds local
@@ -66,6 +67,7 @@ class _SourceIndexPreviewPageState extends State<SourceIndexPreviewPage> {
   OfflinePreparationProgress? _offlineProgress;
   String? _offlineMessage;
   int _narrativeRefresh = 0;
+  int _worldReadinessRefresh = 0;
   bool _showCandidates = false;
   bool _showChapters = false;
   int _visibleCandidates = 10;
@@ -801,26 +803,38 @@ class _SourceIndexPreviewPageState extends State<SourceIndexPreviewPage> {
                               'автоматически.'),
                             trailing: const Icon(Icons.chevron_right),
                             enabled: !_offlineWorking && !_busy,
-                            onTap: () => Navigator.of(context).push<void>(
-                              MaterialPageRoute(
-                                builder: (_) => ReviewedStoryEditorPage(
-                                  index: index,
-                                  gateway: widget.worldGateway ??
-                                      const DeviceWorldLibraryGateway(),
+                            onTap: () async {
+                              await Navigator.of(context).push<void>(
+                                MaterialPageRoute(
+                                  builder: (_) => ReviewedStoryEditorPage(
+                                    index: index,
+                                    gateway: widget.worldGateway ??
+                                        const DeviceWorldLibraryGateway(),
+                                  ),
                                 ),
-                              ),
-                            ),
+                              );
+                              if (mounted) {
+                                setState(() => _worldReadinessRefresh++);
+                              }
+                            },
                           ),
+                        ),
+                        const SizedBox(height: 8),
+                        PrivateGameReadinessPanel(
+                          key: ValueKey('private-readiness-${index.sourceFingerprint}-$_worldReadinessRefresh'),
+                          index: index,
+                          gateway: widget.worldGateway ??
+                              const DeviceWorldLibraryGateway(),
                         ),
                         const SizedBox(height: 8),
                         Card(
                           child: ListTile(
                             leading: const Icon(Icons.lock_outline),
-                            title: const Text('Создать RPG по этой книге'),
-                            subtitle: const Text('Для запуска требуются проверенные сцены и выборы. '
-                                'Встроенная сборка .bworld ещё не связана '
-                                'с редактором книги; завершение поиска само '
-                                'по себе не создаёт игру.'),
+                            title: const Text('Полная автоматическая адаптация книги'),
+                            subtitle: const Text('Пока недоступна: локальные правила '
+                                'только предлагают отдельные факты. '
+                                'Выше можно вручную собрать короткую личную RPG, '
+                                'но не всю книгу автоматически.'),
                           ),
                         ),
                         const SizedBox(height: 8),
