@@ -206,7 +206,7 @@ class _SourceIndexPreviewPageState extends State<SourceIndexPreviewPage> {
       context: context,
       builder: (context) => AlertDialog(
         scrollable: true,
-        title: const Text('Сбросить анализ книги?'),
+        title: const Text('Сбросить найденные имена и места?'),
         content: const Text(
           'Будут удалены только результаты анализа и решения по '
           'упоминаниям этой редакции. Книга, закладки и игровые '
@@ -219,7 +219,7 @@ class _SourceIndexPreviewPageState extends State<SourceIndexPreviewPage> {
           ),
           FilledButton(
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('Сбросить анализ'),
+            child: const Text('Сбросить поиск имён'),
           ),
         ],
       ),
@@ -257,7 +257,7 @@ class _SourceIndexPreviewPageState extends State<SourceIndexPreviewPage> {
   /// Never confuse a finished source index with a playable bookworld.
   Widget _preparationOverview(BookSourceIndex index) {
     final analysis = _analysis;
-    final searchStatus = analysis == null
+    final searchStatus = analysis == null || analysis.processedCount == 0
         ? 'Ещё не запускался'
         : analysis.pendingCount == 0 && analysis.failedCount == 0
             ? 'Поиск завершён, находки требуют проверки'
@@ -388,8 +388,10 @@ class _SourceIndexPreviewPageState extends State<SourceIndexPreviewPage> {
               key: const Key('prepare-search-mentions'),
               label: Text(_busy
                   ? 'Сохраняем результаты…'
-                  : processed == 0 ? 'Начать поиск имён и мест'
-                      : 'Продолжить поиск имён и мест'),
+                  : pending == 0 && analysis?.failedCount == 0
+                      ? 'Поиск имён и мест завершён'
+                      : processed == 0 ? 'Начать поиск имён и мест'
+                          : 'Продолжить поиск имён и мест'),
             ),
             if (analysis != null && analysis.failedCount > 0)
               OutlinedButton.icon(
@@ -400,7 +402,7 @@ class _SourceIndexPreviewPageState extends State<SourceIndexPreviewPage> {
             OutlinedButton.icon(
               onPressed: _busy || _loadingAnalysis ? null : _resetAnalysis,
               icon: const Icon(Icons.restart_alt),
-              label: const Text('Сбросить анализ'),
+              label: const Text('Сбросить поиск имён'),
             ),
           ],
         ),
@@ -480,7 +482,7 @@ class _SourceIndexPreviewPageState extends State<SourceIndexPreviewPage> {
         final pageCount = allPending.isEmpty
             ? 1 : (allPending.length + _candidatesPerPage - 1) ~/
                 _candidatesPerPage;
-        final page = _candidatePage.clamp(0, pageCount - 1);
+        final page = _candidatePage.clamp(0, pageCount - 1).toInt();
         final pendingReview = allPending
             .skip(page * _candidatesPerPage)
             .take(_candidatesPerPage)
