@@ -238,4 +238,51 @@ void main() {
     expect(result.blockers.any((s) => s.contains('права')), true);
     expect(result.canExportPublic, false);
   });
+  test('M2c rejects unknown flags, duplicated choices and forged schema fields',
+      () {
+    final draft = goodDraft();
+    final wrongFlags = IntermediateStoryBlueprint(
+      sourceFingerprint: draft.sourceFingerprint, title: draft.title,
+      entrySceneId: draft.entrySceneId, rights: draft.rights,
+      flags: ['saved_hero'], initialFlags: draft.initialFlags,
+      scenes: [
+        DraftScene(id: 'entry', chapterIndex: 0, text: 'Вход',
+          origin: DraftSceneOrigin.sourcePassage,
+          assertionIds: draft.scenes[0].assertionIds, terminal: false,
+          choices: [
+            DraftChoice(id: 'unknown_flag', label: 'Идти',
+              nextSceneId: 'junction', requires: ['magic']),
+          ]),
+        ...draft.scenes.skip(1),
+      ],
+    );
+    expect(() => wrongFlags.validate(index, graph, catalog),
+        throwsFormatException);
+    final duplicate = IntermediateStoryBlueprint(
+      sourceFingerprint: draft.sourceFingerprint, title: draft.title,
+      entrySceneId: draft.entrySceneId, rights: draft.rights,
+      flags: draft.flags, initialFlags: draft.initialFlags,
+      scenes: [draft.scenes.first, draft.scenes.first, ...draft.scenes.skip(1)],
+    );
+    expect(() => duplicate.validate(index, graph, catalog),
+        throwsFormatException);
+    final json = jsonDecode(draft.encode()) as Map<String, dynamic>;
+    expect(() => IntermediateStoryBlueprint.fromJson(
+        {...json, 'network_enabled': true}), throwsFormatException);
+    expect(() => IntermediateStoryBlueprint.fromJson(
+        {...json, 'status': 'PLAYABLE'}), throwsFormatException);
+  });
+
+  test('model text cannot promote a single verified quotation to world truth',
+      () {
+    final assertion = catalog.assertions.first;
+    final fake = Map<String, dynamic>.from(assertion.toJson());
+    fake['status'] = 'CONFIRMED';
+    fake['can_publish_bookworld'] = true;
+    expect(() => SourceSemanticAssertion.fromJson(index, graph, fake),
+        throwsFormatException);
+    expect(catalog.canPublishBookworld, false);
+    expect(goodDraft().canPublishBookworld, false);
+  });
+
 }
