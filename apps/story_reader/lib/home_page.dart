@@ -6,6 +6,7 @@ import 'package:file_picker/file_picker.dart';
 import 'book_import.dart';
 import 'book_storage.dart';
 import 'book_reader.dart';
+import 'source_index_preview_page.dart';
 import 'world_library_gateway.dart';
 import 'world_campaigns_page.dart';
 import 'world_play_page.dart';
@@ -712,10 +713,32 @@ class _LibraryPageState extends State<LibraryPage> {
                     title: Text(entry.book.title),
                     subtitle: Text(entry.book.author.isEmpty
                         ? 'Импортированная книга' : entry.book.author),
-                    trailing: IconButton(
-                      tooltip: 'Удалить книгу: ${entry.book.title}',
-                      icon: const Icon(Icons.delete_outline),
-                      onPressed: _working ? null : () => _deleteBook(entry),
+                    trailing: PopupMenuButton<String>(
+                      tooltip: 'Действия с книгой',
+                      enabled: !_working,
+                      onSelected: (action) {
+                        if (action == 'index') {
+                          Navigator.of(context).push<void>(
+                            MaterialPageRoute(
+                              builder: (_) => SourceIndexPreviewPage(
+                                book: entry.book,
+                              ),
+                            ),
+                          );
+                        } else if (action == 'delete') {
+                          _deleteBook(entry);
+                        }
+                      },
+                      itemBuilder: (_) => const [
+                        PopupMenuItem(
+                          value: 'index',
+                          child: Text('Подготовка книги · индекс текста'),
+                        ),
+                        PopupMenuItem(
+                          value: 'delete',
+                          child: Text('Удалить книгу'),
+                        ),
+                      ],
                     ),
                     onTap: () => Navigator.of(context).push(
                       MaterialPageRoute<void>(
