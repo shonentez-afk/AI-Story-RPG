@@ -107,8 +107,12 @@ class _BookReaderPageState extends State<BookReaderPage>
         if (_layoutAnchorIndex != null && anchor != null) {
           final sliver = _currentBlocksKey.currentContext?.findRenderObject();
           if (sliver is RenderSliverList && sliver.firstChild != null) {
+            // A trailing-edge anchor (fraction == 1) otherwise places the
+            // entire paragraph just outside the viewport after reflow.
+            // Keep a small visible slice so the intended paragraph remains
+            // reachable and screen readers retain its context.
             offset = sliver.firstChild!.size.height *
-                anchor.fraction.clamp(0.0, 1.0);
+                anchor.fraction.clamp(0.0, 0.85);
           } else {
             offset = 0;
           }
