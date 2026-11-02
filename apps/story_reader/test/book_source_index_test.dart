@@ -145,6 +145,14 @@ void main() {
   });
 
   testWidgets('source index preview never claims playable RPG', (tester) async {
+    // Desktop viewport: verify the expandable diagnostic section without
+    // brittle off-screen taps on eagerly built SliverToBoxAdapter children.
+    tester.view.physicalSize = const Size(900, 1750);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
     const book = ImportedBook(
       title: 'Оригинальная короткая история',
       author: '',
@@ -159,20 +167,28 @@ void main() {
     ));
     await tester.pumpAndSettle();
     expect(find.text('Подготовка книги'), findsOneWidget);
-    expect(find.text('Главы с текстом: 2 из 2'), findsOneWidget);
+    expect(find.text('Создать игровую историю — пока недоступно'),
+        findsOneWidget);
+    await tester.ensureVisible(find.text('Технические сведения о книге'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Технические сведения о книге'));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Глав с текстом: 2 из 2'));
+    expect(find.text('Глав с текстом: 2 из 2'), findsOneWidget);
     expect(find.text('Текстовое покрытие индекса: 100.0%'),
         findsOneWidget);
-    expect(find.textContaining('Готового игрового мира нет'), findsOneWidget);
-    // Source sections are lazy slivers below the new M2b review header.
-    // Scroll to them as a real user would instead of requiring eager build.
+    await tester.ensureVisible(
+        find.byKey(const Key('prepare-show-chapters')));
+    await tester.tap(find.byKey(const Key('prepare-show-chapters')));
+    await tester.pumpAndSettle();
     await tester.scrollUntilVisible(
       find.text('Глава 1'), 180,
-      scrollable: find.byType(Scrollable).first,
+      scrollable: find.byType(Scrollable).first, maxScrolls:30,
     );
     expect(find.text('Глава 1'), findsOneWidget);
     await tester.scrollUntilVisible(
       find.text('Глава 2'), 180,
-      scrollable: find.byType(Scrollable).first,
+      scrollable: find.byType(Scrollable).first, maxScrolls:30,
     );
     expect(find.text('Глава 2'), findsOneWidget);
     expect(tester.takeException(), isNull);

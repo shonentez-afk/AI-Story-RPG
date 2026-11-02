@@ -269,7 +269,7 @@ class _SourceNarrativeReviewPanelState
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Факты, события и связи · M2b3b',
+          Text('Проверка фраз о событиях и фактах',
               style: text.titleMedium),
           const SizedBox(height: 6),
           const Text('Отдельная локальная проверка книги. '
@@ -307,7 +307,7 @@ class _SourceNarrativeReviewPanelState
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Факты, события и связи · M2b3b',
+        Text('Проверка фраз о событиях и фактах',
             style: text.titleMedium),
         const SizedBox(height: 6),
         const Text('Офлайн-кандидаты с точными ссылками на текст. '

@@ -234,7 +234,7 @@ class _SourceRelationsReviewPanelState
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Divider(height: 28),
-          Text('Связи и хронология · M2b3c', style: style.titleMedium),
+          Text('Имена и порядок событий', style: style.titleMedium),
           const SizedBox(height: 6),
           const Text('Найденные совпадения имён могут относиться '
               'к разным людям. Откройте редактор для ручных решений.'),
@@ -259,7 +259,7 @@ class _SourceRelationsReviewPanelState
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const Divider(height: 28),
-        Text('Связи и хронология · M2b3c', style: style.titleMedium),
+        Text('Имена и порядок событий', style: style.titleMedium),
         const SizedBox(height: 6),
         const Text('Решения редактора об упоминаниях, а не слияние '
             'игровых NPC. Порядок чтения глав не доказывает хронологию.'),
