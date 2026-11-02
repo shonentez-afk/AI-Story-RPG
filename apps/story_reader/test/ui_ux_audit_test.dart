@@ -156,6 +156,10 @@ void main() {
     SharedPreferences.setMockInitialValues({
       'ai_story_reading_v1_palette': 3,
     });
+    // Explicit reader choice is separate from the app's light/dark mode.
+    await ReadingSettingsStore().save(const ReadingPreferences(
+      palette: ReadingPalette.oled,
+    ));
     await tester.pumpWidget(const AIStoryApp());
     await tester.pumpAndSettle();
     await tester.tap(find.text('Новая история'));
