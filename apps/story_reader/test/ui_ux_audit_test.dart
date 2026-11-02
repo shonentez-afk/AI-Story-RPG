@@ -15,6 +15,30 @@ import 'package:shared_preferences/shared_preferences.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  test('Continue uses actual save timestamps across pilot and BookWorld', () {
+    final older = DateTime.utc(2026, 11, 1, 10);
+    final newer = DateTime.utc(2026, 11, 2, 16);
+    expect(shouldContinueWorld(
+      hasPilot: true, hasWorld: true,
+      pilotSavedAt: older, worldSavedAt: newer,
+    ), isTrue);
+    expect(shouldContinueWorld(
+      hasPilot: true, hasWorld: true,
+      pilotSavedAt: newer, worldSavedAt: older,
+    ), isFalse);
+    expect(shouldContinueWorld(
+      hasPilot: false, hasWorld: true,
+    ), isTrue);
+    expect(shouldContinueWorld(
+      hasPilot: true, hasWorld: false,
+      pilotSavedAt: newer,
+    ), isFalse);
+    expect(shouldContinueWorld(
+      hasPilot: true, hasWorld: true,
+      pilotSavedAt: newer, worldSavedAt: null,
+    ), isFalse);
+  });
+
   test('all terminal outcomes have distinct saved titles and valid migration',
       () {
     for (final id in GameProgress.endingTitles.keys) {

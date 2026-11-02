@@ -1,4 +1,7 @@
+import 'dart:convert';
 import 'dart:io';
+
+import 'package:file_picker/file_picker.dart';
 
 import 'package:ai_story_reader/home_page.dart';
 import 'package:ai_story_reader/campaign_store.dart';
@@ -20,6 +23,22 @@ class _PrivatePaths extends PathProviderPlatform {
   Future<String?> getApplicationSupportPath() async => path;
   @override
   Future<String?> getApplicationDocumentsPath() async => path;
+}
+
+/// Test the actual shared system-file entry point without touching devices.
+class _FixtureSavePicker implements FilePicker {
+  const _FixtureSavePicker(this.bytes);
+  final Uint8List bytes;
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) {
+    if (invocation.memberName == #pickFiles) {
+      return Future<FilePickerResult?>.value(FilePickerResult([
+        PlatformFile(name: 'portable.bwsave', size: bytes.length, bytes: bytes),
+      ]));
+    }
+    return super.noSuchMethod(invocation);
+  }
 }
 
 class _FailingChoiceGateway extends DeviceWorldLibraryGateway {
@@ -293,6 +312,116 @@ void main() {
     expect(importedPreview.stateHash, inspected.stateHash);
     expect((await gateway.campaigns()).length, 2);
     expect((await gateway.load(campaignId)).revision, 1);
+  });
+
+
+  testWidgets('global save import accepts BookWorld v2 and cancel is read-only',
+      (tester) async {
+    final world = await install();
+    final source = await gateway.start(world.archiveHash);
+    final save = await gateway.exportSave(source);
+    final oldPicker = FilePicker.platform;
+    FilePicker.platform = _FixtureSavePicker(Uint8List.fromList(utf8.encode(save)));
+    addTearDown(() => FilePicker.platform = oldPicker);
+    await tester.pumpWidget(MaterialApp(
+      home: CampaignsPage(worldGateway: gateway),
+    ));
+    await settleWorker(tester);
+    expect(find.byTooltip('Импортировать сохранение (.bwsave)'),
+        findsOneWidget);
+
+    Future<void> openPreview() async {
+      await tester.tap(find.byTooltip('Импортировать сохранение (.bwsave)'));
+      for (var i = 0; i < 8; i++) {
+        await tester.pump(const Duration(milliseconds: 100));
+      }
+      expect(find.text('Импортировать прохождение?'), findsOneWidget);
+      expect(find.textContaining('Ходов: 0'), findsOneWidget);
+    }
+
+    await openPreview();
+    await tester.tap(find.text('Отмена'));
+    await settleWorker(tester);
+    expect((await gateway.campaigns()).length, 1);
+    await openPreview();
+    await tester.tap(find.text('Импортировать').last);
+    await settleWorker(tester);
+    expect((await gateway.campaigns()).length, 2);
+    expect((await gateway.load(source)).revision, 0);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('global save import refuses missing BookWorld without writing',
+      (tester) async {
+    final world = await install();
+    final original = await gateway.start(world.archiveHash);
+    final save = await gateway.exportSave(original);
+    await gateway.deleteCampaign(original, expectedRevision: 0);
+    await gateway.deleteWorld(world.archiveHash);
+    final oldPicker = FilePicker.platform;
+    FilePicker.platform = _FixtureSavePicker(Uint8List.fromList(utf8.encode(save)));
+    addTearDown(() => FilePicker.platform = oldPicker);
+    await tester.pumpWidget(MaterialApp(
+      home: CampaignsPage(worldGateway: gateway),
+    ));
+    await settleWorker(tester);
+    await tester.tap(find.byTooltip('Импортировать сохранение (.bwsave)'));
+    for (var i = 0; i < 8; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+    expect(find.text('Импортировать прохождение?'), findsNothing);
+    expect(find.textContaining('соответствующий .bworld'), findsOneWidget);
+    expect((await gateway.campaigns()), isEmpty);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('library searches worlds without false books-not-found',
+      (tester) async {
+    final world = await install();
+    await tester.pumpWidget(MaterialApp(
+      home: LibraryPage(worldGateway: gateway),
+    ));
+    await settleWorker(tester);
+    expect(find.text('По вашему запросу ничего не найдено.'), findsNothing);
+    final search = find.byType(TextField);
+    await tester.enterText(search, 'несуществующий мир');
+    await tester.pump();
+    expect(find.text('По вашему запросу ничего не найдено.'), findsOneWidget);
+    await tester.enterText(search, world.title);
+    await tester.pump();
+    expect(find.text('По вашему запросу ничего не найдено.'), findsNothing);
+    await tester.scrollUntilVisible(
+      find.byKey(ValueKey('library-world-' + world.archiveHash)),
+      150, scrollable: find.byType(Scrollable).first,
+    );
+    expect(find.byKey(ValueKey('library-world-' + world.archiveHash)),
+        findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('BookWorld read failure is scrollable at 320dp and 200% text',
+      (tester) async {
+    tester.view.physicalSize = const Size(320, 480);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+    await tester.pumpWidget(MaterialApp(
+      builder: (context, child) => MediaQuery(
+        data: MediaQuery.of(context).copyWith(
+          textScaler: const TextScaler.linear(2),
+        ),
+        child: child!,
+      ),
+      home: const WorldPlayPage(
+        gateway: gateway, campaignId: 'c_missing',
+      ),
+    ));
+    await settleWorker(tester);
+    expect(find.textContaining('Сохранение не удалось открыть'), findsOneWidget);
+    expect(find.byType(SingleChildScrollView), findsWidgets);
+    expect(tester.takeException(), isNull);
   });
 
   test('gateway guards stale deletion and archive reinstall', () async {
