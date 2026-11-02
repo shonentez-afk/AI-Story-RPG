@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
@@ -26,6 +27,7 @@ class _WorldCampaignsPageState extends State<WorldCampaignsPage> {
   List<WorldCampaignItem> _items = const [];
   bool _loading = true;
   bool _busy = false;
+  bool _opening = false;
   String? _failure;
 
   @override
@@ -61,17 +63,26 @@ class _WorldCampaignsPageState extends State<WorldCampaignsPage> {
   }
 
   Future<void> _open(String id) async {
-    await Navigator.of(context).push<void>(MaterialPageRoute(
-      builder: (_) => WorldPlayPage(
-        gateway: widget.gateway,
-        campaignId: id,
-      ),
-    ));
-    if (mounted) await _refresh();
+    if (_opening) return;
+    setState(() => _opening = true);
+    try {
+      await Navigator.of(context).push<void>(MaterialPageRoute(
+        builder: (_) => WorldPlayPage(
+          gateway: widget.gateway,
+          campaignId: id,
+        ),
+      ));
+    } finally {
+      if (mounted) {
+        setState(() => _opening = false);
+        // Release the navigation lock before potentially slow disk refresh.
+        unawaited(_refresh());
+      }
+    }
   }
 
   Future<void> _start({String? parentCampaignId}) async {
-    if (_busy) return;
+    if (_busy || _opening) return;
     setState(() => _busy = true);
     try {
       final id = await widget.gateway.start(
@@ -79,6 +90,9 @@ class _WorldCampaignsPageState extends State<WorldCampaignsPage> {
         parentCampaignId: parentCampaignId,
       );
       if (!mounted) return;
+      // Creating a campaign has finished. Do not leave the busy animation
+      // active under the entire game route.
+      setState(() => _busy = false);
       await _open(id);
     } catch (error) {
       _notice('Не удалось создать прохождение: $error');
@@ -272,10 +286,10 @@ class _WorldCampaignsPageState extends State<WorldCampaignsPage> {
                 subtitle: Text(item.parentId == null
                     ? 'Самостоятельная история'
                     : 'Ответвление другого прохождения'),
-                onTap: _busy ? null : () => _open(item.id),
+                onTap: _busy || _opening ? null : () => _open(item.id),
                 trailing: PopupMenuButton<String>(
                   tooltip: 'Действия с прохождением',
-                  enabled: !_busy,
+                  enabled: !_busy && !_opening,
                   onSelected: (action) {
                     if (action == 'fork') {
                       _start(parentCampaignId: item.id);

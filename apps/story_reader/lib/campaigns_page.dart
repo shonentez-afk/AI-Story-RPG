@@ -44,6 +44,15 @@ class _CampaignsPageState extends State<CampaignsPage> {
     }
   }
 
+  void _retryWorlds() {
+    if (_worldLoading) return;
+    setState(() {
+      _worldLoading = true;
+      _worldError = false;
+    });
+    unawaited(_refreshWorlds());
+  }
+
   Future<void> _refreshWorlds() async {
     final gateway = widget.worldGateway;
     if (gateway == null) return;
@@ -343,10 +352,18 @@ class _CampaignsPageState extends State<CampaignsPage> {
         if (_worldLoading) const LinearProgressIndicator(minHeight: 2),
         if (_worldError) Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-          child: Text(
-            'Игровые миры пока недоступны. '
-            'Старые прохождения не затронуты.',
-            style: Theme.of(context).textTheme.bodySmall,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Игровые миры пока недоступны. '
+                   'Старые прохождения не затронуты.',
+                  style: Theme.of(context).textTheme.bodySmall),
+              TextButton.icon(
+                onPressed: _retryWorlds,
+                icon: const Icon(Icons.refresh),
+                label: const Text('Повторить загрузку миров'),
+              ),
+            ],
           ),
         ),
         Expanded(
