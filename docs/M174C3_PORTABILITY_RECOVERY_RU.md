@@ -1,7 +1,7 @@
 # M1.7.4c3 — переносимость BookWorld, предварительный replay и политика legacy
 
 Дата: 2026-11-02. Ветка разработки: `feat/m174c3-portable-save-preflight`.
-**Статус:** код и тесты внесены, новый CI необходимо проверить по фактическому SHA. Физический Android↔Windows E2E — не подтверждён.
+**Статус:** автоматический CI #157 (run 41377701471) **6/6 PASS**, Flutter **84/84** PASS, Android APK и Windows portable PASS, кодовый SHA после squash `48d5659c85ed6c42c05053f28ac88544827cda91`. Физический Android↔Windows E2E — **SKIP**, не подтверждён.
 
 ## 1. Контракт файлов
 
@@ -60,4 +60,13 @@ Flutter gateway-тест подтверждает read-only preflight, exact wor
 
 ## 6. Следующий этап
 
-После зелёного CI M1.7.4c3 зафиксировать SHA/run/число тестов, затем решить, какие физические шаги выполнить пользователю на Android/Windows. Автоматический этап не замещает ручной QA. Следующий функциональный блок: M2 Book Compiler для пользовательских TXT/FB2 → проверенный BookWorld, с отчётом охвата произведения и правами на исходные тексты. Нельзя выдавать простое открытие TXT/FB2 за готовый RPG-сюжет.
+Автоматическая приёмка M1.7.4c3 закрыта CI #157: 6/6 PASS, Flutter 84/84, кодовый SHA `48d5659`. Далее выполнить и документировать физические шаги на Android/Windows. Автоматический этап не замещает ручной QA. Следующий функциональный блок: M2 Book Compiler для пользовательских TXT/FB2 → проверенный BookWorld, с отчётом охвата произведения и правами на исходные тексты. Нельзя выдавать простое открытие TXT/FB2 за готовый RPG-сюжет.
+
+
+## M1.7.4c3 — принята автоматическая проверка (2026-11-02)
+- PR [#3](https://github.com/shonentez-afk/AI-Story-RPG/pull/3) merged/squash в `main`: **кодовый SHA `48d5659c85ed6c42c05053f28ac88544827cda91`**; HEAD проверенного PR `b3ad242e149e2934cd11f793f8983ece2c6389b1`.
+- GitHub Actions [#157 — run `41377701471`](https://github.com/shonentez-afk/AI-Story-RPG/actions/runs/41377701471): **completed/success, 6/6 PASS**. Python, Dart, core/format/SQLite-campaign-manager, Flutter analyze + **84/84 Flutter tests**, Windows portable release и Android debug APK — PASS. Артефакты: `AI-Story-RPG-Windows-portable`, `AI-Story-RPG-Android-debug`, `AI-Story-RPG-BookWorld-demo` (срок хранения задаёт GitHub).
+- Новые тесты `campaign_manager_test.dart`: read-only portable preflight с подделанным checksum/неверной ревизией; симуляция Android→Windows посредством **двух независимых SQLite каталогов и двух реальных файлов**, перенос 24+fork+25 ходов, повторное открытие, ход 26 только у получателя. Flutter: gateway preflight без записи и в рабочем `Isolate.run`; до импорта видны проверенные progress/terminal/sha. `importPortable` повторяет валидацию и создаёт новый ID.
+- Старые SharedPreferences M1.6, TXT/FB2 и .bwsave v1 не менялись; автоматической миграции в BookWorld **нет** по обоснованной политике совместимости `docs/M174C3_PORTABILITY_RECOVERY_RU.md`. Одна библиотека, одна CTA импорта книг.
+- **SKIP/НЕ ПРОВЕДЕНО:** файловый менеджер Android/Windows на реальном устройстве, настоящий двусторонний перенос .bworld/.bwsave v2 между платформами, запуск полученного APK/EXE на устройствах, ручная accessibility/keyboard матрица, power-loss и recovery при внезапном выключении. Зелёный CI не доказывает эти действия.
+- Следующий этап: физический E2E по `docs/M174C3_PORTABILITY_RECOVERY_RU.md` для M1 acceptance (или явный deferral). Функциональная ветка **M2 Book Compiler** должна начинаться с фактического свежего `main`: конвейер TXT/FB2→исходные сегменты с provenance/coverage→проверяемый промежуточный blueprint→готовый .bworld, с честной маркировкой неполной компиляции и без обещания AI-игры до реализации. После каждого этапа обновлять этот handoff.

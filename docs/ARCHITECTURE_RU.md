@@ -83,3 +83,6 @@ ZIP/JSON+SQLite экспорт, включающий `schema_version, book_id, b
 
 ## M1.7.4c3 — portable preflight и отказ от молчаливой миграции
 `BookworldCampaignStore.previewPortable` проверяет переносимый `.bwsave v2` с помощью того же валидатора/детерминированного replay, что и `importPortable`, **без INSERT/UPDATE/DELETE**. `DeviceWorldLibraryGateway.previewSave` проверяет соответствие exact `world_sha256` выбранному миру и возвращает только UI DTO, не внутренние объекты story runtime. Переход к импорту повторно валидирует файл в worker isolate и создаёт отдельную SQLite-кампанию с новым локальным ID. Существующий старый пилот `CampaignStore/SaveStore` и формат `.bwsave v1` не мигрируются из-за несовместимости контракта сценария и версии правил. Детально: `M174C3_PORTABILITY_RECOVERY_RU.md`.
+
+## M1.7.4c3 — кодовая автоматическая приёмка
+PR #3 merged в `main` как `48d5659c85ed6c42c05053f28ac88544827cda91`. [CI #157](https://github.com/shonentez-afk/AI-Story-RPG/actions/runs/41377701471) completed/success 6/6, Flutter 84/84, Windows/Android PASS. Две независимые SQLite базы в тесте подтверждают перенос одной пары `.bworld/.bwsave v2` и продолжение журнала без перезаписи source; это **симуляция двух устройств**, а не физический Android↔Windows QA. Legacy M1.6 не мигрируется, блокирующих записей на этапе preflight нет.
