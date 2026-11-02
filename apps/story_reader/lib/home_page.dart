@@ -676,7 +676,7 @@ class _LibraryPageState extends State<LibraryPage> {
                         ),
                       ],
                     ),
-                  )
+                  ),
                 // Query feedback is independent from an error reading TXT/FB2.
                 // A verified BookWorld can still be searched and opened.
                 if (!_loadingBooks && term.isNotEmpty &&

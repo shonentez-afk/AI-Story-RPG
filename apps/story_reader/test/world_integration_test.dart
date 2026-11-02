@@ -330,7 +330,7 @@ void main() {
     }
     FilePicker.platform = _FixtureSavePicker(Uint8List.fromList(utf8.encode(save)));
     addTearDown(() {
-      if (previousPicker != null) FilePicker.platform = previousPicker!;
+      if (previousPicker != null) FilePicker.platform = previousPicker;
     });
     await tester.pumpWidget(MaterialApp(
       home: CampaignsPage(worldGateway: gateway),
@@ -377,7 +377,7 @@ void main() {
     }
     FilePicker.platform = _FixtureSavePicker(Uint8List.fromList(utf8.encode(save)));
     addTearDown(() {
-      if (previousPicker != null) FilePicker.platform = previousPicker!;
+      if (previousPicker != null) FilePicker.platform = previousPicker;
     });
     await tester.pumpWidget(MaterialApp(
       home: CampaignsPage(worldGateway: gateway),
