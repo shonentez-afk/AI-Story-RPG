@@ -181,8 +181,16 @@ class _BookReaderPageState extends State<BookReaderPage>
       setState(() => _progressReady = true);
       return;
     }
-    final saved = await _readingStore.load(widget.bookId!);
-    if (mounted) setState(() {
+    // A damaged or inaccessible preference record must not prevent
+    // opening the imported book. Fall back to its first chapter.
+    BookReadingState saved;
+    try {
+      saved = await _readingStore.load(widget.bookId!);
+    } catch (_) {
+      saved = const BookReadingState();
+    }
+    if (!mounted) return;
+    setState(() {
       _reading = saved.copyWith(chapter:
           saved.chapter.clamp(0, _count > 0 ? _count - 1 : 0).toInt());
       _layoutAnchorIndex = saved.anchor?.blockIndex;
@@ -212,7 +220,7 @@ class _BookReaderPageState extends State<BookReaderPage>
     });
     _restoreScroll();
     if (widget.bookId != null) {
-      _readingStore.save(widget.bookId!, _reading);
+      unawaited(_readingStore.save(widget.bookId!, _reading));
     }
   }
 
@@ -220,7 +228,9 @@ class _BookReaderPageState extends State<BookReaderPage>
     final marks = _reading.bookmarks.toSet();
     if (!marks.add(_reading.chapter)) marks.remove(_reading.chapter);
     setState(() => _reading = _reading.copyWith(bookmarks: marks.toList()..sort()));
-    if (widget.bookId != null) _readingStore.save(widget.bookId!, _reading);
+    if (widget.bookId != null) {
+      unawaited(_readingStore.save(widget.bookId!, _reading));
+    }
   }
 
   String _chapterLabel(int i) {
