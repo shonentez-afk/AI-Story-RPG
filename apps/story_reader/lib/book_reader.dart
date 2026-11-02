@@ -83,10 +83,15 @@ class _BookReaderPageState extends State<BookReaderPage>
 
     final before = inLazyList(_priorBlocksKey, 0);
     if (before != null || passedViewport) return before;
-    // The zero-extent center separates backward and forward lazy lists.
-    // The anchored paragraph is the first child of the forward list.
+    // Always-mounted source paragraph is in a standalone sliver AFTER
+    // the zero-extent center; the rest of the chapter stays lazy.
+    final anchorRender = _anchorParagraphKey.currentContext?.findRenderObject();
+    if (anchorRender is RenderBox) {
+      final found = consider(anchorRender, _layoutAnchorIndex ?? 0);
+      if (found != null || passedViewport) return found;
+    }
     final after = inLazyList(
-      _followingBlocksKey, _layoutAnchorIndex ?? 0,
+      _followingBlocksKey, (_layoutAnchorIndex ?? 0) + 1,
     );
     return after ?? trailing;
   }
@@ -577,19 +582,30 @@ class _BookReaderPageState extends State<BookReaderPage>
                   key: _centerSliverKey,
                   child: const SizedBox.shrink(),
                 ),
+                // Source paragraph is mounted even when Flutter temporarily
+                // shifts the viewport across a large paragraph during resize.
+                // It must NOT be the center sliver (nonzero center produced a
+                // repeated one-paragraph-height layout correction).
+                SliverPadding(
+                  padding: EdgeInsets.symmetric(horizontal: prefs.horizontalPadding),
+                  sliver: SliverToBoxAdapter(
+                    child: KeyedSubtree(
+                      key: _anchorParagraphKey,
+                      child: visibleBlocks.isEmpty
+                          ? const SizedBox.shrink()
+                          : _blockWidget(visibleBlocks[splitIndex], readerText),
+                    ),
+                  ),
+                ),
                 SliverPadding(
                   padding: EdgeInsets.symmetric(horizontal: prefs.horizontalPadding),
                   sliver: SliverList.builder(
                     key: _followingBlocksKey,
                     itemCount: visibleBlocks.isEmpty
-                        ? 0 : visibleBlocks.length - splitIndex,
-                    itemBuilder: (context, index) {
-                      final child = _blockWidget(
-                        visibleBlocks[splitIndex + index], readerText);
-                      return index == 0
-                          ? KeyedSubtree(key: _anchorParagraphKey, child: child)
-                          : child;
-                    },
+                        ? 0 : visibleBlocks.length - splitIndex - 1,
+                    itemBuilder: (context, index) =>
+                        _blockWidget(visibleBlocks[splitIndex + index + 1],
+                            readerText),
                   ),
                 ),
                 SliverPadding(
