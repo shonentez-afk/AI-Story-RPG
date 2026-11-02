@@ -18,6 +18,7 @@ class SourceIndexPreviewPage extends StatefulWidget {
     this.checkpointRepository,
     this.batchProcessor,
     this.checkpointEncoder,
+    this.checkpointDecoder,
   });
 
   final ImportedBook book;
@@ -30,6 +31,8 @@ class SourceIndexPreviewPage extends StatefulWidget {
   final Future<SourceAnalysisSession> Function(
       BookSourceIndex, SourceAnalysisSession)? batchProcessor;
   final Future<String> Function(SourceAnalysisSession)? checkpointEncoder;
+  final Future<SourceAnalysisSession> Function(
+      BookSourceIndex, String)? checkpointDecoder;
 
   @override
   State<SourceIndexPreviewPage> createState() =>
@@ -83,11 +86,14 @@ class _SourceIndexPreviewPageState extends State<SourceIndexPreviewPage> {
   Future<void> _loadAnalysis(BookSourceIndex index, int generation) async {
     try {
       final checkpoint = await _repository.read(index.sourceFingerprint);
+      final decoder = widget.checkpointDecoder;
       final restored = checkpoint == null
           ? SourceAnalysisSession.create(index)
-          : await Isolate.run(
-              () => SourceAnalysisSession.decode(index, checkpoint),
-            );
+          : decoder == null
+              ? await Isolate.run(
+                  () => SourceAnalysisSession.decode(index, checkpoint),
+                )
+              : await decoder(index, checkpoint);
       if (!mounted || generation != _generation) return;
       setState(() {
         _analysis = restored;
