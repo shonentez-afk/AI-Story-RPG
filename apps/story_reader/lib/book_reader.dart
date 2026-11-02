@@ -83,15 +83,10 @@ class _BookReaderPageState extends State<BookReaderPage>
 
     final before = inLazyList(_priorBlocksKey, 0);
     if (before != null || passedViewport) return before;
-    // Unlike a lazily built child at index zero, this source paragraph stays
-    // mounted as a standalone sliver while the window itself is changing.
-    final anchorRender = _anchorParagraphKey.currentContext?.findRenderObject();
-    if (anchorRender is RenderBox) {
-      final found = consider(anchorRender, _layoutAnchorIndex ?? 0);
-      if (found != null || passedViewport) return found;
-    }
+    // The zero-extent center separates backward and forward lazy lists.
+    // The anchored paragraph is the first child of the forward list.
     final after = inLazyList(
-      _followingBlocksKey, (_layoutAnchorIndex ?? 0) + 1,
+      _followingBlocksKey, _layoutAnchorIndex ?? 0,
     );
     return after ?? trailing;
   }
@@ -575,27 +570,26 @@ class _BookReaderPageState extends State<BookReaderPage>
                         _blockWidget(visibleBlocks[index], readerText),
                   ),
                 ),
-                SliverPadding(
+                // The center MUST have zero extent: a nonempty center
+                // makes RenderViewport add its height to the scroll offset
+                // during layout corrections (822px in the regression case).
+                SliverToBoxAdapter(
                   key: _centerSliverKey,
-                  padding: EdgeInsets.symmetric(horizontal: prefs.horizontalPadding),
-                  sliver: SliverToBoxAdapter(
-                    child: KeyedSubtree(
-                      key: _anchorParagraphKey,
-                      child: visibleBlocks.isEmpty
-                          ? const SizedBox.shrink()
-                          : _blockWidget(visibleBlocks[splitIndex], readerText),
-                    ),
-                  ),
+                  child: const SizedBox.shrink(),
                 ),
                 SliverPadding(
                   padding: EdgeInsets.symmetric(horizontal: prefs.horizontalPadding),
                   sliver: SliverList.builder(
                     key: _followingBlocksKey,
                     itemCount: visibleBlocks.isEmpty
-                        ? 0 : visibleBlocks.length - splitIndex - 1,
-                    itemBuilder: (context, index) =>
-                        _blockWidget(visibleBlocks[splitIndex + index + 1],
-                            readerText),
+                        ? 0 : visibleBlocks.length - splitIndex,
+                    itemBuilder: (context, index) {
+                      final child = _blockWidget(
+                        visibleBlocks[splitIndex + index], readerText);
+                      return index == 0
+                          ? KeyedSubtree(key: _anchorParagraphKey, child: child)
+                          : child;
+                    },
                   ),
                 ),
                 SliverPadding(
