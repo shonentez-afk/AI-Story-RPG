@@ -13,6 +13,8 @@ import 'package:ai_story_reader/source_evidence_graph.dart';
 import 'package:ai_story_reader/source_narrative_extractor.dart';
 import 'package:ai_story_reader/source_relation_review.dart';
 import 'package:ai_story_reader/story_evidence_review_session.dart';
+import 'package:ai_story_reader/source_semantic_provider.dart';
+import 'package:ai_story_reader/source_semantic_review.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -72,6 +74,25 @@ void main() {
     expect(restored.decisionFor(relations.hints.first.id),
         IdentityDecision.same);
     expect(restored.canPublishBookworld, false);
+  });
+
+  test('semantic workers do not capture Flutter State or alter saves',
+      () async {
+    final binding = WidgetsBinding.instance;
+    final data = Uint8List.fromList(utf8.encode(
+        'Его звали Артем. В городе Москва случилась встреча.'));
+    final book = await parseImportedBookInWorker('semantic.txt', data);
+    final index = await indexImportedBookInWorker(book);
+    const provider = OfflineRuleProvider();
+    final empty = SemanticReviewSession.create(index, provider);
+    final processed = await processSemanticReviewInWorker(
+        index, empty, limit: 1);
+    final raw = await encodeSemanticReviewInWorker(processed);
+    final restored = await decodeSemanticReviewInWorker(index, raw);
+    expect(restored.encode(), raw);
+    expect(restored.candidates, isNotEmpty);
+    expect(restored.canPublishBookworld, false);
+    expect(binding, isNotNull);
   });
 
   test('stored library scan uses a data-only worker and preserves files',
