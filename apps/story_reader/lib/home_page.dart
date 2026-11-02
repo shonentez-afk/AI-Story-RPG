@@ -772,18 +772,19 @@ class _LibraryPageState extends State<LibraryPage> {
                               ? 'Импортированная книга · нажмите для чтения'
                               : '${entry.book.author} · нажмите для чтения'),
                           onTap: _working ? null : () => _readBook(entry),
-                          trailing: PopupMenuButton<String>(
-                            tooltip: 'Действия с книгой',
-                            enabled: !_working,
-                            onSelected: (action) {
-                              if (action == 'delete') _deleteBook(entry);
-                            },
-                            itemBuilder: (_) => const [
-                              PopupMenuItem(
-                                value: 'delete',
-                                child: Text('Удалить книгу'),
-                              ),
-                            ],
+                          // The book has one destructive action:
+                          // show it directly instead of a one-item menu.
+                          // Confirmation still happens in _deleteBook().
+                          trailing: IconButton(
+                            key: ValueKey('library-delete-${entry.id}'),
+                            tooltip: 'Удалить книгу',
+                            icon: const Icon(Icons.delete_outline),
+                            style: IconButton.styleFrom(
+                              foregroundColor:
+                                  Theme.of(context).colorScheme.error,
+                            ),
+                            onPressed: _working ? null :
+                                () => _deleteBook(entry),
                           ),
                         ),
                         Padding(
