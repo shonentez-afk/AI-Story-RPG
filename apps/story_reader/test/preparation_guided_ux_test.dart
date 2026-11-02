@@ -14,9 +14,11 @@ Future<void> revealInViewport(WidgetTester tester, Finder target) async {
       final y = tester.getCenter(target).dy;
       final height = tester.view.physicalSize.height /
           tester.view.devicePixelRatio;
-      if (y >= 85 && y <= height - 85) return;
+      // A control near the bottom edge is still tappable. Requiring
+      // 85 px of blank space can be impossible at maxScrollExtent.
+      if (y >= 72 && y <= height - 4) return;
       await tester.drag(find.byType(CustomScrollView).first,
-          Offset(0, y > height - 85 ? -260 : 260));
+          Offset(0, y > height - 4 ? -260 : 260));
     } else {
       await tester.drag(find.byType(CustomScrollView).first,
           const Offset(0, -260));
