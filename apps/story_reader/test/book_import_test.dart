@@ -12,6 +12,17 @@ void main() {
     expect(book.cover, isNull);
   });
 
+  test('TXT preserves boundary whitespace but rejects whitespace-only file',
+      () {
+    final original = ' \nПривет, глава!\n\n';
+    final parsed = BookImporter.parse('space.txt',
+        Uint8List.fromList(utf8.encode('\ufeff$original')));
+    expect(parsed.chapters.single, original);
+    expect(() => BookImporter.parse('empty.txt',
+        Uint8List.fromList(utf8.encode(' \n\t '))),
+      throwsFormatException);
+  });
+
   test('FB2 metadata, chapters and embedded PNG cover', () {
     const png = 'iVBORw0KGgo=';
     final xml = """<?xml version="1.0" encoding="utf-8"?>
