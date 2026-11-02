@@ -61,9 +61,14 @@ void main() {
     final key = GlobalKey<_BookOpenProbeState>();
     await tester.pumpWidget(MaterialApp(home: _BookOpenProbe(key: key)));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Открыть книгу'));
-    final index = await tester.runAsync(() => key.currentState!.completer.future
-        .timeout(const Duration(seconds: 25)));
+    // Flutter widget tests run in FakeAsync. Start and await a real native
+    // isolate within runAsync; do not strand the job in the fake clock.
+    final state = key.currentState!;
+    expect(find.text('Открыть книгу'), findsOneWidget);
+    final index = await tester.runAsync(() async {
+      await state.open();
+      return state.completer.future.timeout(const Duration(seconds: 25));
+    });
     expect(index, isNotNull);
     expect(index!.chunks.single.text, contains('Дверь была открыта'));
     expect(tester.takeException(), isNull);
