@@ -88,5 +88,9 @@ class ReadingSettingsStore {
     return operation;
   }
 
+  /// Wait until all issued appearance writes have committed. Useful before
+  /// closing an editing session and for exact persistence regressions.
+  Future<void> flush() => _writeFence;
+
   Future<void> reset() => save(const ReadingPreferences());
 }
