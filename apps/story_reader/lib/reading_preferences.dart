@@ -48,13 +48,14 @@ class ReadingSettingsStore {
   // Repeated slider changes and navigation used to cause overlapping
   // preference writes. All callers share one ordered queue.
   static Future<void> _writeFence = Future<void>.value();
+  static ReadingPreferences? _queuedView;
 
   Future<ReadingPreferences> load() async {
-    try {
-      await _writeFence;
-    } catch (_) {
-      // A failed save must not hide the previous readable preferences.
-    }
+    // Reading settings in a freshly opened page should not be blocked by
+    // outstanding slider writes. Present the last explicitly chosen style
+    // until its ordered persistence finishes.
+    final queued = _queuedView;
+    if (queued != null) return queued;
     final prefs = await SharedPreferences.getInstance();
     final theme = prefs.getInt('${_prefix}palette') ?? 1;
     final palette = theme >= 0 && theme < ReadingPalette.values.length
@@ -69,6 +70,7 @@ class ReadingSettingsStore {
   }
 
   Future<void> save(ReadingPreferences settings) {
+    _queuedView = settings;
     final previous = _writeFence;
     final operation = previous.catchError((Object _) {}).then((_) async {
       final prefs = await SharedPreferences.getInstance();
@@ -78,6 +80,11 @@ class ReadingSettingsStore {
       await prefs.setDouble('${_prefix}padding', settings.horizontalPadding);
     });
     _writeFence = operation;
+    operation.then((_) {
+      if (identical(_queuedView, settings)) _queuedView = null;
+    }, onError: (Object _) {
+      if (identical(_queuedView, settings)) _queuedView = null;
+    });
     return operation;
   }
 
