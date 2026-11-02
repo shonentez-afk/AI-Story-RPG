@@ -257,7 +257,11 @@ void main() {
     await tester.tap(find.byTooltip('Действия с прохождением'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Удалить с резервной копией'));
-    await tester.pumpAndSettle();
+    // The parent route intentionally displays an indeterminate busy bar
+    // while the confirmation dialog is open. pumpAndSettle cannot finish
+    // while that animation is active; pump the dialog transition explicitly.
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
     expect(find.text('Удалить прохождение?'), findsOneWidget);
     await tester.tap(find.text('Отмена'));
     await tester.pumpAndSettle();
