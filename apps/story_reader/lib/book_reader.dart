@@ -27,6 +27,10 @@ class _BookReaderPageState extends State<BookReaderPage>
   // Do not resurrect pixel offsets from PageStorage after a semantic reflow.
   final ScrollController _scroll = ScrollController(keepScrollOffset: false);
   int _scrollLayoutEpoch = 0;
+  bool _anchorCorrectionPending = false;
+  bool _anchorCorrectionScheduled = false;
+  int _anchorCorrectionBudget = 0;
+  int _anchorCorrectionPasses = 0;
   final GlobalKey _viewportKey = GlobalKey();
   final GlobalKey _priorBlocksKey = GlobalKey();
   final GlobalKey _followingBlocksKey = GlobalKey();
@@ -115,33 +119,96 @@ class _BookReaderPageState extends State<BookReaderPage>
     });
   }
 
-  /// On each semantic reflow the Scrollable gets a fresh ScrollPosition.
-  /// Reusing the old ScrollPosition when changing CustomScrollView.center
-  /// causes Flutter to preserve pixel coordinates from the old sliver origin,
-  /// which can shift the target paragraph thousands of pixels off screen.
-  /// The source paragraph is a mounted sliver at the NEW scroll origin.
+  /// Restore from a source block, never from the old pixel layout.
+  /// A fresh ScrollPosition is created when the center changes. Flutter
+  /// can still correct sliver extents after the first layout pass, so verify
+  /// the actual paragraph rectangle for a bounded number of frames.
   void _restoreScroll() {
     _restoring = true;
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      if (_scroll.hasClients) {
-        final pos = _scroll.position;
-        final anchor = _reading.anchor;
-        double requested = _reading.scrollOffset;
-        if (_layoutAnchorIndex != null && anchor != null) {
-          final target = _anchorParagraphKey.currentContext?.findRenderObject();
-          // Use only the paragraph's size relative to the fresh center.
-          // Clamping the fraction keeps a portion of it visible even when
-          // the font/window makes a single paragraph taller than the screen.
-          requested = target is RenderBox && target.hasSize
-              ? target.size.height * anchor.fraction.clamp(0.0, 0.75)
-              : 0.0;
-        }
-        _scroll.jumpTo(requested.clamp(
+      if (!mounted || !_scroll.hasClients) {
+        _restoring = false;
+        return;
+      }
+      final pos = _scroll.position;
+      final anchor = _reading.anchor;
+      if (_layoutAnchorIndex != null && anchor != null) {
+        final target = _anchorParagraphKey.currentContext?.findRenderObject();
+        final paragraphOffset = target is RenderBox && target.hasSize
+            ? target.size.height * anchor.fraction.clamp(0.0, 0.75)
+            : 0.0;
+        _scroll.jumpTo(paragraphOffset.clamp(
           pos.minScrollExtent, pos.maxScrollExtent,
         ).toDouble());
+        _beginAnchorCorrection();
+      } else {
+        _scroll.jumpTo(_reading.scrollOffset.clamp(
+          pos.minScrollExtent, pos.maxScrollExtent,
+        ).toDouble());
+        _restoring = false;
       }
-      _restoring = false;
+    });
+  }
+
+  /// ScrollMetricsNotification fires *after* the viewport has discovered its
+  /// new dimensions. A didChangeMetrics-only fix runs too early and Flutter
+  /// can then move the old center by the height of one rendered paragraph.
+  bool _onScrollMetrics(ScrollMetricsNotification notice) {
+    if (notice.depth == 0 && _anchorCorrectionPending &&
+        _reading.anchor != null && mounted) {
+      if (_anchorCorrectionBudget < 2) _anchorCorrectionBudget = 2;
+      _scheduleAnchorCorrection();
+    }
+    return false;
+  }
+
+  void _beginAnchorCorrection() {
+    _anchorCorrectionPending = true;
+    _anchorCorrectionBudget = 6;
+    _anchorCorrectionPasses = 0;
+    _scheduleAnchorCorrection();
+  }
+
+  void _scheduleAnchorCorrection() {
+    if (!mounted || !_anchorCorrectionPending ||
+        _anchorCorrectionScheduled) return;
+    _anchorCorrectionScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _anchorCorrectionScheduled = false;
+      if (!mounted || !_scroll.hasClients || _reading.anchor == null) {
+        _anchorCorrectionPending = false;
+        _restoring = false;
+        return;
+      }
+      final target = _anchorParagraphKey.currentContext?.findRenderObject();
+      final viewport = _viewportKey.currentContext?.findRenderObject();
+      if (target is RenderBox && target.hasSize &&
+          viewport is RenderBox && viewport.hasSize) {
+        final anchor = _reading.anchor!;
+        final viewTop = viewport.localToGlobal(Offset.zero).dy + 1;
+        final paragraphTop = target.localToGlobal(Offset.zero).dy;
+        final desiredTop = viewTop -
+            target.size.height * anchor.fraction.clamp(0.0, 0.75);
+        final correction = paragraphTop - desiredTop;
+        final pos = _scroll.position;
+        final nextOffset = (pos.pixels + correction).clamp(
+          pos.minScrollExtent, pos.maxScrollExtent,
+        ).toDouble();
+        if (correction.abs() > 1 && (nextOffset - pos.pixels).abs() > 0.5) {
+          _scroll.jumpTo(nextOffset);
+        }
+      }
+      _anchorCorrectionPasses++;
+      if (_anchorCorrectionBudget > 0 && _anchorCorrectionPasses < 10) {
+        _anchorCorrectionBudget--;
+        // A callback alone does not create the frame needed for the
+        // viewport's subsequent metrics correction. Explicitly request one.
+        WidgetsBinding.instance.scheduleFrame();
+        _scheduleAnchorCorrection();
+      } else {
+        _anchorCorrectionPending = false;
+        _restoring = false;
+      }
     });
   }
 
@@ -445,7 +512,9 @@ class _BookReaderPageState extends State<BookReaderPage>
           child: ConstrainedBox(
             key: _viewportKey,
             constraints: const BoxConstraints(maxWidth: 800),
-            child: CustomScrollView(
+            child: NotificationListener<ScrollMetricsNotification>(
+              onNotification: _onScrollMetrics,
+              child: CustomScrollView(
               key: ValueKey('reader-scroll-$_scrollLayoutEpoch'),
               controller: _scroll,
               center: anchored ? _centerSliverKey : null,
@@ -564,6 +633,7 @@ class _BookReaderPageState extends State<BookReaderPage>
                   ),
                 ),
               ],
+            ),
             ),
           ),
         ),
