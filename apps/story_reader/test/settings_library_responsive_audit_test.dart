@@ -86,7 +86,8 @@ void main() {
         scrollable: find.byType(Scrollable).first,
         maxScrolls: 20);
     expect(find.text('Читать'), findsOneWidget);
-    expect(find.byTooltip('Действия с книгой'), findsOneWidget);
+    expect(find.byTooltip('Удалить книгу'), findsOneWidget);
+    expect(find.byTooltip('Действия с книгой'), findsNothing);
     expect(tester.takeException(), isNull);
   });
 }
