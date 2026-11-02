@@ -287,6 +287,106 @@ void main() {
     expect(store.installBookworld(backup).archiveHash, world.archiveHash);
   });
 
+
+  test('read-only preview validates full replay, never creates a slot', () {
+    final original = store.createCampaign(world.archiveHash);
+    expect(take(original, 'before_preview', 'inspect_gate').applied, true);
+    final portable = store.exportPortable(original);
+    final oldHead = store.loadCampaign(original).metadata.stateHash;
+    final verified = store.previewPortable(portable);
+    expect(verified.worldHash, world.archiveHash);
+    expect(verified.sourceCampaignId, original);
+    expect(verified.revision, 1);
+    expect(verified.stateHash, oldHead);
+    expect(verified.isTerminal, isFalse);
+    expect(store.campaigns().length, 1);
+
+    final forged = jsonDecode(portable) as Map<String, dynamic>;
+    (forged['checkpoint'] as Map<String, dynamic>)['revision'] = 900;
+    forged.remove('checksum_sha256');
+    forged['checksum_sha256'] =
+        sha256.convert(utf8.encode(canonicalJson(forged))).toString();
+    expect(() => store.previewPortable(jsonEncode(forged)),
+        throwsFormatException);
+    final damaged = portable.replaceFirst('"role":"PROTAGONIST"',
+        '"role":"CUSTOM"');
+    expect(() => store.previewPortable(damaged), throwsFormatException);
+    expect(() => store.previewPortable('{broken'), throwsFormatException);
+    expect(store.campaigns().length, 1);
+    expect(store.loadCampaign(original).metadata.stateHash, oldHead);
+  });
+
+  test('Android-to-Windows offline files restore in independent SQLite DBs',
+      () {
+    final androidId = store.createCampaign(world.archiveHash);
+    for (var i = 0; i < 24; i++) {
+      expect(take(androidId, 'phone_$i', 'inspect_gate').applied, true);
+    }
+    final branch = store.createCampaign(
+      world.archiveHash, parentCampaignId: androidId,
+    );
+    expect(take(branch, 'phone_branch', 'walk_market').applied, true);
+    final source = store.loadCampaign(branch);
+    expect(source.metadata.revision, 25);
+    final transfer = Directory.systemTemp.createTempSync('rpg_transfer_');
+    final sep = Platform.pathSeparator;
+    final worldFile = File('${transfer.path}${sep}book.bworld');
+    final saveFile = File('${transfer.path}${sep}progress.bwsave');
+    final receiverPath = '${transfer.path}${sep}windows_private';
+    worldFile.writeAsBytesSync(store.exportBookworld(world.archiveHash),
+        flush: true);
+    saveFile.writeAsStringSync(store.exportPortable(branch),
+        encoding: utf8, flush: true);
+    var receiver = BookworldCampaignStore.openPrivateDirectory(receiverPath);
+    try {
+      final transferred = saveFile.readAsStringSync(encoding: utf8);
+      expect(() => receiver.previewPortable(transferred),
+          throwsFormatException); // Exact world must be installed first.
+      expect(receiver.campaigns(), isEmpty);
+      receiver.installBookworld(
+          Uint8List.fromList(worldFile.readAsBytesSync()));
+      final preview = receiver.previewPortable(transferred);
+      expect(preview.revision, 25);
+      expect(preview.stateHash, source.metadata.stateHash);
+      expect(preview.worldHash, world.archiveHash);
+      expect(receiver.campaigns(), isEmpty); // Preflight is read-only.
+
+      final destId = receiver.importPortable(transferred);
+      expect(destId, isNot(branch));
+      expect(receiver.loadCampaign(destId).metadata.stateHash,
+          source.metadata.stateHash);
+      receiver.close();
+      receiver = BookworldCampaignStore.openPrivateDirectory(receiverPath);
+      expect(receiver.loadCampaign(destId).metadata.revision, 25);
+      expect(receiver.loadCampaign(destId).coordinator.events.length, 25);
+      final advanced = receiver.commitChoice(
+        destId, actionId: 'desktop_after_import',
+        choiceId: 'return_gate', expectedRevision: 25,
+      );
+      expect(advanced.applied, isTrue);
+      expect(receiver.loadCampaign(destId).metadata.revision, 26);
+      expect(store.loadCampaign(branch).metadata.revision, 25);
+      expect(store.loadCampaign(androidId).metadata.revision, 24);
+      final duplicate = receiver.importPortable(transferred);
+      expect(duplicate, isNot(destId));
+      expect(receiver.loadCampaign(duplicate).metadata.stateHash,
+          source.metadata.stateHash);
+      expect(receiver.loadCampaign(destId).metadata.revision, 26);
+
+      final corrupted = jsonDecode(transferred) as Map<String, dynamic>;
+      corrupted['world_sha256'] = List.filled(64, 'a').join();
+      final before = receiver.campaigns().length;
+      expect(() => receiver.previewPortable(jsonEncode(corrupted)),
+          throwsFormatException);
+      expect(() => receiver.importPortable(jsonEncode(corrupted)),
+          throwsFormatException);
+      expect(receiver.campaigns().length, before);
+    } finally {
+      receiver.close();
+      transfer.deleteSync(recursive: true);
+    }
+  });
+
   test('unknown DB version and modified world payload refuse to open', () {
     final path = temp.path + Platform.pathSeparator +
         'bookworld_campaigns_v1.sqlite';
