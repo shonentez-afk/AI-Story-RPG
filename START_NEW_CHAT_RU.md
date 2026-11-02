@@ -268,3 +268,17 @@ Run `41332360623` (SHA `ef004a4`): Python/Dart/analyze PASS, Flutter FAIL из-�
 - Тесты `apps/story_reader/test/book_source_analysis_test.dart`; отчёт `docs/M2B1_SOURCE_ANALYSIS_RU.md`. **Не заявлять PASS до CI в PR**.
 - Пока НЕТ UI-интеграции, durable storage, полноценного извлечения фактов/событий/alias, cross-chapter resolution, BookWorld из книги, AI или gameplay. `gameplay_coverage=0`, `can_publish_bookworld=false`.
 - Продолжение: сначала проверить CI/исправить FAIL для этой ветки; затем M2b2 — приватные сохраняемые checkpoint+UI progress/review в существующем экране «Подготовка книги» без второй библиотеки и без второго импорта. Обязательно поддерживать START_NEW_CHAT_RU.md и STATUS_RU.md после приёмки.
+
+
+## M2b2 — приватные checkpoints и review UI (2026-11-02)
+- Ветка `feat/m2b2-private-checkpoints-review-20261102` построена поверх M2b1 PR #7 (НЕ ПУТАТЬ с main, если ещё не merged). Файлы: `apps/story_reader/lib/source_analysis_checkpoint_repository.dart`, `source_index_preview_page.dart`, улучшенный `book_source_analysis.dart`, `test/source_analysis_checkpoint_test.dart`, документ `docs/M2B2_CHECKPOINT_REVIEW_RU.md`.
+- После индексации единственный экран подготовки TXT/FB2 загружает checkpoint из приватной папки ApplicationSupport по SHA нормализованной редакции; рабочая очередь возобновляется без raw text в checkpoint. Порции анализируются в `Isolate.run`, checkpoint сохраняется через flushed-temp + same-directory rename до показа нового прогресса. При сбое записи старый прогресс не заменяется.
+- Кандидаты CHARACTER_NAME/LOCATION_NAME показываются по явному запросу (предупреждение о спойлерах), принимается/отклоняется только **упоминание**, не канон/сюжет. Есть ошибки, повтор failed и подтверждённый сброс анализа. Второй библиотеки/импорта нет; BookWorld, SQLite/legacy сейвы, TXT/FB2 чтение не переписаны.
+- Требуется **проверить CI точного HEAD M2b2**, Android/Windows builds и негативные тесты, исправить FAIL прежде чем объединять. На данном этапе M2b2 CODE ADDED, CI NOT VERIFIED; физические устройства SKIP.
+- Следующий шаг после автоматической приёмки: M2b3 факты/события/алиасы/cross-chapter, достоверные evidence, spoiler policies; затем проверяемый промежуточный blueprint. `gameplay_coverage=0`, `can_publish_bookworld=false`; regex-находки не превращать в игровые факты.
+
+
+## Подтверждённая приёмка M2b1 / актуальная база M2b2 (2026-11-02)
+- M2b1 PR #7 **MERGED** в main (squash SHA `91c6ede82f1615a6f5e96c2a4be816354252b6fc`). Подтверждённый HEAD до squash `22cd1a071b81bcf7784cf16f8778ad180a6d9504`: GitHub Actions `41399856182` **6/6 PASS**, Flutter analyze+tests, core/Dart/Python, Android APK, Windows portable. Первый CI FAIL синтаксиса processBatch был исправлен перед приёмкой.
+- M2b2 PR #8 [https://github.com/shonentez-afk/AI-Story-RPG/pull/8](https://github.com/shonentez-afk/AI-Story-RPG/pull/8) перенесён на squash main без потери восьми изменённых файлов; после rebase mergeable=true. Первый CI M2b2 `41400545444` Flutter analyze PASS, 4 widget FAIL из-за offscreen taps/lazy section expectations, исправления уже в ветке; это НЕ итоговый PASS.
+- **Обязательно проверить последний CI PR #8 точного HEAD и при FAIL чинить по логам**, затем merge; физические Android/Windows проверки не выдумывать. Далее M2b3 с фактами/событиями/alias/provenance/review, без ложной готовности .bworld.

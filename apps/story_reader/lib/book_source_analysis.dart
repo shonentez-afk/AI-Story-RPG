@@ -227,15 +227,16 @@ class SourceAnalysisSession {
 
       final mentions = <SourceMention>[];
       final ids = <String>{};
+      final tasksByChunk = <String, ChunkAnalysisTask>{
+        for (final task in tasks) task.chunkId: task,
+      };
       for (final rawMention in rawMentions) {
         final mention = SourceMention.fromJson(
           Map<String, dynamic>.from(rawMention as Map),
         );
         final chunk = chunksById[mention.chunkId];
-        final task = tasks[index.chunks.indexWhere(
-          (x) => x.id == mention.chunkId,
-        )];
-        if (chunk == null || !ids.add(mention.id) ||
+        final task = tasksByChunk[mention.chunkId];
+        if (chunk == null || task == null || !ids.add(mention.id) ||
             (mention.kind != 'CHARACTER_NAME' &&
              mention.kind != 'LOCATION_NAME') ||
             (task.status != ChunkAnalysisStatus.review &&
@@ -258,11 +259,13 @@ class SourceAnalysisSession {
         }
         mentions.add(mention);
       }
+      final chunksNeedingReview = <String>{
+        for (final mention in mentions)
+          if (mention.decision == MentionDecision.review) mention.chunkId,
+      };
       for (final task in tasks) {
-        final needsReview = mentions.any((m) =>
-            m.chunkId == task.chunkId &&
-            m.decision == MentionDecision.review);
-        if ((task.status == ChunkAnalysisStatus.review) != needsReview) {
+        if ((task.status == ChunkAnalysisStatus.review) !=
+            chunksNeedingReview.contains(task.chunkId)) {
           throw const FormatException('Несогласованное состояние проверки');
         }
       }
@@ -342,11 +345,41 @@ class SourceAnalysisSession {
     if (limit < 1 || limit > 100) {
       throw RangeError.range(limit, 1, 100, 'limit');
     }
-    var current = this;
-    for (var i = 0; i < limit && current.pendingCount > 0; i++) {
-      current = current.startNext().finishRunning(index);
+    if (index.sourceFingerprint != sourceFingerprint ||
+        index.chunks.length != tasks.length) {
+      throw const FormatException('Не та редакция книги');
     }
-    return current;
+    if (tasks.any((task) => task.status == ChunkAnalysisStatus.running)) {
+      throw StateError('Сначала завершите RUNNING фрагмент');
+    }
+
+    // Work on a private candidate and publish only after ALL selected chunks
+    // pass validation. Avoid O(number-of-chunks²) cloning per source chunk.
+    final updated = List<ChunkAnalysisTask>.from(tasks);
+    final foundAll = List<SourceMention>.from(mentions);
+    var processed = 0;
+    for (var i = 0; i < updated.length && processed < limit; i++) {
+      final task = updated[i];
+      if (task.status != ChunkAnalysisStatus.pending) continue;
+      final chunk = index.chunks[i];
+      if (task.chunkId != chunk.id ||
+          task.textSha256 != chunk.sha256Text ||
+          _digest(chunk.text) != chunk.sha256Text) {
+        throw const FormatException('Изменён исходный фрагмент');
+      }
+      final found = _scan(chunk);
+      if (foundAll.length + found.length > maxMentions) {
+        throw const FormatException('Слишком много кандидатов анализа');
+      }
+      updated[i] = task.withStatus(
+        found.isEmpty ? ChunkAnalysisStatus.done : ChunkAnalysisStatus.review,
+      );
+      foundAll.addAll(found);
+      processed++;
+    }
+    return SourceAnalysisSession._(
+      sourceFingerprint, updated, foundAll,
+    );
   }
 
   /// ACCEPTED means "this text mention was reviewed", NOT an accepted canon

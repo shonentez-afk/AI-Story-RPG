@@ -379,3 +379,15 @@
 ## 2026-11-02 — M2b1: рабочая ветка (НЕ ПРИНЯТО CI)
 - PR #7 `feat/m2b1-resumable-provenance-20261102`: локальная очередь анализа SourceChunk с контрольными точками, SHA-256 provenance и проверяемыми упоминаниями имён и мест. Добавлен отдельный регрессионный тест. Это не извлечение канона и не готовая RPG.
 - Статус: CODE ADDED, CI PENDING; Flutter/Android/Windows PASS не подтверждены. Интерфейс M1/M2a и сохранения не изменены. Следующий этап M2b2 — durable checkpoint, UI review в существующей библиотеке.
+
+
+## 2026-11-02 — M2b2 implementation branch, CI pending
+- На базе M2b1 сделаны private ApplicationSupport checkpoints с атомарной заменой и восстановлением, единый экран подготовки с порциями анализа, review только текстовых упоминаний, скрытие спойлеров, явная ошибка/сброс. M1 и M2a UX не переписаны.
+- Тесты: `source_analysis_checkpoint_test.dart` + актуализация `book_source_index_test.dart`. **PASS не заявлен** до точного CI SHA. Android/Windows physical/manual QA: SKIP.
+- Следующая цель M2b3: source-grounded facts/events/alias resolution; никакого `.bworld` из пользовательской книги до валидации.
+
+
+## Подтверждённая приёмка M2b1 / актуальная база M2b2 (2026-11-02)
+- M2b1 PR #7 **MERGED** в main (squash SHA `91c6ede82f1615a6f5e96c2a4be816354252b6fc`). Подтверждённый HEAD до squash `22cd1a071b81bcf7784cf16f8778ad180a6d9504`: GitHub Actions `41399856182` **6/6 PASS**, Flutter analyze+tests, core/Dart/Python, Android APK, Windows portable. Первый CI FAIL синтаксиса processBatch был исправлен перед приёмкой.
+- M2b2 PR #8 [https://github.com/shonentez-afk/AI-Story-RPG/pull/8](https://github.com/shonentez-afk/AI-Story-RPG/pull/8) перенесён на squash main без потери восьми изменённых файлов; после rebase mergeable=true. Первый CI M2b2 `41400545444` Flutter analyze PASS, 4 widget FAIL из-за offscreen taps/lazy section expectations, исправления уже в ветке; это НЕ итоговый PASS.
+- **Обязательно проверить последний CI PR #8 точного HEAD и при FAIL чинить по логам**, затем merge; физические Android/Windows проверки не выдумывать. Далее M2b3 с фактами/событиями/alias/provenance/review, без ложной готовности .bworld.
