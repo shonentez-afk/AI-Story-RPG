@@ -854,34 +854,63 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
   Future<void> _openReadingSettings() async {
-    try {
-      final current = await _readerStore.load();
-      if (!mounted) return;
-      await showModalBottomSheet<void>(
-        context: context,
-        isScrollControlled: true,
-        showDragHandle: true,
-        builder: (_) => ReadingSettingsSheet(
-          preferences: current,
-          onChanged: (next) {
-            _readerStore.save(next).then((_) {},
-                onError: (Object error) {
-              if (mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text(
-                    'Не удалось сохранить оформление страниц: $error')),
-                );
-              }
-            });
-          },
-        ),
-      );
-    } catch (error) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Не удалось открыть настройки чтения: $error')),
-      );
-    }
+    // Open the route immediately: a slow preferences plugin should display
+    // a recoverable loading/error state, not make the settings tap appear dead.
+    final loading = _readerStore.load();
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (sheetContext) => FutureBuilder<ReadingPreferences>(
+        future: loading,
+        builder: (context, snapshot) {
+          if (snapshot.connectionState != ConnectionState.done) {
+            return const SafeArea(child: SingleChildScrollView(
+              padding: EdgeInsets.all(24),
+              child: Column(mainAxisSize: MainAxisSize.min, children: [
+                Text('Настройки чтения'),
+                SizedBox(height: 16),
+                CircularProgressIndicator(),
+                SizedBox(height: 12),
+                Text('Загружаем оформление страниц…'),
+              ]),
+            ));
+          }
+          if (snapshot.hasError) {
+            return SafeArea(child: SingleChildScrollView(
+              padding: const EdgeInsets.all(24),
+              child: Column(mainAxisSize: MainAxisSize.min, children: [
+                Text('Не удалось загрузить оформление страниц: '
+                    '${snapshot.error}'),
+                const SizedBox(height: 12),
+                OutlinedButton.icon(
+                  onPressed: () {
+                    Navigator.of(sheetContext).pop();
+                    if (mounted) unawaited(_openReadingSettings());
+                  },
+                  icon: const Icon(Icons.refresh),
+                  label: const Text('Повторить'),
+                ),
+              ]),
+            ));
+          }
+          return ReadingSettingsSheet(
+            preferences: snapshot.requireData,
+            onChanged: (next) {
+              _readerStore.save(next).then((_) {},
+                  onError: (Object error) {
+                if (mounted) {
+                  ScaffoldMessenger.of(this.context).showSnackBar(
+                    SnackBar(content: Text(
+                      'Не удалось сохранить оформление страниц: $error')),
+                  );
+                }
+              });
+            },
+          );
+        },
+      ),
+    );
   }
 
   Future<void> _resetReader() async {
