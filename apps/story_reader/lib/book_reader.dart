@@ -27,7 +27,8 @@ class _BookReaderPageState extends State<BookReaderPage>
   final ScrollController _scroll = ScrollController();
   final GlobalKey _viewportKey = GlobalKey();
   final GlobalKey _priorBlocksKey = GlobalKey();
-  final GlobalKey _currentBlocksKey = GlobalKey();
+  final GlobalKey _followingBlocksKey = GlobalKey();
+  final GlobalKey _anchorParagraphKey = GlobalKey();
   final GlobalKey _centerSliverKey = GlobalKey();
   Timer? _progressTimer;
   bool _restoring = false;
@@ -41,35 +42,52 @@ class _BookReaderPageState extends State<BookReaderPage>
     final viewport = _viewportKey.currentContext?.findRenderObject();
     if (viewport is! RenderBox || !viewport.hasSize) return null;
     final top = viewport.localToGlobal(Offset.zero).dy + 1;
-    BookTextAnchor? lastVisible;
-    for (final pair in [
-      (_priorBlocksKey, 0),
-      (_currentBlocksKey, _layoutAnchorIndex ?? 0),
-    ]) {
-      final sliver = pair.$1.currentContext?.findRenderObject();
-      if (sliver is! RenderSliverList) continue;
+    BookTextAnchor? trailing;
+    bool passedViewport = false;
+    BookTextAnchor? consider(RenderBox child, int index) {
+      if (index < 0 || index >= _visibleBlockCount) return null;
+      final y = child.localToGlobal(Offset.zero).dy;
+      final height = child.size.height;
+      if (height > 0 && y + height > top && y <= top) {
+        return BookTextAnchor(
+          blockIndex: index,
+          fraction: ((top - y) / height).clamp(0.0, 1.0).toDouble(),
+        );
+      }
+      if (y > top) {
+        passedViewport = true;
+      } else if (height > 0) {
+        trailing = BookTextAnchor(blockIndex: index, fraction: 1);
+      }
+      return null;
+    }
+
+    BookTextAnchor? inLazyList(GlobalKey key, int baseIndex) {
+      final sliver = key.currentContext?.findRenderObject();
+      if (sliver is! RenderSliverList) return null;
       var child = sliver.firstChild;
       while (child != null) {
-        final y = child.localToGlobal(Offset.zero).dy;
-        final height = child.size.height;
-        final index = pair.$2 + sliver.indexOf(child);
-        if (index >= _visibleBlockCount) break;
-        if (height > 0 && y + height > top && y <= top) {
-          final fraction = ((top - y) / height).clamp(0.0, 1.0).toDouble();
-          return BookTextAnchor(blockIndex: index, fraction: fraction);
-        }
-        if (y > top) {
-          // A title, header or cover is at the top, not this paragraph.
-          return null;
-        }
-        if (height > 0 && y <= top) {
-          lastVisible = BookTextAnchor(blockIndex: index, fraction: 1);
-        }
+        final found = consider(child, baseIndex + sliver.indexOf(child));
+        if (found != null) return found;
+        if (passedViewport) break;
         child = sliver.childAfter(child);
       }
+      return null;
     }
-    // At the navigation footer, retain the final source block.
-    return lastVisible;
+
+    final before = inLazyList(_priorBlocksKey, 0);
+    if (before != null || passedViewport) return before;
+    // Unlike a lazily built child at index zero, this source paragraph stays
+    // mounted as a standalone sliver while the window itself is changing.
+    final anchorRender = _anchorParagraphKey.currentContext?.findRenderObject();
+    if (anchorRender is RenderBox) {
+      final found = consider(anchorRender, _layoutAnchorIndex ?? 0);
+      if (found != null || passedViewport) return found;
+    }
+    final after = inLazyList(
+      _followingBlocksKey, (_layoutAnchorIndex ?? 0) + 1,
+    );
+    return after ?? trailing;
   }
 
   BookReadingState _snapshotPosition() {
@@ -105,14 +123,14 @@ class _BookReaderPageState extends State<BookReaderPage>
         final anchor = _reading.anchor;
         double offset = _reading.scrollOffset;
         if (_layoutAnchorIndex != null && anchor != null) {
-          final sliver = _currentBlocksKey.currentContext?.findRenderObject();
-          if (sliver is RenderSliverList && sliver.firstChild != null) {
-            // A trailing-edge anchor (fraction == 1) otherwise places the
-            // entire paragraph just outside the viewport after reflow.
-            // Keep a small visible slice so the intended paragraph remains
-            // reachable and screen readers retain its context.
-            offset = sliver.firstChild!.size.height *
-                anchor.fraction.clamp(0.0, 0.85);
+          final target = _anchorParagraphKey.currentContext?.findRenderObject();
+          if (target is RenderBox && target.hasSize) {
+            final viewport = RenderAbstractViewport.of(target);
+            // This is an absolute, frame-correct scroll offset. The center
+            // paragraph is mounted outside the lazy lists, so resizing
+            // cannot silently replace it with a later List child.
+            offset = viewport.getOffsetToReveal(target, 0.0).offset +
+                target.size.height * anchor.fraction.clamp(0.0, 0.85);
           } else {
             offset = 0;
           }
@@ -479,11 +497,24 @@ class _BookReaderPageState extends State<BookReaderPage>
                 SliverPadding(
                   key: _centerSliverKey,
                   padding: EdgeInsets.symmetric(horizontal: prefs.horizontalPadding),
+                  sliver: SliverToBoxAdapter(
+                    child: KeyedSubtree(
+                      key: _anchorParagraphKey,
+                      child: visibleBlocks.isEmpty
+                          ? const SizedBox.shrink()
+                          : _blockWidget(visibleBlocks[splitIndex], readerText),
+                    ),
+                  ),
+                ),
+                SliverPadding(
+                  padding: EdgeInsets.symmetric(horizontal: prefs.horizontalPadding),
                   sliver: SliverList.builder(
-                    key: _currentBlocksKey,
-                    itemCount: visibleBlocks.length - splitIndex,
+                    key: _followingBlocksKey,
+                    itemCount: visibleBlocks.isEmpty
+                        ? 0 : visibleBlocks.length - splitIndex - 1,
                     itemBuilder: (context, index) =>
-                        _blockWidget(visibleBlocks[splitIndex + index], readerText),
+                        _blockWidget(visibleBlocks[splitIndex + index + 1],
+                            readerText),
                   ),
                 ),
                 SliverPadding(
