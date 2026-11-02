@@ -359,35 +359,6 @@ class _SourceIndexPreviewPageState extends State<SourceIndexPreviewPage> {
           'Найденные слова нужно проверить вручную.',
         ),
         const SizedBox(height: 10),
-        Text('Обработано фрагментов: $processed из $total'),
-        LinearProgressIndicator(value: total == 0 ? 0 : processed / total),
-        const SizedBox(height: 6),
-        Text('Осталось фрагментов: $pending · Ошибок: '
-            '${analysis?.failedCount ?? 0}'),
-        Text('Найдено упоминаний: ${analysis?.mentions.length ?? 0} · '
-            'Принято: ${acceptedCount} · Отклонено: ${rejectedCount} · '
-            'На проверку: ${analysis?.reviewCount ?? 0}'),
-        if (_loadingAnalysis)
-          const Padding(
-            padding: EdgeInsets.symmetric(vertical: 12),
-            child: Text('Загружаем сохранённый прогресс анализа…'),
-          ),
-        if (error != null) ...[
-          const SizedBox(height: 8),
-          Text(error, style: TextStyle(
-            color: Theme.of(context).colorScheme.error,
-          )),
-          if (analysis == null)
-            TextButton.icon(
-              onPressed: _retryAnalysis,
-              icon: const Icon(Icons.refresh),
-              label: const Text('Повторить чтение анализа'),
-            ),
-        ],
-        const SizedBox(height: 8),
-        const Text('За одно нажатие проверяется не более 24 фрагментов. '
-            'При большой книге используйте кнопку повторно.'),
-        const SizedBox(height: 8),
         Wrap(
           spacing: 8,
           runSpacing: 8,
@@ -417,6 +388,36 @@ class _SourceIndexPreviewPageState extends State<SourceIndexPreviewPage> {
             ),
           ],
         ),
+        const SizedBox(height: 4),
+        const Text('За одно нажатие проверяется не более 24 фрагментов. '
+            'При большой книге используйте кнопку повторно.'),
+        const SizedBox(height: 8),
+        Text('Обработано фрагментов: $processed из $total'),
+        LinearProgressIndicator(value: total == 0 ? 0 : processed / total),
+        const SizedBox(height: 6),
+        Text('Осталось фрагментов: $pending · Ошибок: '
+            '${analysis?.failedCount ?? 0}'),
+        Text('Найдено упоминаний: ${analysis?.mentions.length ?? 0} · '
+            'Принято: ${acceptedCount} · Отклонено: ${rejectedCount} · '
+            'На проверку: ${analysis?.reviewCount ?? 0}'),
+        if (_loadingAnalysis)
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 12),
+            child: Text('Загружаем сохранённый прогресс анализа…'),
+          ),
+        if (error != null) ...[
+          const SizedBox(height: 8),
+          Text(error, style: TextStyle(
+            color: Theme.of(context).colorScheme.error,
+          )),
+          if (analysis == null)
+            TextButton.icon(
+              onPressed: _retryAnalysis,
+              icon: const Icon(Icons.refresh),
+              label: const Text('Повторить чтение анализа'),
+            ),
+        ],
+        const SizedBox(height: 8),
         const SizedBox(height: 12),
         if (analysis != null && analysis.reviewCount > 0) ...[
           TextButton.icon(
