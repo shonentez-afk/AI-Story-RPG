@@ -1,0 +1,125 @@
+import 'dart:convert';
+import 'dart:typed_data';
+
+import 'package:crypto/crypto.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:ai_story_reader/book_import.dart';
+import 'package:ai_story_reader/book_model.dart';
+import 'package:ai_story_reader/book_source_index.dart';
+
+void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
+  test('TXT indexing keeps every UTF-16 unit including newlines and emoji',
+      () {
+    final original = ('Строка с emoji 😀! Следующий шаг?\n\n' * 600);
+    final book = BookImporter.parse(
+      'story.txt', Uint8List.fromList(utf8.encode(original)),
+    );
+    final a = BookSourceIndexer.index(book, maxChunkUtf16: 257);
+    final b = BookSourceIndexer.index(book, maxChunkUtf16: 257);
+    expect(jsonEncode(a.toJson()), jsonEncode(b.toJson()));
+    expect(a.chapterCount, 1);
+    expect(a.indexedChapterCount, 1);
+    expect(a.indexedTextUtf16, original.length);
+    expect(a.textIndexCoverage, 1);
+    expect(a.gameplayCoverage, 0);
+    expect(a.canPublishBookworld, false);
+    expect(a.chunks.length, greaterThan(2));
+    expect(a.chunks.map((x) => x.text).join(), original);
+    var cursor = 0;
+    for (final chunk in a.chunks) {
+      expect(chunk.startUtf16, cursor);
+      expect(chunk.endUtf16, greaterThan(cursor));
+      expect(
+        original.substring(chunk.startUtf16, chunk.endUtf16),
+        chunk.text,
+      );
+      expect(chunk.sha256Text,
+          sha256.convert(utf8.encode(chunk.text)).toString());
+      expect(chunk.text.codeUnits.first >= 0xDC00 &&
+          chunk.text.codeUnits.first <= 0xDFFF, false);
+      expect(chunk.text.codeUnits.last >= 0xD800 &&
+          chunk.text.codeUnits.last <= 0xDBFF, false);
+      cursor = chunk.endUtf16;
+    }
+    expect(cursor, original.length);
+    final differentChunking =
+        BookSourceIndexer.index(book, maxChunkUtf16: 4096);
+    expect(differentChunking.sourceFingerprint, a.sourceFingerprint);
+    expect(differentChunking.chunks.map((x) => x.text).join(), original);
+  });
+
+  test('FB2 chapters, text/heading order and media review are explicit', () {
+    const fb2 = '''<?xml version="1.0" encoding="UTF-8"?>
+<FictionBook xmlns="http://www.gribuser.ru/xml/fictionbook/2.0">
+ <description><title-info><book-title>Оригинальная повесть</book-title>
+ <author><first-name>Автор</first-name></author></title-info></description>
+ <body>
+  <section><title><p>Глава 1</p></title><p>Начало истории.</p>
+  <image href="#drawing"/></section>
+  <section><title><p>Глава 2</p></title><p>Финал истории.</p></section>
+ </body>
+</FictionBook>''';
+    final book = BookImporter.parse(
+      'original.fb2', Uint8List.fromList(utf8.encode(fb2)),
+    );
+    final index = BookSourceIndexer.index(book);
+    expect(index.chapterCount, 2);
+    expect(index.indexedChapterCount, 2);
+    expect(index.unindexedMediaBlocks, 1);
+    expect(index.chapters[0].hasUnindexedMedia, true);
+    expect(index.chunks.first.text, 'Глава 1');
+    expect(index.chunks.any((c) => c.text == 'Начало истории.'), true);
+    expect(index.chunks.last.chapterIndex, 1);
+    expect(index.chunks.last.text, 'Финал истории.');
+    expect(index.toJson()['stage'], 'SOURCE_INDEX_ONLY');
+    expect(index.toJson()['can_publish_bookworld'], false);
+    final stored = index.toJson()['chunks'] as List;
+    expect((stored.first as Map)['analysis_status'], 'PENDING');
+    expect(index.gameplayCoverage, 0);
+  });
+
+  test('empty, unsafe size and invalid chunk policies fail closed', () {
+    expect(() => BookSourceIndexer.index(
+      const ImportedBook(title: '', author: '', chapters: ['A']),
+    ), throwsFormatException);
+    expect(() => BookSourceIndexer.index(
+      const ImportedBook(title: 'Empty', author: '', chapters: ['']),
+    ), throwsFormatException);
+    expect(() => BookSourceIndexer.index(
+      const ImportedBook(title: 'No', author: '', chapters: []),
+    ), throwsFormatException);
+    expect(() => BookSourceIndexer.index(
+      const ImportedBook(title: 'Valid', author: '', chapters: ['A']),
+      maxChunkUtf16: 0,
+    ), throwsFormatException);
+    expect(() => BookSourceIndexer.index(
+      const ImportedBook(title: 'Valid', author: '', chapters: ['A']),
+      maxChunkUtf16: 20000,
+    ), throwsFormatException);
+  });
+
+  test('media-only chapters never count as indexed chapters', () {
+    const book = ImportedBook(
+      title: 'Повесть',
+      author: '',
+      chapters: ['', ''],
+      structuredChapters: [
+        BookChapter(id: 'p1', blocks: [
+          BookBlock(kind: BookBlockKind.image, resourceId: 'cover'),
+        ]),
+        BookChapter(id: 'p2', blocks: [
+          BookBlock(kind: BookBlockKind.paragraph, text: 'Доступный текст'),
+        ]),
+      ],
+    );
+    final result = BookSourceIndexer.index(book);
+    expect(result.chapterCount, 2);
+    expect(result.indexedChapterCount, 1);
+    expect(result.unindexedMediaBlocks, 1);
+    expect(result.chapters.first.fullyIndexed, false);
+    expect(result.chunks.single.chapterId, 'p2');
+    expect(result.canPublishBookworld, false);
+  });
+}
