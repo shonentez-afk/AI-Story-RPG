@@ -9,6 +9,7 @@ import 'source_analysis_checkpoint_repository.dart';
 import 'source_evidence_graph.dart';
 import 'source_narrative_extractor.dart';
 import 'story_evidence_review_session.dart';
+import 'source_relations_review_panel.dart';
 
 /// A collapsible addition to the EXISTING preparation page. Opening this
 /// section is explicit: it does not load checkpoints or reveal spoilers until
@@ -455,6 +456,11 @@ class _SourceNarrativeReviewPanelState
           ] else
             const Text('Нет новых цитат для ручной проверки. '
                 'Это не означает, что сюжетная модель готова.'),
+          SourceRelationsReviewPanel(
+            key: ValueKey(widget.index.sourceFingerprint),
+            index: widget.index,
+            graph: review.graph,
+          ),
         ],
       ],
     );
