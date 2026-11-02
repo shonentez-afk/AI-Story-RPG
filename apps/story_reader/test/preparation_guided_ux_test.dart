@@ -44,6 +44,9 @@ void main() {
     expect(await store.read(BookSourceIndexer.index(book).sourceFingerprint),
         isNull);
 
+    await tester.ensureVisible(
+        find.byKey(const Key('prepare-search-mentions')));
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('prepare-search-mentions')));
     await tester.pumpAndSettle();
     expect(find.text('Поиск имён и мест завершён'), findsOneWidget);
@@ -91,6 +94,9 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Глава 1'), findsNothing);
 
+    await tester.ensureVisible(
+        find.byKey(const Key('prepare-search-mentions')));
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('prepare-search-mentions')));
     await tester.pumpAndSettle();
     await tester.tap(
