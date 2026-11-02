@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:isolate';
 import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart';
@@ -127,14 +128,32 @@ void main() {
     expect(result.chunks.single.chapterId, 'p2');
     expect(result.canPublishBookworld, false);
   });
+
+  test('the production Dart source index is transferable across isolates',
+      () async {
+    const book = ImportedBook(
+      title: 'Текст для фонового анализа',
+      author: '',
+      chapters: ['Начало', 'Продолжение'],
+    );
+    final indexed = await Isolate.run(() => BookSourceIndexer.index(book));
+    expect(indexed.indexedChapterCount, 2);
+    expect(indexed.chunks.map((x) => x.text).join(),
+        'НачалоПродолжение');
+    expect(indexed.canPublishBookworld, false);
+  });
+
   testWidgets('source index preview never claims playable RPG', (tester) async {
     const book = ImportedBook(
       title: 'Оригинальная короткая история',
       author: '',
       chapters: ['Начало.', 'Конец.'],
     );
-    await tester.pumpWidget(const MaterialApp(
-      home: SourceIndexPreviewPage(book: book),
+    await tester.pumpWidget(MaterialApp(
+      home: SourceIndexPreviewPage(
+        book: book,
+        indexer: (value) async => BookSourceIndexer.index(value),
+      ),
     ));
     await tester.pumpAndSettle();
     expect(find.text('Подготовка книги'), findsOneWidget);
@@ -162,9 +181,12 @@ void main() {
         ),
         child: child!,
       ),
-      home: const SourceIndexPreviewPage(book: ImportedBook(
-        title: 'Пустая', author: '', chapters: [''],
-      )),
+      home: SourceIndexPreviewPage(
+        book: const ImportedBook(
+          title: 'Пустая', author: '', chapters: [''],
+        ),
+        indexer: (value) async => BookSourceIndexer.index(value),
+      ),
     ));
     await tester.pumpAndSettle();
     expect(find.textContaining('Не удалось проиндексировать'),
