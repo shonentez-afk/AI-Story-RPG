@@ -109,6 +109,17 @@ class SourceSemanticAssertion {
         throw const FormatException('Нет исходного подтверждения цитаты');
       }
       record.validate(index);
+      if (kind == SemanticAssertionKind.event &&
+          record.kind != EvidenceKind.event ||
+          kind == SemanticAssertionKind.fact &&
+          record.kind != EvidenceKind.fact ||
+          (kind == SemanticAssertionKind.character ||
+              kind == SemanticAssertionKind.alias) &&
+          record.kind != EvidenceKind.character ||
+          kind == SemanticAssertionKind.location &&
+          record.kind != EvidenceKind.location) {
+        throw const FormatException('Тип утверждения не совпадает с цитатой');
+      }
     }
     final payload = _fields(
       kind: kind, evidenceIds: evidenceIds, subject: subject,
@@ -147,7 +158,8 @@ class SourceSemanticAssertion {
     }
     try {
       T parse<T extends Enum>(List<T> values, Object? value) {
-        return values.byName((value as String).toLowerCase());
+        return values.firstWhere(
+            (item) => item.name.toUpperCase() == value);
       }
       final proposed = SourceSemanticAssertion.propose(index, graph,
         kind: parse(SemanticAssertionKind.values, json['kind']),
