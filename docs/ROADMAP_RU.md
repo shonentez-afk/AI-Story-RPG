@@ -109,3 +109,6 @@
 - Функции: обязательный системный backup перед удалением `.bwsave v2` или пустого `.bworld`, RESTRICT против удаления мира с кампаниями, проверка expectedRevision в SQLite, полный replay, сохранение дочерних fork. Старые M1.6 SharedPreferences/книги TXT/FB2 не затронуты.
 - **SKIP:** реальный запуск на физических Android/Windows устройствах, восстановление из системного FilePicker после копирования файла, внезапная потеря питания, старые M1.6 migration, Book Compiler/AI. Результаты CI относятся к PR SHA; если после squash запущен отдельный main CI — его статус проверять по факту, не додумывать.
 - Дальше **M1.7.4c2**: унификация ReaderChromeMode normal/reading/fullscreen в новом BookWorld UI, доступность 320dp/200%, Windows keyboard, затем Android↔Windows device E2E и backup restore QA. Не создавать вторую библиотеку и вторую CTA импорта книг.
+
+## M1.7.4c2 — общий BookWorld reader chrome (2026-11-02)
+Реализован код UI режимов normal/reading/fullscreen и shared typography, F11/Esc для Windows, три новых Flutter/SQLite проверки. После подтверждения GitHub CI перейти к физическим Android+Windows E2E (импорт/экспорт .bworld/.bwsave v2, legacy migration policy) и лишь затем M2 Book Compiler. Матрица и ограничения: [M174C2_READER_CHROME_RU.md](M174C2_READER_CHROME_RU.md). Статус кода до CI — непроверенный.
