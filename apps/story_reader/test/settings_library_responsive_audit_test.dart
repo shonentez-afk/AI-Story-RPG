@@ -48,6 +48,10 @@ void main() {
         scrollable: find.byType(Scrollable).first);
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
+    // ListView lazily unmounts earlier tiles after scrolling to the bottom.
+    // Scroll up until it is mounted, then align it inside the viewport.
+    await tester.scrollUntilVisible(find.text('Оформление страниц'), -100,
+        scrollable: find.byType(Scrollable).first, maxScrolls: 30);
     await tester.ensureVisible(find.text('Оформление страниц'));
     await tester.pumpAndSettle();
     // The tile is now actually inside the 320dp viewport after scrolling.
