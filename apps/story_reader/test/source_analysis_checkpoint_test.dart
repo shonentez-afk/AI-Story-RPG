@@ -48,6 +48,8 @@ void main() {
       book: book, indexer: indexer, checkpointRepository: store,
       batchProcessor: (index, current) async => current.processBatch(index),
       checkpointEncoder: (session) async => session.encode(),
+      checkpointDecoder: (index, raw) async =>
+          SourceAnalysisSession.decode(index, raw),
     ));
 
     await tester.pumpWidget(page());
@@ -86,6 +88,8 @@ void main() {
       checkpointRepository: store,
       batchProcessor: (index, current) async => current.processBatch(index),
       checkpointEncoder: (session) async => session.encode(),
+      checkpointDecoder: (index, raw) async =>
+          SourceAnalysisSession.decode(index, raw),
     )));
     await tester.pumpAndSettle();
     store.failNextWrite = true;
@@ -117,6 +121,8 @@ void main() {
       checkpointRepository: store,
       batchProcessor: (index, current) async => current.processBatch(index),
       checkpointEncoder: (session) async => session.encode(),
+      checkpointDecoder: (index, raw) async =>
+          SourceAnalysisSession.decode(index, raw),
     )));
     await tester.pumpAndSettle();
     expect(find.textContaining('Не удалось восстановить анализ'),
