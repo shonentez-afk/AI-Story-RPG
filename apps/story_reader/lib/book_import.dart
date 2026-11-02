@@ -163,22 +163,53 @@ class BookImporter {
       }
     }
 
+    // FB2 often stores numbered footnotes in a separate <body name="notes">.
+    // Its <section> elements are NOT extra story chapters. Preserve all note
+    // text in one clearly labeled appendix while keeping the main tales as
+    // separate chapters. Other named bodies retain their original behavior.
+    final auxiliaryBodies = <XmlElement>[];
     for (final body in child(root, 'body')) {
+      final role = (body.getAttribute('name') ?? '').trim().toLowerCase();
+      if (role == 'notes' || role == 'comments') {
+        auxiliaryBodies.add(body);
+        continue;
+      }
       final sections = child(body, 'section').toList();
       if (sections.isEmpty) {
         final blocks = <BookBlock>[];
         appendNode(body, blocks);
         if (blocks.isNotEmpty) {
-          structured.add(BookChapter(id: 'chapter_${structured.length}', blocks: blocks));
+          structured.add(BookChapter(
+            id: 'chapter_${structured.length}', blocks: blocks,
+          ));
         }
       } else {
         for (final section in sections) {
           final blocks = <BookBlock>[];
           appendNode(section, blocks);
           if (blocks.isNotEmpty) {
-            structured.add(BookChapter(id: 'chapter_${structured.length}', blocks: blocks));
+            structured.add(BookChapter(
+              id: 'chapter_${structured.length}', blocks: blocks,
+            ));
           }
         }
+      }
+    }
+    for (final body in auxiliaryBodies) {
+      final role = (body.getAttribute('name') ?? '').trim().toLowerCase();
+      final blocks = <BookBlock>[
+        BookBlock(
+          kind: BookBlockKind.heading,
+          text: role == 'notes' ? 'Примечания' : 'Комментарии',
+        ),
+      ];
+      // Keep numbered note titles and their complete contents in source
+      // order, without presenting each note as an independent fairy tale.
+      appendNode(body, blocks);
+      if (blocks.length > 1) {
+        structured.add(BookChapter(
+          id: 'chapter_${structured.length}', blocks: blocks,
+        ));
       }
     }
     for (final chapter in structured) {
