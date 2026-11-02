@@ -9,6 +9,7 @@ import 'source_narrative_chronology.dart';
 import 'source_relation_review.dart';
 import 'source_semantic_provider.dart';
 import 'source_semantic_review.dart';
+import 'source_semantic_catalog.dart';
 
 /// Entry points live OUTSIDE widget State methods. Flutter's native compute
 /// sends only the explicit message and this top-level function to the worker.
@@ -164,3 +165,22 @@ Future<String> encodeSemanticReviewInWorker(
     SemanticReviewSession session) =>
     compute(_encodeSemanticReview, session,
         debugLabel: 'story-semantic-encode');
+
+
+SourceSemanticCatalog _buildSourceSemanticCatalog(
+    (BookSourceIndex, SourceEvidenceGraph) request) =>
+    SourceSemanticCatalog.fromLocalEvidence(request.$1, request.$2);
+
+Future<SourceSemanticCatalog> buildSourceSemanticCatalogInWorker(
+    BookSourceIndex index, SourceEvidenceGraph graph) =>
+    compute(_buildSourceSemanticCatalog, (index, graph),
+        debugLabel: 'story-semantic-catalog');
+
+SourceSemanticCatalog _decodeSourceSemanticCatalog(
+    (BookSourceIndex, SourceEvidenceGraph, String) request) =>
+    SourceSemanticCatalog.decode(request.$1, request.$2, request.$3);
+
+Future<SourceSemanticCatalog> decodeSourceSemanticCatalogInWorker(
+    BookSourceIndex index, SourceEvidenceGraph graph, String raw) =>
+    compute(_decodeSourceSemanticCatalog, (index, graph, raw),
+        debugLabel: 'story-semantic-catalog-validate');

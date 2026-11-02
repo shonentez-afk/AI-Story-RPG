@@ -268,7 +268,67 @@ class SourceSemanticCatalog {
           time: AssertionTime.textOrderOnly,
           uncertainty: 'Локальный шаблон. Нужны проверка контекста и времени.',
         ));
+        // A story event may hint at a relationship. Neither the action
+        // nor the identity of two characters becomes world canon.
+        if (kind == SemanticAssertionKind.event &&
+            (claim.attribute == 'встретил' ||
+             claim.attribute == 'встретила')) {
+          proposals.add(SourceSemanticAssertion.propose(index, graph,
+            kind: SemanticAssertionKind.relation,
+            evidenceIds: [evidence.id],
+            subject: claim.subject, predicate: 'meeting_hint',
+            object: claim.value,
+            voice: claim.isReported
+                ? AssertionVoice.reported : AssertionVoice.uncertain,
+            polarity: AssertionPolarity.ambiguous,
+            time: AssertionTime.textOrderOnly,
+            uncertainty: 'Возможное отношение по одному событию, '
+                'не доказано постоянное знакомство или общая личность.',
+          ));
+        }
       }
+      // Explicit phrases such as "X по прозвищу Y" are *hints* only.
+      // The two exact character spans must exist in the evidence graph.
+      final aliases = SourceNarrativeExtractor.aliasesInChunk(index, chunk);
+      for (var i = 0; i + 1 < aliases.length; i += 2) {
+        final first = accepted[aliases[i].id];
+        final second = accepted[aliases[i + 1].id];
+        if (first == null || second == null) continue;
+        proposals.add(SourceSemanticAssertion.propose(index, graph,
+          kind: SemanticAssertionKind.alias,
+          evidenceIds: [first.id, second.id],
+          subject: first.label, predicate: 'alias_hint',
+          object: second.label,
+          voice: AssertionVoice.uncertain,
+          polarity: AssertionPolarity.ambiguous,
+          time: AssertionTime.textOrderOnly,
+          uncertainty: 'Явная текстовая подсказка псевдонима; '
+              'межглавная личность нуждается в проверке.',
+        ));
+      }
+    }
+    // Existing accepted names and locations are included as standalone
+    // source-backed mentions, never silently merged into a single NPC.
+    for (final evidence in graph.records) {
+      if (evidence.status == EvidenceStatus.rejected) continue;
+      final kind = switch (evidence.kind) {
+        EvidenceKind.character => SemanticAssertionKind.character,
+        EvidenceKind.location => SemanticAssertionKind.location,
+        _ => null,
+      };
+      if (kind == null) continue;
+      proposals.add(SourceSemanticAssertion.propose(index, graph,
+        kind: kind, evidenceIds: [evidence.id],
+        subject: evidence.label, predicate: 'source_mention',
+        object: '',
+        voice: AssertionVoice.uncertain,
+        polarity: AssertionPolarity.ambiguous,
+        time: AssertionTime.textOrderOnly,
+        uncertainty: 'Упоминание, не установленная личность или место действия.',
+      ));
+    }
+    if (proposals.length > maxAssertions) {
+      throw const FormatException('Слишком много смысловых кандидатов');
     }
     return SourceSemanticCatalog.checked(index, graph, proposals);
   }
