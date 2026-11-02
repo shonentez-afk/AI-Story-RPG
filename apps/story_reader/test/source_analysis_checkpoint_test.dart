@@ -127,13 +127,13 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.textContaining('Не удалось восстановить анализ'),
         findsOneWidget);
-    expect(find.text('Сбросить анализ'), findsOneWidget);
-    await tester.ensureVisible(find.text('Сбросить анализ'));
+    expect(find.text('Сбросить поиск имён'), findsOneWidget);
+    await tester.ensureVisible(find.text('Сбросить поиск имён'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Сбросить анализ'));
+    await tester.tap(find.text('Сбросить поиск имён'));
     await tester.pumpAndSettle();
-    expect(find.text('Сбросить анализ книги?'), findsOneWidget);
-    await tester.tap(find.text('Сбросить анализ').last);
+    expect(find.text('Сбросить найденные имена и места?'), findsOneWidget);
+    await tester.tap(find.text('Сбросить поиск имён').last);
     await tester.pumpAndSettle();
     expect(await store.read(index.sourceFingerprint), isNull);
     expect(find.text('Обработано фрагментов: 0 из 1'), findsOneWidget);
