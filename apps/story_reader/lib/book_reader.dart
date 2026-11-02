@@ -8,60 +8,6 @@ import 'reading_preferences.dart';
 import 'reading_settings_sheet.dart';
 import 'reader_chrome.dart';
 
-/// Test-only diagnostics: identify which Flutter layout path shifts pixels
-/// by the full paragraph extent after the viewport is resized.
-class _ReaderProbeController extends ScrollController {
-  _ReaderProbeController() : super(keepScrollOffset: false);
-
-  @override
-  ScrollPosition createScrollPosition(
-    ScrollPhysics physics,
-    ScrollContext context,
-    ScrollPosition? oldPosition,
-  ) => _ReaderProbePosition(
-    physics: physics,
-    context: context,
-    oldPosition: oldPosition,
-  );
-}
-
-class _ReaderProbePosition extends ScrollPositionWithSingleContext {
-  _ReaderProbePosition({
-    required super.physics,
-    required super.context,
-    super.oldPosition,
-  }) : super(initialPixels: 0.0, keepScrollOffset: false);
-
-  void _trace(String message) {
-    assert(() {
-      debugPrint('AR-POS $message STACK ${StackTrace.current.toString().split("\\n").take(7).join(" | ")}');
-      return true;
-    }());
-  }
-
-  @override
-  void correctBy(double correction) {
-    if (correction.abs() > 300) _trace('correctBy $correction from=$pixels');
-    super.correctBy(correction);
-  }
-
-  @override
-  void correctPixels(double value) {
-    if (hasPixels && (value - pixels).abs() > 300) {
-      _trace('correctPixels $value from=$pixels');
-    }
-    super.correctPixels(value);
-  }
-
-  @override
-  void jumpTo(double value) {
-    if (hasPixels && pixels < 3500 && value < 3500) {
-      _trace('jumpTo $value from=$pixels');
-    }
-    super.jumpTo(value);
-  }
-}
-
 class BookReaderPage extends StatefulWidget {
   const BookReaderPage({super.key, required this.book, this.bookId});
   final ImportedBook book;
@@ -78,25 +24,12 @@ class _BookReaderPageState extends State<BookReaderPage>
   final BookReadingStore _readingStore = BookReadingStore();
   BookReadingState _reading = const BookReadingState();
   bool _progressReady = false;
-  // Do not resurrect pixel offsets from PageStorage after a semantic reflow.
-  final ScrollController _scroll = _ReaderProbeController();
-  int _scrollLayoutEpoch = 0;
-  bool _anchorCorrectionPending = false;
-  bool _anchorCorrectionScheduled = false;
-  int _anchorCorrectionBudget = 0;
-  int _anchorCorrectionPasses = 0;
+  final ScrollController _scroll = ScrollController(keepScrollOffset: false);
+  int _scrollEpoch = 0;
   final GlobalKey _viewportKey = GlobalKey();
-  final GlobalKey _priorBlocksKey = GlobalKey();
-  final GlobalKey _followingBlocksKey = GlobalKey();
-  // A small, fixed-size eagerly built window avoids RenderSliverList
-  // scrollOffsetCorrection next to a resized bidirectional center.
-  static const int _warmBlockLimit = 16;
-  final List<GlobalKey> _warmBlockKeys = List.generate(
-    _warmBlockLimit, (_) => GlobalKey(),
-  );
-  int _warmBlockCount = 0;
-  final GlobalKey _anchorParagraphKey = GlobalKey();
-  final GlobalKey _centerSliverKey = GlobalKey();
+  GlobalKey _priorBlocksKey = GlobalKey();
+  GlobalKey _currentBlocksKey = GlobalKey();
+  GlobalKey _centerSliverKey = GlobalKey();
   Timer? _progressTimer;
   bool _restoring = false;
   int? _layoutAnchorIndex;
@@ -109,69 +42,37 @@ class _BookReaderPageState extends State<BookReaderPage>
     final viewport = _viewportKey.currentContext?.findRenderObject();
     if (viewport is! RenderBox || !viewport.hasSize) return null;
     final top = viewport.localToGlobal(Offset.zero).dy + 1;
-    BookTextAnchor? trailing;
-    bool passedViewport = false;
-    BookTextAnchor? consider(RenderBox child, int index) {
-      if (index < 0 || index >= _visibleBlockCount) return null;
-      final y = child.localToGlobal(Offset.zero).dy;
-      final height = child.size.height;
-      if (height > 0 && y + height > top && y <= top) {
-        return BookTextAnchor(
-          blockIndex: index,
-          fraction: ((top - y) / height).clamp(0.0, 1.0).toDouble(),
-        );
-      }
-      if (y > top) {
-        passedViewport = true;
-      } else if (height > 0) {
-        trailing = BookTextAnchor(blockIndex: index, fraction: 1);
-      }
-      return null;
-    }
-
-    BookTextAnchor? inLazyList(GlobalKey key, int baseIndex,
-        {bool reverse = false}) {
-      final sliver = key.currentContext?.findRenderObject();
-      if (sliver is! RenderSliverList) return null;
+    BookTextAnchor? lastVisible;
+    for (final pair in [
+      (_priorBlocksKey, _layoutAnchorIndex == null ? 0 : _layoutAnchorIndex! - 1),
+      (_currentBlocksKey, _layoutAnchorIndex ?? 0),
+    ]) {
+      final sliver = pair.$1.currentContext?.findRenderObject();
+      if (sliver is! RenderSliverList) continue;
       var child = sliver.firstChild;
       while (child != null) {
-        final localIndex = sliver.indexOf(child);
-        final realIndex = reverse
-            ? baseIndex - localIndex : baseIndex + localIndex;
-        final found = consider(child, realIndex);
-        if (found != null) return found;
-        // Reverse-growth sliver children proceed *upward* from the center:
-        // a child below the viewport top does not imply later children are.
-        if (passedViewport && !reverse) break;
+        final y = child.localToGlobal(Offset.zero).dy;
+        final height = child.size.height;
+        final index = pair.$1 == _priorBlocksKey && _layoutAnchorIndex != null
+            ? pair.$2 - sliver.indexOf(child)
+            : pair.$2 + sliver.indexOf(child);
+        if (index >= _visibleBlockCount) break;
+        if (height > 0 && y + height > top && y <= top) {
+          final fraction = ((top - y) / height).clamp(0.0, 1.0).toDouble();
+          return BookTextAnchor(blockIndex: index, fraction: fraction);
+        }
+        if (y > top) {
+          // A title, header or cover is at the top, not this paragraph.
+          return null;
+        }
+        if (height > 0 && y <= top) {
+          lastVisible = BookTextAnchor(blockIndex: index, fraction: 1);
+        }
         child = sliver.childAfter(child);
       }
-      return null;
     }
-
-    final before = inLazyList(
-      _priorBlocksKey, (_layoutAnchorIndex ?? 0) - 1, reverse: true,
-    );
-    if (before != null) return before;
-    passedViewport = false;
-    // Always-mounted source paragraph is in a standalone sliver AFTER
-    // the zero-extent center; the rest of the chapter stays lazy.
-    final anchorRender = _anchorParagraphKey.currentContext?.findRenderObject();
-    if (anchorRender is RenderBox) {
-      final found = consider(anchorRender, _layoutAnchorIndex ?? 0);
-      if (found != null || passedViewport) return found;
-    }
-    for (var i = 0; i < _warmBlockCount; i++) {
-      final render = _warmBlockKeys[i].currentContext?.findRenderObject();
-      if (render is RenderBox) {
-        final found = consider(render, (_layoutAnchorIndex ?? 0) + 1 + i);
-        if (found != null || passedViewport) return found;
-      }
-    }
-    final after = inLazyList(
-      _followingBlocksKey,
-      (_layoutAnchorIndex ?? 0) + 1 + _warmBlockCount,
-    );
-    return after ?? trailing;
+    // At the navigation footer, retain the final source block.
+    return lastVisible;
   }
 
   BookReadingState _snapshotPosition() {
@@ -197,101 +98,30 @@ class _BookReaderPageState extends State<BookReaderPage>
     });
   }
 
-  /// Restore from a source block, never from the old pixel layout.
-  /// A fresh ScrollPosition is created when the center changes. Flutter
-  /// can still correct sliver extents after the first layout pass, so verify
-  /// the actual paragraph rectangle for a bounded number of frames.
+  /// Reconstruct an anchored layout with the target paragraph as the sliver
+  /// center. Earlier blocks remain scrollable backwards, even in long books.
   void _restoreScroll() {
-    assert(() { debugPrint('AR-DBG RESTORE start epoch=$_scrollLayoutEpoch anchor=${_reading.anchor?.blockIndex} fraction=${_reading.anchor?.fraction} positions=${_scroll.positions.length} offset=${_scroll.hasClients ? _scroll.offset : "none"}'); return true; }());
     _restoring = true;
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || !_scroll.hasClients) {
-        _restoring = false;
-        return;
-      }
-      final pos = _scroll.position;
-      final anchor = _reading.anchor;
-      if (_layoutAnchorIndex != null && anchor != null) {
-        final target = _anchorParagraphKey.currentContext?.findRenderObject();
-        final paragraphOffset = target is RenderBox && target.hasSize
-            ? target.size.height * anchor.fraction.clamp(0.0, 0.75)
-            : 0.0;
-        assert(() { debugPrint('AR-DBG RESTORE layout epoch=$_scrollLayoutEpoch size=${target is RenderBox ? target.size.height : -1} requested=$paragraphOffset current=${pos.pixels} min=${pos.minScrollExtent} max=${pos.maxScrollExtent}'); return true; }());
-        _scroll.jumpTo(paragraphOffset.clamp(
-          pos.minScrollExtent, pos.maxScrollExtent,
-        ).toDouble());
-        _beginAnchorCorrection();
-      } else {
-        _scroll.jumpTo(_reading.scrollOffset.clamp(
-          pos.minScrollExtent, pos.maxScrollExtent,
-        ).toDouble());
-        _restoring = false;
-      }
-    });
-  }
-
-  /// ScrollMetricsNotification fires *after* the viewport has discovered its
-  /// new dimensions. A didChangeMetrics-only fix runs too early and Flutter
-  /// can then move the old center by the height of one rendered paragraph.
-  bool _onScrollMetrics(ScrollMetricsNotification notice) {
-    assert(() { debugPrint('AR-DBG METRICS epoch=$_scrollLayoutEpoch depth=${notice.depth} pending=$_anchorCorrectionPending pixel=${notice.metrics.pixels} viewport=${notice.metrics.viewportDimension}'); return true; }());
-    if (notice.depth == 0 && _anchorCorrectionPending &&
-        _reading.anchor != null && mounted) {
-      if (_anchorCorrectionBudget < 2) _anchorCorrectionBudget = 2;
-      _scheduleAnchorCorrection();
-    }
-    return false;
-  }
-
-  void _beginAnchorCorrection() {
-    _anchorCorrectionPending = true;
-    _anchorCorrectionBudget = 6;
-    _anchorCorrectionPasses = 0;
-    _scheduleAnchorCorrection();
-  }
-
-  void _scheduleAnchorCorrection() {
-    if (!mounted || !_anchorCorrectionPending ||
-        _anchorCorrectionScheduled) return;
-    _anchorCorrectionScheduled = true;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _anchorCorrectionScheduled = false;
-      if (!mounted || !_scroll.hasClients || _reading.anchor == null) {
-        _anchorCorrectionPending = false;
-        _restoring = false;
-        return;
-      }
-      final target = _anchorParagraphKey.currentContext?.findRenderObject();
-      final viewport = _viewportKey.currentContext?.findRenderObject();
-      if (target is RenderBox && target.hasSize &&
-          viewport is RenderBox && viewport.hasSize) {
-        final anchor = _reading.anchor!;
-        final viewTop = viewport.localToGlobal(Offset.zero).dy + 1;
-        final paragraphTop = target.localToGlobal(Offset.zero).dy;
-        final desiredTop = viewTop -
-            target.size.height * anchor.fraction.clamp(0.0, 0.75);
-        final correction = paragraphTop - desiredTop;
-        final pos = _scroll.position;
-        final nextOffset = (pos.pixels + correction).clamp(
-          pos.minScrollExtent, pos.maxScrollExtent,
-        ).toDouble();
-        assert(() { debugPrint('AR-DBG ALIGN epoch=$_scrollLayoutEpoch pass=$_anchorCorrectionPasses pixel=${pos.pixels} target=$paragraphTop expected=$desiredTop delta=$correction next=$nextOffset'); return true; }());
-        if (correction.abs() > 1 && (nextOffset - pos.pixels).abs() > 0.5) {
-          _scroll.jumpTo(nextOffset);
+      if (!mounted) return;
+      if (_scroll.hasClients) {
+        final anchor = _reading.anchor;
+        double offset = _reading.scrollOffset;
+        if (_layoutAnchorIndex != null && anchor != null) {
+          final sliver = _currentBlocksKey.currentContext?.findRenderObject();
+          if (sliver is RenderSliverList && sliver.firstChild != null) {
+            offset = sliver.firstChild!.size.height *
+                anchor.fraction.clamp(0.0, 1.0);
+          } else {
+            offset = 0;
+          }
         }
+        final pos = _scroll.position;
+        _scroll.jumpTo(offset.clamp(
+          pos.minScrollExtent, pos.maxScrollExtent,
+        ).toDouble());
       }
-      _anchorCorrectionPasses++;
-      if (_anchorCorrectionBudget > 0 && _anchorCorrectionPasses < 10) {
-        _anchorCorrectionBudget--;
-        // A callback alone does not create the frame needed for the
-        // viewport's subsequent metrics correction. Explicitly request one.
-        WidgetsBinding.instance.scheduleFrame();
-        _scheduleAnchorCorrection();
-      } else {
-        assert(() { debugPrint('AR-DBG ALIGN DONE epoch=$_scrollLayoutEpoch pixel=${_scroll.hasClients ? _scroll.offset : "none"}'); return true; }());
-        _anchorCorrectionPending = false;
-        _restoring = false;
-      }
+      _restoring = false;
     });
   }
 
@@ -303,17 +133,19 @@ class _BookReaderPageState extends State<BookReaderPage>
     bool useLastKnownAnchor = false,
   }) {
     _progressTimer?.cancel();
-    // Window metrics may invalidate the previous RenderBox geometry before
-    // the callback runs. The scroll listener already cached the last actual
-    // visible paragraph. Preserve that source position across system reflow.
-    assert(() { debugPrint('AR-DBG REFLOW start epoch=$_scrollLayoutEpoch current=${_scroll.hasClients ? _scroll.offset : "none"} last=${_reading.anchor?.blockIndex} usingLast=$useLastKnownAnchor'); return true; }());
     final next = useLastKnownAnchor
-        ? _reading
-        : (_progressReady ? _snapshotPosition() : _reading);
+        ? _reading : (_progressReady ? _snapshotPosition() : _reading);
     _restoring = true;
     if (_scroll.hasClients) _scroll.jumpTo(0);
     setState(() {
-      _scrollLayoutEpoch++;
+      // IMPORTANT: sliver GlobalKeys must be regenerated when a center is
+      // introduced or moved. Reparenting the old RenderSliverList preserves
+      // dead-reckoned child offsets from the previous chapter layout,
+      // causing RenderViewport.correctBy(paragraphHeight) on every frame.
+      _scrollEpoch++;
+      _priorBlocksKey = GlobalKey();
+      _currentBlocksKey = GlobalKey();
+      _centerSliverKey = GlobalKey();
       _reading = next;
       _layoutAnchorIndex = next.anchor?.blockIndex;
       if (settings != null) _settings = settings;
@@ -354,7 +186,10 @@ class _BookReaderPageState extends State<BookReaderPage>
       _reading = saved.copyWith(chapter:
           saved.chapter.clamp(0, _count > 0 ? _count - 1 : 0).toInt());
       _layoutAnchorIndex = saved.anchor?.blockIndex;
-      _scrollLayoutEpoch++;
+      _scrollEpoch++;
+      _priorBlocksKey = GlobalKey();
+      _currentBlocksKey = GlobalKey();
+      _centerSliverKey = GlobalKey();
       _progressReady = true;
     });
     _restoreScroll();
@@ -370,7 +205,10 @@ class _BookReaderPageState extends State<BookReaderPage>
         chapter: index, scrollOffset: 0, clearAnchor: true,
       );
       _layoutAnchorIndex = null;
-      _scrollLayoutEpoch++;
+      _scrollEpoch++;
+      _priorBlocksKey = GlobalKey();
+      _currentBlocksKey = GlobalKey();
+      _centerSliverKey = GlobalKey();
     });
     _restoreScroll();
     if (widget.bookId != null) {
@@ -433,9 +271,6 @@ class _BookReaderPageState extends State<BookReaderPage>
 
   @override
   void didChangeMetrics() {
-    assert(() { debugPrint('AR-DBG DIDMETRICS epoch=$_scrollLayoutEpoch restoring=$_restoring'); return true; }());
-    // Capture the paragraph location from the previous render tree BEFORE
-    // the first frame lays out the new window size/orientation.
     if (mounted && _progressReady && !_restoring) {
       _reflow(useLastKnownAnchor: true);
     }
@@ -554,13 +389,6 @@ class _BookReaderPageState extends State<BookReaderPage>
         ? _layoutAnchorIndex! : 0;
     final anchored = _layoutAnchorIndex != null &&
         _layoutAnchorIndex! < visibleBlocks.length;
-    // Bounded eager window; all remaining content still uses a lazy builder.
-    // During reflow a RenderSliverList immediately adjacent to the anchored
-    // paragraph can emit a bogus one-paragraph-height correction.
-    final warmCount = visibleBlocks.isEmpty ? 0
-        : (visibleBlocks.length - splitIndex - 1)
-            .clamp(0, _warmBlockLimit).toInt();
-    _warmBlockCount = warmCount;
 
 
     return ReaderChromeKeyboard(
@@ -604,10 +432,8 @@ class _BookReaderPageState extends State<BookReaderPage>
           child: ConstrainedBox(
             key: _viewportKey,
             constraints: const BoxConstraints(maxWidth: 800),
-            child: NotificationListener<ScrollMetricsNotification>(
-              onNotification: _onScrollMetrics,
-              child: CustomScrollView(
-              key: ValueKey('reader-scroll-$_scrollLayoutEpoch'),
+            child: CustomScrollView(
+              key: ValueKey('book-scroll-$_scrollEpoch'),
               controller: _scroll,
               center: anchored ? _centerSliverKey : null,
               slivers: [
@@ -656,64 +482,21 @@ class _BookReaderPageState extends State<BookReaderPage>
                   sliver: SliverList.builder(
                     key: _priorBlocksKey,
                     itemCount: splitIndex,
-                    // Pre-center slivers use reverse GrowthDirection. Item 0
-                    // is next to the center, not the start of the chapter.
+                    // Reverse-growth sliver: index zero must be the paragraph
+                    // immediately BEFORE the selected source paragraph.
                     itemBuilder: (context, index) =>
                         _blockWidget(
                             visibleBlocks[splitIndex - 1 - index], readerText),
                   ),
                 ),
-                // The center MUST have zero extent: a nonempty center
-                // makes RenderViewport add its height to the scroll offset
-                // during layout corrections (822px in the regression case).
-                SliverToBoxAdapter(
+                SliverPadding(
                   key: _centerSliverKey,
-                  child: const SizedBox.shrink(),
-                ),
-                // Source paragraph is mounted even when Flutter temporarily
-                // shifts the viewport across a large paragraph during resize.
-                // It must NOT be the center sliver (nonzero center produced a
-                // repeated one-paragraph-height layout correction).
-                SliverPadding(
-                  padding: EdgeInsets.symmetric(horizontal: prefs.horizontalPadding),
-                  sliver: SliverToBoxAdapter(
-                    child: KeyedSubtree(
-                      key: _anchorParagraphKey,
-                      child: visibleBlocks.isEmpty
-                          ? const SizedBox.shrink()
-                          : _blockWidget(visibleBlocks[splitIndex], readerText),
-                    ),
-                  ),
-                ),
-                SliverPadding(
-                  padding: EdgeInsets.symmetric(horizontal: prefs.horizontalPadding),
-                  sliver: SliverToBoxAdapter(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        for (var index = 0; index < warmCount; index++)
-                          KeyedSubtree(
-                            key: _warmBlockKeys[index],
-                            child: _blockWidget(
-                              visibleBlocks[splitIndex + index + 1],
-                              readerText,
-                            ),
-                          ),
-                      ],
-                    ),
-                  ),
-                ),
-                SliverPadding(
                   padding: EdgeInsets.symmetric(horizontal: prefs.horizontalPadding),
                   sliver: SliverList.builder(
-                    key: _followingBlocksKey,
-                    itemCount: visibleBlocks.isEmpty ? 0
-                        : visibleBlocks.length - splitIndex - 1 - warmCount,
+                    key: _currentBlocksKey,
+                    itemCount: visibleBlocks.length - splitIndex,
                     itemBuilder: (context, index) =>
-                        _blockWidget(
-                          visibleBlocks[splitIndex + 1 + warmCount + index],
-                          readerText,
-                        ),
+                        _blockWidget(visibleBlocks[splitIndex + index], readerText),
                   ),
                 ),
                 SliverPadding(
@@ -758,7 +541,6 @@ class _BookReaderPageState extends State<BookReaderPage>
                   ),
                 ),
               ],
-            ),
             ),
           ),
         ),
