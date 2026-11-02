@@ -157,6 +157,12 @@ void main() {
       tester.view.resetDevicePixelRatio();
     });
     await tester.pumpAndSettle();
+    // A direct centered sliver is required for an anchored reflow;
+    // a legacy raw pixel offset is not sufficient after resize.
+    final liveView = tester.widget<CustomScrollView>(
+      find.byType(CustomScrollView),
+    );
+    expect(liveView.center, isNotNull);
     expect(find.textContaining(
       'Текст параграфа ${old.anchor!.blockIndex}.',
     ), findsOneWidget);
