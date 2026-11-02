@@ -53,6 +53,9 @@ class _SourceIndexPreviewPageState extends State<SourceIndexPreviewPage> {
   bool _loadingAnalysis = false;
   bool _busy = false;
   bool _showCandidates = false;
+  bool _showChapters = false;
+  int _candidatePage = 0;
+  static const int _candidatesPerPage = 10;
   int _generation = 0;
 
   @override
@@ -68,6 +71,8 @@ class _SourceIndexPreviewPageState extends State<SourceIndexPreviewPage> {
     _analysisError = null;
     _loadingAnalysis = false;
     _showCandidates = false;
+    _showChapters = false;
+    _candidatePage = 0;
     final book = widget.book;
     final worker = widget.indexer;
     _result = worker == null
@@ -247,6 +252,84 @@ class _SourceIndexPreviewPageState extends State<SourceIndexPreviewPage> {
     return chunk.text.substring(start, end).replaceAll('\n', ' ');
   }
 
+
+  /// User-oriented explanation of the actual, currently supported pipeline.
+  /// Never confuse a finished source index with a playable bookworld.
+  Widget _preparationOverview(BookSourceIndex index) {
+    final analysis = _analysis;
+    final searchStatus = analysis == null
+        ? 'Ещё не запускался'
+        : analysis.pendingCount == 0 && analysis.failedCount == 0
+            ? 'Поиск завершён, находки требуют проверки'
+            : 'Просмотрено ${analysis.processedCount} из ${index.chunks.length} фрагментов';
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Что делает подготовка?',
+                style: Theme.of(context).textTheme.titleLarge),
+            const SizedBox(height: 8),
+            const Text(
+              'Задача этого раздела — постепенно собрать проверенные '
+              'сведения из книги для будущей текстовой RPG. '
+              'В этой сборке мы пока анализируем текст: '
+              'готовой игры из вашей книги ещё не создаём.',
+            ),
+            const SizedBox(height: 14),
+            _preparationStep('1', 'Разобрать текст — готово',
+                'Найдены ${index.chapterCount} разделов и '
+                '${index.chunks.length} текстовых фрагментов. '
+                'Иллюстрации пока не анализируются.'),
+            _preparationStep('2', 'Найти имена и места',
+                searchStatus + '. Используются простые правила, '
+                'поэтому часть героев и мест может быть пропущена.'),
+            const SizedBox(height: 8),
+            _preparationStep('3', 'Проверить найденное',
+                'Можно проверить упоминания, возможные события, '
+                'противоречия и связи. Это отдельные действия ниже, '
+                'а не подтверждённый сюжет.'),
+            const SizedBox(height: 8),
+            _preparationStep('4', 'Создать игровую историю — пока недоступно',
+                'Генерация сцен, игровых выборов и альтернативного сюжета '
+                'ещё разрабатывается. Завершение анализа не создаёт RPG.'),
+            const SizedBox(height: 12),
+            const Text(
+              'Весь текущий анализ работает без отправки текста в облако. '
+              'Книга, положение чтения и игровые сохранения не изменяются.',
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _preparationStep(String number, String title, String detail) =>
+      Padding(
+        padding: const EdgeInsets.symmetric(vertical: 3),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SizedBox(
+              width: 28,
+              child: Text('$number.',
+                  style: Theme.of(context).textTheme.titleMedium),
+            ),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title, style: Theme.of(context).textTheme.titleSmall),
+                  const SizedBox(height: 2),
+                  Text(detail),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+
   Widget _analysisControls(BookSourceIndex index) {
     final analysis = _analysis;
     final error = _analysisError;
@@ -257,13 +340,14 @@ class _SourceIndexPreviewPageState extends State<SourceIndexPreviewPage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Анализ источников · M2b',
+        Text('Шаг 2. Поиск имён персонажей и мест',
             style: Theme.of(context).textTheme.titleMedium),
         const SizedBox(height: 6),
         const Text(
-          'Локальный поиск явных упоминаний персонажей и мест. '
-          'Все находки требуют ручной проверки. Это не готовый '
-          'сюжет, не установленные факты и не игровая история.',
+          'Нажмите «Начать поиск», чтобы найти выражения вроде '
+          '«его звали …» и «в городе …». '
+          'Поиск не распознаёт всех героев и не понимает сюжет. '
+          'Найденные слова нужно проверить вручную.',
         ),
         const SizedBox(height: 10),
         Text('Обработано фрагментов: $processed из $total'),
@@ -290,6 +374,9 @@ class _SourceIndexPreviewPageState extends State<SourceIndexPreviewPage> {
             ),
         ],
         const SizedBox(height: 8),
+        const Text('За одно нажатие проверяется не более 24 фрагментов. '
+            'При большой книге используйте кнопку повторно.'),
+        const SizedBox(height: 8),
         Wrap(
           spacing: 8,
           runSpacing: 8,
@@ -298,7 +385,11 @@ class _SourceIndexPreviewPageState extends State<SourceIndexPreviewPage> {
               onPressed: _busy || _loadingAnalysis ||
                   analysis == null || pending == 0 ? null : _processBatch,
               icon: const Icon(Icons.manage_search),
-              label: Text(_busy ? 'Сохраняем…' : 'Обработать порцию'),
+              key: const Key('prepare-search-mentions'),
+              label: Text(_busy
+                  ? 'Сохраняем результаты…'
+                  : processed == 0 ? 'Начать поиск имён и мест'
+                      : 'Продолжить поиск имён и мест'),
             ),
             if (analysis != null && analysis.failedCount > 0)
               OutlinedButton.icon(
@@ -323,11 +414,12 @@ class _SourceIndexPreviewPageState extends State<SourceIndexPreviewPage> {
                 ? Icons.visibility_off_outlined : Icons.visibility_outlined),
             label: Text(_showCandidates
                 ? 'Скрыть упоминания'
-                : 'Показать упоминания (возможны спойлеры)'),
+                : 'Проверить найденные имена (возможны спойлеры)'),
           ),
           if (!_showCandidates)
-            const Text('Содержание найденных упоминаний скрыто '
-                'до вашего выбора.'),
+            const Text('Цитаты и имена скрыты до вашего выбора. '
+                'Подтверждение означает, что слово есть в книге, '
+                'но не доказывает, что найден персонаж или факт.'),
         ] else if (analysis != null && pending == 0) ...[
           const Text('Явных упоминаний на проверку не осталось. '
               'Это не означает, что все события и персонажи книги '
