@@ -70,7 +70,7 @@ void main() {
 
     for (final candidate in [
       tamper(quote: 'подмена'),
-      tamper(fingerprint: '0' * 64),
+      tamper(fingerprint: List.filled(64, '0').join()),
       tamper(status: 'CONFIRMED'),
       tamper(end: first.startUtf16),
     ]) {
