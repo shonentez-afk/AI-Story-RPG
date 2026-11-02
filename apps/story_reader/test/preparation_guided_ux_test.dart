@@ -6,6 +6,26 @@ import 'package:ai_story_reader/book_source_index.dart';
 import 'package:ai_story_reader/source_analysis_checkpoint_repository.dart';
 import 'package:ai_story_reader/source_index_preview_page.dart';
 
+// Scroll lazy slivers as a user would. ensureVisible() alone can target an
+// eagerly built child of an off-screen SliverToBoxAdapter.
+Future<void> revealInViewport(WidgetTester tester, Finder target) async {
+  for (var attempt = 0; attempt < 32; attempt++) {
+    if (target.evaluate().isNotEmpty) {
+      final y = tester.getCenter(target).dy;
+      final height = tester.view.physicalSize.height /
+          tester.view.devicePixelRatio;
+      if (y >= 85 && y <= height - 85) return;
+      await tester.drag(find.byType(CustomScrollView).first,
+          Offset(0, y > height - 85 ? -260 : 260));
+    } else {
+      await tester.drag(find.byType(CustomScrollView).first,
+          const Offset(0, -260));
+    }
+    await tester.pumpAndSettle();
+  }
+  throw StateError('Target is not reachable in source preparation scroll');
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -145,12 +165,14 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Глава 1'), findsNothing);
     final toggle = find.byKey(const Key('prepare-show-chapters'));
-    await tester.ensureVisible(toggle);
-    await tester.pumpAndSettle();
+    await revealInViewport(tester, toggle);
     await tester.tap(toggle);
     await tester.pumpAndSettle();
+    await revealInViewport(tester, find.text('Глава 1'));
     expect(find.text('Глава 1'), findsOneWidget);
+    await revealInViewport(tester, find.text('Глава 2'));
     expect(find.text('Глава 2'), findsOneWidget);
+    await revealInViewport(tester, toggle);
     await tester.tap(toggle);
     await tester.pumpAndSettle();
     expect(find.text('Глава 1'), findsNothing);
