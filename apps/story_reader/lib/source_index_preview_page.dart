@@ -126,10 +126,10 @@ class _SourceIndexPreviewPageState extends State<SourceIndexPreviewPage> {
                       title: Text('Глава ${chapter.chapterIndex + 1}'),
                       subtitle: Text(
                         'Фрагментов: ${chapter.sourceChunks} · '
-                        'Статус анализа: ожидает'
-                        ${chapter.hasUnindexedMedia
-                            ? ' · Иллюстрации требуют проверки'
-                            : ''}',
+                        'Статус анализа: ожидает' +
+                            (chapter.hasUnindexedMedia
+                                ? ' · Иллюстрации требуют проверки'
+                                : ''),
                       ),
                       leading: Icon(
                         chapter.fullyIndexed
@@ -139,9 +139,7 @@ class _SourceIndexPreviewPageState extends State<SourceIndexPreviewPage> {
                     );
                   },
                 ),
-                const SliverPadding(
-                  padding: EdgeInsets.only(bottom: 24),
-                ),
+                const SliverToBoxAdapter(child: SizedBox(height: 24)),
               ],
             ),
           ),
