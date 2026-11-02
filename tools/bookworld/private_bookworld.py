@@ -448,7 +448,7 @@ def verify(archive: bytes) -> dict:
     _valid_blueprint(bp)
     _valid_provenance(prov, bp)
     expected = _manifest(bp, prov, {
-        name: files[name] for name in PAYLOAD,
+        name: files[name] for name in PAYLOAD
     })
     if manifest != expected:
         fail("Invalid source/rights/manifest hash binding")
