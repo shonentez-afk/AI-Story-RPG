@@ -50,7 +50,11 @@ class ReadingSettingsStore {
   static Future<void> _writeFence = Future<void>.value();
 
   Future<ReadingPreferences> load() async {
-    await _writeFence;
+    try {
+      await _writeFence;
+    } catch (_) {
+      // A failed save must not hide the previous readable preferences.
+    }
     final prefs = await SharedPreferences.getInstance();
     final theme = prefs.getInt('${_prefix}palette') ?? 1;
     final palette = theme >= 0 && theme < ReadingPalette.values.length
