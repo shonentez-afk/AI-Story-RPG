@@ -9,6 +9,7 @@ import 'package:ai_story_reader/book_import.dart';
 import 'package:ai_story_reader/book_model.dart';
 import 'package:ai_story_reader/book_source_index.dart';
 import 'package:ai_story_reader/source_index_preview_page.dart';
+import 'package:ai_story_reader/source_analysis_checkpoint_repository.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -153,6 +154,7 @@ void main() {
       home: SourceIndexPreviewPage(
         book: book,
         indexer: (value) async => BookSourceIndexer.index(value),
+        checkpointRepository: MemorySourceAnalysisCheckpointRepository(),
       ),
     ));
     await tester.pumpAndSettle();
@@ -161,7 +163,17 @@ void main() {
     expect(find.text('Текстовое покрытие индекса: 100.0%'),
         findsOneWidget);
     expect(find.textContaining('Готового игрового мира нет'), findsOneWidget);
+    // Source sections are lazy slivers below the new M2b review header.
+    // Scroll to them as a real user would instead of requiring eager build.
+    await tester.scrollUntilVisible(
+      find.text('Глава 1'), 180,
+      scrollable: find.byType(Scrollable).first,
+    );
     expect(find.text('Глава 1'), findsOneWidget);
+    await tester.scrollUntilVisible(
+      find.text('Глава 2'), 180,
+      scrollable: find.byType(Scrollable).first,
+    );
     expect(find.text('Глава 2'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
@@ -186,6 +198,7 @@ void main() {
           title: 'Пустая', author: '', chapters: [''],
         ),
         indexer: (value) async => BookSourceIndexer.index(value),
+        checkpointRepository: MemorySourceAnalysisCheckpointRepository(),
       ),
     ));
     await tester.pumpAndSettle();

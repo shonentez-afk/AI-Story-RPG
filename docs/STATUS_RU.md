@@ -379,3 +379,9 @@
 ## 2026-11-02 — M2b1: рабочая ветка (НЕ ПРИНЯТО CI)
 - PR #7 `feat/m2b1-resumable-provenance-20261102`: локальная очередь анализа SourceChunk с контрольными точками, SHA-256 provenance и проверяемыми упоминаниями имён и мест. Добавлен отдельный регрессионный тест. Это не извлечение канона и не готовая RPG.
 - Статус: CODE ADDED, CI PENDING; Flutter/Android/Windows PASS не подтверждены. Интерфейс M1/M2a и сохранения не изменены. Следующий этап M2b2 — durable checkpoint, UI review в существующей библиотеке.
+
+
+## 2026-11-02 — M2b2 implementation branch, CI pending
+- На базе M2b1 сделаны private ApplicationSupport checkpoints с атомарной заменой и восстановлением, единый экран подготовки с порциями анализа, review только текстовых упоминаний, скрытие спойлеров, явная ошибка/сброс. M1 и M2a UX не переписаны.
+- Тесты: `source_analysis_checkpoint_test.dart` + актуализация `book_source_index_test.dart`. **PASS не заявлен** до точного CI SHA. Android/Windows physical/manual QA: SKIP.
+- Следующая цель M2b3: source-grounded facts/events/alias resolution; никакого `.bworld` из пользовательской книги до валидации.
