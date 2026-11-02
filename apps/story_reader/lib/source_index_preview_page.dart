@@ -8,8 +8,15 @@ import 'book_source_index.dart';
 /// M2a inspection from the existing book library. No duplicate import
 /// controls and no claim that an index equals a playable AI-generated RPG.
 class SourceIndexPreviewPage extends StatefulWidget {
-  const SourceIndexPreviewPage({super.key, required this.book});
+  const SourceIndexPreviewPage({
+    super.key,
+    required this.book,
+    this.indexer,
+  });
   final ImportedBook book;
+
+  /// Test seam only; production always executes in a worker isolate.
+  final Future<BookSourceIndex> Function(ImportedBook)? indexer;
 
   @override
   State<SourceIndexPreviewPage> createState() => _SourceIndexPreviewPageState();
@@ -28,7 +35,10 @@ class _SourceIndexPreviewPageState extends State<SourceIndexPreviewPage> {
     // Native Dart runs offline on Windows and Android. Large TXT/FB2 books
     // are processed outside the UI isolate.
     final book = widget.book;
-    _result = Isolate.run(() => BookSourceIndexer.index(book));
+    final worker = widget.indexer;
+    _result = worker == null
+        ? Isolate.run(() => BookSourceIndexer.index(book))
+        : worker(book);
   }
 
   void _retry() => setState(_buildIndex);
