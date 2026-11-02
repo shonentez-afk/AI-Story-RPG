@@ -71,6 +71,28 @@ void main() {
     } else {
       await tester.ensureVisible(finder);
     }
+    await tester.pump();
+    // At 200% accessibility text scale, the button can be built and only
+    // partly inside the viewport. A real player scrolls farther before
+    // tapping; do that here instead of sending a false off-screen click.
+    final scroll = find.byKey(const ValueKey('world-scene-scroll'));
+    if (scroll.evaluate().isNotEmpty) {
+      final viewport = tester.getRect(scroll);
+      final center = tester.getCenter(finder);
+      if (center.dy > viewport.bottom - 24) {
+        await tester.drag(
+          scroll,
+          Offset(0, viewport.bottom - 90 - center.dy),
+        );
+        await tester.pumpAndSettle();
+      } else if (center.dy < viewport.top + 24) {
+        await tester.drag(
+          scroll,
+          Offset(0, viewport.top + 90 - center.dy),
+        );
+        await tester.pumpAndSettle();
+      }
+    }
     await tester.tap(finder);
     await settleWorker(tester);
     expect(tester.takeException(), isNull);
