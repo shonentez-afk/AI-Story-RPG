@@ -633,9 +633,7 @@ class _BookReaderPageState extends State<BookReaderPage>
                   padding: EdgeInsets.symmetric(horizontal: prefs.horizontalPadding),
                   sliver: SliverList.builder(
                     key: _priorBlocksKey,
-                    // Temporary diagnostic isolation: exclude preceding
-                    // sliver to identify which list requests correction.
-                    itemCount: anchored ? 0 : splitIndex,
+                    itemCount: splitIndex,
                     // Pre-center slivers use reverse GrowthDirection. Item 0
                     // is next to the center, not the start of the chapter.
                     itemBuilder: (context, index) =>
@@ -669,8 +667,9 @@ class _BookReaderPageState extends State<BookReaderPage>
                   padding: EdgeInsets.symmetric(horizontal: prefs.horizontalPadding),
                   sliver: SliverList.builder(
                     key: _followingBlocksKey,
-                    itemCount: visibleBlocks.isEmpty
-                        ? 0 : visibleBlocks.length - splitIndex - 1,
+                    // Temporary diagnostic isolation of the forward lazy list.
+                    itemCount: anchored ? 0 : (visibleBlocks.isEmpty
+                        ? 0 : visibleBlocks.length - splitIndex - 1),
                     itemBuilder: (context, index) =>
                         _blockWidget(visibleBlocks[splitIndex + index + 1],
                             readerText),
