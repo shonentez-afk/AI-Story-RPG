@@ -70,6 +70,8 @@ void main() {
         (await store.read(originalIndex.sourceFingerprint))!);
     expect(restored.mentions.where(
         (m) => m.decision == MentionDecision.accepted).length, 1);
+    await tester.scrollUntilVisible(find.textContaining('Принято: 1'), -180,
+        scrollable: find.byType(Scrollable).first, maxScrolls:25);
     expect(find.textContaining('Принято: 1'), findsOneWidget);
 
     await tester.scrollUntilVisible(
