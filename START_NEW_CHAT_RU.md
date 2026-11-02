@@ -276,3 +276,9 @@ Run `41332360623` (SHA `ef004a4`): Python/Dart/analyze PASS, Flutter FAIL из-�
 - Кандидаты CHARACTER_NAME/LOCATION_NAME показываются по явному запросу (предупреждение о спойлерах), принимается/отклоняется только **упоминание**, не канон/сюжет. Есть ошибки, повтор failed и подтверждённый сброс анализа. Второй библиотеки/импорта нет; BookWorld, SQLite/legacy сейвы, TXT/FB2 чтение не переписаны.
 - Требуется **проверить CI точного HEAD M2b2**, Android/Windows builds и негативные тесты, исправить FAIL прежде чем объединять. На данном этапе M2b2 CODE ADDED, CI NOT VERIFIED; физические устройства SKIP.
 - Следующий шаг после автоматической приёмки: M2b3 факты/события/алиасы/cross-chapter, достоверные evidence, spoiler policies; затем проверяемый промежуточный blueprint. `gameplay_coverage=0`, `can_publish_bookworld=false`; regex-находки не превращать в игровые факты.
+
+
+## Подтверждённая приёмка M2b1 / актуальная база M2b2 (2026-11-02)
+- M2b1 PR #7 **MERGED** в main (squash SHA `91c6ede82f1615a6f5e96c2a4be816354252b6fc`). Подтверждённый HEAD до squash `22cd1a071b81bcf7784cf16f8778ad180a6d9504`: GitHub Actions `41399856182` **6/6 PASS**, Flutter analyze+tests, core/Dart/Python, Android APK, Windows portable. Первый CI FAIL синтаксиса processBatch был исправлен перед приёмкой.
+- M2b2 PR #8 [https://github.com/shonentez-afk/AI-Story-RPG/pull/8](https://github.com/shonentez-afk/AI-Story-RPG/pull/8) перенесён на squash main без потери восьми изменённых файлов; после rebase mergeable=true. Первый CI M2b2 `41400545444` Flutter analyze PASS, 4 widget FAIL из-за offscreen taps/lazy section expectations, исправления уже в ветке; это НЕ итоговый PASS.
+- **Обязательно проверить последний CI PR #8 точного HEAD и при FAIL чинить по логам**, затем merge; физические Android/Windows проверки не выдумывать. Далее M2b3 с фактами/событиями/alias/provenance/review, без ложной готовности .bworld.
