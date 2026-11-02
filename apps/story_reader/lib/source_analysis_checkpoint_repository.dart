@@ -14,19 +14,27 @@ abstract class SourceAnalysisCheckpointRepository {
   Future<void> delete(String sourceFingerprint);
 }
 
+/// Two isolated folders. Existing M2b1 files keep their original path.
+enum SourceCheckpointScope { mentions, narrativeEvidence }
+
 /// Private app-support storage shared by Android and Windows.
 /// The temporary file is flushed and renamed on the SAME filesystem; an
 /// interrupted write cannot turn the previous checkpoint into a partial JSON.
 /// This is not an OS power-loss/real-device durability certification.
 class FileSourceAnalysisCheckpointRepository
     implements SourceAnalysisCheckpointRepository {
-  const FileSourceAnalysisCheckpointRepository({this.rootDirectory});
+  const FileSourceAnalysisCheckpointRepository({
+    this.rootDirectory,
+    this.scope = SourceCheckpointScope.mentions,
+  });
 
   /// Injected only in unit tests; production uses application support.
   final Future<Directory> Function()? rootDirectory;
+  final SourceCheckpointScope scope;
 
   static final RegExp _validFingerprint = RegExp(r'^[a-f0-9]{64}$');
-  static const _folderName = 'ai_story_source_analysis_v1';
+  static const _mentionsFolder = 'ai_story_source_analysis_v1';
+  static const _evidenceFolder = 'ai_story_evidence_review_v1';
 
   static void _checkFingerprint(String fingerprint) {
     if (!_validFingerprint.hasMatch(fingerprint)) {
@@ -37,7 +45,9 @@ class FileSourceAnalysisCheckpointRepository
   Future<Directory> _folder() async {
     final base = await (rootDirectory?.call() ??
         getApplicationSupportDirectory());
-    final folder = Directory('${base.path}/$_folderName');
+    final name = scope == SourceCheckpointScope.mentions
+        ? _mentionsFolder : _evidenceFolder;
+    final folder = Directory('${base.path}/$name');
     if (!await folder.exists()) await folder.create(recursive: true);
     return folder;
   }
