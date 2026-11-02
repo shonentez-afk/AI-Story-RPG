@@ -409,3 +409,11 @@ Run `41332360623` (SHA `ef004a4`): Python/Dart/analyze PASS, Flutter FAIL из-�
   - [Android APK](https://github.com/shonentez-afk/AI-Story-RPG/releases/download/test-build-260/AI-Story-RPG-Android-debug.apk), 167 209 424 bytes, SHA256 `b832b719b1612b1b0980ad281536632973b0101ecfb3d4442457eabaf041c610`.
   - `SHA256SUMS.txt` присутствует. Все три актива GitHub Release проверены, state=uploaded.
 - Старые test-build-258/256 **не содержат новую корзину**. Для проверки новой версии нужно переустановить/распаковать test-build-260. Ручной E2E на реальном устройстве остаётся SKIP; не путать CI PASS с проверкой всех физических устройств. Следующий функциональный план M2b4 semantic provider, но текущая UX-корзина уже завершена.
+
+
+## M2b4a — provider boundary, PR #18 (2026-11-02)
+- Начат с последнего принятого `main` `2c9f3f7d2fd8a95f385e2ec98c2ebd0b61465dc6`; последний опубликованный релиз пока `test-build-260` (Windows/Android), 7/7 push(main) CI для code SHA `180e32995e71e609fe303cad6db927f0420ed239`.
+- Ветка `feature/m2b4a-semantic-provider-boundary-20261102`, PR https://github.com/shonentez-afk/AI-Story-RPG/pull/18, документ `docs/M2B4A_SEMANTIC_BOUNDARY_PROGRESS_RU.md`.
+- Добавлены сменяемые типизированные semantic request/candidates, `OfflineRuleProvider`, `SemanticProviderGate`, fail-closed validator и негативные Flutter tests; локальная модель не настроена, cloud gate всегда закрыт. `SourceAnalysisSession.scanChunk` только read-only обёртка старого M2b1 сканера.
+- **Статус CODE ONLY / CI PENDING**: проверить PR #18 точный HEAD Flutter analyze/test, Python/world, Windows+Android. Важно: текущий код ещё не добавлен в UI и не имеет semantic checkpoints. Не заявлять готовым весь M2b4a и не объединять без CI.
+- Далее безопасные приватные semantic checkpoint/возобновление и UI строго внутри существующей страницы подготовки, после отдельного code/CI QA. Не трогать старую библиотеку, сохранения, M2b1/M2b3b/M2b3c, не отправлять книгу по сети и не объявлять playable BookWorld.
