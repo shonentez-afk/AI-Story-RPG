@@ -16,23 +16,26 @@ void main() {
     final book = BookImporter.parse(
       'story.txt', Uint8List.fromList(utf8.encode(original)),
     );
+    // Current TXT importer intentionally trims outer whitespace; the M2a
+    // index promises lossless coverage of the *parsed* canonical book.
+    final parsedText = book.chapters.single;
     final a = BookSourceIndexer.index(book, maxChunkUtf16: 257);
     final b = BookSourceIndexer.index(book, maxChunkUtf16: 257);
     expect(jsonEncode(a.toJson()), jsonEncode(b.toJson()));
     expect(a.chapterCount, 1);
     expect(a.indexedChapterCount, 1);
-    expect(a.indexedTextUtf16, original.length);
+    expect(a.indexedTextUtf16, parsedText.length);
     expect(a.textIndexCoverage, 1);
     expect(a.gameplayCoverage, 0);
     expect(a.canPublishBookworld, false);
     expect(a.chunks.length, greaterThan(2));
-    expect(a.chunks.map((x) => x.text).join(), original);
+    expect(a.chunks.map((x) => x.text).join(), parsedText);
     var cursor = 0;
     for (final chunk in a.chunks) {
       expect(chunk.startUtf16, cursor);
       expect(chunk.endUtf16, greaterThan(cursor));
       expect(
-        original.substring(chunk.startUtf16, chunk.endUtf16),
+        parsedText.substring(chunk.startUtf16, chunk.endUtf16),
         chunk.text,
       );
       expect(chunk.sha256Text,
@@ -43,11 +46,11 @@ void main() {
           chunk.text.codeUnits.last <= 0xDBFF, false);
       cursor = chunk.endUtf16;
     }
-    expect(cursor, original.length);
+    expect(cursor, parsedText.length);
     final differentChunking =
         BookSourceIndexer.index(book, maxChunkUtf16: 4096);
     expect(differentChunking.sourceFingerprint, a.sourceFingerprint);
-    expect(differentChunking.chunks.map((x) => x.text).join(), original);
+    expect(differentChunking.chunks.map((x) => x.text).join(), parsedText);
   });
 
   test('FB2 chapters, text/heading order and media review are explicit', () {
