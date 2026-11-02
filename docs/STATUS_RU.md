@@ -302,3 +302,6 @@
 - Python/Dart M0 PASS; story_core 10/10, adapter 9/9, JSON Schema 9/9, Python BookWorld 12/12, BookWorld Dart 5/5, campaign_manager 10/10, Flutter analyze PASS и **78/78 tests PASS** (в том числе 35 UI ходов, reopen на 23-м, native worker isolate, старые пилотные UI).
 - Android APK PASS, Windows portable PASS, demo .bworld artifact PASS. [Android prerelease #148](https://github.com/shonentez-afk/AI-Story-RPG/releases/tag/android-build-148).
 - SKIP: Android/Windows physical E2E, real cross-device .bwsave transfer, legacy migration, power-loss, safe delete/backup. Общая UI-интеграция M1.7.4b принята **только по автоматическим QA**, полный M1.7 acceptance ещё требует аппаратной проверки и остаточных функций. См. `docs/M174B_FLUTTER_BOOKWORLD_RU.md`.
+
+## M1.7.4c1 — резервирование и удаление BookWorld (2026-11-02)
+Новая отдельная ветка `feat/m174c1-safe-backup-delete`: безопасный экспорт исходного .bworld; запрет удаления мира с кампаниями; SQLite транзакционное удаление кампании после replay и проверки ревизии; независимость форков; подтверждение и системный экспорт .bwsave v2 перед удалением. Тесты добавлены. Подробности в `docs/M174C_SAFE_BACKUP_DELETE_RU.md`. **CI ещё не подтверждён**, предыдущий PASS #148 только для M1.7.4b. Legacy сохранения M1.6 и TXT/FB2 не затрагивать.
