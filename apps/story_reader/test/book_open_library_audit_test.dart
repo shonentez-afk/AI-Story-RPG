@@ -87,7 +87,8 @@ void main() {
         findsOneWidget);
     await tester.ensureVisible(find.text('Подготовить к RPG'));
     await tester.tap(find.text('Подготовить к RPG'));
-    await tester.pump();
+    await tester.pumpAndSettle();
+    // Wait for MaterialPageRoute's transition before asserting its AppBar.
     expect(find.text('Подготовка книги'), findsOneWidget);
     await tester.pageBack();
     await tester.pumpAndSettle();
