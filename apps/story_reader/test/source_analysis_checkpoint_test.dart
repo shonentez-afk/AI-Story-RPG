@@ -56,14 +56,14 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Обработано фрагментов: 0 из 1'), findsOneWidget);
     expect(find.text('Артем'), findsNothing);
-    await tester.ensureVisible(find.text('Обработать порцию'));
+    await tester.ensureVisible(find.byKey(const Key('prepare-search-mentions')));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Обработать порцию'));
+    await tester.tap(find.byKey(const Key('prepare-search-mentions')));
 
     await tester.pumpAndSettle();
     expect(find.text('Обработано фрагментов: 1 из 1'), findsOneWidget);
     expect(find.text('Артем'), findsNothing);
-    expect(find.text('Показать упоминания (возможны спойлеры)'),
+    expect(find.text('Проверить найденные имена (возможны спойлеры)'),
         findsOneWidget);
     final index = BookSourceIndexer.index(book);
     expect(SourceAnalysisSession.decode(
@@ -93,17 +93,17 @@ void main() {
     )));
     await tester.pumpAndSettle();
     store.failNextWrite = true;
-    await tester.ensureVisible(find.text('Обработать порцию'));
+    await tester.ensureVisible(find.byKey(const Key('prepare-search-mentions')));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Обработать порцию'));
+    await tester.tap(find.byKey(const Key('prepare-search-mentions')));
 
     await tester.pumpAndSettle();
     expect(find.text('Обработано фрагментов: 0 из 1'), findsOneWidget);
     expect(find.textContaining('Предыдущий checkpoint сохранён'),
         findsOneWidget);
-    await tester.ensureVisible(find.text('Обработать порцию'));
+    await tester.ensureVisible(find.byKey(const Key('prepare-search-mentions')));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Обработать порцию'));
+    await tester.tap(find.byKey(const Key('prepare-search-mentions')));
 
     await tester.pumpAndSettle();
     expect(find.text('Обработано фрагментов: 1 из 1'), findsOneWidget);
