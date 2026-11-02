@@ -2,7 +2,6 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
-import 'book_import.dart';
 import 'book_isolate_workers.dart';
 import 'book_storage.dart';
 import 'book_reader.dart';
