@@ -7,6 +7,7 @@ import 'book_import.dart';
 import 'book_source_analysis.dart';
 import 'book_source_index.dart';
 import 'source_analysis_checkpoint_repository.dart';
+import 'source_narrative_review_panel.dart';
 
 /// The single preparation page already opened from Library. M2b2 adds local
 /// evidence review here, not a second library/import or an unverified RPG.
@@ -433,6 +434,12 @@ class _SourceIndexPreviewPageState extends State<SourceIndexPreviewPage> {
                             '${index.chunks.length}'),
                         const Divider(height: 28),
                         _analysisControls(index),
+                        const Divider(height: 28),
+                        SourceNarrativeReviewPanel(
+                          key: ValueKey(index.sourceFingerprint),
+                          index: index,
+                          sourceMentions: _analysis,
+                        ),
                         const Divider(height: 28),
                         Text('Разделы произведения',
                             style: Theme.of(context).textTheme.titleMedium),
