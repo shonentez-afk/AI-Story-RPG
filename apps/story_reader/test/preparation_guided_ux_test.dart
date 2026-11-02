@@ -60,6 +60,14 @@ void main() {
         scrollable: find.byType(Scrollable).first, maxScrolls:25);
     expect(find.text('Артем'), findsOneWidget);
     expect(find.text('Это имя персонажа'), findsOneWidget);
+    await tester.tap(find.text('Это имя персонажа'));
+    await tester.pumpAndSettle();
+    final originalIndex = BookSourceIndexer.index(book);
+    final restored = SourceAnalysisSession.decode(originalIndex,
+        (await store.read(originalIndex.sourceFingerprint))!);
+    expect(restored.mentions.where(
+        (m) => m.decision == MentionDecision.accepted).length, 1);
+    expect(find.textContaining('Принято: 1'), findsOneWidget);
 
     await tester.scrollUntilVisible(
         find.text('Дополнительно: экспериментальный поиск'), 220,
