@@ -248,6 +248,45 @@ void main() {
     expect(store.loadCampaign(a).metadata.revision, 1);
   });
 
+
+  test('deleting parent retains fork and exported save restores', () {
+    final parent = store.createCampaign(world.archiveHash);
+    expect(take(parent, 'inspect_parent', 'inspect_gate').applied, isTrue);
+    final fork = store.createCampaign(
+      world.archiveHash, parentCampaignId: parent,
+    );
+    expect(take(fork, 'inspect_fork', 'inspect_gate').applied, isTrue);
+    final forkHash = store.loadCampaign(fork).metadata.stateHash;
+    final backup = store.exportPortable(parent);
+    expect(() => store.deleteCampaign(parent, expectedRevision: 0),
+        throwsFormatException);
+    store.deleteCampaign(parent, expectedRevision: 1);
+    expect(() => store.loadCampaign(parent), throwsFormatException);
+    final child = store.loadCampaign(fork);
+    expect(child.metadata.parentId, isNull);
+    expect(child.metadata.revision, 2);
+    expect(child.metadata.stateHash, forkHash);
+    final restored = store.importPortable(backup);
+    expect(restored, isNot(parent));
+    expect(store.loadCampaign(restored).metadata.revision, 1);
+  });
+
+  test('BookWorld deletion rejects remaining campaigns and reinstalls', () {
+    final backup = store.exportBookworld(world.archiveHash);
+    expect(backup, orderedEquals(archive));
+    final id = store.createCampaign(world.archiveHash);
+    expect(() => store.deleteBookworld(world.archiveHash),
+        throwsFormatException);
+    expect(() => store.deleteCampaign(id, expectedRevision: 4),
+        throwsFormatException);
+    store.deleteCampaign(id, expectedRevision: 0);
+    store.deleteBookworld(world.archiveHash);
+    expect(store.installedWorlds(), isEmpty);
+    expect(() => store.createCampaign(world.archiveHash),
+        throwsFormatException);
+    expect(store.installBookworld(backup).archiveHash, world.archiveHash);
+  });
+
   test('unknown DB version and modified world payload refuse to open', () {
     final path = temp.path + Platform.pathSeparator +
         'bookworld_campaigns_v1.sqlite';
