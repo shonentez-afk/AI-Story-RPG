@@ -127,7 +127,10 @@ class CausalPreflight {
   final bool canExportPublic;
   final List<String> blockers;
 
-  bool get isCausallyComplete => blockers.isEmpty;
+  /// The paths pass structural causality checks even if semantic and
+  /// packaging acceptance is still blocked by separate compiler gates.
+  bool get isCausallyComplete =>
+      reachableScenes > 0 && reachableEndings >= 2 && reachableStates > 0;
   bool get canPublishBookworld => false;
 }
 
