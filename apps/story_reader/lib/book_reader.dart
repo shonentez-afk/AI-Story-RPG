@@ -122,21 +122,30 @@ class _BookReaderPageState extends State<BookReaderPage>
       return null;
     }
 
-    BookTextAnchor? inLazyList(GlobalKey key, int baseIndex) {
+    BookTextAnchor? inLazyList(GlobalKey key, int baseIndex,
+        {bool reverse = false}) {
       final sliver = key.currentContext?.findRenderObject();
       if (sliver is! RenderSliverList) return null;
       var child = sliver.firstChild;
       while (child != null) {
-        final found = consider(child, baseIndex + sliver.indexOf(child));
+        final localIndex = sliver.indexOf(child);
+        final realIndex = reverse
+            ? baseIndex - localIndex : baseIndex + localIndex;
+        final found = consider(child, realIndex);
         if (found != null) return found;
-        if (passedViewport) break;
+        // Reverse-growth sliver children proceed *upward* from the center:
+        // a child below the viewport top does not imply later children are.
+        if (passedViewport && !reverse) break;
         child = sliver.childAfter(child);
       }
       return null;
     }
 
-    final before = inLazyList(_priorBlocksKey, 0);
-    if (before != null || passedViewport) return before;
+    final before = inLazyList(
+      _priorBlocksKey, (_layoutAnchorIndex ?? 0) - 1, reverse: true,
+    );
+    if (before != null) return before;
+    passedViewport = false;
     // Always-mounted source paragraph is in a standalone sliver AFTER
     // the zero-extent center; the rest of the chapter stays lazy.
     final anchorRender = _anchorParagraphKey.currentContext?.findRenderObject();
@@ -625,8 +634,11 @@ class _BookReaderPageState extends State<BookReaderPage>
                   sliver: SliverList.builder(
                     key: _priorBlocksKey,
                     itemCount: splitIndex,
+                    // Pre-center slivers use reverse GrowthDirection. Item 0
+                    // is next to the center, not the start of the chapter.
                     itemBuilder: (context, index) =>
-                        _blockWidget(visibleBlocks[index], readerText),
+                        _blockWidget(
+                            visibleBlocks[splitIndex - 1 - index], readerText),
                   ),
                 ),
                 // The center MUST have zero extent: a nonempty center
