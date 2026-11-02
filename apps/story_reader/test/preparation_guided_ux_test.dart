@@ -63,6 +63,8 @@ void main() {
         scrollable: find.byType(Scrollable).first, maxScrolls:25);
     expect(find.text('Артем'), findsOneWidget);
     expect(find.text('Это имя персонажа'), findsOneWidget);
+    await tester.ensureVisible(find.text('Это имя персонажа'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Это имя персонажа'));
     await tester.pumpAndSettle();
     final originalIndex = BookSourceIndexer.index(book);
@@ -85,7 +87,7 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('long candidate lists paginate; chapters stay hidden by default',
+  testWidgets('long candidate lists reveal more without losing reviewed items',
       (tester) async {
     final book = ImportedBook(
       title: 'Много имён', author: 'Автор',
@@ -105,12 +107,15 @@ void main() {
         find.text('Проверить найденные имена (возможны спойлеры)'));
     await tester.pumpAndSettle();
     await tester.scrollUntilVisible(
-        find.byKey(const Key('prepare-review-next')), 250,
+        find.byKey(const Key('prepare-review-more')), 250,
         scrollable: find.byType(Scrollable).first, maxScrolls:30);
-    expect(find.text('Страница 1 из 2'), findsOneWidget);
-    await tester.tap(find.byKey(const Key('prepare-review-next')));
+    await tester.ensureVisible(find.byKey(const Key('prepare-review-more')));
     await tester.pumpAndSettle();
-    expect(find.text('Страница 2 из 2'), findsOneWidget);
+    expect(find.text('Показано 10 из 13 упоминаний'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('prepare-review-more')));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Показано 13 из 13 упоминаний'));
+    expect(find.text('Показано 13 из 13 упоминаний'), findsOneWidget);
 
     await tester.scrollUntilVisible(
         find.byKey(const Key('prepare-show-chapters')), 260,
