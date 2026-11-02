@@ -405,6 +405,61 @@ CREATE TABLE events(
     });
   }
 
+
+  /// Exact, verified backup of the original installed BookWorld archive.
+  Uint8List exportBookworld(String archiveHash) {
+    _world(archiveHash);
+    final rows = _db.select(
+      'SELECT package FROM bookworlds WHERE archive_sha256=?',
+      [archiveHash],
+    );
+    return Uint8List.fromList(rows.single.columnAt(0) as Uint8List);
+  }
+
+  /// Do not cascade-delete a BookWorld that still has campaigns.
+  /// The Flutter UI requires an external .bworld backup before this call.
+  void deleteBookworld(String archiveHash) {
+    _transaction(() {
+      _world(archiveHash);
+      final count = _db.select(
+        'SELECT COUNT(*) FROM campaigns WHERE world_sha256=?',
+        [archiveHash],
+      ).single.columnAt(0) as int;
+      if (count != 0) {
+        throw const FormatException(
+          'BookWorld has saved campaigns; export and delete them first',
+        );
+      }
+      _db.execute(
+        'DELETE FROM bookworlds WHERE archive_sha256=?', [archiveHash],
+      );
+      if (_db.select('SELECT changes()').single.columnAt(0) != 1) {
+        throw const FormatException('BookWorld deletion did not commit');
+      }
+    });
+  }
+
+  /// Reject stale deletions and corrupted journals. Forks own cloned event
+  /// logs; foreign key ON DELETE SET NULL only clears the parent pointer.
+  void deleteCampaign(String campaignId, {required int expectedRevision}) {
+    _transaction(() {
+      final snapshot = _campaignRow(campaignId);
+      if (snapshot.revision != expectedRevision) {
+        throw const FormatException(
+          'Campaign changed after backup; export again',
+        );
+      }
+      _restore(campaignId, snapshot);
+      _db.execute(
+        'DELETE FROM campaigns WHERE campaign_id=? AND revision=?',
+        [campaignId, expectedRevision],
+      );
+      if (_db.select('SELECT changes()').single.columnAt(0) != 1) {
+        throw const FormatException('Concurrent campaign modification');
+      }
+    });
+  }
+
   /// Portable v2: separate from the existing pilot .bwsave v1. References
   /// installed BookWorld by exact SHA; does NOT contain the book text.
   String exportPortable(String campaignId) {
