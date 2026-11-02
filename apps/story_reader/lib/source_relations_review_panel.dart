@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:isolate';
 
 import 'package:flutter/material.dart';
 
@@ -8,6 +7,7 @@ import 'source_analysis_checkpoint_repository.dart';
 import 'source_evidence_graph.dart';
 import 'source_narrative_chronology.dart';
 import 'source_relation_review.dart';
+import 'book_isolate_workers.dart';
 
 /// Nested inside the existing spoiler-gated evidence panel.
 /// The user opens it explicitly. Decisions live in a separate private file.
@@ -72,15 +72,13 @@ class _SourceRelationsReviewPanelState
   Future<SourceRelationReviewSession> _newSession() async {
     final worker = widget.sessionBuilder;
     if (worker != null) return worker(widget.index, widget.graph);
-    return Isolate.run(() =>
-        SourceRelationReviewSession.create(widget.index, widget.graph));
+    return createRelationReviewInWorker(widget.index, widget.graph);
   }
 
   Future<SourceNarrativeChronology> _newChronology() async {
     final worker = widget.chronologyBuilder;
     if (worker != null) return worker(widget.index, widget.graph);
-    return Isolate.run(() =>
-        SourceNarrativeChronology.build(widget.index, widget.graph));
+    return buildSourceChronologyInWorker(widget.index, widget.graph);
   }
 
   Future<void> _load() async {
@@ -97,8 +95,7 @@ class _SourceRelationsReviewPanelState
       final decoder = widget.sessionDecoder;
       final restored = raw == null ? await _newSession()
           : decoder == null
-              ? await Isolate.run(() => SourceRelationReviewSession.decode(
-                  widget.index, widget.graph, raw))
+              ? await decodeRelationReviewInWorker(widget.index, widget.graph, raw)
               : await decoder(widget.index, widget.graph, raw);
       final chronology = await _newChronology();
       if (mounted) {
@@ -122,7 +119,7 @@ class _SourceRelationsReviewPanelState
   Future<void> _persist(SourceRelationReviewSession updated) async {
     final encoder = widget.checkpointEncoder;
     final raw = encoder == null
-        ? await Isolate.run(() => updated.encode())
+        ? await encodeRelationReviewInWorker(updated)
         : await encoder(updated);
     await _store.write(widget.index.sourceFingerprint, raw);
     if (mounted) setState(() => _session = updated);
@@ -139,8 +136,7 @@ class _SourceRelationsReviewPanelState
     try {
       final worker = widget.relationDecider;
       final updated = worker == null
-          ? await Isolate.run(() => current.decide(
-              widget.index, widget.graph, relation.hint.id, choice))
+          ? await decideRelationInWorker(widget.index, widget.graph, current, relation.hint.id, choice)
           : await worker(widget.index, widget.graph,
               current, relation.hint.id, choice);
       await _persist(updated);
