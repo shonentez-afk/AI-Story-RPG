@@ -336,6 +336,10 @@ class _SourceIndexPreviewPageState extends State<SourceIndexPreviewPage> {
     final pending = analysis?.pendingCount ?? index.chunks.length;
     final processed = analysis?.processedCount ?? 0;
     final total = index.chunks.length;
+    final acceptedCount = analysis?.mentions.where(
+        (item) => item.decision == MentionDecision.accepted).length ?? 0;
+    final rejectedCount = analysis?.mentions.where(
+        (item) => item.decision == MentionDecision.rejected).length ?? 0;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -353,9 +357,11 @@ class _SourceIndexPreviewPageState extends State<SourceIndexPreviewPage> {
         Text('Обработано фрагментов: $processed из $total'),
         LinearProgressIndicator(value: total == 0 ? 0 : processed / total),
         const SizedBox(height: 6),
-        Text('Ожидают: $pending · Ошибок: '
-            '${analysis?.failedCount ?? 0} · '
-            'Упоминаний на проверку: ${analysis?.reviewCount ?? 0}'),
+        Text('Осталось фрагментов: $pending · Ошибок: '
+            '${analysis?.failedCount ?? 0}'),
+        Text('Найдено упоминаний: ${analysis?.mentions.length ?? 0} · '
+            'Принято: ${acceptedCount} · Отклонено: ${rejectedCount} · '
+            'На проверку: ${analysis?.reviewCount ?? 0}'),
         if (_loadingAnalysis)
           const Padding(
             padding: EdgeInsets.symmetric(vertical: 12),
@@ -419,9 +425,9 @@ class _SourceIndexPreviewPageState extends State<SourceIndexPreviewPage> {
                 : 'Проверить найденные имена (возможны спойлеры)'),
           ),
           if (!_showCandidates)
-            const Text('Цитаты и имена скрыты до вашего выбора. '
-                'Подтверждение означает, что слово есть в книге, '
-                'но не доказывает, что найден персонаж или факт.'),
+            const Text('Находки скрыты до вашего выбора. '
+                'Вы отмечаете, правильно ли распознан тип: '
+                'имя персонажа или название места. Это не проверка канона.'),
         ] else if (analysis != null && pending == 0) ...[
           const Text('Явных упоминаний на проверку не осталось. '
               'Это не означает, что все события и персонажи книги '
@@ -522,8 +528,9 @@ class _SourceIndexPreviewPageState extends State<SourceIndexPreviewPage> {
                               style: Theme.of(context).textTheme.titleMedium),
                           const SizedBox(height: 4),
                           Text('Непроверенных упоминаний: ${allPending.length}. '
-                              'Подтверждается только наличие слова в книге, '
-                              'а не личность персонажа или истина события.'),
+                              'Выбирайте только подходящие имена и места. '
+                              'Это ещё не объединяет персонажей и не '
+                              'подтверждает сюжетные события.'),
                         ],
                       ],
                     ),
@@ -563,7 +570,9 @@ class _SourceIndexPreviewPageState extends State<SourceIndexPreviewPage> {
                                 FilledButton(
                                   onPressed: _busy ? null : () => _decide(
                                       mention, MentionDecision.accepted),
-                                  child: const Text('Это слово есть в книге'),
+                                  child: Text(mention.kind == 'CHARACTER_NAME'
+                                      ? 'Это имя персонажа'
+                                      : 'Это название места'),
                                 ),
                               ]),
                             ],
