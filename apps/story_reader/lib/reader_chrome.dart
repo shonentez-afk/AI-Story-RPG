@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
+import 'package:flutter/services.dart';
 
 /// Shared visibility contract for both the book and RPG reader.
 /// Story choices and book navigation remain in the page body in all modes.
@@ -92,5 +93,42 @@ class ReaderChromeButton extends StatelessWidget {
       ),
     ),
   ),
+  );
+}
+
+/// Consistent F11/Escape contract for the book reader and pilot RPG.
+/// It is a chrome-only mode; native OS exclusive fullscreen is NOT requested.
+/// Modal routes retain Escape because the underlying page is not current.
+class ReaderChromeKeyboard extends StatelessWidget {
+  const ReaderChromeKeyboard({
+    super.key, required this.mode, required this.onChange,
+    required this.child,
+  });
+
+  final ReaderChromeMode mode;
+  final ValueChanged<ReaderChromeMode> onChange;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => Focus(
+    autofocus: true,
+    onKeyEvent: (_, event) {
+      if (event is! KeyDownEvent ||
+          ModalRoute.of(context)?.isCurrent != true) {
+        return KeyEventResult.ignored;
+      }
+      if (event.logicalKey == LogicalKeyboardKey.f11) {
+        onChange(mode == ReaderChromeMode.fullscreen
+            ? ReaderChromeMode.normal : ReaderChromeMode.fullscreen);
+        return KeyEventResult.handled;
+      }
+      if (event.logicalKey == LogicalKeyboardKey.escape &&
+          mode != ReaderChromeMode.normal) {
+        onChange(ReaderChromeMode.normal);
+        return KeyEventResult.handled;
+      }
+      return KeyEventResult.ignored;
+    },
+    child: child,
   );
 }

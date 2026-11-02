@@ -234,7 +234,10 @@ class _BookReaderPageState extends State<BookReaderPage> {
         ? blocks.skip(1).toList()
         : blocks;
 
-    return Scaffold(
+    return ReaderChromeKeyboard(
+      mode: _chrome,
+      onChange: _changeChrome,
+      child: Scaffold(
       backgroundColor: prefs.background,
       appBar: !_chrome.showTopBar ? null : AppBar(
         backgroundColor: prefs.background,
@@ -368,6 +371,6 @@ class _BookReaderPageState extends State<BookReaderPage> {
           ),
         ),
       ),
-    );
+    ));
   }
 }
