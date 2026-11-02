@@ -217,8 +217,7 @@ class SemanticReviewSession {
     for (var i = 0; i < tasks.length; i++) {
       final item = tasks[i];
       final chunk = index.chunks[i];
-      if (item.chunkId != chunk.id || item.sha256Text != chunk.sha256Text ||
-          _sha(chunk.text) != chunk.sha256Text) {
+      if (item.chunkId != chunk.id || item.sha256Text != chunk.sha256Text) {
         throw const FormatException('Изменён исходный фрагмент');
       }
     }
@@ -278,6 +277,7 @@ class SemanticReviewSession {
           index, item,
           allowedChunkIds: {item.chunkId},
           categories: _categories,
+          sourceChunk: chunks[item.chunkId],
         );
         candidates.add(item);
       }
