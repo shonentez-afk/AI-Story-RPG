@@ -83,7 +83,9 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('Настройки'));
     await tester.pumpAndSettle();
-    expect(find.text('0.1.0 · BookWorld · тестовая версия'), findsOneWidget);
+    expect(find.textContaining('локальный анализ книг (M2b3c)'), findsOneWidget);
+    expect(find.text('Подготовка и анализ книг'), findsOneWidget);
+    expect(find.textContaining('Автоматическое создание'), findsOneWidget);
     await tester.tap(find.text('Мои прохождения'));
     await tester.pumpAndSettle();
     expect(find.text('Импортировать .bwsave'), findsOneWidget);
