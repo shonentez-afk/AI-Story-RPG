@@ -42,8 +42,10 @@ class BookImporter {
       );
     }
     if (ext == 'txt') {
-      final body = text.replaceFirst('\ufeff', '').trim();
-      if (body.isEmpty) throw const FormatException('Файл пуст');
+      // Preserve all user-authored whitespace for exact TXT source ranges.
+      // Strip only the UTF-8 BOM, which is an encoding marker, not content.
+      final body = text.startsWith('\ufeff') ? text.substring(1) : text;
+      if (body.trim().isEmpty) throw const FormatException('Файл пуст');
       return ImportedBook(
         title: filename.replaceFirst(RegExp(r'\.[^.]+$'), ''),
         author: '',
