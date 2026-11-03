@@ -31,10 +31,27 @@ class _ZaiSemanticPreviewPageState extends State<ZaiSemanticPreviewPage> {
   int _position = 0;
   bool _busy = false;
   bool _confirming = false;
+  ZaiPreviewCancellation? _cancellation;
+  String? _progress;
   ZaiSemanticPreviewResult? _result;
   String? _error;
 
   SourceChunk get _chunk => widget.index.chunks[_position];
+
+  @override
+  void dispose() {
+    // Leaving the preview revokes permission for ALL not-yet-sent retries.
+    _cancellation?.cancel();
+    super.dispose();
+  }
+
+  void _stopRetries() {
+    _cancellation?.cancel();
+    if (mounted) {
+      setState(() => _progress =
+          'Остановка запрошена. Новых попыток отправки не будет.');
+    }
+  }
 
   void _move(int direction) {
     if (_busy || _confirming) return;
@@ -44,6 +61,7 @@ class _ZaiSemanticPreviewPageState extends State<ZaiSemanticPreviewPage> {
       _position = next;
       _result = null;
       _error = null;
+      _progress = null;
     });
   }
 
@@ -66,7 +84,13 @@ class _ZaiSemanticPreviewPageState extends State<ZaiSemanticPreviewPage> {
                 const Text('Будет отправлен только приведённый ниже текст. '
                     'Ключ передаётся Z.ai для авторизации. '
                     'Никакие остальные главы, автор, библиотека, '
-                    'NPC или игровые сохранения не отправляются.'),
+                    'NPC или игровые сохранения не отправляются. '
+                    'При временном сбое соединения, HTTP 429 или ошибке '
+                    'сервера разрешены до двух автоматических повторов '
+                    'ТОГО ЖЕ фрагмента (всего не более трёх попыток). '
+                    'Модель может получить одинаковый текст повторно, '
+                    'если предыдущий ответ потерялся. '
+                    'Повторы можно остановить; другие главы не передаются.'),
                 const SizedBox(height: 12),
                 Text('Глава ' + (chunk.chapterIndex + 1).toString() +
                     ' · ' + utf8.encode(chunk.text).length.toString() +
@@ -84,8 +108,9 @@ class _ZaiSemanticPreviewPageState extends State<ZaiSemanticPreviewPage> {
                   contentPadding: EdgeInsets.zero,
                   onChanged: (value) =>
                       setDialogState(() => checked = value == true),
-                  title: const Text('Разрешаю однократную отправку '
-                      'именно этого текста на Z.ai'),
+                  title: const Text('Разрешаю отправку именно этого '
+                      'фрагмента в Z.ai с максимум двумя '
+                      'автоматическими повторами при временных ошибках'),
                 ),
               ],
             ),
@@ -127,8 +152,11 @@ class _ZaiSemanticPreviewPageState extends State<ZaiSemanticPreviewPage> {
       if (mounted) setState(() => _confirming = false);
     }
     if (!approved || !mounted) return;
+    final cancellation = ZaiPreviewCancellation();
     setState(() {
       _busy = true;
+      _cancellation = cancellation;
+      _progress = null;
       _result = null;
       _error = null;
     });
@@ -137,6 +165,12 @@ class _ZaiSemanticPreviewPageState extends State<ZaiSemanticPreviewPage> {
         index: widget.index,
         chunk: chunk,
         consentForThisChunk: true,
+        cancellation: cancellation,
+        onProgress: (attempt, total, status) {
+          if (mounted && _cancellation == cancellation) {
+            setState(() => _progress = status);
+          }
+        },
       );
       if (mounted && _chunk.id == chunk.id) {
         setState(() => _result = result);
@@ -148,7 +182,13 @@ class _ZaiSemanticPreviewPageState extends State<ZaiSemanticPreviewPage> {
           'Предпросмотр не завершён. '
           'Исходная книга, редакторы и сохранения не изменены.');
     } finally {
-      if (mounted) setState(() => _busy = false);
+      if (mounted) {
+        setState(() {
+          _busy = false;
+          _progress = null;
+          _cancellation = null;
+        });
+      }
     }
   }
 
@@ -163,7 +203,20 @@ class _ZaiSemanticPreviewPageState extends State<ZaiSemanticPreviewPage> {
     final scheme = Theme.of(context).colorScheme;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Предложения ИИ по цитатам')),
+      appBar: AppBar(
+        title: const Text('Предложения ИИ по цитатам'),
+        actions: [
+          if (_busy)
+            IconButton(
+              key: const Key('zai-cancel-retries'),
+              tooltip: 'Остановить дальнейшие попытки',
+              onPressed: _cancellation == null ||
+                      _cancellation!.isCancelled
+                  ? null : _stopRetries,
+              icon: const Icon(Icons.stop_circle_outlined),
+            ),
+        ],
+      ),
       body: SafeArea(
         child: Center(
           child: ConstrainedBox(
@@ -178,15 +231,17 @@ class _ZaiSemanticPreviewPageState extends State<ZaiSemanticPreviewPage> {
                     'ИИ предлагает имена, места, события и факты '
                     'по одному выбранному фрагменту. '
                     'Результат не сохраняется, не подтверждает канон '
-                    'и не создаёт RPG. Для каждой отправки '
-                    'требуется новое согласие.'),
+                    'и не создаёт RPG. Для каждого выбранного '
+                    'фрагмента требуется новое согласие; '
+                    'после временной ошибки возможны до двух повторов '
+                    'без нового подтверждения.'),
                 const SizedBox(height: 16),
                 Row(
                   children: [
                     IconButton(
                       key: const Key('zai-previous-chunk'),
                       tooltip: 'Предыдущий фрагмент',
-                      onPressed: !_busy && _position > 0
+                      onPressed: !_busy && !_confirming && _position > 0
                           ? () => _move(-1) : null,
                       icon: const Icon(Icons.chevron_left),
                     ),
@@ -201,7 +256,8 @@ class _ZaiSemanticPreviewPageState extends State<ZaiSemanticPreviewPage> {
                     IconButton(
                       key: const Key('zai-next-chunk'),
                       tooltip: 'Следующий фрагмент',
-                      onPressed: !_busy && _position + 1 < chunks.length
+                      onPressed: !_busy && !_confirming &&
+                              _position + 1 < chunks.length
                           ? () => _move(1) : null,
                       icon: const Icon(Icons.chevron_right),
                     ),
@@ -233,8 +289,14 @@ class _ZaiSemanticPreviewPageState extends State<ZaiSemanticPreviewPage> {
                 if (_busy) ...[
                   const SizedBox(height: 16),
                   const LinearProgressIndicator(),
-                  const Text('Анализируем один фрагмент. '
-                      'Никакие файлы не изменяются.'),
+                  Text(
+                    _progress ?? 'Ожидаем ответ GLM-4.7-Flash…',
+                    key: const Key('zai-retry-status'),
+                  ),
+                  const Text('Анализируется только выбранный фрагмент. '
+                      'Книги, RPG и сохранения не изменяются.'),
+                  const Text('Остановить новые попытки можно значком '
+                      '«Стоп» в верхней панели.'),
                 ],
                 if (_error != null) ...[
                   const SizedBox(height: 14),

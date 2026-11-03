@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -28,6 +29,9 @@ class _Network implements AiHttpTransport {
   String? body;
   String? finishReason = 'stop';
   List<dynamic> suggestions = [];
+  final List<Object> scriptedReplies = [];
+  final List<String> sentBodies = [];
+  final List<Uri> sentUris = [];
 
   @override
   Future<AiHttpResponse> send({
@@ -39,6 +43,13 @@ class _Network implements AiHttpTransport {
     this.uri = uri;
     this.headers = headers;
     this.body = body;
+    sentBodies.add(body);
+    sentUris.add(uri);
+    if (scriptedReplies.isNotEmpty) {
+      final reply = scriptedReplies.removeAt(0);
+      if (reply is AiHttpResponse) return reply;
+      throw reply;
+    }
     return AiHttpResponse(status, jsonEncode({
       'choices': [
         {
@@ -65,6 +76,7 @@ void main() {
   late _Vault vault;
   late AiCloudPreferences preferences;
   late ZaiSemanticPreviewService service;
+  late List<Duration> waits;
 
   setUp(() async {
     SharedPreferences.setMockInitialValues({'saved_game': 'DO-NOT-CHANGE'});
@@ -72,8 +84,10 @@ void main() {
     network = _Network();
     vault = _Vault();
     preferences = AiCloudPreferences();
+    waits = [];
     service = ZaiSemanticPreviewService(
       preferences: preferences, vault: vault, transport: network,
+      retryWait: (duration) async { waits.add(duration); },
     );
   });
 
@@ -194,7 +208,8 @@ void main() {
           consentForThisChunk: true),
       throwsA(isA<AiSetupException>()),
     );
-    expect(network.calls, 1);
+    expect(network.calls, ZaiSemanticPreviewService.maxAttempts);
+    expect(waits, [const Duration(seconds: 5), const Duration(seconds: 15)]);
     network.status = 200;
     network.finishReason = 'length';
     await expectLater(
@@ -223,8 +238,165 @@ void main() {
           consentForThisChunk: true),
       throwsA(isA<AiSetupException>()),
     );
-    expect(network.calls, 5);
+    expect(network.calls, 7);
     expect((await SharedPreferences.getInstance())
         .getString('saved_game'), 'DO-NOT-CHANGE');
   });
+  test('429 is retried automatically using the same approved excerpt',
+      () async {
+    await preferences.setEnabled(true);
+    network.scriptedReplies.addAll([
+      const AiHttpResponse(429,
+          '{"error":{"code":"1302","message":"rate limit"}}',
+          retryAfter: '7'),
+      AiHttpResponse(200, jsonEncode({
+        'choices': [{
+          'finish_reason': 'stop',
+          'message': {'content': jsonEncode({'candidates': []})},
+        }],
+      })),
+    ]);
+    final messages = <String>[];
+    final result = await service.preview(
+      index: index,
+      chunk: index.chunks.first,
+      consentForThisChunk: true,
+      onProgress: (attempt, total, message) => messages.add(message),
+    );
+    expect(result.batch.candidates, isEmpty);
+    expect(network.calls, 2);
+    expect(waits, [const Duration(seconds: 7)]);
+    expect(network.sentBodies[0], network.sentBodies[1]);
+    expect(network.sentUris, everyElement(ZaiModel.endpoint));
+    expect(messages.any((s) => s.contains('429')), isTrue);
+    expect(messages.any((s) => s.contains('попытка 2 из 3')), isTrue);
+  });
+
+  test('broken connection and timeout use bounded retries, not a new '
+      'consent dialog', () async {
+    await preferences.setEnabled(true);
+    network.scriptedReplies.addAll([
+      const AiTransientConnectionException('synthetic socket failure'),
+      TimeoutException('synthetic deadline'),
+      AiHttpResponse(200, jsonEncode({
+        'choices': [{
+          'finish_reason': 'stop',
+          'message': {'content': jsonEncode({'candidates': []})},
+        }],
+      })),
+    ]);
+    final result = await service.preview(
+      index: index, chunk: index.chunks.first,
+      consentForThisChunk: true,
+    );
+    expect(result.batch.candidates, isEmpty);
+    expect(network.calls, 3);
+    expect(waits, [
+      const Duration(seconds: 3),
+      const Duration(seconds: 8),
+    ]);
+    expect(network.sentBodies[0], network.sentBodies[1]);
+    expect(network.sentBodies[1], network.sentBodies[2]);
+  });
+
+  test('account quota 1113 and 1310 never trigger automatic retries',
+      () async {
+    await preferences.setEnabled(true);
+    for (final code in [1113, 1308, 1310, 1321]) {
+      network.calls = 0;
+      network.status = 429;
+      network.scriptedReplies.add(AiHttpResponse(
+        429, jsonEncode({'error': {'code': '$code', 'message': 'secret'}}),
+      ));
+      await expectLater(
+        service.preview(index: index, chunk: index.chunks.first,
+            consentForThisChunk: true),
+        throwsA(isA<AiSetupException>()),
+      );
+      expect(network.calls, 1);
+    }
+    expect(waits, isEmpty);
+  });
+
+  test('long Retry-After cannot trigger an early retry', () async {
+    await preferences.setEnabled(true);
+    network.scriptedReplies.add(const AiHttpResponse(429,
+      '{"error":{"code":"1305"}}', retryAfter: '3600'));
+    await expectLater(
+      service.preview(index: index, chunk: index.chunks.first,
+          consentForThisChunk: true),
+      throwsA(isA<AiSetupException>()),
+    );
+    expect(network.calls, 1);
+    expect(waits, isEmpty);
+  });
+
+  test('cancel during 429 backoff forbids all unsent retries', () async {
+    await preferences.setEnabled(true);
+    final token = ZaiPreviewCancellation();
+    final cancellingService = ZaiSemanticPreviewService(
+      preferences: preferences, vault: vault, transport: network,
+      retryWait: (delay) async { token.cancel(); },
+    );
+    network.scriptedReplies.add(
+      const AiHttpResponse(429, '{"error":{"code":"1302"}}'),
+    );
+    await expectLater(
+      cancellingService.preview(index: index, chunk: index.chunks.first,
+        consentForThisChunk: true, cancellation: token),
+      throwsA(isA<AiSetupException>()),
+    );
+    expect(network.calls, 1);
+    expect(await preferences.isEnabled(), isTrue);
+    expect((await SharedPreferences.getInstance())
+        .getString('saved_game'), 'DO-NOT-CHANGE');
+  });
+
+  test('non-retryable TLS, invalid token, malformed model JSON and 400 '
+      'must fail with one request', () async {
+    await preferences.setEnabled(true);
+    for (final response in <Object>[
+      const AiSetupException('TLS certificate error'),
+      const AiHttpResponse(401, '{"error":{"code":"1000"}}'),
+      const AiHttpResponse(400, '{"error":{"code":"1214"}}'),
+      const AiHttpResponse(200, '{"choices":[]}')
+    ]) {
+      network.calls = 0;
+      network.scriptedReplies.add(response);
+      await expectLater(
+        service.preview(index: index, chunk: index.chunks.first,
+            consentForThisChunk: true),
+        throwsA(isA<AiSetupException>()),
+      );
+      expect(network.calls, 1);
+    }
+    expect(waits, isEmpty);
+  });
+
+  test('generic narrator opening is not an RPG event even if quote matches',
+      () async {
+    SharedPreferences.setMockInitialValues({});
+    await preferences.setEnabled(true);
+    final opener = BookSourceIndexer.index(const ImportedBook(
+      title: 'Начало', author: 'Автор',
+      chapters: ['Послушаем же, как было дело.'],
+    ));
+    network.suggestions = [
+      {
+        'category': 'event',
+        'quote': 'Послушаем же, как было дело.',
+        'label': 'Start of the story',
+        'uncertainty': 'Generic opening line',
+      },
+    ];
+    final result = await service.preview(
+      index: opener, chunk: opener.chunks.first,
+      consentForThisChunk: true,
+    );
+    expect(result.totalSuggestions, 1);
+    expect(result.rejectedCount, 1);
+    expect(result.batch.candidates, isEmpty);
+  });
+
+
 }

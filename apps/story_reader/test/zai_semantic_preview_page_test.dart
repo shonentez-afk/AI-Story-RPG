@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -22,12 +23,17 @@ class _Vault implements AiApiKeyVault {
 
 class _Network implements AiHttpTransport {
   int calls = 0;
+  int rateLimitsRemaining = 0;
   @override
   Future<AiHttpResponse> send({
     required Uri uri, required Map<String, String> headers,
     required String body,
   }) async {
     calls++;
+    if (rateLimitsRemaining > 0) {
+      rateLimitsRemaining--;
+      return const AiHttpResponse(429, '{"error":{"code":"1302"}}');
+    }
     return AiHttpResponse(200, jsonEncode({
       'choices': [
         {
@@ -141,4 +147,85 @@ void main() {
     expect(find.byKey(const Key('zai-send-single-chunk')), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets('one consent covers exactly one transient retry without '
+      'reopening the permission dialog', (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    final preferences = AiCloudPreferences();
+    await preferences.setEnabled(true);
+    final network = _Network()..rateLimitsRemaining = 1;
+    final waits = <Duration>[];
+    final service = ZaiSemanticPreviewService(
+      preferences: preferences,
+      vault: _Vault(),
+      transport: network,
+      retryWait: (delay) async { waits.add(delay); },
+    );
+    await tester.pumpWidget(MaterialApp(home: ZaiSemanticPreviewPage(
+      index: BookSourceIndexer.index(sample),
+      service: service,
+    )));
+    await tester.pumpAndSettle();
+    final send = find.byKey(const Key('zai-send-single-chunk'));
+    await tester.scrollUntilVisible(send, 140,
+        scrollable: find.byType(Scrollable).first);
+    await tester.tap(send);
+    await tester.pumpAndSettle();
+    expect(find.textContaining('автоматическими повторами'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('zai-consent-exact-checkbox')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('zai-consent-confirm')));
+    await tester.pumpAndSettle();
+    expect(network.calls, 2);
+    expect(waits, [const Duration(seconds: 5)]);
+    expect(find.text('Передать этот фрагмент в Z.ai?'), findsNothing);
+    await tester.scrollUntilVisible(find.text('Имя Анна'), 130,
+        scrollable: find.byType(Scrollable).first);
+    expect(find.text('Имя Анна'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('cancel retries after rate limit blocks second transmission',
+      (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    final preferences = AiCloudPreferences();
+    await preferences.setEnabled(true);
+    final network = _Network()..rateLimitsRemaining = 2;
+    final pendingWait = Completer<void>();
+    final service = ZaiSemanticPreviewService(
+      preferences: preferences,
+      vault: _Vault(),
+      transport: network,
+      retryWait: (delay) => pendingWait.future,
+    );
+    await tester.pumpWidget(MaterialApp(home: ZaiSemanticPreviewPage(
+      index: BookSourceIndexer.index(sample),
+      service: service,
+    )));
+    await tester.pumpAndSettle();
+    final send = find.byKey(const Key('zai-send-single-chunk'));
+    await tester.scrollUntilVisible(send, 140,
+        scrollable: find.byType(Scrollable).first);
+    await tester.tap(send);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('zai-consent-exact-checkbox')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('zai-consent-confirm')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(network.calls, 1);
+    // Stop is pinned to the app bar, even if a long source excerpt pushes
+    // the result and status cards below the viewport.
+    final cancel = find.byKey(const Key('zai-cancel-retries'));
+    expect(tester.widget<IconButton>(cancel).onPressed, isNotNull);
+    await tester.tap(cancel);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(network.calls, 1);
+    await tester.scrollUntilVisible(find.byKey(const Key('zai-preview-error')),
+        130, scrollable: find.byType(Scrollable).first);
+    expect(find.textContaining('отменена'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
 }
