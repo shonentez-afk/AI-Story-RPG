@@ -84,7 +84,7 @@ class SourceNarrativeExtractor {
       r'фрейлина|фрейлины|королева|король|царь|царица|'
       r'солдат|сапожник|мельник|купец)';
   static final RegExp _roleMention = RegExp(
-    '(?:^|[\\s.!?«(—-])($_role)(?=$|[\\s.,!?»):—-])',
+    '(?:^|[\\s.!?«(—-])($_role)(?=\$|[\\s.,!?»):—-])',
     unicode: true, caseSensitive: false,
   );
 
@@ -97,7 +97,7 @@ class SourceNarrativeExtractor {
       r'закрыл|закрыла|взял|взяла|спросил|спросила|позвал|позвала)';
   static final RegExp _roleEvent = RegExp(
     '(?:^|[\\s.!?«(—-])($_role\\s+$_roleVerb\\s+[А-ЯЁа-яё-]{2,36})'
-    '(?=$|[\\s.,!?»):—-])',
+    '(?=\$|[\\s.,!?»):—-])',
     unicode: true, caseSensitive: false,
   );
   static final RegExp _roleEventParts = RegExp(
