@@ -127,30 +127,45 @@ void main() {
       home: BookReaderPage(book: book),
     ));
     await tester.pumpAndSettle();
+    // The active chapter title also stays mounted behind the modal sheet.
+    // Find only items INSIDE the TOC, otherwise the first chapter produces
+    // two valid Text widgets and an incorrect exactly-one assertion.
+    final toc = find.byType(BottomSheet);
+    Finder tocTitle(String title) => find.descendant(
+      of: toc, matching: find.text(title),
+    );
     await tester.tap(find.byTooltip('Оглавление'));
     await tester.pumpAndSettle();
-    expect(find.text('Рассказ первый'), findsOneWidget);
-    expect(find.text('Рассказ второй'), findsOneWidget);
+    expect(toc, findsOneWidget);
+    expect(tocTitle('Рассказ первый'), findsOneWidget);
+    expect(tocTitle('Рассказ второй'), findsOneWidget);
     await tester.scrollUntilVisible(
-      find.text('Рассказ седьмой'), 160,
-      scrollable: find.byType(Scrollable).last, maxScrolls: 25,
+      tocTitle('Рассказ седьмой'), 160,
+      scrollable: find.descendant(
+        of: toc, matching: find.byType(Scrollable),
+      ), maxScrolls: 25,
     );
     await tester.pumpAndSettle();
-    expect(find.text('Рассказ седьмой'), findsOneWidget);
-    await tester.tap(find.text('Рассказ седьмой'));
+    expect(tocTitle('Рассказ седьмой'), findsOneWidget);
+    await tester.tap(tocTitle('Рассказ седьмой'));
     await tester.pumpAndSettle();
+    expect(toc, findsNothing);
     expect(find.text('Глава 7 из 8'), findsOneWidget);
     expect(find.textContaining('События части 7'), findsOneWidget);
     expect(tester.takeException(), isNull);
 
     await tester.tap(find.byTooltip('Оглавление'));
     await tester.pumpAndSettle();
+    expect(toc, findsOneWidget);
     await tester.scrollUntilVisible(
-      find.text('Примечания'), 140,
-      scrollable: find.byType(Scrollable).last, maxScrolls: 25,
+      tocTitle('Примечания'), 140,
+      scrollable: find.descendant(
+        of: toc, matching: find.byType(Scrollable),
+      ), maxScrolls: 25,
     );
-    await tester.tap(find.text('Примечания'));
+    await tester.tap(tocTitle('Примечания'));
     await tester.pumpAndSettle();
+    expect(toc, findsNothing);
     expect(find.text('Глава 8 из 8'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
