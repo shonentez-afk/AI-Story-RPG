@@ -4,6 +4,10 @@ import 'package:crypto/crypto.dart';
 
 import 'book_source_index.dart';
 import 'intermediate_story_blueprint.dart';
+import 'npc_editorial_notebook.dart';
+import 'npc_knowledge_rulebook.dart';
+import 'npc_knowledge_world_bridge.dart';
+import 'source_character_dossiers.dart';
 import 'private_adaptation_preflight.dart';
 import 'source_evidence_graph.dart';
 import 'source_semantic_catalog.dart';
@@ -57,8 +61,11 @@ class PrivateClassicScenarioTranslator {
     SourceEvidenceGraph evidence,
     SourceSemanticCatalog catalog,
     SemanticEditorialReviewSession editorial,
-    IntermediateStoryBlueprint draft,
-  ) {
+    IntermediateStoryBlueprint draft, {
+    NpcKnowledgeRulebook? npcRules,
+    NpcEditorialNotebook? npcNotebook,
+    SourceCharacterDossierIndex? npcDossiers,
+  }) {
     final acceptance = PrivateAdaptationPreflight.evaluate(
         index, evidence, catalog, editorial, draft);
     if (!acceptance.isStructurallyReady ||
@@ -195,7 +202,26 @@ class PrivateClassicScenarioTranslator {
       'model_provenance': {'provider': 'none', 'model_id': null},
       'scene_origins': origins,
     };
+    var finalBlueprint = blueprint;
+    if (npcRules != null) {
+      if (npcNotebook == null || npcDossiers == null) {
+        throw const FormatException(
+            'Нельзя включить знания NPC без проверенных карточек');
+      }
+      if (npcRules.rules.isEmpty) {
+        throw const FormatException(
+            'Для включения NPC нужны явные правила знаний');
+      }
+      final npcPreview = NpcKnowledgeWorldBridge.preview(
+        index: index, dossiers: npcDossiers, graph: evidence,
+        catalog: catalog, editorial: editorial,
+        notebook: npcNotebook, scenario: draft, rulebook: npcRules,
+        originalBlueprint: blueprint,
+      );
+      finalBlueprint = npcPreview.blueprint;
+      provenance['bookworld_id'] = finalBlueprint['book_id'];
+    }
     return PrivateClassicScenarioTranslation._(
-        jsonEncode(blueprint), jsonEncode(provenance), acceptance);
+        jsonEncode(finalBlueprint), jsonEncode(provenance), acceptance);
   }
 }
