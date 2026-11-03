@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'book_source_index.dart';
 import 'intermediate_story_blueprint.dart';
 import 'multi_scene_draft_workbench.dart';
+import 'draft_scene_graph_panel.dart';
 import 'native_private_bookworld_compiler.dart';
 import 'private_adaptation_preflight.dart';
 import 'reviewed_story_editor_page.dart';
@@ -756,6 +757,15 @@ class _MultiSceneEditorPageState extends State<MultiSceneEditorPage> {
                         )
                       else ...[
                         const Divider(height: 24),
+                        DraftSceneGraphPanel(
+                          key: ValueKey('scene-graph-${draft.sourceFingerprint}'),
+                          index: widget.index,
+                          draft: draft,
+                          enabled: !_working,
+                          onSelectScene: (id) => setState(
+                              () => _selectedSceneId = id),
+                        ),
+                        const SizedBox(height: 12),
                         Text('Создание сцен',
                             style: Theme.of(context).textTheme.titleMedium),
                         const SizedBox(height: 6),
