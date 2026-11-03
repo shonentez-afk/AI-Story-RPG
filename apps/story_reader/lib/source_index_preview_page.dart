@@ -262,7 +262,10 @@ class _SourceIndexPreviewPageState extends State<SourceIndexPreviewPage> {
 
   Widget _offlinePreparationControls(BookSourceIndex index) {
     final progress = _offlineProgress;
-    final label = _offlineWorking ? 'Остановить после порции'
+    final label = _offlineWorking
+        ? (_offlinePause
+            ? 'Останавливаем после сохранения…'
+            : 'Остановить после порции')
         : _offlineMessage?.startsWith('Остановлено') == true
             ? 'Продолжить локальную подготовку'
             : 'Выполнить локальную подготовку';
@@ -283,7 +286,8 @@ class _SourceIndexPreviewPageState extends State<SourceIndexPreviewPage> {
             FilledButton.icon(
               key: const Key('prepare-offline-all'),
               onPressed: _offlineWorking
-                  ? () => setState(() => _offlinePause = true)
+                  ? (_offlinePause
+                      ? null : () => setState(() => _offlinePause = true))
                   : _busy || _loadingAnalysis || _analysis == null
                       ? null : _runLocalPreparation,
               icon: Icon(_offlineWorking
@@ -385,6 +389,12 @@ class _SourceIndexPreviewPageState extends State<SourceIndexPreviewPage> {
         _analysis = SourceAnalysisSession.create(index);
         _analysisError = null;
         _showCandidates = false;
+        _offlineProgress = null;
+        _offlinePause = false;
+        _offlineMessage = 'Поиск имён сброшен. Локальная подготовка '
+            'нуждается в повторном запуске. Проверка цитат и сценарные '
+            'черновики других этапов не удалены.';
+        _narrativeRefresh++;
       });
     } catch (error) {
       if (mounted) setState(() =>
@@ -424,34 +434,42 @@ class _SourceIndexPreviewPageState extends State<SourceIndexPreviewPage> {
             Text('Что делает подготовка?',
                 style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: 4),
-            const Text('В этой сборке проверяем текст, но '
-                'готовой игры из вашей книги ещё не создаём.'),
+            const Text('Сначала анализируем текст локально, затем вы '
+                'проверяете находки и вручную собираете сюжет. '
+                'Автоматической RPG по всей книге пока нет.'),
             const SizedBox(height: 6),
             Text('Текст разобран: ${index.chapterCount} разделов. '
                 'Поиск имён: $searchStatus.'),
             const SizedBox(height: 4),
-            const Text('Создать игровую историю — пока недоступно'),
+            const Text('Личная короткая или многосценная RPG собирается '
+                'в редакторах ниже после проверки источника и сценария. '
+                'Полная автоматическая адаптация книги пока недоступна.'),
             ExpansionTile(
               key: const Key('prepare-how-it-works'),
               tilePadding: EdgeInsets.zero,
-              title: const Text('Как это будет работать: 4 этапа'),
+              title: const Text('Маршрут подготовки: 5 шагов'),
               children: [
                 _preparationStep('1', 'Разобрать текст — готово',
                     'Найдены ${index.chapterCount} разделов и '
                     '${index.chunks.length} фрагментов. '
                     'Иллюстрации отдельно не анализируются.'),
                 const SizedBox(height: 8),
-                _preparationStep('2', 'Найти имена и места',
-                    'Локальный поиск по простым правилам, '
-                    'часть упоминаний может быть пропущена.'),
+                _preparationStep('2', 'Локально найти имена, цитаты и факты',
+                    'Нажмите «Выполнить локальную подготовку» выше. '
+                    'Сохранение выполняется порциями, ИИ не используется.'),
                 const SizedBox(height: 8),
                 _preparationStep('3', 'Проверить найденное',
                     'Можно вручную проверить имена, события, '
                     'предполагаемые связи и спорные цитаты.'),
                 const SizedBox(height: 8),
-                _preparationStep('4', 'Собрать игровую историю',
-                    'Сцены, действия, выбор героя и альтернативы '
-                    'появятся после создания сценарного компилятора.'),
+                _preparationStep('4', 'Создать и проверить сценарий',
+                    'Редакторы ниже позволяют вручную составить сцены, '
+                    'выборы, последствия и проверить причинные переходы.'),
+                const SizedBox(height: 8),
+                _preparationStep('5', 'Собрать личную RPG',
+                    'Локальный компилятор доступен для проверенного '
+                    'короткого или многосценного черновика. '
+                    'Для всей книги автоматической сборки нет.'),
                 const SizedBox(height: 8),
               ],
             ),
@@ -502,14 +520,14 @@ class _SourceIndexPreviewPageState extends State<SourceIndexPreviewPage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Шаг 2. Поиск имён персонажей и мест',
+        Text('Дополнительно: ручной поиск имён и мест',
             style: Theme.of(context).textTheme.titleMedium),
         const SizedBox(height: 6),
         const Text(
-          'Нажмите «Начать поиск», чтобы найти выражения вроде '
-          '«его звали …» и «в городе …». '
-          'Поиск не распознаёт всех героев и не понимает сюжет. '
-          'Найденные слова нужно проверить вручную.',
+          'Основная кнопка «Выполнить локальную подготовку» выше '
+          'уже включает этот поиск, цитаты и смысловые предложения. '
+          'Кнопка ниже нужна только для ручного запуска по 24 фрагмента. '
+          'Простые шаблоны не распознают всех персонажей и событий.',
         ),
         const SizedBox(height: 10),
         Wrap(
@@ -779,7 +797,7 @@ class _SourceIndexPreviewPageState extends State<SourceIndexPreviewPage> {
                             'Внутри есть раздел связей персонажей и хронологии.'),
                         const SizedBox(height: 10),
                         IgnorePointer(
-                          ignoring: _offlineWorking,
+                          ignoring: _offlineWorking || _busy,
                           child: SourceNarrativeReviewPanel(
                           key: ValueKey('${index.sourceFingerprint}-${_narrativeRefresh}'),
                           index: index,

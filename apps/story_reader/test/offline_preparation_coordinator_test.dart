@@ -176,6 +176,60 @@ void main() {
     expect(result.canPublishBookworld, false);
   });
 
+
+  testWidgets('reset names after complete pipeline clears stale success '
+      'without deleting later checkpoints or source book', (tester) async {
+    tester.view.physicalSize = const Size(900, 1700);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+    await tester.pumpWidget(MaterialApp(
+      home: SourceIndexPreviewPage(
+        book: book,
+        indexer: (b) async => BookSourceIndexer.index(b),
+        checkpointRepository: names,
+        checkpointEncoder: (value) async => value.encode(),
+        checkpointDecoder: (i, raw) async =>
+            SourceAnalysisSession.decode(i, raw),
+        batchProcessor: (i, value) async => value.processBatch(i),
+        localPreparationCoordinator: coordinator,
+      ),
+    ));
+    await tester.pumpAndSettle();
+
+    final all = find.byKey(const Key('prepare-offline-all'));
+    await tester.tap(all);
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Локальный анализ завершён'), findsOneWidget);
+    final fp = index.sourceFingerprint;
+    expect(await names.read(fp), isNotNull);
+    final narrativeBefore = await events.read(fp);
+    final semanticsBefore = await semantics.read(fp);
+    expect(narrativeBefore, isNotNull);
+    expect(semanticsBefore, isNotNull);
+
+    final reset = find.text('Сбросить поиск имён');
+    await tester.ensureVisible(reset);
+    await tester.pumpAndSettle();
+    await tester.tap(reset);
+    await tester.pumpAndSettle();
+    expect(find.text('Сбросить найденные имена и места?'), findsOneWidget);
+    // Confirm from the dialog, not the outlined button behind it.
+    await tester.tap(find.widgetWithText(
+        FilledButton, 'Сбросить поиск имён'));
+    await tester.pumpAndSettle();
+
+    expect(await names.read(fp), isNull);
+    expect(await events.read(fp), narrativeBefore);
+    expect(await semantics.read(fp), semanticsBefore);
+    expect(find.textContaining('Локальный анализ завершён'), findsNothing);
+    expect(find.textContaining('Поиск имён сброшен'), findsOneWidget);
+    expect(find.textContaining('Осталось фрагментов'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('main page offers one local action, not a playable RPG button',
       (tester) async {
     tester.view.physicalSize = const Size(900, 1600);
