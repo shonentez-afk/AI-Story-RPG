@@ -781,3 +781,11 @@
 - Дополнительно в `LibraryPage` закрыт двойной Navigator.push после повторного нажатия кнопок «Читать»/«Подготовить к RPG»: `_openingBook` до закрытия дочернего маршрута; тест двойного callback → один Back → вновь доступное чтение. Новый exact-head CI обязателен.
 
 - CI `41596927069` (head `8eaf009...`) Flutter FAIL (прочие Python/Dart/BookWorld/M0 PASS): новый тест 320dp/200% выявил production RenderFlex overflow **147px** на кнопке «Добавить выбор» в мультисценном редакторе; исправлена responsive раскладка. Тест double Prepare nav теперь снимает ровно один Navigator route программно и проверяет отсутствие дубля (test harness vs back hit test). Следующий exact-head CI обязателен.
+
+## 2026-11-03 — M2e5c2d: возврат из редакторов и актуализация подготовки (CODE / CI PENDING)
+
+- Зафиксированная база: `main` `08d8098eeadfd5d0db6d8508b418a36d890441e3`, PR #43 M2e5c2c MERGED; исходный tested HEAD `43ca8f09269cde780da7c3fa0ba3bc2c2eba8c57`, CI `41597610816` SUCCESS 6/6, M0 `41597610792` SUCCESS, Flutter 300 PASS / 2 private FB2 SKIP; release `test-build-364`. Физические Windows/Android E2E по 6 FB2 ещё PENDING.
+- GitHub объект `c0ae5aa36eaf` не доступен как commit/tree через API (422/404). Не объявлять его восстановленным или включённым в main. Новый патч выполнен на актуальном коде без cherry-pick.
+- Ветка `fix/m2e5c2d-editor-return-refresh-20261103`: `SourceIndexPreviewPage._openEditor` сериализует навигацию в расширенный редактор, короткий и многосценный сценарий; после возврата инвалидирует key `SourceNarrativeReviewPanel`, пересоздаёт `PrivateGameReadinessPanel` и вызывает новый checkOnOpen только после редактора. Не сбрасываются sourceFingerprint, тексты, mentions, scope checkpoints, SQLite/.bwsave.
+- Добавлен `apps/story_reader/test/editor_return_refresh_test.dart`: для трёх маршрутов проверяет возвращение одним pop, обновление обоих ключей и сохранение names checkpoint. **CODE ONLY**: Flutter SDK в текущем рабочем окружении отсутствует, локальный analyze/test не выполнялся, GitHub Actions exact-head пока не подтверждён. Не мержить до PASS.
+- Дальше: exact-head CI Python/Dart/BookWorld/Flutter widgets/Windows/Android и M0; исправить любые выявленные проблемы теста или сборки; после PASS принять PR. Затем device E2E кнопок, FB2, 320dp/200%, отмены/ошибки/сохранения и только затем M2f BYOK/consent/security. Live AI OFF.
