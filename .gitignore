@@ -75,3 +75,7 @@ key.properties
 *.fb2.zip
 *.epub
 *.bwsave
+
+# Generated public-domain Grimm CI corpus: ephemeral only, never publish
+apps/story_reader/test/fixtures/grimm_ci.json
+apps/story_reader/test/fixtures/grimm_ci.fb2

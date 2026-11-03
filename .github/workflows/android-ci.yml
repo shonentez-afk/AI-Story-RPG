@@ -170,7 +170,17 @@ jobs:
           mkdir -p artifacts/bookworld
           python3 tools/bookworld/bookworld.py build --blueprint shared_schemas/fixtures/manor_world_m17.json --output artifacts/bookworld/manor_m17_original_demo.bworld
           python3 tools/bookworld/bookworld.py verify --input artifacts/bookworld/manor_m17_original_demo.bworld
+      - name: Build real COMPLETE public-domain Grimm FB2 (62 tales)
+        # Full original text is fetched only by CI and stays in the runner.
+        # Never silently SKIP or replace a failed download with fake text.
+        run: |
+          python3 tools/build_grimm_public_domain_fb2.py \
+            --output apps/story_reader/test/fixtures/grimm_ci.fb2 \
+            --manifest apps/story_reader/test/fixtures/grimm_ci.json
       - name: Widget tests
+        env:
+          AI_RPG_GRIMM_PUBLIC_FB2_PATH: test/fixtures/grimm_ci.fb2
+          AI_RPG_GRIMM_PUBLIC_MANIFEST_PATH: test/fixtures/grimm_ci.json
         timeout-minutes: 5
         # A widget test blocked on a Future can ignore the Dart test-zone
         # timeout. Stop the external test process rather than consuming a
