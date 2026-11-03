@@ -721,3 +721,11 @@ Run `41332360623` (SHA `ef004a4`): Python/Dart/analyze PASS, Flutter FAIL из-�
 - **Не выдавать CODE за PASS**: до завершения точного CI на актуальном HEAD PR #44 и M0 статус CODE / QA PENDING. Physical E2E по 6 личным FB2/Windows/Android/TalkBack/file picker всё ещё DEVICE PENDING. После PASS и принятия PR обновить данный handoff и `docs/STATUS_RU.md` проверенным SHA/runs, затем M2f; live AI OFF.
 
 - В финальном программном UX-проходе дополнительно исправлена **повторная Пауза** `SourceNarrativeReviewPanel`: после запроса остановки повторное нажатие блокируется до записи порции. Добавлен виджет-тест с управляемым незавершённым Future: одна сохранённая порция, без второго worker-запуска. Включить этот тест в итоговую проверку exact HEAD; подробности `docs/M2E5C2D_FINAL_UX_QA_RU.md`.
+
+## 2026-11-03 — M2e5c2d ПРИНЯТ: итоговый программный UX/UI-проход
+
+- **PR #44 MERGED**, squash main `90b2a2768e84f7e3716a1e2dd56a36e26e191c25`. Exact проверенный HEAD ветки `f65746fa3c0803a77f0b46d93ac0a3cfd7a681f2`.
+- GitHub Actions **`41602688284` COMPLETED/SUCCESS, 6/6**: Python reference PASS, Dart engine PASS, BookWorld/schema/SQLite PASS, Flutter analyze + **303 widget PASS / 2 private FB2 SKIP**, Windows portable PASS, Android debug APK PASS. Дополнительный M0 `41602688049` **COMPLETED/SUCCESS** на том же HEAD.
+- Фактически устранены устаревшие блоки проверки после возврата из трёх редакторов, двойная навигация, ложная действительность старых `canonCandidate` после сброса цитат и повторная кнопка «Пауза» до сохранения порции. Новые регрессии проходят вместе со всем принятом набором.
+- **Ручные Windows/Android E2E с 6 личными FB2 (семь рассказов «Снежной королевы» и примечания), OS FilePicker, 320dp/200%, TalkBack, клавиатура и длительное прохождение — DEVICE PENDING.** CI-бинарники не являются физической приёмкой; приватные книги не загружались в публичный репозиторий. Матрица в `docs/M2E5C2D_FINAL_UX_QA_RU.md`.
+- **NEXT:** проверка post-merge main CI/публикации test-release, затем этап **M2f — согласие, BYOK, безопасные ключи и локальные/облачные ИИ-провайдеры**. Live AI по умолчанию OFF. Не перезаписывать и не удалять старые книги, checkpoints, SQLite или `.bwsave`.
