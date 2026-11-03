@@ -24,6 +24,7 @@ enum SourceCheckpointScope {
   semanticEditorial,
   intermediateDraft,
   multiSceneDraft,
+  npcEditorial,
 }
 
 /// Private app-support storage shared by Android and Windows.
@@ -50,6 +51,7 @@ class FileSourceAnalysisCheckpointRepository
   static const _editorialFolder = 'ai_story_semantic_editorial_m2c_v1';
   static const _draftFolder = 'ai_story_intermediate_draft_m2c_v1';
   static const _multiSceneFolder = 'ai_story_multiscene_draft_m2e5a_v1';
+  static const _npcFolder = 'ai_story_npc_editorial_m2e5b2_v1';
 
   static void _checkFingerprint(String fingerprint) {
     if (!_validFingerprint.hasMatch(fingerprint)) {
@@ -69,6 +71,7 @@ class FileSourceAnalysisCheckpointRepository
       SourceCheckpointScope.semanticEditorial => _editorialFolder,
       SourceCheckpointScope.intermediateDraft => _draftFolder,
       SourceCheckpointScope.multiSceneDraft => _multiSceneFolder,
+      SourceCheckpointScope.npcEditorial => _npcFolder,
     };
     final folder = Directory('${base.path}/$name');
     if (!await folder.exists()) await folder.create(recursive: true);
