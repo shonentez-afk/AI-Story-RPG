@@ -239,6 +239,35 @@ class PrivateBookworldImporter {
         blueprint.initial.flags.length > 32) {
       throw const FormatException('Небезопасный размер частного сценария');
     }
+    // Strict private opt-in: only opaque, typed actor/fact catalogs.
+    // Knowledge conditions remain unsupported, preserving exhaustive
+    // flag-state causality independent of monotonic knowledge effects.
+    final npcId = RegExp(r'^npc_[a-f0-9]{20}$');
+    final factId = RegExp(r'^fact_[a-f0-9]{24}$');
+    final hasKnowledge = blueprint.facts.isNotEmpty ||
+        blueprint.actors.length > 1;
+    var declaredEffects = 0;
+    for (final scene in blueprint.scenes.values) {
+      for (final choice in scene.choices) {
+        for (final effect in choice.effects) {
+          if (effect.op == 'learn_fact') declaredEffects++;
+        }
+      }
+    }
+    if (hasKnowledge &&
+        (blueprint.actors.any((id) =>
+            id != 'player' && !npcId.hasMatch(id)) ||
+        blueprint.facts.isEmpty ||
+        blueprint.facts.length > 128 || declaredEffects > 128 ||
+        blueprint.facts.any((id) => !factId.hasMatch(id)) ||
+        blueprint.initial.knowledge.keys.toSet()
+            .difference(blueprint.actors).isNotEmpty ||
+        blueprint.actors.difference(
+            blueprint.initial.knowledge.keys.toSet()).isNotEmpty ||
+        blueprint.initial.knowledge.values.any((known) => known.isNotEmpty))) {
+      throw const FormatException('Недопустимый каталог знаний частной RPG');
+    }
+    final learnedFacts = <String>{};
     final flags = blueprint.initial.flags.keys.toList()..sort();
     final bitByName = <String, int>{
       for (var i = 0; i < flags.length; i++) flags[i]: 1 << i,
@@ -289,6 +318,21 @@ class PrivateBookworldImporter {
         choicesAvailable++;
         var nextBits = state.$2;
         for (final effect in choice.effects) {
+          if (effect.op == 'learn_fact') {
+            // The type is checked again by story_core; player/NPC facts can
+            // only change AFTER an accepted, replayable game choice.
+            if (!hasKnowledge || effect.id == null ||
+                effect.actor == null ||
+                !factId.hasMatch(effect.id!) ||
+                (effect.actor != 'player' &&
+                    !npcId.hasMatch(effect.actor!)) ||
+                !blueprint.facts.contains(effect.id) ||
+                !blueprint.actors.contains(effect.actor)) {
+              throw const FormatException('Недопустимое правило знания NPC');
+            }
+            learnedFacts.add(effect.id!);
+            continue;
+          }
           if (effect.op != 'set_flag' ||
               effect.id == null || effect.value == null ||
               !bitByName.containsKey(effect.id)) {
@@ -309,6 +353,11 @@ class PrivateBookworldImporter {
       if (choicesAvailable == 0) {
         throw const FormatException('Есть игровой тупик без доступных действий');
       }
+    }
+    if (hasKnowledge && (learnedFacts.length != blueprint.facts.length ||
+        !learnedFacts.containsAll(blueprint.facts))) {
+      throw const FormatException(
+          'Факт NPC не связан с достижимым игровым переходом');
     }
     if (endings.length < 2 || seenScenes.length != blueprint.scenes.length) {
       throw const FormatException('Недоступные сцены или альтернативные финалы');

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'book_isolate_workers.dart';
 import 'book_source_index.dart';
 import 'npc_editorial_notebook.dart';
+import 'npc_knowledge_rules_page.dart';
 import 'npc_continuity_audit.dart';
 import 'npc_continuity_panel.dart';
 import 'intermediate_story_blueprint.dart';
@@ -33,6 +34,7 @@ class NpcEditorialPage extends StatefulWidget {
     this.relationsRepository,
     this.notebookRepository,
     this.multiDraftRepository,
+    this.knowledgeRulesRepository,
     this.sessionBuilder,
     this.sessionDecoder,
     this.dossierBuilder,
@@ -45,6 +47,7 @@ class NpcEditorialPage extends StatefulWidget {
   final SourceAnalysisCheckpointRepository? relationsRepository;
   final SourceAnalysisCheckpointRepository? notebookRepository;
   final SourceAnalysisCheckpointRepository? multiDraftRepository;
+  final SourceAnalysisCheckpointRepository? knowledgeRulesRepository;
   final Future<SourceRelationReviewSession> Function(
       BookSourceIndex, SourceEvidenceGraph)? sessionBuilder;
   final Future<SourceRelationReviewSession> Function(
@@ -685,6 +688,29 @@ class _NpcEditorialPageState extends State<NpcEditorialPage> {
                         icon: const Icon(Icons.refresh),
                         label: const Text('Перепроверить NPC и сценарий'),
                       ),
+                      if (_scenario != null && notebook.profiles.isNotEmpty)
+                        OutlinedButton.icon(
+                          key: const Key('npc-open-knowledge-rules'),
+                          onPressed: _busy ? null : () async {
+                            await Navigator.of(context).push<void>(
+                              MaterialPageRoute(
+                                builder: (_) => NpcKnowledgeRulesPage(
+                                  index: widget.index,
+                                  dossiers: index,
+                                  graph: widget.graph,
+                                  catalog: widget.catalog,
+                                  editorial: widget.editorial,
+                                  notebook: notebook,
+                                  scenario: _scenario!,
+                                  repository: widget.knowledgeRulesRepository,
+                                ),
+                              ),
+                            );
+                            if (mounted) await _load();
+                          },
+                          icon: const Icon(Icons.psychology_outlined),
+                          label: const Text('Правила знаний и секретов'),
+                        ),
                       if (_continuity != null)
                         NpcContinuityPanel(
                           audit: _continuity!,

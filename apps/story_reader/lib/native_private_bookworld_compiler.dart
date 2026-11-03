@@ -3,6 +3,9 @@ import 'package:flutter/foundation.dart';
 
 import 'book_source_index.dart';
 import 'intermediate_story_blueprint.dart';
+import 'npc_editorial_notebook.dart';
+import 'npc_knowledge_rulebook.dart';
+import 'source_character_dossiers.dart';
 import 'private_classic_scenario_translator.dart';
 import 'source_evidence_graph.dart';
 import 'source_semantic_catalog.dart';
@@ -29,10 +32,15 @@ Future<Uint8List> compileReviewedPrivateBookworldInWorker(
   SourceEvidenceGraph evidence,
   SourceSemanticCatalog catalog,
   SemanticEditorialReviewSession editorial,
-  IntermediateStoryBlueprint draft,
-) async {
+  IntermediateStoryBlueprint draft, {
+  NpcKnowledgeRulebook? npcRules,
+  NpcEditorialNotebook? npcNotebook,
+  SourceCharacterDossierIndex? npcDossiers,
+}) async {
   final translation = PrivateClassicScenarioTranslator.translate(
-      index, evidence, catalog, editorial, draft);
+      index, evidence, catalog, editorial, draft,
+      npcRules: npcRules, npcNotebook: npcNotebook,
+      npcDossiers: npcDossiers);
   if (!translation.preflight.isStructurallyReady) {
     throw const FormatException('Не завершена проверка игрового сценария');
   }

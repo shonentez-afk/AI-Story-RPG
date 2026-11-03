@@ -88,4 +88,75 @@ void main() {
     corrupted[105] ^= 0xff;
     expect(() => importer.inspect(corrupted), throwsFormatException);
   });
+  test('bounded NPC learn_fact imports but knowledge conditions remain forbidden',
+      () {
+    final npc = 'npc_' + List.filled(20, 'a').join();
+    final fact = 'fact_' + List.filled(24, 'b').join();
+    Map<String, dynamic> enriched() {
+      final data = loadFixture();
+      final blueprint = data['blueprint'] as Map<String, dynamic>;
+      blueprint['actors'] = ['player', npc];
+      blueprint['facts'] = [fact];
+      final state = object(blueprint['initial_state']);
+      state['knowledge'] = {'player': <String>[], npc: <String>[]};
+      blueprint['initial_state'] = state;
+      final scene = (blueprint['scenes'] as List).first as Map;
+      final choice = (scene['choices'] as List).first as Map;
+      (choice['effects'] as List).add(
+          {'op': 'learn_fact', 'id': fact, 'actor': npc});
+      return data;
+    }
+
+    final ok = enriched();
+    final package = writer.build(
+      blueprint: object(ok['blueprint']),
+      provenance: object(ok['provenance']),
+      sourceIndex: object(ok['source_index']),
+    );
+    final verified = importer.inspect(package);
+    expect(verified.blueprint.actors, contains(npc));
+    expect(verified.blueprint.facts, contains(fact));
+    expect(verified.blueprint.initial.knowledge[npc], isEmpty);
+
+    for (final invalid in <void Function(Map<String, dynamic>)>[
+      (data) {
+        final bp = data['blueprint'] as Map<String, dynamic>;
+        final state = object(bp['initial_state']);
+        state['knowledge'] = {'player': <String>[], npc: [fact]};
+        bp['initial_state'] = state;
+      },
+      (data) {
+        final bp = data['blueprint'] as Map<String, dynamic>;
+        bp['facts'] = ['plain_text'];
+        final scene = (bp['scenes'] as List).first as Map;
+        ((scene['choices'] as List).first as Map)['effects'] = [
+          {'op': 'learn_fact', 'id': 'plain_text', 'actor': npc},
+        ];
+      },
+      (data) {
+        final bp = data['blueprint'] as Map<String, dynamic>;
+        final scene = (bp['scenes'] as List).first as Map;
+        ((scene['choices'] as List).first as Map)['conditions'] = [
+          {'op': 'knows_fact', 'id': fact, 'actor': npc},
+        ];
+      },
+      (data) {
+        final bp = data['blueprint'] as Map<String, dynamic>;
+        final scene = (bp['scenes'] as List).first as Map;
+        ((scene['choices'] as List).first as Map)['effects'] = [
+          {'op': 'stat_delta', 'id': 'missing', 'amount': 1},
+        ];
+      },
+    ]) {
+      final data = enriched();
+      invalid(data);
+      expect(() => writer.build(
+        blueprint: object(data['blueprint']),
+        provenance: object(data['provenance']),
+        sourceIndex: object(data['source_index']),
+      ), throwsFormatException);
+    }
+  });
+
+
 }
