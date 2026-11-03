@@ -105,6 +105,12 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(submit);
     await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.text('Редакторских гипотез о связях: 1'), 150,
+      scrollable: find.byType(Scrollable).first,
+      maxScrolls: 40,
+    );
+    await tester.pumpAndSettle();
     expect(find.text('Редакторских гипотез о связях: 1'), findsOneWidget);
     final raw = await linksRepo.read(index.sourceFingerprint);
     expect(raw, isNotNull);
