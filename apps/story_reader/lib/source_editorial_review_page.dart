@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'book_source_index.dart';
 import 'source_analysis_checkpoint_repository.dart';
 import 'source_evidence_graph.dart';
+import 'source_character_dossier_panel.dart';
 import 'source_relations_review_panel.dart';
 import 'source_semantic_catalog.dart';
 import 'source_semantic_editorial_review.dart';
@@ -52,6 +53,7 @@ class _SourceEditorialReviewPageState extends State<SourceEditorialReviewPage> {
   bool _loading = true;
   bool _busy = false;
   bool _revealed = false;
+  int _relationRevision = 0;
   String? _error;
   String? _notice;
   String _search = '';
@@ -395,11 +397,23 @@ class _SourceEditorialReviewPageState extends State<SourceEditorialReviewPage> {
                               ],
                             ),
                           const SizedBox(height: 14),
+                          SourceCharacterDossierPanel(
+                            key: ValueKey('character-dossiers-${widget.index.sourceFingerprint}'),
+                            index: widget.index,
+                            graph: graph,
+                            catalog: catalog,
+                            editorial: editorial,
+                            checkpointRepository: widget.relationsRepository,
+                            refreshRevision: _relationRevision,
+                          ),
+                          const SizedBox(height: 14),
                           SourceRelationsReviewPanel(
                             key: ValueKey('relations-${widget.index.sourceFingerprint}'),
                             index: widget.index,
                             graph: graph,
                             checkpointRepository: widget.relationsRepository,
+                            onReviewSaved: () => setState(
+                                () => _relationRevision++),
                           ),
                         ],
                       ],
