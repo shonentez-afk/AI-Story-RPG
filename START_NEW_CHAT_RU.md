@@ -605,3 +605,10 @@ Run `41332360623` (SHA `ef004a4`): Python/Dart/analyze PASS, Flutter FAIL из-�
 - Тесты: 135 действий с хэшами/replay/подменой, строгий writer+importer, UI 320dp/200%, повреждённый checkpoint, отсутствие согласия, source-future; отчёт `docs/M2E5B3B1_NPC_KNOWLEDGE_RULES_RU.md`.
 - Физические Windows/Android E2E и длинное прохождение с реальным SQLite/`.bwsave` остаются **SKIP**, не PASS. Последний подтверждённый релиз перед merge — `test-build-332`; main CI с новым кодом `41577494842` запущен отдельно, не объявлять новый опубликованный релиз до завершения.
 - **Далее M2e5b3b2:** типизированные `knows_fact` условия в полностью проверяемом state-graph (не добавлять без нового causal proof), редактор взаимодействий и знаний NPC, long-running 20–100+ действий в настоящих кампаниях SQLite/`.bwsave`, полный UX/UI аудит меню/библиотеки/чтения/редакторов с 320dp/200%, проверка реальных Windows и Android устройств. После этого **M2f**: consent, BYOK, локальные и облачные ИИ-провайдеры, ключи, лимиты, аудит запросов. Live ИИ ещё не подключён.
+
+
+### 2026-11-03 — подтверждённый установочный релиз M2e5b3b1
+
+- **test-build-339**: https://github.com/shonentez-afk/AI-Story-RPG/releases/tag/test-build-339 — подтверждённый опубликованный релиз для принятого squash-коммита `109b3508c9b772f410d517897c45ae9bd9e51fde` (PR #34, M2e5b3b1).
+- Post-merge main CI `41577494842` **completed/success**, Python/Dart/BookWorld/schema/Flutter widget/Windows portable/Android debug APK/PUBLISH PASS. В релизе есть `AI-Story-RPG-Windows-portable.zip`, `AI-Story-RPG-Android-debug.apk` и `SHA256SUMS.txt`.
+- Это автоматические CI-бинарники, **не** результат физического E2E на Windows/Android: реальное тестирование устройств и длительных кампаний SQLite/.bwsave остаётся PENDING. Live AI по-прежнему выключен; следующий этап — **M2e5b3b2**, затем M2f.
