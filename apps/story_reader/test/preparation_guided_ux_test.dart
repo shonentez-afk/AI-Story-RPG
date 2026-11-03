@@ -109,7 +109,7 @@ void main() {
     await tester.scrollUntilVisible(
         find.text('Дополнительно: экспериментальный поиск'), 220,
         scrollable: find.byType(Scrollable).first, maxScrolls:30);
-    expect(find.text('Создать RPG по этой книге'), findsOneWidget);
+    expect(find.text('Полная RPG по всей книге'), findsOneWidget);
     expect(find.text('Открыть локальный анализ'), findsNothing);
     await tester.tap(find.text('Дополнительно: экспериментальный поиск'));
     await tester.pumpAndSettle();
