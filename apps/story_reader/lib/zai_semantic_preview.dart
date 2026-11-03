@@ -423,7 +423,7 @@ class ZaiSemanticPreviewService {
     // because they contain "было". The goal is to catch the observed
     // static predicate from the user's Andersen sample.
     return RegExp(
-      r'\\b(был|была|было|были|есть|являлся|являлась)\\b',
+      r'\b(был|была|было|были|есть|являлся|являлась)\b',
     ).hasMatch(source) &&
         RegExp(r'маленьк|бедн|больш|огромн|крошечн|велик|'
                r'скромн|богат|старинн').hasMatch(source);
