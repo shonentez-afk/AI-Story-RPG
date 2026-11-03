@@ -300,18 +300,7 @@ class ZaiSemanticPreviewService {
     if (RegExp(
       r'^(start( of( the)?)? (story|tale)|beginning( of( the)?)? (story|tale)|'
       r'introduction|opening( of( the)?)? (story|tale)|'
-      r'начало (истории|сказки|повествования|рассказа)|вступление)
-  const ZaiSemanticPreviewResult({
-    required this.batch,
-    required this.rejectedCount,
-    required this.totalSuggestions,
-  });
-
-  final SemanticCandidateBatch batch;
-  final int rejectedCount;
-  final int totalSuggestions;
-}
-,
+      r'начало (истории|сказки|повествования|рассказа)|вступление)$',
     ).hasMatch(title)) {
       return true;
     }
