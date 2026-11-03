@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -86,6 +87,104 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(find.text('Далее'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+
+  testWidgets('seven inner fairy-tale stories have named chapters and notes '
+      'at 320dp with 200% text', (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    tester.view.physicalSize = const Size(320, 640);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+    const ordinals = [
+      'первый', 'второй', 'третий', 'четвертый',
+      'пятый', 'шестой', 'седьмой'
+    ];
+    final contents = [
+      for (var i = 0; i < ordinals.length; i++)
+        '<p>Рассказ ' + ordinals[i] + ' ДРУГАЯ ИСТОРИЯ</p>'
+        '<p>События части ' + (i + 1).toString() + '.</p>',
+    ].join();
+    final source = '<FictionBook><description><title-info>'
+        '<book-title>Большая сказка</book-title></title-info></description>'
+        '<body><section><title><p>Большая сказка</p></title>'
+        + contents +
+        '</section></body><body name="notes"><section>'
+        '<p>Примечание к сказке.</p></section></body></FictionBook>';
+    final book = BookImporter.parse('tale.fb2',
+        Uint8List.fromList(utf8.encode(source)));
+    expect(book.structuredChapters, hasLength(8));
+    // The source paragraph must remain part of the seventh chapter even
+    // when the reader builds its offscreen slivers lazily.
+    expect(book.chapters[6], contains('События части 7'));
+    await tester.pumpWidget(MaterialApp(
+      builder: (context, child) => MediaQuery(
+        data: MediaQuery.of(context).copyWith(
+          textScaler: const TextScaler.linear(2)),
+        child: child!,
+      ),
+      home: BookReaderPage(book: book),
+    ));
+    await tester.pumpAndSettle();
+    // The active chapter title also stays mounted behind the modal sheet.
+    // Find only items INSIDE the TOC, otherwise the first chapter produces
+    // two valid Text widgets and an incorrect exactly-one assertion.
+    final toc = find.byType(BottomSheet);
+    Finder tocTitle(String title) => find.descendant(
+      of: toc, matching: find.text(title),
+    );
+    await tester.tap(find.byTooltip('Оглавление'));
+    await tester.pumpAndSettle();
+    expect(toc, findsOneWidget);
+    expect(tocTitle('Рассказ первый'), findsOneWidget);
+    expect(tocTitle('Рассказ второй'), findsOneWidget);
+    await tester.scrollUntilVisible(
+      tocTitle('Рассказ седьмой'), 160,
+      scrollable: find.descendant(
+        of: toc, matching: find.byType(Scrollable),
+      ), maxScrolls: 25,
+    );
+    await tester.pumpAndSettle();
+    expect(tocTitle('Рассказ седьмой'), findsOneWidget);
+    await tester.tap(tocTitle('Рассказ седьмой'));
+    await tester.pumpAndSettle();
+    expect(toc, findsNothing);
+    expect(find.text('Глава 7 из 8'), findsOneWidget);
+    // At 320dp/200% the long heading can fill the viewport: the story
+    // paragraph exists in the next lazy sliver but is not mounted until
+    // scrolled into view. Assert actual visibility, not premature mounting.
+    await tester.scrollUntilVisible(
+      find.textContaining('События части 7'), 150,
+      scrollable: find.byType(Scrollable).first,
+      maxScrolls: 20,
+    );
+    await tester.pumpAndSettle();
+    expect(find.textContaining('События части 7'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+
+    await tester.tap(find.byTooltip('Оглавление'));
+    await tester.pumpAndSettle();
+    expect(toc, findsOneWidget);
+    await tester.scrollUntilVisible(
+      tocTitle('Примечания'), 140,
+      scrollable: find.descendant(
+        of: toc, matching: find.byType(Scrollable),
+      ), maxScrolls: 25,
+    );
+    // scrollUntilVisible may stop as soon as the lazily created ListTile
+    // enters the scroll cache. At 320dp/200% its centre can still be below
+    // the device bottom (CI observed y=672 on a 640px screen).
+    await tester.ensureVisible(tocTitle('Примечания'));
+    await tester.pumpAndSettle();
+    expect(tocTitle('Примечания').hitTestable(), findsOneWidget);
+    await tester.tap(tocTitle('Примечания').hitTestable());
+    await tester.pumpAndSettle();
+    expect(toc, findsNothing);
+    expect(find.text('Глава 8 из 8'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
