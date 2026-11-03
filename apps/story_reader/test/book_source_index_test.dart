@@ -189,7 +189,7 @@ void main() {
     ));
     await tester.pumpAndSettle();
     expect(find.text('Подготовка книги'), findsOneWidget);
-    expect(find.text('Создать игровую историю — пока недоступно'),
+    expect(find.textContaining('Полная автоматическая адаптация книги пока недоступна'),
         findsOneWidget);
     await tester.ensureVisible(find.text('Технические сведения о книге'));
     await tester.pumpAndSettle();
