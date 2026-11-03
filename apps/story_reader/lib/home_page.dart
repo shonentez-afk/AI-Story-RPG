@@ -14,6 +14,7 @@ import 'campaigns_page.dart';
 import 'app_theme.dart';
 import 'reading_preferences.dart';
 import 'reading_settings_sheet.dart';
+import 'ai_connection_settings_page.dart';
 import 'main.dart' show StoryReaderPage;
 
 /// Prefer the most recently saved campaign regardless of its storage type.
@@ -1040,7 +1041,17 @@ class _SettingsPageState extends State<SettingsPage> {
                   leading: Icon(Icons.offline_bolt_outlined),
                   title: Text('Режим игры'),
                   subtitle: Text('Демо и подготовленные миры — офлайн. '
-                      'Свободный ИИ-режим пока не подключён.'),
+                      'ИИ-анализ книги и свободное общение ещё не включены.'),
+                ),
+                ListTile(
+                  key: const Key('settings-ai-connect'),
+                  contentPadding: EdgeInsets.zero,
+                  leading: const Icon(Icons.smart_toy_outlined),
+                  title: const Text('ИИ: Z.ai · GLM-4.7-Flash'),
+                  subtitle: const Text('API-ключ, защита, согласие и '
+                      'проверка подключения · по умолчанию отключено'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => _navigate(const AiConnectionSettingsPage()),
                 ),
                 ListTile(
                   contentPadding: EdgeInsets.zero,
@@ -1066,8 +1077,9 @@ class _SettingsPageState extends State<SettingsPage> {
                   contentPadding: EdgeInsets.zero,
                   leading: Icon(Icons.privacy_tip_outlined),
                   title: Text('Анализ книги и приватность'),
-                  subtitle: Text('Текущий анализ работает локально. '
-                      'Отправка текста внешнему ИИ ещё не реализована.'),
+                  subtitle: Text('Поиск цитат и подготовка книги остаются '
+                      'локальными. Настройки Z.ai не отправляют текст '
+                      'книги и не включают автоматический анализ.'),
                 ),
                 const Divider(height: 30),
                 Text('О программе',

@@ -22,6 +22,8 @@ dependencies:
   path_provider: ^2.1.5
   xml: ^6.6.1
   crypto: ^3.0.6
+  # Pinned for consistent Windows/Android secure-key support in CI.
+  flutter_secure_storage: 10.3.4
 
 dev_dependencies:
   flutter_test:
