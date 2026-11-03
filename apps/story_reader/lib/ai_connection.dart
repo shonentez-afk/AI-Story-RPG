@@ -77,10 +77,21 @@ class AiSetupException implements Exception {
   String toString() => message;
 }
 
+/// Classified as transient; only an explicitly consented source-preview
+/// request may retry this error. HTTPS certificate errors are NOT transient.
+class AiTransientConnectionException extends AiSetupException {
+  const AiTransientConnectionException(super.message);
+}
+
 class AiHttpResponse {
-  const AiHttpResponse(this.statusCode, this.body);
+  const AiHttpResponse(this.statusCode, this.body, {this.retryAfter});
+
   final int statusCode;
   final String body;
+
+  /// The trusted HTTP Retry-After header (not the model's response text).
+  /// Do not store API secrets or copy arbitrary response headers.
+  final String? retryAfter;
 }
 
 abstract class AiHttpTransport {
@@ -92,7 +103,8 @@ abstract class AiHttpTransport {
 }
 
 /// HTTP implementation for the ONLY supported provider endpoint. No redirects,
-/// untrusted base URLs, request/body logs, tools or background retries.
+/// untrusted base URLs or request/body logs. Individual calls do NOT retry;
+/// only a per-excerpt consent gate may authorize bounded higher-level retries.
 class ZaiHttpTransport implements AiHttpTransport {
   const ZaiHttpTransport();
 
@@ -106,38 +118,48 @@ class ZaiHttpTransport implements AiHttpTransport {
       throw const AiSetupException('Недопустимый адрес сервера ИИ.');
     }
     final client = HttpClient()
-      ..connectionTimeout = const Duration(seconds: 10)
-      ..userAgent = 'AI-Story-RPG/M2f1';
+      ..connectionTimeout = const Duration(seconds: 15)
+      ..userAgent = 'AI-Story-RPG/M2f2b';
     try {
       final request = await client.postUrl(uri)
-          .timeout(const Duration(seconds: 12));
+          .timeout(const Duration(seconds: 20));
       request.followRedirects = false;
       for (final entry in headers.entries) {
         request.headers.set(entry.key, entry.value);
       }
       request.add(utf8.encode(body));
+      // GLM-4.7-Flash free tier can queue requests before first response.
+      // Previous 25-second header timeout caused premature failures.
       final response = await request.close()
-          .timeout(const Duration(seconds: 25));
+          .timeout(const Duration(seconds: 110));
       final received = <int>[];
-      await for (final bytes in response.timeout(const Duration(seconds: 25))) {
+      await for (final bytes in response.timeout(const Duration(seconds: 45))) {
         if (received.length + bytes.length > 64 * 1024) {
           throw const AiSetupException(
               'Ответ сервера превышает безопасный размер.');
         }
         received.addAll(bytes);
       }
-      return AiHttpResponse(response.statusCode, utf8.decode(received));
+      return AiHttpResponse(
+        response.statusCode,
+        utf8.decode(received),
+        retryAfter: response.headers.value(HttpHeaders.retryAfterHeader),
+      );
     } on AiSetupException {
       rethrow;
     } on TimeoutException {
-      throw const AiSetupException(
-          'Время ожидания Z.ai истекло. Проверьте сеть и повторите.');
-    } on SocketException {
-      throw const AiSetupException(
-          'Нет соединения с Z.ai. Проверьте интернет.');
+      throw const AiTransientConnectionException(
+          'Z.ai долго не отвечает (тайм-аут).');
     } on HandshakeException {
+      // Never retry an invalid server certificate or TLS failure.
       throw const AiSetupException(
           'Ошибка защищённого соединения с Z.ai.');
+    } on SocketException {
+      throw const AiTransientConnectionException(
+          'Соединение с Z.ai оборвалось или сеть недоступна.');
+    } on HttpException {
+      throw const AiTransientConnectionException(
+          'Сервер прервал HTTP-соединение до завершения ответа.');
     } catch (_) {
       // Never expose request headers, API keys or server response bodies.
       throw const AiSetupException(
