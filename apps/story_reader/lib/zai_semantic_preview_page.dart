@@ -218,6 +218,17 @@ class _ZaiSemanticPreviewPageState extends State<ZaiSemanticPreviewPage> {
     }
   }
 
+  static String _categoryLabel(String name) => switch (name) {
+    'character' => 'Персонаж',
+    'alias' => 'Псевдоним',
+    'location' => 'Место',
+    'event' => 'Событие',
+    'state' => 'Состояние',
+    'fact' => 'Факт / намерение',
+    'dependency' => 'Причинная связь',
+    _ => 'Другое',
+  };
+
   @override
   Widget build(BuildContext context) {
     final windows = _windows;
@@ -262,14 +273,13 @@ class _ZaiSemanticPreviewPageState extends State<ZaiSemanticPreviewPage> {
                     'Цитаты и имена собственные сохраняются '
                     'на языке оригинала.'),
                 const SizedBox(height: 8),
-                const Text('Экспериментальный просмотр. '
-                    'ИИ предлагает по-русски имена, места, события и факты '
-                    'по одному выбранному фрагменту. '
-                    'Результат не сохраняется, не подтверждает канон '
-                    'и не создаёт RPG. Для каждого выбранного '
-                    'фрагмента требуется новое согласие; '
-                    'после временной ошибки возможны до двух повторов '
-                    'без нового подтверждения.'),
+                const Text('Экспериментальный просмотр. ИИ изучает '
+                    'одно смысловое окно из соседних абзацев одной главы '
+                    'и предлагает персонажей, места, действия, '
+                    'состояния и факты. Результат не сохраняется, '
+                    'не подтверждает канон и не создаёт RPG. '
+                    'Каждое окно отправляется только после согласия; '
+                    'временные сбои могут вызвать до двух повторов.'),
                 const SizedBox(height: 12),
                 Text('Книга: ${widget.index.title}',
                     key: const Key('zai-preview-book-title'),
@@ -358,7 +368,7 @@ class _ZaiSemanticPreviewPageState extends State<ZaiSemanticPreviewPage> {
                   const SizedBox(height: 6),
                   Text('Получено: ' +
                       _result!.totalSuggestions.toString() +
-                      '. Проверено по буквальному совпадению цитат: ' +
+                      '. Проверено по исходным цитатам: ' +
                       _result!.batch.candidates.length.toString() +
                       '. Отброшено: ' + _result!.rejectedCount.toString() +
                       ' (не на русском: ' +
@@ -378,9 +388,12 @@ class _ZaiSemanticPreviewPageState extends State<ZaiSemanticPreviewPage> {
                         subtitle: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text('Категория: ' + candidate.category.name),
+                            Text('Категория: ' +
+                                _categoryLabel(candidate.category.name)),
                             const SizedBox(height: 4),
                             SelectableText('Цитата: ' + candidate.quote),
+                            const SizedBox(height: 4),
+                            Text('Исходный фрагмент: ' + candidate.chunkId),
                             const SizedBox(height: 4),
                             Text('Проверить: ' + candidate.uncertainty),
                           ],
@@ -388,6 +401,15 @@ class _ZaiSemanticPreviewPageState extends State<ZaiSemanticPreviewPage> {
                         leading: const Icon(Icons.fact_check_outlined),
                       ),
                     ),
+                  if (_result!.rejectionReasons.isNotEmpty) ...[
+                    const SizedBox(height: 12),
+                    const Text('Причины отклонения предложений:'),
+                    for (final reason in _result!.rejectionReasons)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 3),
+                        child: Text('• ' + reason),
+                      ),
+                  ],
                   const SizedBox(height: 8),
                   const Text('Ни одна находка не перенесена в редакторы, '
                       'канон, кампанию или BookWorld. '
