@@ -290,7 +290,7 @@ class _ZaiSemanticPreviewPageState extends State<ZaiSemanticPreviewPage> {
                   children: [
                     IconButton(
                       key: const Key('zai-previous-chunk'),
-                      tooltip: 'Предыдущий фрагмент',
+                      tooltip: 'Предыдущее окно',
                       onPressed: !_busy && !_confirming && _position > 0
                           ? () => _move(-1) : null,
                       icon: const Icon(Icons.chevron_left),
@@ -306,7 +306,7 @@ class _ZaiSemanticPreviewPageState extends State<ZaiSemanticPreviewPage> {
                     ),
                     IconButton(
                       key: const Key('zai-next-chunk'),
-                      tooltip: 'Следующий фрагмент',
+                      tooltip: 'Следующее окно',
                       onPressed: !_busy && !_confirming &&
                               _position + 1 < windows.length
                           ? () => _move(1) : null,
@@ -333,7 +333,7 @@ class _ZaiSemanticPreviewPageState extends State<ZaiSemanticPreviewPage> {
                   key: const Key('zai-send-single-chunk'),
                   onPressed: _busy || _confirming || !allowed ? null : _analyze,
                   icon: const Icon(Icons.auto_awesome_outlined),
-                  label: const Text('Проверить этот фрагмент с ИИ'),
+                  label: const Text('Проверить это окно с ИИ'),
                 ),
                 if (!validTitle)
                   const Text('Название книги отсутствует или слишком '
