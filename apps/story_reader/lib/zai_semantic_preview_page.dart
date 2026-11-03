@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import 'book_source_index.dart';
 import 'source_semantic_window.dart';
+import 'source_semantic_provider.dart';
 import 'zai_semantic_preview.dart';
 import 'ai_connection.dart';
 import 'source_analysis_checkpoint_repository.dart';
