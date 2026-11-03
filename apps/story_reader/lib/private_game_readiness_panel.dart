@@ -50,8 +50,8 @@ class _PrivateGameReadinessPanelState
           Text('Готовность книги к RPG',
               style: Theme.of(context).textTheme.titleMedium),
           const SizedBox(height: 8),
-          Text('1. Текст: \${widget.index.indexedChapterCount} '
-              'из \${widget.index.chapterCount} глав проиндексировано.'),
+          Text('1. Текст: ${widget.index.indexedChapterCount} '
+              'из ${widget.index.chapterCount} глав проиндексировано.'),
           const Text('2. Сценарий: подтвердите цитаты, сцены и '
               'авторскую альтернативу в редакторе.'),
           const SizedBox(height: 8),
@@ -67,13 +67,13 @@ class _PrivateGameReadinessPanelState
                 }
                 if (snapshot.hasError || !snapshot.hasData) {
                   return Text('3. Игра: проверка не завершена. '
-                      '\${snapshot.error ?? "Повторите проверку."}');
+                      '${snapshot.error ?? "Повторите проверку."}');
                 }
                 final result = snapshot.data!;
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('3. Игра: \${result.explanation}'),
+                    Text('3. Игра: ${result.explanation}'),
                     if (result.canStartPrivateGame) ...[
                       const SizedBox(height: 8),
                       FilledButton.icon(
