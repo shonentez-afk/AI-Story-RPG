@@ -81,16 +81,27 @@ class _ZaiSemanticPreviewPageState extends State<ZaiSemanticPreviewPage> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('Будет отправлен только приведённый ниже текст. '
+                const Text('На Z.ai будут отправлены ТОЛЬКО название книги '
+                    'и выбранный фрагмент, показанные ниже. '
+                    'Название используется как контекст, но не доказывает '
+                    'события и факты: ИИ обязан сверять их по цитатам. '
                     'Ключ передаётся Z.ai для авторизации. '
-                    'Никакие остальные главы, автор, библиотека, '
-                    'NPC или игровые сохранения не отправляются. '
+                    'Автор, остальные главы, библиотека, '
+                    'NPC и игровые сохранения не отправляются. '
                     'При временном сбое соединения, HTTP 429 или ошибке '
                     'сервера разрешены до двух автоматических повторов '
                     'ТОГО ЖЕ фрагмента (всего не более трёх попыток). '
                     'Модель может получить одинаковый текст повторно, '
                     'если предыдущий ответ потерялся. '
                     'Повторы можно остановить; другие главы не передаются.'),
+                const SizedBox(height: 12),
+                const Text('Название книги (будет передано):'),
+                const SizedBox(height: 4),
+                SelectableText(
+                  widget.index.title.trim(),
+                  key: const Key('zai-consent-book-title'),
+                  style: Theme.of(context).textTheme.bodyMedium,
+                ),
                 const SizedBox(height: 12),
                 Text('Глава ' + (chunk.chapterIndex + 1).toString() +
                     ' · ' + utf8.encode(chunk.text).length.toString() +
@@ -108,8 +119,8 @@ class _ZaiSemanticPreviewPageState extends State<ZaiSemanticPreviewPage> {
                   contentPadding: EdgeInsets.zero,
                   onChanged: (value) =>
                       setDialogState(() => checked = value == true),
-                  title: const Text('Разрешаю отправку именно этого '
-                      'фрагмента в Z.ai с максимум двумя '
+                  title: const Text('Разрешаю отправить название книги '
+                      'и именно этот фрагмент в Z.ai с максимум двумя '
                       'автоматическими повторами при временных ошибках'),
                 ),
               ],
@@ -165,6 +176,7 @@ class _ZaiSemanticPreviewPageState extends State<ZaiSemanticPreviewPage> {
         index: widget.index,
         chunk: chunk,
         consentForThisChunk: true,
+        consentForBookTitle: true,
         cancellation: cancellation,
         onProgress: (attempt, total, status) {
           if (mounted && _cancellation == cancellation) {
@@ -197,8 +209,13 @@ class _ZaiSemanticPreviewPageState extends State<ZaiSemanticPreviewPage> {
     final chunks = widget.index.chunks;
     final chunk = _chunk;
     final size = utf8.encode(chunk.text).length;
-    final allowed = chunk.text.length <=
-            ZaiSemanticPreviewService.maxChunkUtf16 &&
+    final title = widget.index.title.trim();
+    final validTitle = title.isNotEmpty &&
+        title.length <= ZaiSemanticPreviewService.maxBookTitleUtf16 &&
+        utf8.encode(title).length <=
+            ZaiSemanticPreviewService.maxBookTitleUtf8;
+    final allowed = validTitle &&
+        chunk.text.length <= ZaiSemanticPreviewService.maxChunkUtf16 &&
         size <= ZaiSemanticPreviewService.maxChunkUtf8Bytes;
     final scheme = Theme.of(context).colorScheme;
 
@@ -228,13 +245,17 @@ class _ZaiSemanticPreviewPageState extends State<ZaiSemanticPreviewPage> {
                     style: Theme.of(context).textTheme.titleMedium),
                 const SizedBox(height: 6),
                 const Text('Экспериментальный просмотр. '
-                    'ИИ предлагает имена, места, события и факты '
+                    'ИИ предлагает по-русски имена, места, события и факты '
                     'по одному выбранному фрагменту. '
                     'Результат не сохраняется, не подтверждает канон '
                     'и не создаёт RPG. Для каждого выбранного '
                     'фрагмента требуется новое согласие; '
                     'после временной ошибки возможны до двух повторов '
                     'без нового подтверждения.'),
+                const SizedBox(height: 12),
+                Text('Книга: ${widget.index.title}',
+                    key: const Key('zai-preview-book-title'),
+                    style: Theme.of(context).textTheme.bodyMedium),
                 const SizedBox(height: 16),
                 Row(
                   children: [
@@ -283,7 +304,11 @@ class _ZaiSemanticPreviewPageState extends State<ZaiSemanticPreviewPage> {
                   icon: const Icon(Icons.auto_awesome_outlined),
                   label: const Text('Проверить этот фрагмент с ИИ'),
                 ),
-                if (!allowed)
+                if (!validTitle)
+                  const Text('Название книги отсутствует или слишком '
+                      'длинное. Для передачи требуется корректное название; '
+                      'никакие данные не отправлены.')
+                else if (!allowed)
                   const Text('Фрагмент больше безопасного лимита. '
                       'Ничего не отправлено.'),
                 if (_busy) ...[
@@ -316,7 +341,10 @@ class _ZaiSemanticPreviewPageState extends State<ZaiSemanticPreviewPage> {
                       '. Проверено по буквальному совпадению цитат: ' +
                       _result!.batch.candidates.length.toString() +
                       '. Отброшено: ' + _result!.rejectedCount.toString() +
-                      '. Это только предварительные гипотезы.'),
+                      ' (не на русском: ' +
+                      _result!.rejectedNonRussian.toString() +
+                      '). Это только предварительные гипотезы. '
+                      'Цитаты сохранены на языке оригинала.'),
                   if (_result!.batch.candidates.isEmpty)
                     const Padding(
                       padding: EdgeInsets.symmetric(vertical: 12),
