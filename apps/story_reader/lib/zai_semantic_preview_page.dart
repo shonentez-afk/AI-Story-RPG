@@ -203,7 +203,20 @@ class _ZaiSemanticPreviewPageState extends State<ZaiSemanticPreviewPage> {
     final scheme = Theme.of(context).colorScheme;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Предложения ИИ по цитатам')),
+      appBar: AppBar(
+        title: const Text('Предложения ИИ по цитатам'),
+        actions: [
+          if (_busy)
+            IconButton(
+              key: const Key('zai-cancel-retries'),
+              tooltip: 'Остановить дальнейшие попытки',
+              onPressed: _cancellation == null ||
+                      _cancellation!.isCancelled
+                  ? null : _stopRetries,
+              icon: const Icon(Icons.stop_circle_outlined),
+            ),
+        ],
+      ),
       body: SafeArea(
         child: Center(
           child: ConstrainedBox(
@@ -282,14 +295,8 @@ class _ZaiSemanticPreviewPageState extends State<ZaiSemanticPreviewPage> {
                   ),
                   const Text('Анализируется только выбранный фрагмент. '
                       'Книги, RPG и сохранения не изменяются.'),
-                  OutlinedButton.icon(
-                    key: const Key('zai-cancel-retries'),
-                    onPressed: _cancellation == null ||
-                            _cancellation!.isCancelled
-                        ? null : _stopRetries,
-                    icon: const Icon(Icons.stop_circle_outlined),
-                    label: const Text('Остановить дальнейшие попытки'),
-                  ),
+                  const Text('Остановить новые попытки можно значком '
+                      '«Стоп» в верхней панели.'),
                 ],
                 if (_error != null) ...[
                   const SizedBox(height: 14),
