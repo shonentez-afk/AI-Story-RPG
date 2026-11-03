@@ -9,6 +9,7 @@ import 'zai_semantic_preview.dart';
 import 'ai_connection.dart';
 import 'source_analysis_checkpoint_repository.dart';
 import 'zai_semantic_review_queue.dart';
+import 'zai_cross_window_review_page.dart';
 
 /// The isolated M2f2a pilot: review ONE complete chunk and permit ONE
 /// intentional cloud request. No automatic analysis of the full book,
@@ -19,11 +20,13 @@ class ZaiSemanticPreviewPage extends StatefulWidget {
     required this.index,
     this.service,
     this.reviewRepository,
+    this.linksRepository,
   });
 
   final BookSourceIndex index;
   final ZaiSemanticPreviewService? service;
   final SourceAnalysisCheckpointRepository? reviewRepository;
+  final SourceAnalysisCheckpointRepository? linksRepository;
 
   @override
   State<ZaiSemanticPreviewPage> createState() =>
@@ -73,15 +76,17 @@ class _ZaiSemanticPreviewPageState extends State<ZaiSemanticPreviewPage> {
     }
   }
 
-  Future<void> _commitReview(ZaiWindowReviewQueue updated) async {
+  Future<bool> _commitReview(ZaiWindowReviewQueue updated) async {
     setState(() => _reviewSaving = true);
     try {
       await _reviewRepository.write(widget.index.sourceFingerprint,
           updated.encode());
       if (mounted) setState(() { _queue = updated; _reviewError = null; });
+      return true;
     } catch (_) {
       if (mounted) setState(() => _reviewError = 'Не удалось сохранить '
           'проверку ИИ. Прежний checkpoint не изменён.');
+      return false;
     } finally {
       if (mounted) setState(() => _reviewSaving = false);
     }
@@ -90,6 +95,27 @@ class _ZaiSemanticPreviewPageState extends State<ZaiSemanticPreviewPage> {
   Future<void> _markCandidate(String id, ZaiEditorialDecision? mark) async {
     if (_busy || _reviewSaving || _reviewLoading || _queue == null) return;
     await _commitReview(_queue!.decide(id, mark));
+  }
+
+  Future<void> _openCrossWindowReview() async {
+    if (!mounted || _busy || _confirming || _reviewLoading ||
+        _reviewSaving || _queue == null) return;
+    final selected = await Navigator.of(context).push<int>(
+      MaterialPageRoute(
+        builder: (_) => ZaiCrossWindowReviewPage(
+          queue: _queue!,
+          linksRepository: widget.linksRepository,
+        ),
+      ),
+    );
+    if (!mounted || selected == null || _busy || _reviewSaving ||
+        selected < 0 || selected >= _windows.length) return;
+    setState(() {
+      _position = selected;
+      _result = null;
+      _error = null;
+      _progress = null;
+    });
   }
 
   void _nextPending() {
@@ -268,9 +294,10 @@ class _ZaiSemanticPreviewPageState extends State<ZaiSemanticPreviewPage> {
           }
         },
       );
-      if (mounted && identical(_window, window)) {
-        setState(() => _result = result);
-        await _commitReview(_queue!.record(selectedPosition, result));
+      if (mounted && identical(_window, window) && _queue != null) {
+        final saved = await _commitReview(
+            _queue!.record(selectedPosition, result));
+        if (mounted && saved) setState(() => _result = result);
       }
     } on AiSetupException catch (error) {
       if (mounted) setState(() => _error = error.message);
@@ -437,6 +464,14 @@ class _ZaiSemanticPreviewPageState extends State<ZaiSemanticPreviewPage> {
                   icon: const Icon(Icons.auto_awesome_outlined),
                   label: const Text('Проверить это окно с ИИ'),
                 ),
+                const SizedBox(height: 8),
+                  OutlinedButton.icon(
+                    key: const Key('zai-open-cross-window-review'),
+                    onPressed: _busy || _confirming || _reviewSaving
+                        ? null : _openCrossWindowReview,
+                    icon: const Icon(Icons.account_tree_outlined),
+                    label: const Text('Сводка персонажей, событий и связей'),
+                  ),
                 if (!validTitle)
                   const Text('Название книги отсутствует или слишком '
                       'длинное. Для передачи требуется корректное название; '
