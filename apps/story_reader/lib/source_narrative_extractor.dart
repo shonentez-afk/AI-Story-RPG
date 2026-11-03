@@ -77,6 +77,34 @@ class SourceNarrativeExtractor {
     r'([А-ЯЁ][а-яё-]{1,35})(?=$|[\s.,!?»])',
     unicode: true,
   );
+  /// In many fairy tales the protagonists are known only by their role.
+  /// These are *text mentions*, not unique or confirmed identities. Restrict
+  /// matching to a small explicit role vocabulary; never infer aliases.
+  static const _role = r'(?:принцесса|принц|император|свинопас|'
+      r'фрейлина|фрейлины|королева|король|царь|царица|'
+      r'солдат|сапожник|мельник|купец)';
+  static final RegExp _roleMention = RegExp(
+    '(?:^|[\\s.!?«(—-])($_role)(?=$|[\\s.,!?»):—-])',
+    unicode: true, caseSensitive: false,
+  );
+
+  /// Strict, short surface-pattern only: a role, an overt action verb and an
+  /// overt object. No coreference, complex syntax or assumed plot causality.
+  static const _roleVerb = r'(?:получил|получила|сделал|сделала|'
+      r'обступили|отправил|отправила|сказал|сказала|'
+      r'увидел|увидела|нашёл|нашел|нашла|встретил|встретила|'
+      r'подарил|подарила|послал|послала|открыл|открыла|'
+      r'закрыл|закрыла|взял|взяла|спросил|спросила|позвал|позвала)';
+  static final RegExp _roleEvent = RegExp(
+    '(?:^|[\\s.!?«(—-])($_role\\s+$_roleVerb\\s+[А-ЯЁа-яё-]{2,36})'
+    '(?=$|[\\s.,!?»):—-])',
+    unicode: true, caseSensitive: false,
+  );
+  static final RegExp _roleEventParts = RegExp(
+    '^($_role)\\s+($_roleVerb)\\s+([А-ЯЁа-яё-]{2,36})\$',
+    unicode: true, caseSensitive: false,
+  );
+
   static final RegExp _stateParts = RegExp(
     r'^(дверь|окно|ворота)\s+'
     r'(?:(?:была|было|были|стала|стало|стали)\s+)?'
@@ -146,6 +174,24 @@ class SourceNarrativeExtractor {
         isReported: _isReported(chunk.text, match.start),
       ));
     }
+    final knownEventIds = {
+      for (final item in result) item.evidence.id,
+    };
+    for (final match in _roleEvent.allMatches(chunk.text)) {
+      final phrase = match.group(1)!;
+      final parts = _roleEventParts.firstMatch(phrase);
+      if (parts == null) continue;
+      final evidence = _passage(
+          index, chunk, EvidenceKind.event, match, phrase);
+      if (!knownEventIds.add(evidence.id)) continue;
+      result.add(DetectedSourceClaim(
+        evidence: evidence,
+        subject: _normalize(parts.group(1)!),
+        attribute: _normalize(parts.group(2)!),
+        value: _normalize(parts.group(3)!),
+        isReported: _isReported(chunk.text, match.start),
+      ));
+    }
     result.sort((a, b) =>
         a.evidence.startUtf16.compareTo(b.evidence.startUtf16));
     return List.unmodifiable(result);
@@ -174,6 +220,28 @@ class SourceNarrativeExtractor {
     return List.unmodifiable(result);
   }
 
+  /// At most one citation per normalized role spelling per source chunk.
+  /// A title such as «принц» does NOT identify the same person across the
+  /// chapter or prove that «свинопас» and «принц» are the same actor.
+  static List<SourceEvidence> roleMentionsInChunk(
+      BookSourceIndex index, SourceChunk chunk) {
+    final result = <SourceEvidence>[];
+    final seen = <String>{};
+    for (final match in _roleMention.allMatches(chunk.text)) {
+      final role = match.group(1)!;
+      if (!seen.add(_normalize(role))) continue;
+      result.add(SourceEvidence.propose(index,
+        chunkId: chunk.id,
+        kind: EvidenceKind.character,
+        startUtf16: chunk.startUtf16 +
+            match.start + match.group(0)!.lastIndexOf(role),
+        endUtf16: chunk.startUtf16 +
+            match.start + match.group(0)!.lastIndexOf(role) + role.length,
+      ));
+    }
+    return List.unmodifiable(result);
+  }
+
   static List<SourceEvidence> extractChunk(
       BookSourceIndex index, SourceChunk chunk) {
     final result = <SourceEvidence>[];
@@ -182,6 +250,9 @@ class SourceNarrativeExtractor {
       if (seen.add(item.evidence.id)) result.add(item.evidence);
     }
     for (final item in aliasesInChunk(index, chunk)) {
+      if (seen.add(item.id)) result.add(item);
+    }
+    for (final item in roleMentionsInChunk(index, chunk)) {
       if (seen.add(item.id)) result.add(item);
     }
     return List.unmodifiable(result);

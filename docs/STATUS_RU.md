@@ -727,3 +727,9 @@
 ## 2026-11-03 — M2e5b3b2b1 ПРИНЯТ (точная приёмка)
 
 - PR #36 **MERGED**, squash `a8ff96279f32bff5c276669861d16dd61900cb76`. Exact branch head `7f562c2100b607e7104b4da38e91d1ef347d6a42`, GitHub Actions `41581807005` **COMPLETED/SUCCESS**: Python, Dart, schema/BookWorld, Flutter analyze+widget, Windows portable, Android APK PASS; M0 `41581807148` PASS. Это тест двух отдельных SQLite каталогов в CI, физические устройства SKIP. `M2e5b3b2b2` остаётся CODE / exact-head CI PENDING до отдельного полного прогона.
+
+## 2026-11-03 — PR #37 принят, реальная FB2 как тестовый источник M2e5c1
+
+- PR #37 M2e5b3b2b2 MERGED: `f143f110f9a00cd645b29a38489c66107bb1a254` (exact head `16ce4f83d782dccad7423eab92572a32a5070d0a`); CI `41582827470` SUCCESS Python/Dart/BookWorld/Flutter/Windows/Android; M0 `41582827425` SUCCESS. Windows/Android физически не тестировались.
+- M2e5c1: подключение раздельной «Свинопас» FB2 для приватного smoke. Файл пользователя не публиковать. Локальная независимая XML/Pillow проверка: 1 рассказ, 57 p, 5/5 реальных JPEG, размер 356051 bytes, SHA256 `bd2488a29fb3b5029c59a6c929cc67df3681e8086df8a4bbd3963f7c7995c123`. Старый event regex = 0.
+- Добавлены ограниченные source-cited role mentions/actions в offline pipeline; UI «Подготовить к RPG» различает количество событий и предупреждает, если находок ноль. Авторское подтверждение обязательно. Приватный smoke Dart `AI_RPG_PRIVATE_FB2_PATH` в CI без книги официально SKIP. Детали `docs/M2E5C1_REAL_BOOK_SMOKE_RU.md`. Новая ветка `feature/m2e5c1-real-svinopas-prep-20261103` — CODE / EXACT-HEAD CI PENDING; не выдавать за релиз.
