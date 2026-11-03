@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 
 import 'book_source_index.dart';
+import 'source_semantic_window.dart';
 import 'zai_semantic_preview.dart';
 import 'ai_connection.dart';
 
@@ -36,7 +37,10 @@ class _ZaiSemanticPreviewPageState extends State<ZaiSemanticPreviewPage> {
   ZaiSemanticPreviewResult? _result;
   String? _error;
 
-  SourceChunk get _chunk => widget.index.chunks[_position];
+  late final List<SourceSemanticWindow> _windows =
+      SourceSemanticWindowPlanner.plan(widget.index);
+  SourceSemanticWindow get _window => _windows[_position];
+  SourceChunk get _chunk => _window.chunks.first;
 
   @override
   void dispose() {
@@ -56,7 +60,7 @@ class _ZaiSemanticPreviewPageState extends State<ZaiSemanticPreviewPage> {
   void _move(int direction) {
     if (_busy || _confirming) return;
     final next = _position + direction;
-    if (next < 0 || next >= widget.index.chunks.length) return;
+    if (next < 0 || next >= _windows.length) return;
     setState(() {
       _position = next;
       _result = null;
@@ -65,7 +69,7 @@ class _ZaiSemanticPreviewPageState extends State<ZaiSemanticPreviewPage> {
     });
   }
 
-  Future<bool> _confirmSource(SourceChunk chunk) async {
+  Future<bool> _confirmSource(SourceSemanticWindow window) async {
     // This is a new, non-persistent consent for this particular excerpt,
     // independent of the prior synthetic connection-test permission.
     var checked = false;
@@ -73,7 +77,9 @@ class _ZaiSemanticPreviewPageState extends State<ZaiSemanticPreviewPage> {
       context: context,
       builder: (dialogContext) => StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(
-          title: const Text('Передать этот фрагмент в Z.ai?'),
+          title: Text(window.chunks.length == 1
+              ? 'Передать этот фрагмент в Z.ai?'
+              : 'Передать это смысловое окно в Z.ai?'),
           scrollable: true,
           content: SizedBox(
             width: 480,
@@ -82,7 +88,7 @@ class _ZaiSemanticPreviewPageState extends State<ZaiSemanticPreviewPage> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const Text('На Z.ai будут отправлены ТОЛЬКО название книги '
-                    'и выбранный фрагмент, показанные ниже. '
+                    'и все показанные ниже исходные абзацы этого окна. '
                     'Название используется как контекст, но не доказывает '
                     'события и факты: ИИ обязан сверять их по цитатам. '
                     'Ключ передаётся Z.ai для авторизации. '
@@ -103,15 +109,17 @@ class _ZaiSemanticPreviewPageState extends State<ZaiSemanticPreviewPage> {
                   style: Theme.of(context).textTheme.bodyMedium,
                 ),
                 const SizedBox(height: 12),
-                Text('Глава ' + (chunk.chapterIndex + 1).toString() +
-                    ' · ' + utf8.encode(chunk.text).length.toString() +
-                    ' байт исходного текста'),
+                Text('Глава ' + (window.chapterIndex + 1).toString() +
+                    ' · исходных частей: ' +
+                    window.chunks.length.toString() +
+                    ' · ' + window.utf8Length.toString() +
+                    ' байт показанного текста'),
                 const SizedBox(height: 4),
                 const Text('Прочитайте фрагмент и прокрутите диалог вниз, '
                     'чтобы подтвердить отправку.'),
                 const SizedBox(height: 8),
                 SelectableText(
-                  chunk.text,
+                  window.displayText,
                   key: const Key('zai-consent-exact-excerpt'),
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
@@ -123,8 +131,9 @@ class _ZaiSemanticPreviewPageState extends State<ZaiSemanticPreviewPage> {
                   onChanged: (value) =>
                       setDialogState(() => checked = value == true),
                   title: const Text('Разрешаю отправить название книги '
-                      'и именно этот фрагмент в Z.ai с максимум двумя '
-                      'автоматическими повторами при временных ошибках'),
+                      'и все показанные исходные абзацы этого окна в Z.ai '
+                      'с максимум двумя автоматическими повторами '
+                      'при временных ошибках'),
                 ),
               ],
             ),
@@ -139,7 +148,7 @@ class _ZaiSemanticPreviewPageState extends State<ZaiSemanticPreviewPage> {
               onPressed: checked
                   ? () => Navigator.of(dialogContext).pop(true)
                   : null,
-              child: const Text('Отправить один фрагмент'),
+              child: const Text('Отправить выбранное окно'),
             ),
           ],
         ),
@@ -150,18 +159,19 @@ class _ZaiSemanticPreviewPageState extends State<ZaiSemanticPreviewPage> {
 
   Future<void> _analyze() async {
     if (_busy || _confirming) return;
-    final chunk = _chunk;
-    if (chunk.text.length > ZaiSemanticPreviewService.maxChunkUtf16 ||
-        utf8.encode(chunk.text).length >
-            ZaiSemanticPreviewService.maxChunkUtf8Bytes) {
-      setState(() => _error = 'Этот фрагмент слишком большой для '
-          'одиночной проверочной отправки. Выберите другой.');
+    final window = _window;
+    final chunk = window.chunks.first;
+    if (!window.hasNarrativeText ||
+        window.utf16Length > SourceSemanticWindowPlanner.maxWindowUtf16 ||
+        window.utf8Length > SourceSemanticWindowPlanner.maxWindowUtf8) {
+      setState(() => _error = 'Окно пустое или слишком большое '
+          'для проверочной отправки. Выберите другое.');
       return;
     }
     setState(() => _confirming = true);
     bool approved = false;
     try {
-      approved = await _confirmSource(chunk);
+      approved = await _confirmSource(window);
     } finally {
       if (mounted) setState(() => _confirming = false);
     }
@@ -178,6 +188,7 @@ class _ZaiSemanticPreviewPageState extends State<ZaiSemanticPreviewPage> {
       final result = await _service.preview(
         index: widget.index,
         chunk: chunk,
+        window: window.chunks.length > 1 ? window : null,
         consentForThisChunk: true,
         consentForBookTitle: true,
         cancellation: cancellation,
@@ -187,7 +198,7 @@ class _ZaiSemanticPreviewPageState extends State<ZaiSemanticPreviewPage> {
           }
         },
       );
-      if (mounted && _chunk.id == chunk.id) {
+      if (mounted && identical(_window, window)) {
         setState(() => _result = result);
       }
     } on AiSetupException catch (error) {
@@ -209,17 +220,17 @@ class _ZaiSemanticPreviewPageState extends State<ZaiSemanticPreviewPage> {
 
   @override
   Widget build(BuildContext context) {
-    final chunks = widget.index.chunks;
-    final chunk = _chunk;
-    final size = utf8.encode(chunk.text).length;
+    final windows = _windows;
+    final window = _window;
+    final size = window.utf8Length;
     final title = widget.index.title.trim();
     final validTitle = title.isNotEmpty &&
         title.length <= ZaiSemanticPreviewService.maxBookTitleUtf16 &&
         utf8.encode(title).length <=
             ZaiSemanticPreviewService.maxBookTitleUtf8;
-    final allowed = validTitle &&
-        chunk.text.length <= ZaiSemanticPreviewService.maxChunkUtf16 &&
-        size <= ZaiSemanticPreviewService.maxChunkUtf8Bytes;
+    final allowed = validTitle && window.hasNarrativeText &&
+        window.utf16Length <= SourceSemanticWindowPlanner.maxWindowUtf16 &&
+        size <= SourceSemanticWindowPlanner.maxWindowUtf8;
     final scheme = Theme.of(context).colorScheme;
 
     return Scaffold(
@@ -275,9 +286,10 @@ class _ZaiSemanticPreviewPageState extends State<ZaiSemanticPreviewPage> {
                     ),
                     Expanded(
                       child: Text(
-                        'Фрагмент ' + (_position + 1).toString() +
-                        ' из ' + chunks.length.toString() +
-                        ' · глава ' + (chunk.chapterIndex + 1).toString(),
+                        'Окно ' + (_position + 1).toString() +
+                        ' из ' + windows.length.toString() +
+                        ' · глава ' + (window.chapterIndex + 1).toString() +
+                        ' · частей ' + window.chunks.length.toString(),
                         textAlign: TextAlign.center,
                       ),
                     ),
@@ -285,21 +297,22 @@ class _ZaiSemanticPreviewPageState extends State<ZaiSemanticPreviewPage> {
                       key: const Key('zai-next-chunk'),
                       tooltip: 'Следующий фрагмент',
                       onPressed: !_busy && !_confirming &&
-                              _position + 1 < chunks.length
+                              _position + 1 < windows.length
                           ? () => _move(1) : null,
                       icon: const Icon(Icons.chevron_right),
                     ),
                   ],
                 ),
                 const SizedBox(height: 8),
-                Text('Исходный текст · ' + size.toString() +
-                    ' байт. Его можно прочитать целиком перед согласием.'),
+                Text('Текст смыслового окна · ' + size.toString() +
+                    ' байт. Включены только соседние части одной главы, '
+                    'цитаты сохраняют исходные ссылки.'),
                 const SizedBox(height: 8),
                 Card(
                   child: Padding(
                     padding: const EdgeInsets.all(16),
                     child: SelectableText(
-                      chunk.text,
+                      window.displayText,
                       key: const Key('zai-chunk-text'),
                     ),
                   ),
@@ -316,8 +329,8 @@ class _ZaiSemanticPreviewPageState extends State<ZaiSemanticPreviewPage> {
                       'длинное. Для передачи требуется корректное название; '
                       'никакие данные не отправлены.')
                 else if (!allowed)
-                  const Text('Фрагмент больше безопасного лимита. '
-                      'Ничего не отправлено.'),
+                  const Text('Окно без текста повествования или слишком '
+                      'большое. Ничего не отправлено.'),
                 if (_busy) ...[
                   const SizedBox(height: 16),
                   const LinearProgressIndicator(),
@@ -325,7 +338,7 @@ class _ZaiSemanticPreviewPageState extends State<ZaiSemanticPreviewPage> {
                     _progress ?? 'Ожидаем ответ GLM-4.7-Flash…',
                     key: const Key('zai-retry-status'),
                   ),
-                  const Text('Анализируется только выбранный фрагмент. '
+                  const Text('Анализируется только выбранное окно. '
                       'Книги, RPG и сохранения не изменяются.'),
                   const Text('Остановить новые попытки можно значком '
                       '«Стоп» в верхней панели.'),
