@@ -23,6 +23,7 @@ class _Vault implements AiApiKeyVault {
 
 class _Network implements AiHttpTransport {
   int calls = 0;
+  String? lastBody;
   int rateLimitsRemaining = 0;
   @override
   Future<AiHttpResponse> send({
@@ -30,6 +31,7 @@ class _Network implements AiHttpTransport {
     required String body,
   }) async {
     calls++;
+    lastBody = body;
     if (rateLimitsRemaining > 0) {
       rateLimitsRemaining--;
       return const AiHttpResponse(429, '{"error":{"code":"1302"}}');
@@ -83,6 +85,8 @@ void main() {
     await tester.tap(send);
     await tester.pumpAndSettle();
     expect(find.text('Передать этот фрагмент в Z.ai?'), findsOneWidget);
+    expect(find.byKey(const Key('zai-consent-book-title')), findsOneWidget);
+    expect(find.text('Личная книга'), findsOneWidget);
     expect(find.textContaining('Анна вошла в дом.'), findsWidgets);
     expect(tester.widget<FilledButton>(
         find.byKey(const Key('zai-consent-confirm'))).onPressed, isNull);
@@ -99,9 +103,17 @@ void main() {
     await tester.tap(find.byKey(const Key('zai-consent-confirm')));
     await tester.pumpAndSettle();
     expect(network.calls, 1);
+    final payload = jsonDecode(network.lastBody!) as Map<String, dynamic>;
+    final bookContext = jsonDecode(
+      (payload['messages'] as List<dynamic>)[1]['content'] as String,
+    ) as Map<String, dynamic>;
+    expect(bookContext['book_title'], 'Личная книга');
+    expect(bookContext['untrusted_excerpt'], index.chunks.single.text);
+    expect(network.lastBody, isNot(contains('Приватный автор')));
     await tester.scrollUntilVisible(find.text('Имя Анна'), 170,
         scrollable: find.byType(Scrollable).first);
     expect(find.text('Имя Анна'), findsOneWidget);
+    expect(find.textContaining('не на русском'), findsOneWidget);
     await tester.scrollUntilVisible(
         find.textContaining('не перенесена в редакторы'), 140,
         scrollable: find.byType(Scrollable).first, maxScrolls: 30);
