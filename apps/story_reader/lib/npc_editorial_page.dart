@@ -217,20 +217,21 @@ class _NpcEditorialPageState extends State<NpcEditorialPage> {
     final prior = _profileFor(dossier.id);
     final initial = prior ??
         NpcEditorialNotebook.freshProfile(dossier);
-    final ctrl = TextEditingController(text: initial.displayName);
+    var enteredName = initial.displayName;
     final name = await showDialog<String>(
       context: context, builder: (ctx) => AlertDialog(
         title: Text(prior == null
             ? 'Создать авторскую карточку' : 'Изменить отображаемое имя'),
-        content: Column(
+        content: SingleChildScrollView(child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             const Text('Название нужно только для личной адаптации. '
                 'Оно не переименует персонажа в оригинальной книге.'),
             const SizedBox(height: 10),
-            TextField(
+            TextFormField(
               key: const Key('npc-name-input'),
-              controller: ctrl,
+              initialValue: initial.displayName,
+              onChanged: (value) => enteredName = value,
               maxLength: 96,
               autofocus: true,
               decoration: const InputDecoration(
@@ -239,7 +240,7 @@ class _NpcEditorialPageState extends State<NpcEditorialPage> {
               ),
             ),
           ],
-        ),
+        )),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
@@ -247,13 +248,12 @@ class _NpcEditorialPageState extends State<NpcEditorialPage> {
           ),
           FilledButton(
             key: const Key('npc-confirm-name'),
-            onPressed: () => Navigator.pop(ctx, ctrl.text.trim()),
+            onPressed: () => Navigator.pop(ctx, enteredName.trim()),
             child: const Text('Сохранить имя'),
           ),
         ],
       ),
     );
-    ctrl.dispose();
     if (!mounted || name == null) return;
     await _persist(_notebook!.putProfile(NpcDraftProfile(
       dossierId: initial.dossierId,
@@ -300,7 +300,7 @@ class _NpcEditorialPageState extends State<NpcEditorialPage> {
     var field = existing?.field ?? NpcDraftField.role;
     var sourceId = existing?.sourceAssertionId;
     var targetId = existing?.targetDossierId;
-    final ctrl = TextEditingController(text: existing?.text ?? '');
+    var enteredText = existing?.text ?? '';
     final proposal = await showDialog<({NpcDraftField field,
           String text, String? sourceId, String? targetId})>(
       context: context, builder: (dialog) => StatefulBuilder(
@@ -365,9 +365,10 @@ class _NpcEditorialPageState extends State<NpcEditorialPage> {
                     ),
                 ],
                 const SizedBox(height: 10),
-                TextField(
+                TextFormField(
                   key: const Key('npc-note-text'),
-                  controller: ctrl,
+                  initialValue: enteredText,
+                  onChanged: (value) => enteredText = value,
                   minLines: 3, maxLines: 6, maxLength: 800,
                   decoration: const InputDecoration(
                     labelText: 'Авторская формулировка',
@@ -418,7 +419,7 @@ class _NpcEditorialPageState extends State<NpcEditorialPage> {
             FilledButton(
               key: const Key('npc-note-confirm'),
               onPressed: () => Navigator.pop(dialog, (
-                field: field, text: ctrl.text.trim(),
+                field: field, text: enteredText.trim(),
                 sourceId: sourceId, targetId: targetId,
               )),
               child: const Text('Сохранить запись'),
@@ -427,7 +428,6 @@ class _NpcEditorialPageState extends State<NpcEditorialPage> {
         ),
       ),
     );
-    ctrl.dispose();
     if (!mounted || proposal == null) return;
     final note = NpcDraftNote(
       id: existing?.id ?? _notebook!.nextNoteId(),
