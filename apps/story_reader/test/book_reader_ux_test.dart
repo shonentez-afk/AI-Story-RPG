@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -86,6 +87,71 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(find.text('Далее'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+
+  testWidgets('seven inner fairy-tale stories have named chapters and notes '
+      'at 320dp with 200% text', (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    tester.view.physicalSize = const Size(320, 640);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+    const ordinals = [
+      'первый', 'второй', 'третий', 'четвертый',
+      'пятый', 'шестой', 'седьмой'
+    ];
+    final contents = [
+      for (var i = 0; i < ordinals.length; i++)
+        '<p>Рассказ ' + ordinals[i] + ' ДРУГАЯ ИСТОРИЯ</p>'
+        '<p>События части ' + (i + 1).toString() + '.</p>',
+    ].join();
+    final source = '<FictionBook><description><title-info>'
+        '<book-title>Большая сказка</book-title></title-info></description>'
+        '<body><section><title><p>Большая сказка</p></title>'
+        + contents +
+        '</section></body><body name="notes"><section>'
+        '<p>Примечание к сказке.</p></section></body></FictionBook>';
+    final book = BookImporter.parse('tale.fb2',
+        Uint8List.fromList(utf8.encode(source)));
+    expect(book.structuredChapters, hasLength(8));
+    await tester.pumpWidget(MaterialApp(
+      builder: (context, child) => MediaQuery(
+        data: MediaQuery.of(context).copyWith(
+          textScaler: const TextScaler.linear(2)),
+        child: child!,
+      ),
+      home: BookReaderPage(book: book),
+    ));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Оглавление'));
+    await tester.pumpAndSettle();
+    expect(find.text('Рассказ первый'), findsOneWidget);
+    expect(find.text('Рассказ второй'), findsOneWidget);
+    await tester.scrollUntilVisible(
+      find.text('Рассказ седьмой'), 160,
+      scrollable: find.byType(Scrollable).last, maxScrolls: 25,
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Рассказ седьмой'), findsOneWidget);
+    await tester.tap(find.text('Рассказ седьмой'));
+    await tester.pumpAndSettle();
+    expect(find.text('Глава 7 из 8'), findsOneWidget);
+    expect(find.textContaining('События части 7'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+
+    await tester.tap(find.byTooltip('Оглавление'));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.text('Примечания'), 140,
+      scrollable: find.byType(Scrollable).last, maxScrolls: 25,
+    );
+    await tester.tap(find.text('Примечания'));
+    await tester.pumpAndSettle();
+    expect(find.text('Глава 8 из 8'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 

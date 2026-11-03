@@ -749,3 +749,10 @@
 - **Установлена ошибка структуры**: семь внутренних рассказов «Снежной королевы» представлены одним <section> и обычными <p>; ранее все индексировались как одна сюжетная глава. Новый строго последовательный numbered-part splitter ожидает 7 сюжетных глав + 1 notes; к старым импортам не применяется без повторного добавления FB2.
 - Добавлены животные/второстепенные роли только как source-cited INFERRED, не канон; тесты на оригинальных синтетических данных + локально опциональный test(private Andersen five) через AI_RPG_PRIVATE_FAIRYTALES_DIR. Отсутствующий в CI пользовательский источник => SKIP, не PASS.
 - Проверить полный exact-head CI и M0 перед merge. Потом M2e5c2b UX/UI 320dp/200% и Windows/Android E2E, затем M2f BYOK/consent. Подробности docs/M2E5C2A_FIVE_BOOK_AUDIT_RU.md.
+
+## 2026-11-03 — M2e5c2a MERGED, M2e5c2b reader UX CODE / CI PENDING
+
+- PR #40 accepted: squash `200ad07c0a5f585492fe79ecfd41045edfbfb4e0`; exact `7cac35824364c1238eba61ad15a28394b9f7ec93`, CI `41590983213` PASS (6/6), M0 `41590983332` PASS. Flutter 295 PASS, 2 private-FB2 SKIP. Release on push(main) not yet confirmed; latest prior published release was test-build-351.
+- Пользователь ручным сообщением подтвердил BASIC OPEN PASS без точной версии и книги; device E2E для всех 5 FB2 ещё не выполнен.
+- M2e5c2b: аудит выявил реальное отсутствие имён «Рассказ 1–7» в оглавлении после корректного разделения «Снежной королевы» на 7 сюжетных глав + notes. В `BookReaderPage` теперь подписи по тому же номерному парсеру, что и в `BookImporter`; отдельный widget-test 320dp/200% с переходом к 7/8 и 8/8. Нет изменений SQLite/.bwsave, текстов пользовательских файлов или автоматически признанных фактов. Документ `docs/M2E5C2B_UX_AUDIT_RU.md`.
+- Осталось exact-head CI/M0 нового PR, полный visual/physical Windows/Android 320dp/200%, затем готовность к M2f.

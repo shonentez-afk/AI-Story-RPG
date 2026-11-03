@@ -44,6 +44,19 @@ class BookImporter {
     'десятый': 10,
   };
 
+  /// Public display label for a numbered story heading stored as an FB2
+  /// paragraph (not necessarily as <title>). The importer remains the source
+  /// of truth; the reader must not invent its own different numbering regex.
+  static String? numberedStoryPartLabel(BookBlock block) {
+    if (block.kind != BookBlockKind.paragraph &&
+        block.kind != BookBlockKind.heading) return null;
+    final text = block.text.trim();
+    final match = _numberedPartHeading.firstMatch(text);
+    if (match == null) return null;
+    final firstWord = text.split(RegExp(r'\s+')).first;
+    return '$firstWord ${match.group(1)}';
+  }
+
   static int? _numberedPart(BookBlock block) {
     if (block.kind != BookBlockKind.paragraph &&
         block.kind != BookBlockKind.heading) return null;

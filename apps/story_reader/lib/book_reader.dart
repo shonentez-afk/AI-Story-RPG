@@ -250,6 +250,15 @@ class _BookReaderPageState extends State<BookReaderPage>
   String _chapterLabel(int i) {
     if (widget.book.structuredChapters.isNotEmpty) {
       final blocks = widget.book.structuredChapters[i].blocks;
+      // A numbered story title can be an ordinary <p> inside a single FB2
+      // <section>. Prefer it to the whole-book heading from the first part.
+      // Number parsing is shared with the importer, not duplicated here.
+      if (_count >= 3) {
+        for (final block in blocks) {
+          final part = BookImporter.numberedStoryPartLabel(block);
+          if (part != null) return part;
+        }
+      }
       for (final block in blocks) {
         if (block.kind == BookBlockKind.heading && block.text.trim().isNotEmpty) {
           return block.text.trim().replaceAll(RegExp(r'\s+'), ' ');
