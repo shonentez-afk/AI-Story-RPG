@@ -130,9 +130,13 @@ void main() {
     await tester.pump(const Duration(milliseconds: 400));
     expect(find.byType(SourceIndexPreviewPage), findsOneWidget);
 
-    await tester.pageBack();
+    // Pop exactly one route. This specifically verifies that two callbacks
+    // did not push two preparation pages; it avoids a simulated back-button
+    // hit test while the indexer's asynchronous worker is still loading.
+    Navigator.of(tester.element(
+        find.byType(SourceIndexPreviewPage))).pop();
     await tester.pump();
-    await tester.pump(const Duration(milliseconds: 400));
+    await tester.pump(const Duration(milliseconds: 500));
     expect(find.byType(SourceIndexPreviewPage), findsNothing);
     expect(find.byType(LibraryPage), findsOneWidget);
 

@@ -779,3 +779,5 @@
 - Добавлены новые 320dp/200% smoke-тесты MultiSceneEditorPage (создать черновик) и NpcEditorialPage (выбор NPC и доступная кнопка карточки). Результат до exact-head CI PENDING, реальные устройства всё ещё не проверены.
 
 - Дополнительно в `LibraryPage` закрыт двойной Navigator.push после повторного нажатия кнопок «Читать»/«Подготовить к RPG»: `_openingBook` до закрытия дочернего маршрута; тест двойного callback → один Back → вновь доступное чтение. Новый exact-head CI обязателен.
+
+- CI `41596927069` (head `8eaf009...`) Flutter FAIL (прочие Python/Dart/BookWorld/M0 PASS): новый тест 320dp/200% выявил production RenderFlex overflow **147px** на кнопке «Добавить выбор» в мультисценном редакторе; исправлена responsive раскладка. Тест double Prepare nav теперь снимает ровно один Navigator route программно и проверяет отсутствие дубля (test harness vs back hit test). Следующий exact-head CI обязателен.
