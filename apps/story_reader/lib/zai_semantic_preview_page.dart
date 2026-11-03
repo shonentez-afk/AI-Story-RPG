@@ -244,6 +244,10 @@ class _ZaiSemanticPreviewPageState extends State<ZaiSemanticPreviewPage> {
                 Text('Z.ai · GLM-4.7-Flash',
                     style: Theme.of(context).textTheme.titleMedium),
                 const SizedBox(height: 6),
+                const Text('Язык описаний: русский. '
+                    'Цитаты и имена собственные сохраняются '
+                    'на языке оригинала.'),
+                const SizedBox(height: 8),
                 const Text('Экспериментальный просмотр. '
                     'ИИ предлагает по-русски имена, места, события и факты '
                     'по одному выбранному фрагменту. '
