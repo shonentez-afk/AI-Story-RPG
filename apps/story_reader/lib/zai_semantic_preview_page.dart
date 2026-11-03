@@ -31,13 +31,14 @@ class _ZaiSemanticPreviewPageState extends State<ZaiSemanticPreviewPage> {
 
   int _position = 0;
   bool _busy = false;
+  bool _confirming = false;
   ZaiSemanticPreviewResult? _result;
   String? _error;
 
   SourceChunk get _chunk => widget.index.chunks[_position];
 
   void _move(int direction) {
-    if (_busy) return;
+    if (_busy || _confirming) return;
     final next = _position + direction;
     if (next < 0 || next >= widget.index.chunks.length) return;
     setState(() {
@@ -110,7 +111,7 @@ class _ZaiSemanticPreviewPageState extends State<ZaiSemanticPreviewPage> {
   }
 
   Future<void> _analyze() async {
-    if (_busy) return;
+    if (_busy || _confirming) return;
     final chunk = _chunk;
     if (chunk.text.length > ZaiSemanticPreviewService.maxChunkUtf16 ||
         utf8.encode(chunk.text).length >
@@ -119,7 +120,14 @@ class _ZaiSemanticPreviewPageState extends State<ZaiSemanticPreviewPage> {
           'одиночной проверочной отправки. Выберите другой.');
       return;
     }
-    if (!await _confirmSource(chunk) || !mounted) return;
+    setState(() => _confirming = true);
+    bool approved = false;
+    try {
+      approved = await _confirmSource(chunk);
+    } finally {
+      if (mounted) setState(() => _confirming = false);
+    }
+    if (!approved || !mounted) return;
     setState(() {
       _busy = true;
       _result = null;
@@ -216,7 +224,7 @@ class _ZaiSemanticPreviewPageState extends State<ZaiSemanticPreviewPage> {
                 const SizedBox(height: 12),
                 FilledButton.icon(
                   key: const Key('zai-send-single-chunk'),
-                  onPressed: _busy || !allowed ? null : _analyze,
+                  onPressed: _busy || _confirming || !allowed ? null : _analyze,
                   icon: const Icon(Icons.auto_awesome_outlined),
                   label: const Text('Проверить этот фрагмент с ИИ'),
                 ),
