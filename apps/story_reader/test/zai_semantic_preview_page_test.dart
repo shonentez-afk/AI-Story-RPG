@@ -214,12 +214,13 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 100));
     expect(network.calls, 1);
+    // Stop is pinned to the app bar, even if a long source excerpt pushes
+    // the result and status cards below the viewport.
     final cancel = find.byKey(const Key('zai-cancel-retries'));
-    await tester.scrollUntilVisible(cancel, 130,
-        scrollable: find.byType(Scrollable).first);
-    expect(tester.widget<OutlinedButton>(cancel).onPressed, isNotNull);
+    expect(tester.widget<IconButton>(cancel).onPressed, isNotNull);
     await tester.tap(cancel);
-    await tester.pumpAndSettle();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
     expect(network.calls, 1);
     await tester.scrollUntilVisible(find.byKey(const Key('zai-preview-error')),
         130, scrollable: find.byType(Scrollable).first);
