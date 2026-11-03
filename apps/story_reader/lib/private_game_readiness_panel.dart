@@ -38,7 +38,10 @@ class _PrivateGameReadinessPanelState
   Future<PrivateGameReadiness> _verify() =>
       PrivateGameReadinessVerifier.assess(widget.index, widget.gateway);
 
-  void _refresh() => setState(() => _pending = _verify());
+  void _refresh() {
+    final pending = _verify();
+    setState(() { _pending = pending; });
+  }
 
   @override
   Widget build(BuildContext context) => Card(
