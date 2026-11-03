@@ -148,6 +148,80 @@ void main() {
         EvidenceStatus.inferred), true);
   });
 
+  test('unnamed fairy-tale roles yield only source-cited suggestions', () {
+    const folk = ImportedBook(
+      title: 'Мастерская и тайна', author: 'Автор тестового текста',
+      chapters: [
+        'Жил сапожник. Сапожник сделал сундук. '
+            'Принцесса увидела сундук. '
+            'Фрейлины обступили её. Свинопас получил подарок.',
+        'Принц и свинопас могли быть разными людьми. '
+            '«Смотри!» — принцесса сказала подруге.',
+      ],
+    );
+    final index = BookSourceIndexer.index(folk);
+    final first = index.chunks.first;
+    final claims = SourceNarrativeExtractor.claimsInChunk(index, first);
+    expect(claims.map((e) => e.evidence.label),
+        containsAll(['Сапожник сделал сундук',
+          'Принцесса увидела сундук', 'Фрейлины обступили её',
+          'Свинопас получил подарок']));
+    expect(claims.every((e) => e.evidence.kind == EvidenceKind.event), true);
+    expect(claims.every((e) => e.evidence.status == EvidenceStatus.inferred),
+        true);
+    final roles = SourceNarrativeExtractor.roleMentionsInChunk(index, first);
+    expect(roles.map((e) => e.label),
+        containsAll(['сапожник', 'Принцесса', 'Фрейлины', 'Свинопас']));
+    expect(roles.map((e) => e.label.toLowerCase()).toSet().length,
+        roles.length);
+    final proposals = SourceNarrativeExtractor.extractChunk(index, first);
+    for (final evidence in proposals) {
+      evidence.validate(index);
+      expect(first.text.substring(
+          evidence.startUtf16 - first.startUtf16,
+          evidence.endUtf16 - first.startUtf16), evidence.label);
+    }
+    final reviewed = StoryEvidenceReviewSession.create(index).scanNext(index);
+    expect(reviewed.graph.records, isNotEmpty);
+    expect(reviewed.graph.records.every(
+        (e) => e.status == EvidenceStatus.inferred), true);
+    expect(reviewed.graph.visibleToPlayer(currentChapter: 99), isEmpty);
+    expect(reviewed.canPublishBookworld, false);
+    expect(StoryEvidenceReviewSession.decode(index, reviewed.encode())
+        .encode(), reviewed.encode());
+  });
+
+  test('role spelling never proves actor identity or a negated event', () {
+    final index = BookSourceIndexer.index(const ImportedBook(
+      title: 'Роли и оговорки', author: '', chapters: [
+        'Принцесса увидела сундук. '
+            'Принц не увидел сундук. '
+            'Свинопас сделал подарок. '
+            'Непринцесса увидела сундук.'
+      ],
+    ));
+    final chunk = index.chunks.first;
+    final claims = SourceNarrativeExtractor.claimsInChunk(index, chunk);
+    expect(claims.map((x) => x.evidence.label),
+        contains('Принцесса увидела сундук'));
+    expect(claims.map((x) => x.evidence.label),
+        contains('Свинопас сделал подарок'));
+    expect(claims.any((x) => x.evidence.label.contains('не увидел')),
+        isFalse);
+    // The pre-existing proper-name matcher can still nominate an unknown
+    // capitalized word. The NEW role matcher must not treat a prefix as a
+    // known role; neither matcher automatically establishes a character.
+    final roles = SourceNarrativeExtractor.roleMentionsInChunk(index, chunk);
+    expect(roles.any((e) => e.label == 'Непринцесса'), isFalse);
+    expect(roles.map((x) => x.label),
+        containsAll(['Принцесса', 'Принц', 'Свинопас']));
+    expect(roles.every((e) => e.status == EvidenceStatus.inferred), true);
+    // There is deliberately no SAME-person decision for role mentions.
+    expect(SourceNarrativeExtractor.explicitAliasHints(
+        index, StoryEvidenceReviewSession.create(index).scanNext(index).graph),
+        isEmpty);
+  });
+
   test('M2b1 and evidence checkpoints live in distinct private folders',
       () async {
     final directory = await Directory.systemTemp.createTemp('evidence-m2b3b-');

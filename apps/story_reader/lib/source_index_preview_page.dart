@@ -9,6 +9,7 @@ import 'book_isolate_workers.dart';
 import 'offline_preparation_coordinator.dart';
 import 'source_analysis_checkpoint_repository.dart';
 import 'source_narrative_review_panel.dart';
+import 'source_semantic_catalog.dart';
 import 'source_semantic_review_panel.dart';
 import 'reviewed_story_editor_page.dart';
 import 'multi_scene_editor_page.dart';
@@ -220,16 +221,27 @@ class _SourceIndexPreviewPageState extends State<SourceIndexPreviewPage> {
             });
           });
       if (!mounted || generation != _generation) return;
+      final assertions = result.catalog?.assertions ?? const <SourceSemanticAssertion>[];
+      final eventCount = assertions
+          .where((item) => item.kind == SemanticAssertionKind.event).length;
       setState(() {
         _analysis = result.mentions;
         _narrativeRefresh++;
         _offlineMessage = result.paused
             ? 'Остановлено после сохранённой порции. '
                 'Нажмите «Продолжить локальную подготовку».'
-            : 'Локальный анализ завершён: '
-                '${result.catalog?.assertions.length ?? 0} '
-                'предполагаемых событий и фактов. '
-                'Это ещё не готовая RPG, необходимы проверка канона и сценарий.';
+            : eventCount == 0
+                ? 'Локальный анализ завершён, но события по текущим '
+                    'шаблонам не найдены. Это не ошибка книги: в сказках '
+                    'герои часто не имеют собственных имён, а действия '
+                    'описаны непрямо. Необходимо проверить исходный текст '
+                    'и вручную подготовить сюжет; без этого готовую RPG '
+                    'обещать нельзя. ИИ пока отключён.'
+                : 'Локальный анализ завершён: '
+                    '${assertions.length} предварительных утверждений, '
+                    'из них событий — $eventCount. '
+                    'Каждую цитату, персонажа и причинную связь необходимо '
+                    'проверить. Это ещё не готовая RPG.';
       });
     } catch (error) {
       if (mounted && generation == _generation) {
