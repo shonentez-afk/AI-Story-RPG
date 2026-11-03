@@ -137,26 +137,43 @@ class SourceCharacterDossierIndex {
     final hints = review.proposedRelations
         .where((r) => r.hint.sourceKind == EvidenceKind.character)
         .toList();
-    final events = <CharacterRelationshipHint>[];
+    final hintByMention = <String, List<IdentityRelationReview>>{};
+    for (final hint in hints) {
+      for (final id in {hint.hint.firstId, hint.hint.secondId}) {
+        hintByMention.putIfAbsent(id, () => []).add(hint);
+      }
+    }
+    final aliasByMention = <String, List<SourceSemanticAssertion>>{};
+    final relationByName = <String, List<CharacterRelationshipHint>>{};
     final byEvidence = {for (final e in graph.records) e.id: e};
     for (final claim in catalog.assertions) {
-      if (claim.kind != SemanticAssertionKind.relation ||
-          claim.evidenceIds.isEmpty) continue;
-      // A candidate relation is never a verified identity/relationship.
-      // Its quote must be a current non-rejected source passage.
-      final refs = [
-        for (final id in claim.evidenceIds)
-          if (byEvidence.containsKey(id)) byEvidence[id]!,
-      ];
-      if (refs.length != claim.evidenceIds.length ||
-          refs.any((e) => e.status == EvidenceStatus.rejected)) continue;
-      refs.sort((a, b) => a.chapterIndex.compareTo(b.chapterIndex));
-      events.add(CharacterRelationshipHint(
-        assertion: claim,
-        chapterIndex: refs.first.chapterIndex,
-        citation: refs.map((e) => e.label).join(' / '),
-        verdict: editorial.verdicts[claim.id],
-      ));
+      if (claim.kind == SemanticAssertionKind.alias) {
+        for (final id in claim.evidenceIds) {
+          if (mentionById.containsKey(id)) {
+            aliasByMention.putIfAbsent(id, () => []).add(claim);
+          }
+        }
+      } else if (claim.kind == SemanticAssertionKind.relation &&
+          claim.evidenceIds.isNotEmpty) {
+        final refs = [
+          for (final id in claim.evidenceIds)
+            if (byEvidence.containsKey(id)) byEvidence[id]!,
+        ];
+        if (refs.length != claim.evidenceIds.length ||
+            refs.any((e) => e.status == EvidenceStatus.rejected)) continue;
+        refs.sort((a, b) => a.chapterIndex.compareTo(b.chapterIndex));
+        final event = CharacterRelationshipHint(
+          assertion: claim,
+          chapterIndex: refs.first.chapterIndex,
+          citation: refs.map((e) => e.label).join(' / '),
+          verdict: editorial.verdicts[claim.id],
+        );
+        for (final name in {
+          _normal(claim.subject), _normal(claim.object),
+        }) {
+          relationByName.putIfAbsent(name, () => []).add(event);
+        }
+      }
     }
     final dossiers = <SourceCharacterDossier>[];
     for (final mentions in groups.values) {
@@ -167,27 +184,34 @@ class SourceCharacterDossierIndex {
         if (offset != 0) return offset;
         return a.id.compareTo(b.id);
       });
-      final ids = {for (final m in mentions) m.id};
       final labels = <String>[];
       for (final m in mentions) {
         if (!labels.contains(m.label)) labels.add(m.label);
       }
-      final linkedHints = [
-        for (final hint in hints)
-          if (ids.contains(hint.hint.firstId) ||
-              ids.contains(hint.hint.secondId)) hint,
-      ];
-      final aliasHints = [
-        for (final claim in catalog.assertions)
-          if (claim.kind == SemanticAssertionKind.alias &&
-              claim.evidenceIds.any(ids.contains)) claim,
-      ];
-      final normalizedNames = labels.map(_normal).toSet();
-      final relationships = [
-        for (final hint in events)
-          if (normalizedNames.contains(_normal(hint.assertion.subject)) ||
-              normalizedNames.contains(_normal(hint.assertion.object))) hint,
-      ];
+      final hintIds = <String>{};
+      final linkedHints = <IdentityRelationReview>[];
+      final aliasIds = <String>{};
+      final aliasHints = <SourceSemanticAssertion>[];
+      final relationIds = <String>{};
+      final relationships = <CharacterRelationshipHint>[];
+      for (final mention in mentions) {
+        for (final edge in hintByMention[mention.id] ??
+            const <IdentityRelationReview>[]) {
+          if (hintIds.add(edge.hint.id)) linkedHints.add(edge);
+        }
+        for (final alias in aliasByMention[mention.id] ??
+            const <SourceSemanticAssertion>[]) {
+          if (aliasIds.add(alias.id)) aliasHints.add(alias);
+        }
+      }
+      for (final label in labels) {
+        for (final candidate in relationByName[_normal(label)] ??
+            const <CharacterRelationshipHint>[]) {
+          if (relationIds.add(candidate.assertion.id)) {
+            relationships.add(candidate);
+          }
+        }
+      }
       dossiers.add(SourceCharacterDossier(
         id: (mentions.map((e) => e.id).toList()..sort()).first,
         labels: List.unmodifiable(labels),
