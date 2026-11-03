@@ -94,7 +94,7 @@ void main() {
     final fact = 'fact_' + List.filled(24, 'b').join();
     Map<String, dynamic> enriched() {
       final data = loadFixture();
-      final blueprint = object(data['blueprint']);
+      final blueprint = data['blueprint'] as Map<String, dynamic>;
       blueprint['actors'] = ['player', npc];
       blueprint['facts'] = [fact];
       final state = object(blueprint['initial_state']);
@@ -120,13 +120,13 @@ void main() {
 
     for (final invalid in <void Function(Map<String, dynamic>)>[
       (data) {
-        final bp = object(data['blueprint']);
+        final bp = data['blueprint'] as Map<String, dynamic>;
         final state = object(bp['initial_state']);
         state['knowledge'] = {'player': <String>[], npc: [fact]};
         bp['initial_state'] = state;
       },
       (data) {
-        final bp = object(data['blueprint']);
+        final bp = data['blueprint'] as Map<String, dynamic>;
         bp['facts'] = ['plain_text'];
         final scene = (bp['scenes'] as List).first as Map;
         ((scene['choices'] as List).first as Map)['effects'] = [
@@ -134,14 +134,14 @@ void main() {
         ];
       },
       (data) {
-        final bp = object(data['blueprint']);
+        final bp = data['blueprint'] as Map<String, dynamic>;
         final scene = (bp['scenes'] as List).first as Map;
         ((scene['choices'] as List).first as Map)['conditions'] = [
           {'op': 'knows_fact', 'id': fact, 'actor': npc},
         ];
       },
       (data) {
-        final bp = object(data['blueprint']);
+        final bp = data['blueprint'] as Map<String, dynamic>;
         final scene = (bp['scenes'] as List).first as Map;
         ((scene['choices'] as List).first as Map)['effects'] = [
           {'op': 'stat_delta', 'id': 'missing', 'amount': 1},
