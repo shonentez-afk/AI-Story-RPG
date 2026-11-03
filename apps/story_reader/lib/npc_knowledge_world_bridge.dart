@@ -110,6 +110,25 @@ class NpcKnowledgeWorldBridge {
         'op': 'learn_fact', 'id': factId, 'actor': actor,
       });
     }
+    // Conditions attach only to previously reviewed grants and are resolved
+    // from the same opaque actor/fact catalog. Runtime checks know-before-act.
+    // Full state-space reachability is independently checked by the ZIP
+    // importer before this private world may be installed or played.
+    for (final gate in rulebook.gates) {
+      final grant = rulebook.rules.singleWhere(
+          (rule) => rule.id == gate.grantRuleId);
+      final fact = factIds['${grant.dossierId}|${grant.noteId}'];
+      final actor = grant.recipient == KnowledgeRecipient.player
+          ? 'player' : actorIds[grant.dossierId];
+      final choice = choices[gate.choiceId];
+      if (fact == null || actor == null || choice == null) {
+        throw const FormatException(
+            'Недействительная привязка условия знания NPC');
+      }
+      (choice['conditions'] as List).add(<String, String>{
+        'op': 'knows_fact', 'id': fact, 'actor': actor,
+      });
+    }
     result['actors'] = <String>[
       'player', ...(actorIds.values.toList()..sort()),
     ];

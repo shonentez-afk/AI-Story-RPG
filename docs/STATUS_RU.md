@@ -715,3 +715,15 @@
 
 - PR #35 MERGED: `5b74a9c225a668557c352b633eb497913446cfff`; exact-head `329cfad19d119276459b26cccbab1212ff305a17`; CI `41580693590` Python/Dart/schema/Flutter/Windows/Android PASS, M0 `41580693511` PASS. AI offline. Физическое E2E SKIP.
 - Новая ветка `feature/m2e5b3b2b1-npc-sqlite-transfer-20261103`: реальный SQLite + BookWorld + portable v2 стресс тест 120 ходов, повторное открытие, изолированный импорт и проверка tamper. До нового exact-head CI — **CODE / QA PENDING**, не называть успешным или опубликованным. Подробности `docs/M2E5B3B2B1_SQLITE_STRESS_RU.md`.
+
+
+## 2026-11-03 — M2e5b3b2b2: GUI условий `knows_fact` (CODE / CI PENDING)
+
+- Ветка `feature/m2e5b3b2b2-npc-gates-20261103` продолжает PR #36 без изменения исходных книг, библиотек и SQLite/.bwsave.
+- Редактор проверяемых `knows_fact` на уже принятых правилах `learn_fact`, source+rule+choice digest; v1 когда gates пусты и строгое v2 когда добавлены. Условия идут в существующий `NpcKnowledgeWorldBridge` и импортёр с causal proof. Нет автоматического раскрытия секрета, AI и новой схемы сохранений.
+- Подробности `docs/M2E5B3B2B2_NPC_KNOWLEDGE_GATES_RU.md`. Статус CODE / EXACT-HEAD QA PENDING — пока без доказанной приёмки или нового релиза. Ручные Windows/Android, полный UI/UX аудит и настройки BYOK остаются отдельными блокерами.
+
+
+## 2026-11-03 — M2e5b3b2b1 ПРИНЯТ (точная приёмка)
+
+- PR #36 **MERGED**, squash `a8ff96279f32bff5c276669861d16dd61900cb76`. Exact branch head `7f562c2100b607e7104b4da38e91d1ef347d6a42`, GitHub Actions `41581807005` **COMPLETED/SUCCESS**: Python, Dart, schema/BookWorld, Flutter analyze+widget, Windows portable, Android APK PASS; M0 `41581807148` PASS. Это тест двух отдельных SQLite каталогов в CI, физические устройства SKIP. `M2e5b3b2b2` остаётся CODE / exact-head CI PENDING до отдельного полного прогона.

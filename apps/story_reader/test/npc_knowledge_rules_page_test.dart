@@ -72,6 +72,8 @@ void main() {
           origin: DraftSceneOrigin.explicitAdaptation,
           assertionIds: const [], terminal: false,
           choices: [
+            DraftChoice(id: 'wait', label: 'Выслушать NPC',
+                nextSceneId: 'first'),
             DraftChoice(id: 'open', label: 'Открыть дверь',
                 nextSceneId: 'end'),
           ],
@@ -120,6 +122,71 @@ void main() {
     await tester.tap(find.text('Отмена').last);
     await tester.pumpAndSettle();
     expect(await store.read(index.sourceFingerprint), raw);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('dialogue gate persists, reloads and cannot orphan its grant',
+      (tester) async {
+    await tester.pumpWidget(screen());
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('knowledge-add')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('knowledge-confirm')));
+    await tester.pumpAndSettle();
+
+    await tester.ensureVisible(find.byKey(const Key('knowledge-gate-add')));
+    await tester.tap(find.byKey(const Key('knowledge-gate-add')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('knowledge-gate-grant')), findsOneWidget);
+    expect(find.byKey(const Key('knowledge-gate-choice')), findsOneWidget);
+    await tester.tap(find.byKey(const Key('knowledge-gate-confirm')));
+    await tester.pumpAndSettle();
+    expect(find.text('Добавить условие к игровому выбору?'), findsOneWidget);
+    await tester.tap(find.text('Подтвердить').last);
+    await tester.pumpAndSettle();
+
+    final raw = (await store.read(index.sourceFingerprint))!;
+    final saved = NpcKnowledgeRulebook.decode(
+      index: index, dossiers: dossiers, graph: graph, catalog: catalog,
+      editorial: editorial, notebook: notebook,
+      scenario: scenario, raw: raw);
+    expect(saved.rules.single.choiceId, 'wait');
+    expect(saved.gates.single.choiceId, 'open');
+    expect(saved.gates.single.grantRuleId, saved.rules.single.id);
+    expect(raw, isNot(contains('Мой авторский секрет')));
+    expect(find.byKey(const Key('knowledge-gate-npc_gate_1')), findsOneWidget);
+
+    await tester.pumpWidget(const MaterialApp(home: SizedBox()));
+    await tester.pumpAndSettle();
+    await tester.pumpWidget(screen());
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.byKey(
+        const Key('knowledge-gate-edit-npc_gate_1')));
+    expect(find.byKey(const Key('knowledge-gate-npc_gate_1')), findsOneWidget);
+
+    await tester.ensureVisible(find.byKey(
+        const Key('knowledge-delete-npc_rule_1')));
+    await tester.tap(find.byKey(const Key('knowledge-delete-npc_rule_1')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Подтвердить').last);
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Не сохранено'), findsOneWidget);
+    expect(await store.read(index.sourceFingerprint), raw);
+
+    await tester.ensureVisible(find.byKey(
+        const Key('knowledge-gate-delete-npc_gate_1')));
+    await tester.tap(find.byKey(
+        const Key('knowledge-gate-delete-npc_gate_1')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Подтвердить').last);
+    await tester.pumpAndSettle();
+    final remaining = NpcKnowledgeRulebook.decode(
+      index: index, dossiers: dossiers, graph: graph, catalog: catalog,
+      editorial: editorial, notebook: notebook,
+      scenario: scenario,
+      raw: (await store.read(index.sourceFingerprint))!);
+    expect(remaining.gates, isEmpty);
+    expect(remaining.rules.length, 1);
     expect(tester.takeException(), isNull);
   });
 

@@ -317,6 +317,86 @@ void main() {
         scenario: draft, raw: saved), throwsFormatException);
   });
 
+  test('v2 condition waits for the exact actor to learn a reviewed fact', () {
+    final grant = makeRule();
+    final scene = draft.scenes.first;
+    final target = scene.choices.singleWhere((choice) => choice.id == 'end_now');
+    final gate = NpcKnowledgeRulebook.composeGate(
+      id: 'npc_gate_1', grant: grant, scene: scene, choice: target);
+    final authored = NpcKnowledgeRulebook.empty(index)
+        .withRule(grant).withGate(gate);
+    check(authored);
+    final raw = authored.encode();
+    expect(raw, contains(NpcKnowledgeRulebook.gatedFormat));
+    expect(raw, isNot(contains(secret.text)));
+    final reopened = NpcKnowledgeRulebook.decode(
+      index: index, dossiers: dossiers, graph: graph, catalog: catalog,
+      editorial: editorial, notebook: notebook, scenario: draft, raw: raw);
+    expect(reopened.encode(), raw);
+    expect(reopened.gates.single.choiceId, 'end_now');
+    expect(reopened.nextGateId(), 'npc_gate_2');
+
+    final translated = NpcKnowledgeWorldBridge.preview(
+      index: index, dossiers: dossiers, graph: graph,
+      catalog: catalog, editorial: editorial, notebook: notebook,
+      scenario: draft, rulebook: reopened, originalBlueprint: base());
+    final actor = translated.actorIds[artem.id]!;
+    final fact = translated.factIds['${artem.id}|${secret.id}']!;
+    final choice = translated.story.scenes['entry']!.choices
+        .singleWhere((value) => value.id == 'end_now');
+    expect(choice.conditions.single.op, 'knows_fact');
+    expect(choice.conditions.single.actor, actor);
+    expect(choice.conditions.single.id, fact);
+
+    final world = StoryWorld(translated.story);
+    final hash = world.state.stateHash;
+    expect(world.apply(actionId: 'too_early', choiceId: 'end_now').applied,
+        isFalse);
+    expect(world.state.stateHash, hash);
+    expect(world.events, isEmpty);
+    expect(world.apply(actionId: 'learn', choiceId: 'repeat').applied, isTrue);
+    expect(world.state.knowledge[actor], contains(fact));
+    expect(world.state.knowledge['player'], isEmpty);
+    expect(world.apply(actionId: 'finish', choiceId: 'end_now').applied, isTrue);
+    expect(world.isTerminal, isTrue);
+    final replay = StoryWorld.replay(
+      translated.story,
+      jsonDecode(jsonEncode(world.events.map((e) => e.toJson()).toList())) as List,
+      expectedSequence: 2, expectedStateHash: world.state.stateHash);
+    expect(replay.state.knowledge[actor], contains(fact));
+    expect(replay.state.stateHash, world.state.stateHash);
+  });
+
+  test('old v1 remains identical, changed rule and tampered gate fail closed', () {
+    final grant = makeRule();
+    final legacy = NpcKnowledgeRulebook.empty(index).withRule(grant);
+    final oldJson = legacy.encode();
+    expect(oldJson, contains(NpcKnowledgeRulebook.format));
+    expect(oldJson, isNot(contains('"gates"')));
+    expect(NpcKnowledgeRulebook.decode(
+      index: index, dossiers: dossiers, graph: graph, catalog: catalog,
+      editorial: editorial, notebook: notebook, scenario: draft,
+      raw: oldJson).encode(), oldJson);
+
+    final gate = NpcKnowledgeRulebook.composeGate(
+      id: 'npc_gate_1', grant: grant, scene: draft.scenes.first,
+      choice: draft.scenes.first.choices.last);
+    final gated = legacy.withGate(gate);
+    check(gated);
+    expect(() => check(gated.withoutRule(grant.id)), throwsFormatException);
+    expect(() => check(gated.withRule(makeRule(
+      recipient: KnowledgeRecipient.player, approved: true))),
+      throwsFormatException);
+    final raw = gated.encode();
+    expect(() => NpcKnowledgeRulebook.decode(
+      index: index, dossiers: dossiers, graph: graph, catalog: catalog,
+      editorial: editorial, notebook: notebook, scenario: draft,
+      raw: raw.replaceFirst('npc_gate_1', 'npc_gate_9')),
+      throwsFormatException);
+    final missing = gated.withoutGate(gate.id);
+    expect(missing.encode(), oldJson);
+  });
+
   test('short note text is never silently copied into world catalog', () {
     // A user must not unknowingly serialize a note verbatim into a scene
     // while simultaneously claiming the note is opaque.
