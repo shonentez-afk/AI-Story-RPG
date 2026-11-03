@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:ai_story_reader/ai_connection.dart';
 import 'package:ai_story_reader/book_import.dart';
 import 'package:ai_story_reader/book_source_index.dart';
+import 'package:ai_story_reader/source_analysis_checkpoint_repository.dart';
 import 'package:ai_story_reader/zai_semantic_preview.dart';
 import 'package:ai_story_reader/zai_semantic_preview_page.dart';
 
@@ -76,6 +77,7 @@ void main() {
       preferences: preferences, vault: _Vault(), transport: network,
     );
     await tester.pumpWidget(MaterialApp(home: ZaiSemanticPreviewPage(
+      reviewRepository: MemorySourceAnalysisCheckpointRepository(),
       index: index, service: service,
     )));
     await tester.pumpAndSettle();
@@ -145,6 +147,7 @@ void main() {
         child: child!,
       ),
       home: ZaiSemanticPreviewPage(
+      reviewRepository: MemorySourceAnalysisCheckpointRepository(),
         index: index,
         service: ZaiSemanticPreviewService(
           vault: _Vault(), transport: _Network(),
@@ -177,6 +180,7 @@ void main() {
       retryWait: (delay) async { waits.add(delay); },
     );
     await tester.pumpWidget(MaterialApp(home: ZaiSemanticPreviewPage(
+      reviewRepository: MemorySourceAnalysisCheckpointRepository(),
       index: BookSourceIndexer.index(sample),
       service: service,
     )));
@@ -217,6 +221,7 @@ void main() {
       retryWait: (delay) => pendingWait.future,
     );
     await tester.pumpWidget(MaterialApp(home: ZaiSemanticPreviewPage(
+      reviewRepository: MemorySourceAnalysisCheckpointRepository(),
       index: BookSourceIndexer.index(sample),
       service: service,
     )));
