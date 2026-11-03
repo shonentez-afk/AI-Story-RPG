@@ -28,6 +28,9 @@ void main() {
   late MemorySourceAnalysisCheckpointRepository editorialStore;
   late MemorySourceAnalysisCheckpointRepository shortStore;
   late MemorySourceAnalysisCheckpointRepository multiStore;
+  late MemorySourceAnalysisCheckpointRepository npcStore;
+  late MemorySourceAnalysisCheckpointRepository rulesStore;
+  late MemorySourceAnalysisCheckpointRepository identityStore;
   late StoryEvidenceReviewSession review;
   late SourceSemanticCatalog catalog;
   late SemanticEditorialReviewSession editorial;
@@ -39,6 +42,9 @@ void main() {
     editorialStore = MemorySourceAnalysisCheckpointRepository();
     shortStore = MemorySourceAnalysisCheckpointRepository();
     multiStore = MemorySourceAnalysisCheckpointRepository();
+    npcStore = MemorySourceAnalysisCheckpointRepository();
+    rulesStore = MemorySourceAnalysisCheckpointRepository();
+    identityStore = MemorySourceAnalysisCheckpointRepository();
 
     review = StoryEvidenceReviewSession.create(index).scanNext(index);
     for (final record in review.graph.records) {
@@ -75,6 +81,9 @@ void main() {
     editorialRepository: editorialStore,
     shortDraftRepository: shortStore,
     multiDraftRepository: multiStore,
+    npcNotebookRepository: npcStore,
+    npcRulesRepository: rulesStore,
+    identityRepository: identityStore,
   ));
 
   Future<void> seedStores({bool withShort = true}) async {
@@ -150,6 +159,8 @@ void main() {
     await tester.pumpAndSettle();
     expect(tester.widget<FilledButton>(
         find.byKey(const Key('multi-compile-private'))).onPressed, isNotNull);
+    expect(tester.widget<CheckboxListTile>(
+        find.byKey(const Key('multi-use-npc-rules'))).value, false);
     expect(tester.takeException(), isNull);
   });
 
@@ -206,4 +217,33 @@ void main() {
     expect(await shortStore.read(index.sourceFingerprint), shortDraft.encode());
     expect(tester.takeException(), isNull);
   });
+  testWidgets('opt-in NPC compile blocks absent rules without changing draft',
+      (tester) async {
+    await seedStores();
+    await tester.pumpWidget(page());
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('multi-copy-short')));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.byKey(const Key('multi-check-causality')));
+    await tester.tap(find.byKey(const Key('multi-check-causality')));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.byKey(const Key('multi-private-consent')));
+    await tester.tap(find.byKey(const Key('multi-private-consent')));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.byKey(const Key('multi-use-npc-rules')));
+    await tester.tap(find.byKey(const Key('multi-use-npc-rules')));
+    await tester.pumpAndSettle();
+    expect(tester.widget<CheckboxListTile>(
+        find.byKey(const Key('multi-use-npc-rules'))).value, true);
+    await tester.ensureVisible(find.byKey(const Key('multi-compile-private')));
+    await tester.tap(find.byKey(const Key('multi-compile-private')));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Нет сохранённых правил знаний'),
+        findsOneWidget);
+    expect(await multiStore.read(index.sourceFingerprint), isNull);
+    expect(await shortStore.read(index.sourceFingerprint), shortDraft.encode());
+    expect(tester.takeException(), isNull);
+  });
+
+
 }
