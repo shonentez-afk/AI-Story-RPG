@@ -37,3 +37,7 @@ PR #40 M2e5c2a принят в main: squash `200ad07c0a5f585492fe79ecfd41045edfb
 ## Целевой CI hotfix: неверный глобальный finder, не дефект главы
 
 Первый PR #41 head `4a3076aeaeefaede09825dccc61505ee862dd157` на GitHub Actions run `41592292664` дал Flutter widget FAILURE только на `book_reader_ux_test.dart:132`. Открытое оглавление отображает «Рассказ первый» одновременно с заголовком текущей главы позади модального BottomSheet. Глобальный `find.text('Рассказ первый')` закономерно находил **два** виджета и ложно требовал один. В тесте заголовки теперь ищутся `find.descendant(of: find.byType(BottomSheet), matching: find.text(title))`; дополнительно проверяется закрытие листа после переходов. Production код и другие тесты не изменены. Новый exact-head CI обязателен до merge.
+
+### Дополнительная диагностика CI
+
+Новый run `41592911307` exact SHA `8afa517bf8f18fc6076339d87fb07f23a22710a8` исправил дубликат заголовка, но следующая проверка на строке 154 искала текст «События части 7» до его монтирования lazy `SliverList.builder` при 320dp/200%. Переход к главе и счётчик 7/8 уже работали. Тест дополнен проверкой `book.chapters[6]` и реальной прокруткой `tester.scrollUntilVisible` до текстового абзаца. Production source unchanged, следующий exact-head CI обязателен.

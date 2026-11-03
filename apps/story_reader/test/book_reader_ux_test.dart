@@ -118,6 +118,9 @@ void main() {
     final book = BookImporter.parse('tale.fb2',
         Uint8List.fromList(utf8.encode(source)));
     expect(book.structuredChapters, hasLength(8));
+    // The source paragraph must remain part of the seventh chapter even
+    // when the reader builds its offscreen slivers lazily.
+    expect(book.chapters[6], contains('События части 7'));
     await tester.pumpWidget(MaterialApp(
       builder: (context, child) => MediaQuery(
         data: MediaQuery.of(context).copyWith(
@@ -151,6 +154,15 @@ void main() {
     await tester.pumpAndSettle();
     expect(toc, findsNothing);
     expect(find.text('Глава 7 из 8'), findsOneWidget);
+    // At 320dp/200% the long heading can fill the viewport: the story
+    // paragraph exists in the next lazy sliver but is not mounted until
+    // scrolled into view. Assert actual visibility, not premature mounting.
+    await tester.scrollUntilVisible(
+      find.textContaining('События части 7'), 150,
+      scrollable: find.byType(Scrollable).first,
+      maxScrolls: 20,
+    );
+    await tester.pumpAndSettle();
     expect(find.textContaining('События части 7'), findsOneWidget);
     expect(tester.takeException(), isNull);
 
