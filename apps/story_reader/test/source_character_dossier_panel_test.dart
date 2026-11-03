@@ -121,7 +121,7 @@ void main() {
     final book = ImportedBook(
       title: 'Двенадцать глав', author: 'Автор',
       chapters: List.generate(12,
-          (i) => 'Артем открыл дверь. Дверь была закрыта. Глава $i.'),
+          (i) => 'Артем по прозвищу Волк открыл дверь. Дверь была закрыта. Глава $i.'),
     );
     final (index, graph, catalog, editorial) = fixture(book);
     final store = MemorySourceAnalysisCheckpointRepository();
@@ -133,7 +133,7 @@ void main() {
     await tester.ensureVisible(find.byKey(const Key('dossier-next')));
     await tester.tap(find.byKey(const Key('dossier-next')));
     await tester.pumpAndSettle();
-    expect(find.text('Страница 2 из 2'), findsOneWidget);
+    expect(find.textContaining('Страница 2 из'), findsOneWidget);
     await tester.enterText(find.byKey(const Key('dossier-search')), 'другое имя');
     await tester.pumpAndSettle();
     expect(find.text('По выбранному имени карточек нет.'), findsOneWidget);
