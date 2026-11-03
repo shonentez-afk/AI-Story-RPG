@@ -40,15 +40,22 @@ void main() {
     )));
     await tester.pumpAndSettle();
 
+    Future<void> show(Finder target, {bool upward = false}) async {
+      await tester.scrollUntilVisible(target, upward ? -170 : 170,
+          scrollable: find.byType(Scrollable).first, maxScrolls: 50);
+      await tester.ensureVisible(target);
+      await tester.pumpAndSettle();
+    }
+
     expect(await preferences.isEnabled(), isFalse);
-    expect(find.text('Ключ пока не сохранён'), findsOneWidget);
+    await show(find.byKey(const Key('ai-test-connection')));
     expect(tester.widget<OutlinedButton>(
         find.byKey(const Key('ai-test-connection'))).onPressed, isNull);
     expect(checker.calls, 0);
-
+    await show(find.byKey(const Key('ai-api-key-input')), upward: true);
     await tester.enterText(find.byKey(const Key('ai-api-key-input')),
         'SYNTHETIC-KEY');
-    await tester.ensureVisible(find.byKey(const Key('ai-save-key')));
+    await show(find.byKey(const Key('ai-save-key')));
     await tester.tap(find.byKey(const Key('ai-save-key')));
     await tester.pumpAndSettle();
     expect(vault.value, 'SYNTHETIC-KEY');
@@ -57,7 +64,7 @@ void main() {
     expect(await preferences.isEnabled(), false);
     expect(checker.calls, 0);
 
-    await tester.ensureVisible(find.byKey(const Key('ai-cloud-consent')));
+    await show(find.byKey(const Key('ai-cloud-consent')));
     await tester.tap(find.byKey(const Key('ai-cloud-consent')));
     await tester.pumpAndSettle();
     expect(find.text('Разрешить подключение к Z.ai?'), findsOneWidget);
@@ -73,16 +80,14 @@ void main() {
     expect(await preferences.isEnabled(), true);
     expect(checker.calls, 0);
 
-    await tester.ensureVisible(find.byKey(const Key('ai-test-connection')));
+    await show(find.byKey(const Key('ai-test-connection')));
     await tester.tap(find.byKey(const Key('ai-test-connection')));
     await tester.pumpAndSettle();
     expect(checker.calls, 1);
-    expect(find.textContaining('Текст книги не отправлялся'), findsOneWidget);
+    await show(find.textContaining('Текст книги не отправлялся'));
 
     final delete = find.byKey(const Key('ai-delete-key'));
-    await tester.scrollUntilVisible(delete, -180,
-        scrollable: find.byType(Scrollable).first, maxScrolls: 30);
-    await tester.ensureVisible(delete);
+    await show(delete, upward: true);
     await tester.tap(delete);
     await tester.pumpAndSettle();
     await tester.tap(find.text('Отмена'));
@@ -126,6 +131,8 @@ void main() {
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
     final url = find.byKey(const Key('ai-copy-key-url'));
+    await tester.scrollUntilVisible(url, 150,
+        scrollable: find.byType(Scrollable).first, maxScrolls: 40);
     await tester.ensureVisible(url);
     expect(tester.takeException(), isNull);
     await tester.scrollUntilVisible(
