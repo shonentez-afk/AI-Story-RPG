@@ -162,12 +162,16 @@ void main() {
     await tester.tap(find.text('Отмена'));
     await tester.pumpAndSettle();
     expect(await repository.read(index.sourceFingerprint), isNotNull);
+    expect(find.textContaining('Цитаты сброшены'), findsNothing);
     await tester.tap(find.text('Сбросить проверку'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Сбросить проверку').last);
     await tester.pumpAndSettle();
     expect(await repository.read(index.sourceFingerprint), isNull);
     expect(find.text('Проверено фрагментов: 0 из 2'), findsOneWidget);
+    expect(find.textContaining('Цитаты сброшены'), findsOneWidget);
+    expect(find.textContaining('Сохранённые сценарии и решения NPC'),
+        findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 }
