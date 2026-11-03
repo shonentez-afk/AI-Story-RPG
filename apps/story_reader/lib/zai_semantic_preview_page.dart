@@ -406,13 +406,6 @@ class _ZaiSemanticPreviewPageState extends State<ZaiSemanticPreviewPage> {
                       'на ручную проверку ${_queue!.pendingReviewCount}.',
                       key: const Key('zai-review-progress')),
                   OutlinedButton.icon(
-                    key: const Key('zai-open-cross-window-review'),
-                    onPressed: _busy || _confirming || _reviewSaving
-                        ? null : _openCrossWindowReview,
-                    icon: const Icon(Icons.account_tree_outlined),
-                    label: const Text('Сводка персонажей, событий и связей'),
-                  ),
-                  OutlinedButton.icon(
                     key: const Key('zai-next-pending-window'),
                     onPressed: _busy || _confirming || _reviewSaving ||
                         _queue!.nextPendingAfter(_position) == null
@@ -471,6 +464,14 @@ class _ZaiSemanticPreviewPageState extends State<ZaiSemanticPreviewPage> {
                   icon: const Icon(Icons.auto_awesome_outlined),
                   label: const Text('Проверить это окно с ИИ'),
                 ),
+                const SizedBox(height: 8),
+                  OutlinedButton.icon(
+                    key: const Key('zai-open-cross-window-review'),
+                    onPressed: _busy || _confirming || _reviewSaving
+                        ? null : _openCrossWindowReview,
+                    icon: const Icon(Icons.account_tree_outlined),
+                    label: const Text('Сводка персонажей, событий и связей'),
+                  ),
                 if (!validTitle)
                   const Text('Название книги отсутствует или слишком '
                       'длинное. Для передачи требуется корректное название; '
