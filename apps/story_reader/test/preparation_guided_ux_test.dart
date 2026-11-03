@@ -65,9 +65,9 @@ void main() {
 
     expect(find.text('Подготовка книги'), findsOneWidget);
     expect(find.text('Что делает подготовка?'), findsOneWidget);
-    expect(find.text('Создать игровую историю — пока недоступно'),
+    expect(find.textContaining('Личная короткая или многосценная RPG собирается'),
         findsOneWidget);
-    expect(find.textContaining('готовой игры из вашей книги ещё не создаём'),
+    expect(find.textContaining('Автоматической RPG по всей книге пока нет'),
         findsOneWidget);
     expect(find.text('Начать поиск имён и мест'), findsOneWidget);
     expect(find.text('Артем'), findsNothing);
@@ -83,7 +83,7 @@ void main() {
     expect(find.text('Артем'), findsNothing);
     expect(find.text('Проверить найденные имена (возможны спойлеры)'),
         findsOneWidget);
-    expect(find.text('Создать игровую историю — пока недоступно'),
+    expect(find.textContaining('Личная короткая или многосценная RPG собирается'),
         findsOneWidget);
 
     await tester.tap(

@@ -768,3 +768,16 @@
 
 - PR #41 MERGED: `386aaef7be9e80551b1631c8958e9ec7c5a7b8d0`; exact head `af5d1df11e78655193043bd4bbd6270d08fa7920`; CI run `41593740031` **SUCCESS 6/6** (Python/Dart/BookWorld/Flutter 296 PASS+2 private-FB2 SKIP/Windows/Android), M0 `41593740280` SUCCESS. Предыдущие три Flutter failure — неверные **тестовые** ожидания для 320dp/200%, устранены. Новое оглавление использует заголовки рассказов, notes остаются отдельной главой; настоящая книга не включена в CI. Проверить отдельную публикацию test-build на post-merge main.
 - Дальше M2e5c2c: полный UX/UI и физический Windows/Android E2E по шести личным FB2, семи частям «Снежной королевы», подготовке RPG, NPC, настройкам и сохранениям. Реальный физический E2E всё ещё SKIP, несмотря на CI PASS; live AI пока OFF.
+
+
+## 2026-11-03 — M2e5c2c UX и подготовка книги: CODE / CI PENDING
+
+- На коде `main` `83b3c05af8dd29a8a84228247db78cd3ae73c522` статически инвентаризированы все основные пользовательские экраны и их обработчики (17 экранных модулей, карта `docs/M2E5C2C_UX_CONTROL_AUDIT_RU.md`); не считать отдельной физической проверкой каждого элемента.
+- `SourceIndexPreviewPage`: исправлены ошибочное заявление об отсутствующем компиляторе, непонятное дублирование ручного поиска и основной подготовки, ложный статус завершения после сброса имён, повторная остановка после порции и возможность параллельно менять цитаты при записи checkpoint. Добавлена Flutter регрессия полного цикла подготовки и reset (narrative/catalog не удаляются); обновлены существующие UX тексты тестов.
+- Дальше exact-head CI+M0, Windows/Android сборки; затем ручной device QA всех 6 FB2, responsive 320dp/200%, verify/checkpoints/editor/NPC/campaigns. `main` не менять до приёмки, AI offline/local/cloud provisioning не включён.
+
+- Добавлены новые 320dp/200% smoke-тесты MultiSceneEditorPage (создать черновик) и NpcEditorialPage (выбор NPC и доступная кнопка карточки). Результат до exact-head CI PENDING, реальные устройства всё ещё не проверены.
+
+- Дополнительно в `LibraryPage` закрыт двойной Navigator.push после повторного нажатия кнопок «Читать»/«Подготовить к RPG»: `_openingBook` до закрытия дочернего маршрута; тест двойного callback → один Back → вновь доступное чтение. Новый exact-head CI обязателен.
+
+- CI `41596927069` (head `8eaf009...`) Flutter FAIL (прочие Python/Dart/BookWorld/M0 PASS): новый тест 320dp/200% выявил production RenderFlex overflow **147px** на кнопке «Добавить выбор» в мультисценном редакторе; исправлена responsive раскладка. Тест double Prepare nav теперь снимает ровно один Navigator route программно и проверяет отсутствие дубля (test harness vs back hit test). Следующий exact-head CI обязателен.

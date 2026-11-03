@@ -666,22 +666,44 @@ class _MultiSceneEditorPageState extends State<MultiSceneEditorPage> {
                   old, text: text)),
         ),
         const SizedBox(height: 6),
-        Row(children: [
-          Expanded(child: Text('Выборы: ${scene.choices.length} · '
-              '${scene.choices.isEmpty ? "Финал" : "Продолжение"}')),
-          OutlinedButton.icon(
-            key: const Key('multi-add-choice'),
-            onPressed: _working || draft.scenes.length < 2 ? null : () {
-              final destination = draft.scenes.firstWhere(
-                  (other) => other.id != scene.id,
-                  orElse: () => draft.scenes.first);
-              _edit((current) => MultiSceneDraftWorkbench.addChoice(
-                  current, scene.id, destination.id));
-            },
-            icon: const Icon(Icons.add),
-            label: const Text('Добавить выбор'),
-          ),
-        ]),
+        LayoutBuilder(builder: (context, bounds) {
+          final compact = bounds.maxWidth < 460 ||
+              MediaQuery.textScalerOf(context).scale(14) > 21;
+          void addChoice() {
+            final destination = draft.scenes.firstWhere(
+                (other) => other.id != scene.id,
+                orElse: () => draft.scenes.first);
+            _edit((current) => MultiSceneDraftWorkbench.addChoice(
+                current, scene.id, destination.id));
+          }
+          final canAdd = !_working && draft.scenes.length >= 2;
+          final count = Text('Выборы: ${scene.choices.length} · '
+              '${scene.choices.isEmpty ? "Финал" : "Продолжение"}');
+          if (compact) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                count,
+                const SizedBox(height: 8),
+                OutlinedButton(
+                  key: const Key('multi-add-choice'),
+                  onPressed: canAdd ? addChoice : null,
+                  child: const Text('Добавить выбор',
+                      textAlign: TextAlign.center),
+                ),
+              ],
+            );
+          }
+          return Row(children: [
+            Expanded(child: count),
+            OutlinedButton.icon(
+              key: const Key('multi-add-choice'),
+              onPressed: canAdd ? addChoice : null,
+              icon: const Icon(Icons.add),
+              label: const Text('Добавить выбор'),
+            ),
+          ]);
+        }),
         if (scene.choices.isEmpty)
           const Text('Без переходов это финальная сцена. '
               'Для продолжения добавьте выбор и укажите его цель.'),

@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:ai_story_reader/book_import.dart';
 import 'package:ai_story_reader/book_reader.dart';
+import 'package:ai_story_reader/source_index_preview_page.dart';
 import 'package:ai_story_reader/book_reading_state.dart';
 import 'package:ai_story_reader/book_storage.dart';
 import 'package:ai_story_reader/home_page.dart';
@@ -102,6 +103,48 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Уникальный первый абзац книги.'), findsOneWidget);
     expect(find.byTooltip('Оглавление'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+
+  testWidgets('rapid repeated Prepare press never stacks duplicate pages '
+      'and Read still works after returning', (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    final storage = _FakeBookStorage(const BookLibraryScan(
+      books: [StoredBook(id: '123_456.json', book: book)],
+      unreadableCount: 0,
+    ));
+    await tester.pumpWidget(MaterialApp(
+      home: LibraryPage(bookStorage: storage),
+    ));
+    await tester.pumpAndSettle();
+    final prepare = find.byKey(
+        const ValueKey('library-prepare-123_456.json'));
+    await tester.ensureVisible(prepare);
+    await tester.pumpAndSettle();
+    final pressed = tester.widget<OutlinedButton>(prepare).onPressed;
+    expect(pressed, isNotNull);
+    pressed!();
+    pressed(); // Two events in the same frame, before the route animates.
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(find.byType(SourceIndexPreviewPage), findsOneWidget);
+
+    // Pop exactly one route. This specifically verifies that two callbacks
+    // did not push two preparation pages; it avoids a simulated back-button
+    // hit test while the indexer's asynchronous worker is still loading.
+    Navigator.of(tester.element(
+        find.byType(SourceIndexPreviewPage))).pop();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(find.byType(SourceIndexPreviewPage), findsNothing);
+    expect(find.byType(LibraryPage), findsOneWidget);
+
+    await tester.ensureVisible(find.text('Читать'));
+    await tester.tap(find.text('Читать'));
+    await tester.pumpAndSettle();
+    expect(find.byType(BookReaderPage), findsOneWidget);
+    expect(find.text('Уникальный первый абзац книги.'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
