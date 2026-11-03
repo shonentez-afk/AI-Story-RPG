@@ -528,3 +528,12 @@ Run `41332360623` (SHA `ef004a4`): Python/Dart/analyze PASS, Flutter FAIL из-�
 - Новая `SourceCheckpointScope.multiSceneDraft` сохраняется независимо от `intermediateDraft`; книги/сейвы не мигрируют. Итоговая проверка использует старые `PrivateAdaptationPreflight` + `IntermediateStoryBlueprint.validate`, включая полный обход игровых состояний и ≥2 финала. Сборка — прежним native worker + строгим ZIP/SQLite importer и `WorldLibraryGateway.install`, только с отдельным согласием privateUse.
 - Тесты `multi_scene_draft_workbench_test.dart` и `multi_scene_editor_page_test.dart`, включая 5-сценную playable-проверку, проверку ложного канона, ошибок записи и локальной изоляции. Подробности `docs/M2E5A_MULTISCENE_EDITOR_RU.md`.
 - Статус **CODE / CI PENDING** до exact-head CI и Windows/Android artifact: не заявлять готовой автоматическую адаптацию всей книги или live ИИ. После приёмки продолжить удобный редактор ролей/NPC/сюжетной схемы, device QA и M2f consent/BYOK.
+
+
+## 2026-11-03 — M2e5b1: проверяемые карточки персонажей (кодовый этап)
+
+- M2e5a уже **MERGED в main**: PR #30, commit `75626fe4`, CI `41562881526` — Python, Dart, schema, Flutter, Windows portable и Android APK PASS; M0 `41562881525` success. Физические проверки по-прежнему SKIP.
+- Новая ветка `feature/m2e5b1-character-dossiers-20261103`. Добавлены `source_character_dossiers.dart` и `source_character_dossier_panel.dart`: карточки из exact-span цитат, поиск/страницы, помеченные гипотезы псевдонимов/отношений, сохранённые SAME/DIFFERENT без автоматического слияния одинаковых имён. Решения сохраняет только существующая `SourceRelationsReviewPanel`, после записи она сообщает карточкам об обновлении.
+- Отозванные цитаты, чужая редакция и повреждённый checkpoint блокируют отображение идентичности. Нет новых сохранённых NPC/игровых данных и нет изменений книг, миров и `.bwsave`.
+- Тесты `source_character_dossiers_test.dart`, `source_character_dossier_panel_test.dart`. Подробный документ `docs/M2E5B1_CHARACTER_DOSSIERS_RU.md`. **CODE / CI PENDING**, не сливать без exact-head Flutter/Dart/Python/schema/Windows/Android.
+- Далее M2e5b2: полноценный ручной authoring персонажей и связей, реестр знаний/мотиваций/NPC, согласование сюжета, затем device QA и настройки ИИ с приватностью/лимитами; live ИИ ещё не подключён.
