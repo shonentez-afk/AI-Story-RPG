@@ -126,6 +126,7 @@ void main() {
     expect(payload['model'], 'glm-4.7-flash');
     expect(payload['thinking'], {'type': 'disabled'});
     expect(payload['stream'], false);
+    expect(payload['response_format'], {'type': 'json_object'});
     expect(payload.containsKey('tools'), isFalse);
     expect(network.body!, isNot(contains('СЕКРЕТНОЕ НАЗВАНИЕ КНИГИ')));
     expect(network.body!, isNot(contains('СЕКРЕТНЫЙ АВТОР')));
@@ -201,6 +202,14 @@ void main() {
           consentForThisChunk: true),
       throwsA(isA<AiSetupException>()),
     );
+    for (final reason in ['sensitive', 'tool_calls']) {
+      network.finishReason = reason;
+      await expectLater(
+        service.preview(index: index, chunk: index.chunks.first,
+            consentForThisChunk: true),
+        throwsA(isA<AiSetupException>()),
+      );
+    }
     network.finishReason = 'stop';
     network.suggestions = [
       {
@@ -214,7 +223,7 @@ void main() {
           consentForThisChunk: true),
       throwsA(isA<AiSetupException>()),
     );
-    expect(network.calls, 3);
+    expect(network.calls, 5);
     expect((await SharedPreferences.getInstance())
         .getString('saved_game'), 'DO-NOT-CHANGE');
   });

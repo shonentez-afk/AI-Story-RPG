@@ -110,6 +110,7 @@ class ZaiSemanticPreviewService {
       ],
       'thinking': {'type': 'disabled'},
       'max_tokens': 900,
+      'response_format': {'type': 'json_object'},
       'stream': false,
     });
     final AiHttpResponse response;
@@ -154,8 +155,8 @@ class ZaiSemanticPreviewService {
     try {
       final root = jsonDecode(response.body) as Map<String, dynamic>;
       final choice = (root['choices'] as List<dynamic>).first as Map;
-      if (choice['finish_reason'] == 'length') {
-        throw const FormatException('incomplete');
+      if (choice['finish_reason'] != 'stop') {
+        throw const FormatException('incomplete or interrupted');
       }
       final content = (choice['message'] as Map)['content'];
       if (content is! String || content.length > 16000) {
