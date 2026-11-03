@@ -612,3 +612,12 @@ Run `41332360623` (SHA `ef004a4`): Python/Dart/analyze PASS, Flutter FAIL из-�
 - **test-build-339**: https://github.com/shonentez-afk/AI-Story-RPG/releases/tag/test-build-339 — подтверждённый опубликованный релиз для принятого squash-коммита `109b3508c9b772f410d517897c45ae9bd9e51fde` (PR #34, M2e5b3b1).
 - Post-merge main CI `41577494842` **completed/success**, Python/Dart/BookWorld/schema/Flutter widget/Windows portable/Android debug APK/PUBLISH PASS. В релизе есть `AI-Story-RPG-Windows-portable.zip`, `AI-Story-RPG-Android-debug.apk` и `SHA256SUMS.txt`.
 - Это автоматические CI-бинарники, **не** результат физического E2E на Windows/Android: реальное тестирование устройств и длительных кампаний SQLite/.bwsave остаётся PENDING. Live AI по-прежнему выключен; следующий этап — **M2e5b3b2**, затем M2f.
+
+
+## 2026-11-03 — M2e5b3b2a подготовлен, ПЕРЕНОС В PR, НЕ ПРИНЯТ
+
+- Связь GitHub восстановилась. Проверен `main` `08c67666` с опубликованной `test-build-339` (приняты M2e5b3b1 и все предыдущие этапы). Доступный офлайн-пакет `AI_Story_RPG_M2E5B3B2_Causal_Knowledge_Patch.zip` сопоставлен с действующим импортером.
+- Рабочая ветка `feature/m2e5b3b2-knowledge-causality-20261103` меняет **только** `PrivateBookworldImporter._causality`: детерминированный полный анализ `(scene, flags, per-actor knowledge)` с типизированными `knows_fact`/`learn_fact`, BigInt, лимитом 2500 состояний и fail-closed на невозможном финале/тупике/чужом знании.
+- Новый `private_knowledge_reachability_test.dart`: старый флаговый режим, разблокирование после учёбы NPC, 120 ходов/replay/hash, подмена истории, будущее знание/чужой актёр, отказ на 2500+ состояниях. Документ `docs/M2E5B3B2A_KNOWLEDGE_CAUSALITY_RU.md`.
+- **CODE / EXACT-HEAD CI PENDING**. До полного Flutter+Dart+Python+schema+M0+Windows+Android PASS не сливать в `main`, не называть релизом. Реальные SQLite/.bwsave и физические устройства всё ещё SKIP.
+- Следом M2e5b3b2b: UI-конструктор условий `knows_fact`, сквозные долгие SQLite/.bwsave, UX/UI на 320dp/200%, после этого M2f безопасные настройки ИИ. Live ИИ отключён.
