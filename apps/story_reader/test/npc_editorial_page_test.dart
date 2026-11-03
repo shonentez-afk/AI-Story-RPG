@@ -120,6 +120,7 @@ void main() {
     await tester.pumpAndSettle();
     noteStore.failNextWrite = true;
     await selectArtem(tester);
+    await tester.ensureVisible(find.byKey(const Key('npc-create-profile')));
     await tester.tap(find.byKey(const Key('npc-create-profile')));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('npc-confirm-name')));
