@@ -26,6 +26,7 @@ enum SourceCheckpointScope {
   multiSceneDraft,
   npcEditorial,
   npcKnowledgeRules,
+  zaiWindowReview,
 }
 
 /// Private app-support storage shared by Android and Windows.
@@ -54,6 +55,7 @@ class FileSourceAnalysisCheckpointRepository
   static const _multiSceneFolder = 'ai_story_multiscene_draft_m2e5a_v1';
   static const _npcFolder = 'ai_story_npc_editorial_m2e5b2_v1';
   static const _knowledgeFolder = 'ai_story_npc_knowledge_rules_m2e5b3b1_v1';
+  static const _zaiReviewFolder = 'ai_story_zai_private_window_review_m2f3a_v1';
 
   static void _checkFingerprint(String fingerprint) {
     if (!_validFingerprint.hasMatch(fingerprint)) {
@@ -75,6 +77,7 @@ class FileSourceAnalysisCheckpointRepository
       SourceCheckpointScope.multiSceneDraft => _multiSceneFolder,
       SourceCheckpointScope.npcEditorial => _npcFolder,
       SourceCheckpointScope.npcKnowledgeRules => _knowledgeFolder,
+      SourceCheckpointScope.zaiWindowReview => _zaiReviewFolder,
     };
     final folder = Directory('${base.path}/$name');
     if (!await folder.exists()) await folder.create(recursive: true);

@@ -4,8 +4,11 @@ import 'package:flutter/material.dart';
 
 import 'book_source_index.dart';
 import 'source_semantic_window.dart';
+import 'source_semantic_provider.dart';
 import 'zai_semantic_preview.dart';
 import 'ai_connection.dart';
+import 'source_analysis_checkpoint_repository.dart';
+import 'zai_semantic_review_queue.dart';
 
 /// The isolated M2f2a pilot: review ONE complete chunk and permit ONE
 /// intentional cloud request. No automatic analysis of the full book,
@@ -15,10 +18,12 @@ class ZaiSemanticPreviewPage extends StatefulWidget {
     super.key,
     required this.index,
     this.service,
+    this.reviewRepository,
   });
 
   final BookSourceIndex index;
   final ZaiSemanticPreviewService? service;
+  final SourceAnalysisCheckpointRepository? reviewRepository;
 
   @override
   State<ZaiSemanticPreviewPage> createState() =>
@@ -36,6 +41,68 @@ class _ZaiSemanticPreviewPageState extends State<ZaiSemanticPreviewPage> {
   String? _progress;
   ZaiSemanticPreviewResult? _result;
   String? _error;
+  ZaiWindowReviewQueue? _queue;
+  bool _reviewLoading = true;
+  bool _reviewSaving = false;
+  String? _reviewError;
+  late final SourceAnalysisCheckpointRepository _reviewRepository =
+      widget.reviewRepository ?? const FileSourceAnalysisCheckpointRepository(
+        scope: SourceCheckpointScope.zaiWindowReview,
+      );
+
+  @override
+  void initState() {
+    super.initState();
+    _restoreReview();
+  }
+
+  Future<void> _restoreReview() async {
+    try {
+      final saved = await _reviewRepository.read(widget.index.sourceFingerprint);
+      final queue = saved == null
+          ? ZaiWindowReviewQueue.empty(widget.index)
+          : ZaiWindowReviewQueue.decode(widget.index, saved);
+      if (mounted) setState(() => _queue = queue);
+    } catch (_) {
+      if (mounted) {
+        setState(() => _reviewError = 'Невозможно прочитать прежнюю очередь ИИ. '
+            'Результаты не перезаписаны; проверьте файл и редакцию книги.');
+      }
+    } finally {
+      if (mounted) setState(() => _reviewLoading = false);
+    }
+  }
+
+  Future<void> _commitReview(ZaiWindowReviewQueue updated) async {
+    setState(() => _reviewSaving = true);
+    try {
+      await _reviewRepository.write(widget.index.sourceFingerprint,
+          updated.encode());
+      if (mounted) setState(() { _queue = updated; _reviewError = null; });
+    } catch (_) {
+      if (mounted) setState(() => _reviewError = 'Не удалось сохранить '
+          'проверку ИИ. Прежний checkpoint не изменён.');
+    } finally {
+      if (mounted) setState(() => _reviewSaving = false);
+    }
+  }
+
+  Future<void> _markCandidate(String id, ZaiEditorialDecision? mark) async {
+    if (_busy || _reviewSaving || _reviewLoading || _queue == null) return;
+    await _commitReview(_queue!.decide(id, mark));
+  }
+
+  void _nextPending() {
+    if (_busy || _reviewSaving || _reviewLoading || _queue == null) return;
+    final next = _queue!.nextPendingAfter(_position);
+    if (next == null) return;
+    setState(() {
+      _position = next;
+      _result = null;
+      _error = null;
+      _progress = null;
+    });
+  }
 
   late final List<SourceSemanticWindow> _windows =
       SourceSemanticWindowPlanner.plan(widget.index);
@@ -57,7 +124,7 @@ class _ZaiSemanticPreviewPageState extends State<ZaiSemanticPreviewPage> {
   }
 
   void _move(int direction) {
-    if (_busy || _confirming) return;
+    if (_busy || _confirming || _reviewSaving) return;
     final next = _position + direction;
     if (next < 0 || next >= _windows.length) return;
     setState(() {
@@ -159,8 +226,10 @@ class _ZaiSemanticPreviewPageState extends State<ZaiSemanticPreviewPage> {
   }
 
   Future<void> _analyze() async {
-    if (_busy || _confirming) return;
+    if (_busy || _confirming || _reviewSaving ||
+        _reviewLoading || _queue == null || _reviewError != null) return;
     final window = _window;
+    final selectedPosition = _position;
     final chunk = window.chunks.first;
     if (!window.hasNarrativeText ||
         window.utf16Length > SourceSemanticWindowPlanner.maxWindowUtf16 ||
@@ -201,6 +270,7 @@ class _ZaiSemanticPreviewPageState extends State<ZaiSemanticPreviewPage> {
       );
       if (mounted && identical(_window, window)) {
         setState(() => _result = result);
+        await _commitReview(_queue!.record(selectedPosition, result));
       }
     } on AiSetupException catch (error) {
       if (mounted) setState(() => _error = error.message);
@@ -240,10 +310,20 @@ class _ZaiSemanticPreviewPageState extends State<ZaiSemanticPreviewPage> {
         title.length <= ZaiSemanticPreviewService.maxBookTitleUtf16 &&
         utf8.encode(title).length <=
             ZaiSemanticPreviewService.maxBookTitleUtf8;
-    final allowed = validTitle && window.hasNarrativeText &&
+    final allowed = !_reviewLoading && !_reviewSaving &&
+        _queue != null && _reviewError == null &&
+        validTitle && window.hasNarrativeText &&
         window.utf16Length <= SourceSemanticWindowPlanner.maxWindowUtf16 &&
         size <= SourceSemanticWindowPlanner.maxWindowUtf8;
     final scheme = Theme.of(context).colorScheme;
+    final savedReview = _queue?.results[_position];
+    final currentCandidates =
+        _result?.batch.candidates ?? savedReview?.candidates ?? const <SemanticCandidate>[];
+    final totalSuggestions =
+        _result?.totalSuggestions ?? savedReview?.totalSuggestions ?? 0;
+    final rejectedCount = _result?.rejectedCount ?? savedReview?.rejectedCount ?? 0;
+    final rejectedNonRussian = _result?.rejectedNonRussian ??
+        savedReview?.rejectedNonRussian ?? 0;
 
     return Scaffold(
       appBar: AppBar(
@@ -274,24 +354,46 @@ class _ZaiSemanticPreviewPageState extends State<ZaiSemanticPreviewPage> {
                     'Цитаты и имена собственные сохраняются '
                     'на языке оригинала.'),
                 const SizedBox(height: 8),
-                const Text('Экспериментальный просмотр. ИИ изучает '
-                    'одно смысловое окно из соседних абзацев одной главы '
-                    'и предлагает персонажей, места, действия, '
-                    'состояния и факты. Результат не сохраняется, '
-                    'не подтверждает канон и не создаёт RPG. '
-                    'Каждое окно отправляется только после согласия; '
+                const Text('Контролируемая проверка окон книги: каждый '
+                    'результат сохраняется только в личную локальную очередь '
+                    'гипотез, связанную с данной редакцией. '
+                    'Результаты не подтверждают канон и не создают RPG. '
+                    'Каждое окно отправляется только после нового согласия; '
                     'временные сбои могут вызвать до двух повторов.'),
                 const SizedBox(height: 12),
                 Text('Книга: ${widget.index.title}',
                     key: const Key('zai-preview-book-title'),
                     style: Theme.of(context).textTheme.bodyMedium),
+                const SizedBox(height: 12),
+                if (_reviewLoading)
+                  const Text('Загружаем локальную очередь проверки ИИ…'),
+                if (_reviewSaving)
+                  const LinearProgressIndicator(),
+                if (_reviewError != null)
+                  Text(_reviewError!, key: const Key('zai-review-checkpoint-error'),
+                      style: TextStyle(color: scheme.error)),
+                if (_queue != null) ...[
+                  Text('Очередь книги: обработано ${_queue!.completedCount} '
+                      'из ${_queue!.windows.length} окон; '
+                      'гипотез ${_queue!.candidateCount}; '
+                      'на ручную проверку ${_queue!.pendingReviewCount}.',
+                      key: const Key('zai-review-progress')),
+                  OutlinedButton.icon(
+                    key: const Key('zai-next-pending-window'),
+                    onPressed: _busy || _confirming || _reviewSaving ||
+                        _queue!.nextPendingAfter(_position) == null
+                        ? null : _nextPending,
+                    icon: const Icon(Icons.skip_next),
+                    label: const Text('Следующее непроверенное окно'),
+                  ),
+                ],
                 const SizedBox(height: 16),
                 Row(
                   children: [
                     IconButton(
                       key: const Key('zai-previous-chunk'),
                       tooltip: 'Предыдущее окно',
-                      onPressed: !_busy && !_confirming && _position > 0
+                      onPressed: !_busy && !_confirming && !_reviewSaving && _position > 0
                           ? () => _move(-1) : null,
                       icon: const Icon(Icons.chevron_left),
                     ),
@@ -307,7 +409,7 @@ class _ZaiSemanticPreviewPageState extends State<ZaiSemanticPreviewPage> {
                     IconButton(
                       key: const Key('zai-next-chunk'),
                       tooltip: 'Следующее окно',
-                      onPressed: !_busy && !_confirming &&
+                      onPressed: !_busy && !_confirming && !_reviewSaving &&
                               _position + 1 < windows.length
                           ? () => _move(1) : null,
                       icon: const Icon(Icons.chevron_right),
@@ -362,27 +464,27 @@ class _ZaiSemanticPreviewPageState extends State<ZaiSemanticPreviewPage> {
                     style: TextStyle(color: scheme.error),
                   ),
                 ],
-                if (_result != null) ...[
+                if (_result != null || savedReview != null) ...[
                   const Divider(height: 32),
                   Text('Неподтверждённые предложения',
                       style: Theme.of(context).textTheme.titleMedium),
                   const SizedBox(height: 6),
                   Text('Получено: ' +
-                      _result!.totalSuggestions.toString() +
+                      totalSuggestions.toString() +
                       '. Проверено по исходным цитатам: ' +
-                      _result!.batch.candidates.length.toString() +
-                      '. Отброшено: ' + _result!.rejectedCount.toString() +
+                      currentCandidates.length.toString() +
+                      '. Отброшено: ' + rejectedCount.toString() +
                       ' (не на русском: ' +
-                      _result!.rejectedNonRussian.toString() +
+                      rejectedNonRussian.toString() +
                       '). Это только предварительные гипотезы. '
                       'Цитаты сохранены на языке оригинала.'),
-                  if (_result!.batch.candidates.isEmpty)
+                  if (currentCandidates.isEmpty)
                     const Padding(
                       padding: EdgeInsets.symmetric(vertical: 12),
                       child: Text('Проверяемых предложений нет. '
                           'Повтор не выполнялся автоматически.'),
                     ),
-                  for (final candidate in _result!.batch.candidates)
+                  for (final candidate in currentCandidates)
                     Card(
                       child: ListTile(
                         title: Text(candidate.label),
@@ -397,12 +499,36 @@ class _ZaiSemanticPreviewPageState extends State<ZaiSemanticPreviewPage> {
                             Text('Исходный фрагмент: ' + candidate.chunkId),
                             const SizedBox(height: 4),
                             Text('Проверить: ' + candidate.uncertainty),
+                            if (_queue != null && !_reviewLoading) ...[
+                              const SizedBox(height: 4),
+                              Text('Редакторское решение: ' +
+                                  switch (_queue!.decisions[candidate.id]) {
+                                    ZaiEditorialDecision.keepForReview =>
+                                      'Оставить на дальнейшую проверку',
+                                    ZaiEditorialDecision.rejected => 'Отклонено',
+                                    null => 'Не рассмотрено',
+                                  }),
+                              Wrap(spacing: 8, children: [
+                                TextButton(
+                                  onPressed: _reviewSaving ? null : () =>
+                                      _markCandidate(candidate.id,
+                                          ZaiEditorialDecision.keepForReview),
+                                  child: const Text('Оставить на проверку'),
+                                ),
+                                TextButton(
+                                  onPressed: _reviewSaving ? null : () =>
+                                      _markCandidate(candidate.id,
+                                          ZaiEditorialDecision.rejected),
+                                  child: const Text('Отклонить'),
+                                ),
+                              ]),
+                            ],
                           ],
                         ),
                         leading: const Icon(Icons.fact_check_outlined),
                       ),
                     ),
-                  if (_result!.rejectionReasons.isNotEmpty) ...[
+                  if (_result != null && _result!.rejectionReasons.isNotEmpty) ...[
                     const SizedBox(height: 12),
                     const Text('Причины отклонения предложений:'),
                     for (final reason in _result!.rejectionReasons)
@@ -412,9 +538,11 @@ class _ZaiSemanticPreviewPageState extends State<ZaiSemanticPreviewPage> {
                       ),
                   ],
                   const SizedBox(height: 8),
-                  const Text('Ни одна находка не перенесена в редакторы, '
-                      'канон, кампанию или BookWorld. '
-                      'Включение в RPG будет отдельным проверяемым шагом.'),
+                  const Text('Гипотезы хранятся только в отдельной приватной '
+                      'очереди проверки, не в каноне, кампании или BookWorld. '
+                      'Включение в RPG будет отдельным проверяемым шагом. '
+                      'Ни одна находка не перенесена в редакторы, '
+                      'канон, кампанию или BookWorld.'),
                 ],
               ],
             ),
