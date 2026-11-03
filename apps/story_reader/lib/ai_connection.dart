@@ -143,7 +143,7 @@ class ZaiHttpTransport implements AiHttpTransport {
       return AiHttpResponse(
         response.statusCode,
         utf8.decode(received),
-        retryAfter: response.headers.value(HttpHeaders.retryAfterHeader),
+        retryAfter: response.headers.value('retry-after'),
       );
     } on AiSetupException {
       rethrow;
