@@ -11,6 +11,7 @@ import 'source_analysis_checkpoint_repository.dart';
 import 'source_narrative_review_panel.dart';
 import 'source_semantic_catalog.dart';
 import 'source_semantic_review_panel.dart';
+import 'zai_semantic_preview_page.dart';
 import 'reviewed_story_editor_page.dart';
 import 'multi_scene_editor_page.dart';
 import 'source_editorial_review_page.dart';
@@ -842,6 +843,26 @@ class _SourceIndexPreviewPageState extends State<SourceIndexPreviewPage> {
                             enabled: !_offlineWorking && !_busy,
                             onTap: () => unawaited(_openEditor(
                               SourceEditorialReviewPage(index: index),
+                            )),
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        Card(
+                          child: ListTile(
+                            key: const Key('prepare-open-zai-preview'),
+                            leading: const Icon(Icons.auto_awesome_outlined),
+                            title: const Text(
+                                'ИИ: проверить отдельный фрагмент книги'),
+                            subtitle: const Text('GLM-4.7-Flash предложит '
+                                'персонажей, места, события и факты. '
+                                'Вы заранее увидите точный текст отправки '
+                                'и отдельно подтвердите каждый запрос. '
+                                'Результат — только предпросмотр без '
+                                'автоматического сохранения или изменения RPG.'),
+                            trailing: const Icon(Icons.chevron_right),
+                            enabled: !_offlineWorking && !_busy,
+                            onTap: () => unawaited(_openEditor(
+                              ZaiSemanticPreviewPage(index: index),
                             )),
                           ),
                         ),
