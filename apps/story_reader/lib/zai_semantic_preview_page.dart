@@ -40,7 +40,6 @@ class _ZaiSemanticPreviewPageState extends State<ZaiSemanticPreviewPage> {
   late final List<SourceSemanticWindow> _windows =
       SourceSemanticWindowPlanner.plan(widget.index);
   SourceSemanticWindow get _window => _windows[_position];
-  SourceChunk get _chunk => _window.chunks.first;
 
   @override
   void dispose() {
@@ -89,6 +88,8 @@ class _ZaiSemanticPreviewPageState extends State<ZaiSemanticPreviewPage> {
               children: [
                 const Text('На Z.ai будут отправлены ТОЛЬКО название книги '
                     'и все показанные ниже исходные абзацы этого окна. '
+                    'Для точной проверки цитат передаются также '
+                    'служебные идентификаторы и типы абзацев. '
                     'Название используется как контекст, но не доказывает '
                     'события и факты: ИИ обязан сверять их по цитатам. '
                     'Ключ передаётся Z.ai для авторизации. '
