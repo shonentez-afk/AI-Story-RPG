@@ -25,6 +25,56 @@ class ImportedBook {
 }
 
 class BookImporter {
+  // Some FB2 editions place a numbered sequence inside ONE <section>,
+  // encoding each part heading as a plain <p>. Preserve the book as a
+  // single file, but use validated sequential parts as reading chapters.
+  // No speculative split based on capitalization or a single stray phrase.
+  static final RegExp _numberedPartHeading = RegExp(
+    r'^(?:рассказ|история)\s+'
+    r'(первый|второй|третий|четвёртый|четвертый|пятый|'
+    r'шестой|седьмой|восьмой|девятый|десятый)'
+    r'(?:$|[\s,.:;—-])',
+    caseSensitive: false,
+    unicode: true,
+  );
+  static const _partNumbers = <String, int>{
+    'первый': 1, 'второй': 2, 'третий': 3,
+    'четвертый': 4, 'пятый': 5, 'шестой': 6,
+    'седьмой': 7, 'восьмой': 8, 'девятый': 9,
+    'десятый': 10,
+  };
+
+  static int? _numberedPart(BookBlock block) {
+    if (block.kind != BookBlockKind.paragraph &&
+        block.kind != BookBlockKind.heading) return null;
+    final match = _numberedPartHeading.firstMatch(block.text.trim());
+    if (match == null) return null;
+    return _partNumbers[match.group(1)!.toLowerCase().replaceAll('ё', 'е')];
+  }
+
+  static List<List<BookBlock>> _splitNumberedStoryParts(
+      List<BookBlock> blocks) {
+    final markers = <(int, int)>[];
+    for (var i = 0; i < blocks.length; i++) {
+      final number = _numberedPart(blocks[i]);
+      if (number != null) markers.add((i, number));
+    }
+    // Need at least three sequential explicit headings beginning with the
+    // first. Otherwise an isolated phrase must not silently alter offsets.
+    if (markers.length < 3 || markers.first.$2 != 1) return [blocks];
+    for (var i = 0; i < markers.length; i++) {
+      if (markers[i].$2 != i + 1) return [blocks];
+    }
+    final parts = <List<BookBlock>>[];
+    for (var i = 0; i < markers.length; i++) {
+      final start = i == 0 ? 0 : markers[i].$1;
+      final end = i + 1 == markers.length
+          ? blocks.length : markers[i + 1].$1;
+      parts.add(blocks.sublist(start, end));
+    }
+    return parts;
+  }
+
   static ImportedBook parse(String filename, Uint8List bytes) {
     if (bytes.length > 20 * 1024 * 1024) {
       throw const FormatException('Максимальный размер книги — 20 МБ');
@@ -188,9 +238,11 @@ class BookImporter {
           final blocks = <BookBlock>[];
           appendNode(section, blocks);
           if (blocks.isNotEmpty) {
-            structured.add(BookChapter(
-              id: 'chapter_${structured.length}', blocks: blocks,
-            ));
+            for (final part in _splitNumberedStoryParts(blocks)) {
+              structured.add(BookChapter(
+                id: 'chapter_${structured.length}', blocks: part,
+              ));
+            }
           }
         }
       }

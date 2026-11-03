@@ -244,4 +244,38 @@ void main() {
     expect(await a.read(index.sourceFingerprint), mentions);
     expect(await b.read(index.sourceFingerprint), isNull);
   });
+
+  test('animal and fairy-tale roles produce exact untrusted citations, '
+      'not merged identities or duplicated named/role events', () {
+    const animal = ImportedBook(
+      title: 'Птичий двор', author: 'Оригинальная тестовая сказка',
+      chapters: [
+        'Утенок увидел лебедя. Жаба встретила крота. '
+        'Ласточка подарила перо. Курица сказала коту правду. '
+        'Кот сидел у окна. Утки прошли мимо.',
+      ],
+    );
+    final index = BookSourceIndexer.index(animal);
+    final chunk = index.chunks.first;
+    final mentions = SourceNarrativeExtractor.roleMentionsInChunk(index, chunk);
+    expect(mentions.map((m) => m.label), containsAll([
+      'Утенок', 'Жаба', 'Ласточка', 'Курица', 'Кот', 'Утки'
+    ]));
+    for (final item in mentions) {
+      item.validate(index);
+      expect(item.status, EvidenceStatus.inferred);
+    }
+    final claims = SourceNarrativeExtractor.claimsInChunk(index, chunk);
+    expect(claims.where((x) =>
+        x.evidence.label == 'Утенок увидел лебедя'), hasLength(1));
+    expect(claims.map((x) => x.evidence.label),
+        contains('Жаба встретила крота'));
+    final review = StoryEvidenceReviewSession.create(index).scanNext(index);
+    expect(review.graph.records, isNotEmpty);
+    expect(review.graph.records
+        .every((e) => e.status == EvidenceStatus.inferred), isTrue);
+    expect(review.graph.visibleToPlayer(currentChapter: 10), isEmpty);
+    expect(review.canPublishBookworld, false);
+  });
+
 }
