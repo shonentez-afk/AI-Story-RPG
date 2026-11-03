@@ -106,6 +106,9 @@ class _ZaiSemanticPreviewPageState extends State<ZaiSemanticPreviewPage> {
                 Text('Глава ' + (chunk.chapterIndex + 1).toString() +
                     ' · ' + utf8.encode(chunk.text).length.toString() +
                     ' байт исходного текста'),
+                const SizedBox(height: 4),
+                const Text('Прочитайте фрагмент и прокрутите диалог вниз, '
+                    'чтобы подтвердить отправку.'),
                 const SizedBox(height: 8),
                 SelectableText(
                   chunk.text,
