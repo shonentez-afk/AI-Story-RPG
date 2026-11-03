@@ -28,6 +28,8 @@ jobs:
       - name: Reference regression tests
         run: python3 -m unittest discover -s tests -v
         working-directory: experiments/m0_engine_comparison
+      - name: Android host security regression
+        run: python3 -m unittest discover -s tools/tests -v
 
   dart-sdk:
     name: Dart engine and scenario tests
@@ -208,6 +210,7 @@ jobs:
       - name: Generate Android host and build APK
         run: |
           flutter create --platforms=android --project-name ai_story_reader --org com.aistoryrpg .
+          python3 ../../tools/configure_android_ai_host.py android/app/src/main/AndroidManifest.xml
           python3 -m pip install --quiet Pillow
           python3 ../../tools/build_android_branding.py android/app/src/main/res
           flutter pub get
