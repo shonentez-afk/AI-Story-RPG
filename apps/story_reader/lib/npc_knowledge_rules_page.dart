@@ -280,6 +280,158 @@ class _NpcKnowledgeRulesPageState extends State<NpcKnowledgeRulesPage> {
     )));
   }
 
+  List<ChoiceOption> _gateTargets(NpcKnowledgeRule grant) {
+    final source = _choices.singleWhere(
+        (option) => option.choice.id == grant.choiceId);
+    return [
+      for (final option in _choices)
+        if (option.choice.id != grant.choiceId &&
+            option.scene.chapterIndex >= source.scene.chapterIndex)
+          option,
+    ];
+  }
+
+  Future<void> _removeGate(NpcKnowledgeGate gate) async {
+    if (_saving || _book == null) return;
+    final approved = await _confirm('Снять условие выбора?',
+        'Условие ${gate.id} будет удалено только из авторских правил. '
+        'Уже созданные игровые миры и сохранения останутся без изменений.');
+    if (approved && mounted && _book != null) {
+      await _save(_book!.withoutGate(gate.id));
+    }
+  }
+
+  Future<void> _editGate([NpcKnowledgeGate? existing]) async {
+    final book = _book;
+    if (_saving || book == null || book.rules.isEmpty) return;
+    var grantId = existing?.grantRuleId ?? book.rules.first.id;
+    var targetId = existing?.choiceId;
+
+    final proposal = await showDialog<({String grantId, String choiceId})>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (dialog, update) {
+          final grant = book.rules.singleWhere((rule) => rule.id == grantId);
+          final targets = _gateTargets(grant);
+          if (!targets.any((x) => x.choice.id == targetId)) {
+            targetId = targets.isEmpty ? null : targets.first.choice.id;
+          }
+          return AlertDialog(
+            title: Text(existing == null
+                ? 'Условие знания для выбора'
+                : 'Изменить условие знания'),
+            content: SizedBox(
+              width: 510,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Действие станет доступно только после того, '
+                        'как указанный NPC или игрок действительно узнает '
+                        'факт на другом переходе. Условие не раскрывает '
+                        'текст секрета.'),
+                    const SizedBox(height: 12),
+                    DropdownButtonFormField<String>(
+                      key: const Key('knowledge-gate-grant'),
+                      initialValue: grantId,
+                      isExpanded: true,
+                      decoration: const InputDecoration(
+                        labelText: 'Какое полученное знание требуется',
+                        border: OutlineInputBorder(),
+                      ),
+                      items: [
+                        for (final rule in book.rules)
+                          DropdownMenuItem<String>(
+                            value: rule.id,
+                            child: Text(
+                              '${rule.id}: ${rule.noteId} · '
+                              '${rule.recipient == KnowledgeRecipient.player ? "игрок" : "NPC"}',
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                      ],
+                      onChanged: (value) {
+                        if (value != null) update(() {
+                          grantId = value;
+                          targetId = null;
+                        });
+                      },
+                    ),
+                    const SizedBox(height: 12),
+                    KeyedSubtree(
+                      key: ValueKey('knowledge-gate-target-$grantId'),
+                      child: DropdownButtonFormField<String>(
+                      key: const Key('knowledge-gate-choice'),
+                      initialValue: targetId,
+                      isExpanded: true,
+                      decoration: const InputDecoration(
+                        labelText: 'Какой игровой выбор заблокировать',
+                        border: OutlineInputBorder(),
+                      ),
+                      items: [
+                        for (final option in targets)
+                          DropdownMenuItem<String>(
+                            value: option.choice.id,
+                            child: Text('Глава ${option.scene.chapterIndex + 1} · '
+                                '${option.choice.label}',
+                                overflow: TextOverflow.ellipsis),
+                          ),
+                      ],
+                      onChanged: targets.isEmpty ? null : (value) {
+                        if (value != null) update(() => targetId = value);
+                      },
+                      ),
+                    ),
+                    if (targets.isEmpty)
+                      const Padding(
+                        padding: EdgeInsets.only(top: 10),
+                        child: Text('Нет подходящих более поздних переходов. '
+                            'Добавьте выбор в конструкторе сцен.'),
+                      ),
+                    const SizedBox(height: 8),
+                    const Text('Недостижимые условия заблокируют сборку '
+                        'BookWorld при независимой проверке причинности.'),
+                  ],
+                ),
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialog),
+                child: const Text('Отмена'),
+              ),
+              FilledButton(
+                key: const Key('knowledge-gate-confirm'),
+                onPressed: targetId == null ? null : () =>
+                    Navigator.pop(dialog,
+                        (grantId: grantId, choiceId: targetId!)),
+                child: const Text('Проверить и сохранить'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+    if (!mounted || proposal == null || _book == null) return;
+    final source = _book!.rules.singleWhere(
+        (rule) => rule.id == proposal.grantId);
+    final destination = _choices.singleWhere(
+        (option) => option.choice.id == proposal.choiceId);
+    if (!await _confirm('Добавить условие к игровому выбору?',
+        'После получения ${source.noteId} выбор '
+        '«${destination.choice.label}» станет доступным именно тому '
+        'получателю, который указан в правиле ${source.id}. '
+        'Старые игровые миры не изменятся.')) return;
+    if (!mounted || _book == null) return;
+    await _save(_book!.withGate(NpcKnowledgeRulebook.composeGate(
+      id: existing?.id ?? _book!.nextGateId(),
+      grant: source,
+      scene: destination.scene,
+      choice: destination.choice,
+    )));
+  }
+
   @override
   Widget build(BuildContext context) {
     final book = _book;
@@ -316,6 +468,7 @@ class _NpcKnowledgeRulesPageState extends State<NpcKnowledgeRulesPage> {
                       child: const Text('Очистить только правила…')),
                   ] else ...[
                     Text('Правил: ${book.rules.length} · '
+                        'условий: ${book.gates.length} · '
                         'заметок: ${_notes.length} · '
                         'переходов: ${_choices.length}'),
                     OutlinedButton.icon(
@@ -349,6 +502,44 @@ class _NpcKnowledgeRulesPageState extends State<NpcKnowledgeRulesPage> {
                                 TextButton(
                                   key: Key('knowledge-delete-${rule.id}'),
                                   onPressed: _saving ? null : () => _remove(rule),
+                                  child: const Text('Удалить')),
+                              ]),
+                            ],
+                          ),
+                        ),
+                      ),
+                    const Divider(height: 18),
+                    Text('Условия доступности действий',
+                        style: Theme.of(context).textTheme.titleMedium),
+                    const Text('Сначала сохраните выдачу знания NPC, '
+                        'затем укажите выбор, требующий это знание. '
+                        'Для удаления выдачи сначала удалите связанные условия.'),
+                    OutlinedButton.icon(
+                      key: const Key('knowledge-gate-add'),
+                      onPressed: _saving || !book.rules.any(
+                          (rule) => _gateTargets(rule).isNotEmpty)
+                          ? null : () => _editGate(),
+                      icon: const Icon(Icons.rule),
+                      label: const Text('Добавить условие знания'),
+                    ),
+                    for (final gate in book.gates)
+                      Card(
+                        key: Key('knowledge-gate-${gate.id}'),
+                        child: Padding(
+                          padding: const EdgeInsets.all(10),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text('${gate.id} · знание по ${gate.grantRuleId}'),
+                              Text('Требуется перед выбором ${gate.choiceId}'),
+                              Wrap(spacing: 6, children: [
+                                TextButton(
+                                  key: Key('knowledge-gate-edit-${gate.id}'),
+                                  onPressed: _saving ? null : () => _editGate(gate),
+                                  child: const Text('Изменить')),
+                                TextButton(
+                                  key: Key('knowledge-gate-delete-${gate.id}'),
+                                  onPressed: _saving ? null : () => _removeGate(gate),
                                   child: const Text('Удалить')),
                               ]),
                             ],

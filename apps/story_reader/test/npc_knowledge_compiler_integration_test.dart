@@ -3,6 +3,8 @@ import 'dart:convert';
 import 'package:ai_story_reader/book_import.dart';
 import 'package:ai_story_reader/book_source_index.dart';
 import 'package:ai_story_reader/native_private_bookworld_compiler.dart';
+import 'package:ai_story_reader/intermediate_story_blueprint.dart';
+import 'package:ai_story_reader/multi_scene_draft_workbench.dart';
 import 'package:ai_story_reader/npc_editorial_notebook.dart';
 import 'package:ai_story_reader/npc_knowledge_rulebook.dart';
 import 'package:ai_story_reader/reviewed_story_composer.dart';
@@ -106,5 +108,47 @@ void main() {
         enriched.blueprint.facts));
     expect(world.state.knowledge[NpcKnowledgeRulebook.actorId(
         artem, index.sourceFingerprint)], isEmpty);
+
+    // An explicit choice can grant knowledge before another choice checks it.
+    // Build and re-import the actual ZIP/SQLite package, not only a preview.
+    var expanded = MultiSceneDraftWorkbench.addChoice(
+        scenario, entry.id, entry.id);
+    final newChoice = expanded.scenes.first.choices.last;
+    expanded = MultiSceneDraftWorkbench.replaceChoice(
+      expanded, entry.id,
+      DraftChoice(id: newChoice.id, label: 'Сначала поговорить с Артемом',
+          nextSceneId: entry.id),
+    );
+    final expandedEntry = expanded.scenes.first;
+    final learnChoice = expandedEntry.choices.last;
+    final grant = NpcKnowledgeRulebook.compose(
+      id: 'npc_rule_1', index: index, dossier: artem, note: note,
+      scene: expandedEntry, choice: learnChoice,
+      recipient: KnowledgeRecipient.ownerNpc, playerApproval: false,
+    );
+    final gate = NpcKnowledgeRulebook.composeGate(
+      id: 'npc_gate_1', grant: grant, scene: expandedEntry,
+      choice: expandedEntry.choices.first,
+    );
+    final gatedRules = NpcKnowledgeRulebook.empty(index)
+        .withRule(grant).withGate(gate);
+    final gatedBytes = await compileReviewedPrivateBookworldInWorker(
+        index, graph, catalog, editorial, expanded,
+        npcRules: gatedRules, npcNotebook: notebook, npcDossiers: dossiers);
+    final gated = importer.inspect(gatedBytes);
+    expect(gated.blueprint.bookId, isNot(enriched.blueprint.bookId));
+    final gatedWorld = StoryWorld(gated.blueprint);
+    final locked = gatedWorld.apply(
+        actionId: 'before_meeting', choiceId: expandedEntry.choices.first.id);
+    expect(locked.applied, isFalse);
+    expect(gatedWorld.events, isEmpty);
+    expect(gatedWorld.apply(
+        actionId: 'talk', choiceId: learnChoice.id).applied, isTrue);
+    expect(gatedWorld.apply(
+        actionId: 'after_meeting', choiceId: expandedEntry.choices.first.id)
+        .applied, isTrue);
+    expect(gatedWorld.isTerminal, isTrue);
+    expect(utf8.decode(gatedBytes, allowMalformed: true),
+        isNot(contains(note.text)));
   });
 }

@@ -629,3 +629,15 @@ Run `41332360623` (SHA `ef004a4`): Python/Dart/analyze PASS, Flutter FAIL из-�
 - Приняты `knows_fact` и детерминированный полный анализ `(scene,flags,per-actor knowledge)`, actor/fact allowlist, лимит 2500 состояний, две достижимые концовки, 120 ходов + replay/tamper. Старые сохранения не мигрированы.
 - Следующая независимая ветка `feature/m2e5b3b2b1-npc-sqlite-transfer-20261103`: `packages/campaign_manager/test/private_npc_sqlite_transfer_test.dart`, `docs/M2E5B3B2B1_SQLITE_STRESS_RU.md`. Реальный SQLite: 120 записей, отклонённый выбор, полное закрытие/восстановление, перенос `.bworld` + `.bwsave v2` между отдельными SQLite каталогами, checksum tamper, независимые финалы; это **CODE / EXACT-HEAD CI PENDING** до проверки.
 - Далее M2e5b3b2b2: UI-конструктор правил `knows_fact` и диалогов, полный UX/UI при 320dp/200%, затем физическая Windows/Android приёмка и M2f consent/BYOK/API key safety. Live AI не подключён.
+
+
+## 2026-11-03 — M2e5b3b2b2: визуальные условия `knows_fact`, CODE / CI PENDING
+
+- Ветка `feature/m2e5b3b2b2-npc-gates-20261103`, построена поверх PR #36 (M2e5b3b2b1). **PR #36 принят:** squash `a8ff96279f32bff5c276669861d16dd61900cb76`; exact-head `7f562c2100b607e7104b4da38e91d1ef347d6a42`, CI `41581807005` полный PASS (Python/Dart/schema/Flutter/Windows/Android), M0 `41581807148` PASS. Физические устройства SKIP.
+- `NpcKnowledgeGate` хранит grantRuleId, строгие SHA256 grant+choice, получателя берёт только из уже проверенного исходного `NpcKnowledgeRule`. На той же странице «Правила знаний NPC» появились добавление/изменение/удаление условий к выбору, чёткая связка `learn_fact` → `knows_fact`. Изменение правила, NPC, главы, заметки или выбора блокирует старое условие; удаления связанной выдачи не допускаются до удаления gate.
+- Старый v1 `npcKnowledgeRules` по-прежнему записывается в **абсолютно том же формате**, если gates пусты. Новый строгий `...m2e5b3b2b2_v2` только при авторском условии; отдельной миграции книг, SQLite, .bwsave нет. По умолчанию NPC overlay всё ещё выключен; ИИ отключён.
+- `NpcKnowledgeWorldBridge.preview` помещает типизированные условия в готовый `story_core` только по явному opt-in. Реальная сборка `.bworld` всегда проходит независимый импортёр с state-space causal proof (две концовки, 2500 states, проверка actor/fact); недостижимое условие означает отказ сборки, а не молчаливое исправление сюжета.
+- Новые тесты для v1/v2, tamper, actor-before/after, UI/сохранения и нативного ZIP+SQLite+causality. Документ: `docs/M2E5B3B2B2_NPC_KNOWLEDGE_GATES_RU.md`.
+- **Не мержить до exact-head Python/Dart/schema/Flutter/Windows/Android + M0 PASS.** Физический UX и Windows/Android E2E ещё SKIP. Затем отдельный полный аудит интерфейса и M2f (consent/BYOK, лимиты, провайдеры).
+
+- UX hotfix в этом же PR: при смене исходного правила в диалоге конструктор сбрасывает и заново создаёт список допустимых целевых выборов (сохраняет корректное Flutter FormField state при разных NPC/правах).
