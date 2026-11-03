@@ -315,6 +315,14 @@ class _ZaiSemanticPreviewPageState extends State<ZaiSemanticPreviewPage> {
         window.utf16Length <= SourceSemanticWindowPlanner.maxWindowUtf16 &&
         size <= SourceSemanticWindowPlanner.maxWindowUtf8;
     final scheme = Theme.of(context).colorScheme;
+    final savedReview = _queue?.results[_position];
+    final currentCandidates =
+        _result?.batch.candidates ?? savedReview?.candidates ?? const <SemanticCandidate>[];
+    final totalSuggestions =
+        _result?.totalSuggestions ?? savedReview?.totalSuggestions ?? 0;
+    final rejectedCount = _result?.rejectedCount ?? savedReview?.rejectedCount ?? 0;
+    final rejectedNonRussian = _result?.rejectedNonRussian ??
+        savedReview?.rejectedNonRussian ?? 0;
 
     return Scaffold(
       appBar: AppBar(
@@ -455,27 +463,27 @@ class _ZaiSemanticPreviewPageState extends State<ZaiSemanticPreviewPage> {
                     style: TextStyle(color: scheme.error),
                   ),
                 ],
-                if (_result != null) ...[
+                if (_result != null || savedReview != null) ...[
                   const Divider(height: 32),
                   Text('Неподтверждённые предложения',
                       style: Theme.of(context).textTheme.titleMedium),
                   const SizedBox(height: 6),
                   Text('Получено: ' +
-                      _result!.totalSuggestions.toString() +
+                      totalSuggestions.toString() +
                       '. Проверено по исходным цитатам: ' +
-                      _result!.batch.candidates.length.toString() +
-                      '. Отброшено: ' + _result!.rejectedCount.toString() +
+                      currentCandidates.length.toString() +
+                      '. Отброшено: ' + rejectedCount.toString() +
                       ' (не на русском: ' +
-                      _result!.rejectedNonRussian.toString() +
+                      rejectedNonRussian.toString() +
                       '). Это только предварительные гипотезы. '
                       'Цитаты сохранены на языке оригинала.'),
-                  if (_result!.batch.candidates.isEmpty)
+                  if (currentCandidates.isEmpty)
                     const Padding(
                       padding: EdgeInsets.symmetric(vertical: 12),
                       child: Text('Проверяемых предложений нет. '
                           'Повтор не выполнялся автоматически.'),
                     ),
-                  for (final candidate in _result!.batch.candidates)
+                  for (final candidate in currentCandidates)
                     Card(
                       child: ListTile(
                         title: Text(candidate.label),
@@ -519,7 +527,7 @@ class _ZaiSemanticPreviewPageState extends State<ZaiSemanticPreviewPage> {
                         leading: const Icon(Icons.fact_check_outlined),
                       ),
                     ),
-                  if (_result!.rejectionReasons.isNotEmpty) ...[
+                  if (_result != null && _result!.rejectionReasons.isNotEmpty) ...[
                     const SizedBox(height: 12),
                     const Text('Причины отклонения предложений:'),
                     for (final reason in _result!.rejectionReasons)
