@@ -4,6 +4,8 @@ import 'dart:io';
 
 import 'ai_connection.dart';
 import 'book_source_index.dart';
+import 'book_model.dart';
+import 'source_semantic_window.dart';
 import 'source_semantic_provider.dart';
 
 /// Cancellation is scoped to the current, explicitly consented excerpt.
@@ -55,7 +57,7 @@ class ZaiSemanticPreviewService {
   static const maxRetryAfter = Duration(seconds: 60);
 
   static const providerId = 'zai-glm47flash-preview';
-  static const providerVersion = 'm2f2c-v1';
+  static const providerVersion = 'm2f2d-v1';
   static const maxChunkUtf16 = 4096;
   static const maxBookTitleUtf16 = 240;
   static const maxBookTitleUtf8 = 1024;
@@ -66,6 +68,7 @@ class ZaiSemanticPreviewService {
     SemanticCategory.location,
     SemanticCategory.event,
     SemanticCategory.fact,
+    SemanticCategory.state,
   };
 
   static const _systemPrompt =
@@ -83,17 +86,32 @@ class ZaiSemanticPreviewService {
       'Имена собственные сохраняйте как в оригинале; текст поля quote '
       'оставляйте дословным, НЕ переводите его. '
       'Технические имена JSON-ключей и category оставьте английскими. '
-      'Событие (event) — конкретное действие или изменение состояния '
-      'внутри мира истории с явным подтверждением в цитате. '
-      'Вступительные фразы рассказчика, приглашения слушать, '
-      'названия разделов и «начало истории» — НЕ события. '
-      'Не выдумывайте событие из метафор или общих вводных слов. '
+      'Событие (event) — совершённое действие или изменение мира с '
+      'наблюдаемым результатом, а НЕ постоянное свойство. '
+      'Состояние (state) — прямо сказанное статическое свойство или '
+      'положение дел: «королевство было маленьким» — state, НЕ event. '
+      'Намерение, желание, владение и отношения, прямо описанные '
+      'рассказчиком, — fact; НЕ придумывайте их осуществление. '
+      'При явном утверждении рассказчика НЕ требуйте иных источников '
+      'для признания его фактом текста, но оставляйте INFERRED. '
+      'Место (location) — только именованное, определённое место: '
+      '«королевство», «сад», «дворец» как обычные слова — НЕ названия мест. '
+      'Заголовки и названия разделов задают контекст, НЕЛЬЗЯ '
+      'извлекать из них отдельных персонажей и события. '
+      'Вступительные слова рассказчика и «начало истории» — НЕ события. '
+      'Если вход содержит source_chunks, quote должна полностью '
+      'принадлежать ОДНОМУ исходному text, и для каждой находки '
+      'обязательно укажите соответствующий source_id. '
+      'Не сливайте цитаты разных абзацев и не придумывайте source_id. '
       'Ответьте ТОЛЬКО JSON-объектом {"candidates":[...]} '
-      'с не более 8 элементами. Каждый элемент должен содержать РОВНО '
-      'поля "category" (character, location, event или fact), '
+      'с не более 8 элементами. Каждый элемент содержит '
+      '"category" (character, location, event, fact или state), '
       '"quote" (дословная непрерывная цитата не длиннее 120 символов), '
-      '"label" (краткое название) и "uncertainty" '
-      '(почему предложение требует проверки человеком). '
+      '"label" (краткая подпись на русском), "uncertainty" '
+      '(что именно требует проверки человеком). '
+      'Для source_chunks добавьте "source_id" из соответствующего '
+      'исходного фрагмента. Для одиночного untrusted_excerpt — только '
+      'четыре обязательных поля. '
       'Не добавляйте вымышленные цитаты, ID, статусы, поля подтверждения '
       'или оформляющие блоки Markdown. '
       'Если нет надёжных примеров, верните {"candidates":[]}.';
@@ -104,6 +122,9 @@ class ZaiSemanticPreviewService {
   Future<ZaiSemanticPreviewResult> preview({
     required BookSourceIndex index,
     required SourceChunk chunk,
+    /// If supplied, the consent dialog MUST show every piece in this window.
+    /// A legacy source-only caller continues to send only its own chunk.
+    SourceSemanticWindow? window,
     required bool consentForThisChunk,
     /// The title is opt-in independently from the excerpt. Existing callers
     /// that did not show the title in their consent dialog send NO metadata.
@@ -117,16 +138,27 @@ class ZaiSemanticPreviewService {
       throw const AiSetupException(
           'Отправка отменена. Фрагмент книги остался на устройстве.');
     }
-    final request = SemanticExtractionRequest(
-      index: index,
-      chunks: [chunk],
-      categories: categories,
-    );
-    if (chunk.text.length > maxChunkUtf16 ||
+    final sourcePieces = window?.chunks ?? [chunk];
+    if (window != null) {
+      try {
+        if (!identical(window.chunks.first, chunk)) {
+          throw const FormatException('Неверная точка входа в окно');
+        }
+        SourceSemanticWindowPlanner.validate(index, window);
+      } catch (_) {
+        throw const AiSetupException(
+            'Смысловое окно изменилось. Отправка запрещена.');
+      }
+    } else if (chunk.text.length > maxChunkUtf16 ||
         utf8.encode(chunk.text).length > maxChunkUtf8Bytes) {
       throw const AiSetupException(
           'Фрагмент превышает безопасный предел пробного анализа.');
     }
+    final request = SemanticExtractionRequest(
+      index: index,
+      chunks: sourcePieces,
+      categories: categories,
+    );
     // Only the exact title shown in the UI may be uploaded. Reject oversized
     // or invalid metadata before any network I/O, and never truncate silently.
     final bookTitle = index.title.trim();
@@ -168,9 +200,10 @@ class ZaiSemanticPreviewService {
     // Only the opted-in title and selected excerpt; never author, file path,
     // source fingerprint, other chapters, bookmarks or game history.
     // Encode both as JSON data, NOT executable chat instructions.
-    final excerptContext = <String, String>{
+    final excerptContext = <String, Object>{
       if (consentForBookTitle) 'book_title': bookTitle,
-      'untrusted_excerpt': chunk.text,
+      if (window == null) 'untrusted_excerpt': chunk.text,
+      if (window != null) 'source_chunks': window.sourcePieces,
     };
     final body = jsonEncode({
       'model': ZaiModel.id,
@@ -215,17 +248,22 @@ class ZaiSemanticPreviewService {
         throw const FormatException('too many proposals');
       }
       final accepted = <SemanticCandidate>[];
+      final rejectionReasons = <String>[];
       var rejected = 0;
       var rejectedNonRussian = 0;
       for (final dynamic item in rawItems) {
+        final expectedFields = <String>{
+          'category', 'quote', 'label', 'uncertainty',
+          if (window != null) 'source_id',
+        };
         if (item is! Map<String, dynamic> ||
-            item.keys.toSet().difference(
-              {'category', 'quote', 'label', 'uncertainty'},
-            ).isNotEmpty || item.length != 4 ||
+            item.keys.toSet().difference(expectedFields).isNotEmpty ||
+            item.length != expectedFields.length ||
             item['category'] is! String ||
             item['quote'] is! String ||
             item['label'] is! String ||
-            item['uncertainty'] is! String) {
+            item['uncertainty'] is! String ||
+            (window != null && item['source_id'] is! String)) {
           throw const FormatException('invalid fields');
         }
         final category = switch (item['category'] as String) {
@@ -233,59 +271,95 @@ class ZaiSemanticPreviewService {
           'location' => SemanticCategory.location,
           'event' => SemanticCategory.event,
           'fact' => SemanticCategory.fact,
+          'state' => SemanticCategory.state,
           _ => null,
         };
         final quote = item['quote'] as String;
         final label = item['label'] as String;
         final uncertainty = item['uncertainty'] as String;
-        final start = chunk.text.indexOf(quote);
-        // Ambiguous duplicate spans and invented/oversized quotes are
-        // intentionally discarded rather than silently choosing an offset.
-        if (category == null || quote.trim().isEmpty ||
-            quote.length > 120 || start < 0 ||
-            chunk.text.lastIndexOf(quote) != start ||
-            label.trim().isEmpty || label.length > 180 ||
-            uncertainty.trim().isEmpty || uncertainty.length > 240 ||
-            _isNarratorIntro(category, label, quote)) {
+
+        void reject(String explanation, {bool language = false}) {
           rejected++;
+          rejectionReasons.add(explanation);
+          if (language) rejectedNonRussian++;
+        }
+
+        if (category == null || quote.trim().isEmpty ||
+            quote.length > 120 ||
+            label.trim().isEmpty || label.length > 180 ||
+            uncertainty.trim().isEmpty || uncertainty.length > 240) {
+          reject('Неподдерживаемый тип или пустое/слишком длинное поле.');
           continue;
         }
-        if (!_isRussianLabel(
-              category, label, quote,
-            ) || !_isRussianExplanatoryText(uncertainty)) {
-          rejected++;
-          rejectedNonRussian++;
+        final sourceId = window == null
+            ? chunk.id : item['source_id'] as String;
+        final possible = sourcePieces
+            .where((piece) => piece.id == sourceId).toList();
+        if (possible.length != 1) {
+          reject('Неверный идентификатор исходного абзаца.');
+          continue;
+        }
+        final actualChunk = possible.single;
+        final start = actualChunk.text.indexOf(quote);
+        if (start < 0 || actualChunk.text.lastIndexOf(quote) != start) {
+          reject('Цитата отсутствует в указанном абзаце '
+              'или встречается неоднозначно.');
+          continue;
+        }
+        if (actualChunk.blockKind == BookBlockKind.heading) {
+          reject('Это заголовок, а не доказательство персонажа, '
+              'события или факта.');
+          continue;
+        }
+        if (_isNarratorIntro(category, label, quote)) {
+          reject('Обращение рассказчика не является событием книги.');
+          continue;
+        }
+        if (category == SemanticCategory.location &&
+            _isUnnamedGenericPlace(label)) {
+          reject('Обычное обозначение места без собственного названия.');
+          continue;
+        }
+        if (category == SemanticCategory.event &&
+            _isStaticStateDescription(quote)) {
+          reject('Статическое свойство ошибочно размечено как событие.');
+          continue;
+        }
+        if (!_isRussianLabel(category, label, quote) ||
+            !_isRussianExplanatoryText(uncertainty)) {
+          reject('Подпись или пояснение не на русском языке.',
+              language: true);
           continue;
         }
         try {
           final candidate = SemanticCandidate.propose(
-            index, chunk,
+            index, actualChunk,
             category: category,
-            startUtf16: chunk.startUtf16 + start,
-            endUtf16: chunk.startUtf16 + start + quote.length,
+            startUtf16: actualChunk.startUtf16 + start,
+            endUtf16: actualChunk.startUtf16 + start + quote.length,
             label: label,
             uncertainty: uncertainty,
           );
           SemanticCandidateValidator.validateCandidate(
             index, candidate,
-            allowedChunkIds: {chunk.id},
+            allowedChunkIds: sourcePieces.map((x) => x.id).toSet(),
             categories: categories,
-            sourceChunk: chunk,
+            sourceChunk: actualChunk,
           );
           if (accepted.any((v) => v.id == candidate.id)) {
-            rejected++;
+            reject('Повторяющееся предложение о той же цитате.');
           } else {
             accepted.add(candidate);
           }
         } on FormatException {
-          rejected++;
+          reject('Цитата не прошла проверку источника или границ Unicode.');
         }
       }
       final batch = SemanticCandidateBatch(
         providerId: providerId,
         providerVersion: providerVersion,
         sourceFingerprint: index.sourceFingerprint,
-        chunkIds: [chunk.id],
+        chunkIds: [for (final piece in sourcePieces) piece.id],
         candidates: accepted,
       );
       SemanticCandidateValidator.validateBatch(
@@ -296,6 +370,7 @@ class ZaiSemanticPreviewService {
         batch: batch,
         rejectedCount: rejected,
         rejectedNonRussian: rejectedNonRussian,
+        rejectionReasons: List.unmodifiable(rejectionReasons),
         totalSuggestions: rawItems.length,
       );
     } catch (_) {
@@ -331,6 +406,27 @@ class ZaiSemanticPreviewService {
     } catch (_) {
       return null;
     }
+  }
+
+  static bool _isUnnamedGenericPlace(String label) {
+    final name = label.trim().toLowerCase().replaceAll('ё', 'е');
+    return <String>{
+      'королевство', 'город', 'деревня', 'селение', 'деревушка',
+      'дворец', 'замок', 'сад', 'дом', 'лес', 'улица',
+      'страна', 'озеро', 'река', 'гора', 'комната',
+    }.contains(name);
+  }
+
+  static bool _isStaticStateDescription(String quote) {
+    final source = quote.trim().toLowerCase().replaceAll('ё', 'е');
+    // Deliberately narrow: do not veto arbitrary action sentences simply
+    // because they contain "было". The goal is to catch the observed
+    // static predicate from the user's Andersen sample.
+    return RegExp(
+      r'(^|[^а-я])(был|была|было|были|есть|являлся|являлась)($|[^а-я])',
+    ).hasMatch(source) &&
+        RegExp(r'маленьк|бедн|больш|огромн|крошечн|велик|'
+               r'скромн|богат|старинн').hasMatch(source);
   }
 
   static bool _isRussianExplanatoryText(String value) {
@@ -510,11 +606,13 @@ class ZaiSemanticPreviewResult {
     required this.batch,
     required this.rejectedCount,
     required this.rejectedNonRussian,
+    this.rejectionReasons = const [],
     required this.totalSuggestions,
   });
 
   final SemanticCandidateBatch batch;
   final int rejectedCount;
   final int rejectedNonRussian;
+  final List<String> rejectionReasons;
   final int totalSuggestions;
 }

@@ -15,6 +15,7 @@ class SourceChunk {
     required this.chapterIndex,
     required this.chapterId,
     required this.blockIndex,
+    this.blockKind = BookBlockKind.paragraph,
     required this.startUtf16,
     required this.endUtf16,
     required this.text,
@@ -25,6 +26,9 @@ class SourceChunk {
   final int chapterIndex;
   final String chapterId;
   final int blockIndex;
+  /// Source block semantics for *preview planning*; not serialized so the
+  /// existing source-index JSON, fingerprints and game saves stay identical.
+  final BookBlockKind blockKind;
   final int startUtf16;
   final int endUtf16;
   final String text;
@@ -208,6 +212,7 @@ class BookSourceIndexer {
             chapterIndex: chapterIndex,
             chapterId: chapterId,
             blockIndex: blockIndex,
+            blockKind: block.kind,
             startUtf16: start,
             endUtf16: end,
             text: piece,
