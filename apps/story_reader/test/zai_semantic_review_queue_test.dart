@@ -66,7 +66,7 @@ void main() {
     expect(reviewed.canPublishBookworld, false);
     final saved = reviewed.encode();
     expect(saved, isNot(contains('НЕ ПЕРЕДАВАТЬ')));
-    expect(saved, isNot(contains('Анна вошла в дом.')));
+    expect(saved, contains('Анна вошла в дом.')); // Exact source quote is deliberately kept locally.
     final restored = ZaiWindowReviewQueue.decode(book, saved);
     expect(restored.encode(), saved);
     expect(restored.decisions[id], ZaiEditorialDecision.keepForReview);
