@@ -608,3 +608,11 @@
 - Проверенная база `main` `867b5816`, CI `41506056713` 7/7 PASS, M0 `41506056826` success, релиз `test-build-310` содержит Windows portable и Android debug APK. Это успех **прошлого** M2e2, а не нового этапа.
 - Новая ветка `feature/m2e3-verified-private-game-gate-20261103` добавляет `private_game_readiness.dart`, `private_game_readiness_panel.dart`, тесты и интеграцию в единую страницу подготовки. `PrivateBookworldImporter` независимо проверяет ZIP/SQLite/source SHA ранее установленной личной адаптации; кнопка открытия видна только для проверенного совпадающего мира. Старые книги и прохождения не меняются.
 - Документ: `docs/M2E3_PRIVATE_GAME_READINESS_RU.md`. Текущий статус **CODE / CI PENDING**, нужен exact-head CI и затем принятие PR. Полная сюжетная модель романа, physical E2E, настройки BYOK/cloud согласия — впереди.
+
+
+## 2026-11-03 — M2e4a: расширенный редактор источников (первая часть)
+
+- Ветка `feature/m2e4-expanded-source-editor-20261103` создана поверх M2e3, пока PR #28 проходит отдельную CI-приёмку. Добавлена ссылка «Редактор персонажей, событий и хронологии» на единой странице подготовки.
+- Новый `source_editorial_review_page.dart` открывает все source-backed утверждения с поиском, разделами, страницами по 12, явным spoiler-gate и сохранением ручных вердиктов в отдельном checkpoint. Не повышает inferred до канона самостоятельно. Проверяет источник, quote status, fingerprint и не переписывает книгу/сейвы.
+- `source_relations_review_panel.dart` теперь может показывать все пары имён, переходы глав и цитаты порциями, вместо прежних 4/3/6. Добавлены Flutter widget-тесты для UI, invalid sources, записи и отказа.
+- Подробно: `docs/M2E4A_SOURCE_EDITORIAL_REVIEW_RU.md`. Статус **CODE / CI PENDING**. Не выдавать это за готовый многосценный игровой конструктор, автоматическую адаптацию книги или подключённый ИИ. Дальше — пройти exact-head CI (Dart/Flutter/Python/Windows/Android) и принять PR, затем строить полноценный многосценный редактор и physical QA.

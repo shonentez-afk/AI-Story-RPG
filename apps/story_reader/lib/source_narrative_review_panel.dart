@@ -52,6 +52,7 @@ class _SourceNarrativeReviewPanelState
   StoryEvidenceReviewSession? _review;
   bool _expanded = false;
   bool _showSpoilers = false;
+  int _visiblePending = 12;
   bool _busy = false;
   bool _pause = false;
   bool _needsSync = false;
@@ -86,6 +87,7 @@ class _SourceNarrativeReviewPanelState
       _busy = true;
       _error = null;
       _showSpoilers = false;
+      _visiblePending = 12;
     });
     try {
       final raw = await _repository.read(widget.index.sourceFingerprint);
@@ -283,9 +285,10 @@ class _SourceNarrativeReviewPanelState
         ],
       );
     }
-    final pending = review?.graph.records.where(
-        (e) => e.status == EvidenceStatus.inferred).take(12).toList()
+    final pendingAll = review?.graph.records.where(
+        (e) => e.status == EvidenceStatus.inferred).toList()
         ?? <SourceEvidence>[];
+    final pending = pendingAll.take(_visiblePending).toList();
     final complete = review != null &&
         review.scannedChunks >= widget.index.chunks.length;
     final conflicts = _showSpoilers && review != null
@@ -414,7 +417,8 @@ class _SourceNarrativeReviewPanelState
           ],
           if (pending.isNotEmpty) ...[
             const SizedBox(height: 12),
-            Text('Непроверенные цитаты · первые ${pending.length}',
+            Text('Непроверенные цитаты · показано ${pending.length} '
+                'из ${pendingAll.length}',
                 style: text.titleSmall),
             for (final candidate in pending)
               Card(
@@ -452,6 +456,15 @@ class _SourceNarrativeReviewPanelState
                     ],
                   ),
                 ),
+              ),
+            if (pending.length < pendingAll.length)
+              OutlinedButton.icon(
+                key: const Key('narrative-show-more-pending'),
+                onPressed: _busy ? null : () => setState(
+                    () => _visiblePending += 12),
+                icon: const Icon(Icons.expand_more),
+                label: Text('Показать ещё цитаты (${pending.length} '
+                    'из ${pendingAll.length})'),
               ),
           ] else
             const Text('Нет новых цитат для ручной проверки. '

@@ -54,6 +54,9 @@ class _SourceRelationsReviewPanelState
   SourceRelationReviewSession? _session;
   SourceNarrativeChronology? _chronology;
   bool _opened = false;
+  int _relationLimit = 4;
+  int _chapterLimit = 3;
+  int _observationLimit = 6;
   bool _busy = false;
   bool _stale = false;
   String? _error;
@@ -89,6 +92,9 @@ class _SourceRelationsReviewPanelState
       _error = null;
       _session = null;
       _chronology = null;
+      _relationLimit = 4;
+      _chapterLimit = 3;
+      _observationLimit = 6;
     });
     try {
       final raw = await _store.read(widget.index.sourceFingerprint);
@@ -248,11 +254,11 @@ class _SourceRelationsReviewPanelState
       );
     }
     final evidence = {for (final e in widget.graph.records) e.id: e};
-    final relations = session?.proposedRelations.take(4).toList()
+    final relations = session?.proposedRelations.take(_relationLimit).toList()
         ?? <IdentityRelationReview>[];
-    final chapterOrder = session?.chapterOrder.take(3).toList()
+    final chapterOrder = session?.chapterOrder.take(_chapterLimit).toList()
         ?? <ChapterTemporalReview>[];
-    final observations = chronology?.observations.take(6).toList()
+    final observations = chronology?.observations.take(_observationLimit).toList()
         ?? <NarrativeObservation>[];
 
     return Column(
@@ -349,6 +355,15 @@ class _SourceRelationsReviewPanelState
                 ),
               ),
             ),
+          if (relations.length < session.proposedRelations.length)
+            OutlinedButton.icon(
+              key: const Key('relations-show-more'),
+              onPressed: _busy ? null : () => setState(() =>
+                  _relationLimit += 8),
+              icon: const Icon(Icons.expand_more),
+              label: Text('Показать ещё связи (${relations.length} '
+                  'из ${session.proposedRelations.length})'),
+            ),
           const SizedBox(height: 8),
           Text('Порядок событий между главами', style: style.titleSmall),
           const Text('Это отдельные решения человека. '
@@ -381,6 +396,15 @@ class _SourceRelationsReviewPanelState
                 ],
               ),
             ),
+          if (chapterOrder.length < session.chapterOrder.length)
+            OutlinedButton.icon(
+              key: const Key('relations-show-more-chapters'),
+              onPressed: _busy ? null : () => setState(() =>
+                  _chapterLimit += 12),
+              icon: const Icon(Icons.expand_more),
+              label: Text('Показать ещё главы (${chapterOrder.length} '
+                  'из ${session.chapterOrder.length})'),
+            ),
           const SizedBox(height: 8),
           Text('Последовательность текстовых свидетельств',
               style: style.titleSmall),
@@ -402,6 +426,17 @@ class _SourceRelationsReviewPanelState
                     ClaimVoice.uncertain => "неуверенное высказывание",
                   }}',
               ),
+            ),
+          if (chronology != null &&
+              observations.length < chronology.observations.length)
+            OutlinedButton.icon(
+              key: const Key('relations-show-more-observations'),
+              onPressed: _busy ? null : () => setState(() =>
+                  _observationLimit += 12),
+              icon: const Icon(Icons.expand_more),
+              label: Text('Показать ещё свидетельства '
+                  '(${observations.length} из '
+                  '${chronology.observations.length})'),
             ),
         ],
       ],

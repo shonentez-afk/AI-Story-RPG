@@ -88,6 +88,39 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('long book can expose and review citations beyond first 12',
+      (tester) async {
+    final longBook = ImportedBook(
+      title: 'Цитаты всех глав', author: 'Автор',
+      chapters: List.generate(16, (i) =>
+          'Артем открыл дверь. Дверь была открыта. Сцена $i.'),
+    );
+    final index = BookSourceIndexer.index(longBook);
+    final session = StoryEvidenceReviewSession.create(index).scanNext(index);
+    expect(session.pendingReviewCount, greaterThan(12));
+    final repository = MemorySourceAnalysisCheckpointRepository();
+    await repository.write(index.sourceFingerprint, session.encode());
+    await tester.pumpWidget(buildPanel(index, repository));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Открыть проверку утверждений'));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(
+        find.text('Показать утверждения (возможны спойлеры)'));
+    await tester.tap(
+        find.text('Показать утверждения (возможны спойлеры)'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('показано 12 из'), findsOneWidget);
+    final more = find.byKey(const Key('narrative-show-more-pending'));
+    expect(more, findsOneWidget);
+    await tester.ensureVisible(more);
+    await tester.tap(more);
+    await tester.pumpAndSettle();
+    expect(find.textContaining('показано 24 из'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    expect((await repository.read(index.sourceFingerprint))!,
+        session.encode());
+  });
+
   testWidgets('failed write cannot show phantom progress; retry resumes',
       (tester) async {
     final index = BookSourceIndexer.index(book);
