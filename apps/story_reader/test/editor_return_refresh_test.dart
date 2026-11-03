@@ -8,8 +8,19 @@ import 'package:ai_story_reader/reviewed_story_editor_page.dart';
 import 'package:ai_story_reader/multi_scene_editor_page.dart';
 import 'package:ai_story_reader/private_game_readiness_panel.dart';
 import 'package:ai_story_reader/source_narrative_review_panel.dart';
+import 'package:ai_story_reader/world_library_gateway.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+class _RecordingWorldGateway extends DeviceWorldLibraryGateway {
+  int scans = 0;
+
+  @override
+  Future<List<WorldLibraryItem>> worlds() async {
+    scans++;
+    return [];
+  }
+}
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -28,6 +39,7 @@ void main() {
     );
     final index = BookSourceIndexer.index(book);
     final mentions = MemorySourceAnalysisCheckpointRepository();
+    final gateway = _RecordingWorldGateway();
     final initial = SourceAnalysisSession.create(index);
     await mentions.write(index.sourceFingerprint, initial.encode());
     await tester.pumpWidget(MaterialApp(
@@ -35,6 +47,7 @@ void main() {
         book: book,
         indexer: (_) async => index,
         checkpointRepository: mentions,
+        worldGateway: gateway,
         checkpointDecoder: (i, raw) async =>
             SourceAnalysisSession.decode(i, raw),
       ),
@@ -67,11 +80,9 @@ void main() {
 
       // Close exactly one editor. The parent must rebuild from persisted
       // checkpoints and re-run the optional game package check.
-      final navigator = tester.state<NavigatorState>(
-          find.byType(Navigator).first);
-      navigator.pop();
+      Navigator.of(tester.element(find.byType(pageType))).pop();
       await tester.pump();
-      await tester.pump(const Duration(milliseconds: 400));
+      await tester.pump(const Duration(milliseconds: 500));
       expect(find.byType(pageType), findsNothing);
       final nextNarrative = tester.widget<SourceNarrativeReviewPanel>(
           find.byType(SourceNarrativeReviewPanel)).key;
@@ -81,6 +92,9 @@ void main() {
       expect(nextReadiness, isNot(priorReadiness));
       expect(tester.widget<PrivateGameReadinessPanel>(
           find.byType(PrivateGameReadinessPanel)).checkOnOpen, isTrue);
+      await tester.pumpAndSettle();
+      expect(gateway.scans, revision + 1);
+      expect(find.textContaining('Проверенной личной RPG'), findsOneWidget);
       expect(await mentions.read(index.sourceFingerprint), initial.encode());
     }
     expect(tester.takeException(), isNull);
