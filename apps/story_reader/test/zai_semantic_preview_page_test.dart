@@ -96,7 +96,10 @@ void main() {
 
     await tester.tap(send);
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('zai-consent-exact-checkbox')));
+    final permission = find.byKey(const Key('zai-consent-exact-checkbox'));
+    await tester.ensureVisible(permission);
+    await tester.pumpAndSettle();
+    await tester.tap(permission);
     await tester.pumpAndSettle();
     expect(tester.widget<FilledButton>(
         find.byKey(const Key('zai-consent-confirm'))).onPressed, isNotNull);
@@ -184,7 +187,10 @@ void main() {
     await tester.tap(send);
     await tester.pumpAndSettle();
     expect(find.textContaining('автоматическими повторами'), findsOneWidget);
-    await tester.tap(find.byKey(const Key('zai-consent-exact-checkbox')));
+    final permission = find.byKey(const Key('zai-consent-exact-checkbox'));
+    await tester.ensureVisible(permission);
+    await tester.pumpAndSettle();
+    await tester.tap(permission);
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('zai-consent-confirm')));
     await tester.pumpAndSettle();
@@ -220,7 +226,10 @@ void main() {
         scrollable: find.byType(Scrollable).first);
     await tester.tap(send);
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('zai-consent-exact-checkbox')));
+    final permission = find.byKey(const Key('zai-consent-exact-checkbox'));
+    await tester.ensureVisible(permission);
+    await tester.pumpAndSettle();
+    await tester.tap(permission);
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('zai-consent-confirm')));
     await tester.pump();
