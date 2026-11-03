@@ -19,6 +19,7 @@ class NpcDraftNote {
     required this.text,
     this.sourceAssertionId,
     this.targetDossierId,
+    this.targetGroupDigest,
   });
 
   final String id;
@@ -31,6 +32,9 @@ class NpcDraftNote {
 
   /// A relationship names one other current mention-group, not an NPC ID.
   final String? targetDossierId;
+  /// Exact snapshot of the other name group's source spans, so SAME/DIFFERENT
+  /// edits cannot silently redirect an authored relationship.
+  final String? targetGroupDigest;
 
   bool get isAuthorial => sourceAssertionId == null;
   bool get isWorldCanon => false;
@@ -41,12 +45,13 @@ class NpcDraftNote {
     'text': text,
     'source_assertion_id': sourceAssertionId,
     'target_dossier_id': targetDossierId,
+    'target_group_sha256': targetGroupDigest,
   };
 
   static NpcDraftNote fromJson(Map<String, dynamic> item) {
     const fields = {
       'id', 'field', 'text',
-      'source_assertion_id', 'target_dossier_id',
+      'source_assertion_id', 'target_dossier_id', 'target_group_sha256',
     };
     if (item.length != fields.length ||
         !item.keys.toSet().containsAll(fields)) {
@@ -61,6 +66,7 @@ class NpcDraftNote {
         text: item['text'] as String,
         sourceAssertionId: item['source_assertion_id'] as String?,
         targetDossierId: item['target_dossier_id'] as String?,
+        targetGroupDigest: item['target_group_sha256'] as String?,
       );
     } on FormatException {
       rethrow;
@@ -146,6 +152,9 @@ class NpcEditorialNotebook {
 
   static List<String> mentionIds(SourceCharacterDossier dossier) =>
       List.unmodifiable([for (final e in dossier.mentions) e.id]..sort());
+
+  static String groupDigest(SourceCharacterDossier dossier) =>
+      _sha(mentionIds(dossier).join('|'));
 
   /// Fail closed for unverified names or a changed identity group. Refuse to
   /// rebind the old profile to a different NPC merely because names match.
@@ -246,14 +255,15 @@ class NpcEditorialNotebook {
               'Отозвана цитата или редакторское решение по NPC');
         }
         if (note.field != NpcDraftField.relationship) {
-          if (note.targetDossierId != null) {
+          if (note.targetDossierId != null || note.targetGroupDigest != null) {
             throw const FormatException('Цель есть у нереляционной заметки');
           }
         } else {
           final target = groupById[note.targetDossierId];
           if (note.targetDossierId == null ||
               note.targetDossierId == profile.dossierId ||
-              target == null || !isConfirmedDossier(target)) {
+              target == null || !isConfirmedDossier(target) ||
+              note.targetGroupDigest != groupDigest(target)) {
             throw const FormatException(
                 'Связь указывает на неподтверждённого персонажа');
           }
