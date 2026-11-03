@@ -22,10 +22,13 @@ class SourceRelationsReviewPanel extends StatefulWidget {
     this.checkpointEncoder,
     this.chronologyBuilder,
     this.relationDecider,
+    this.onReviewSaved,
   });
 
   final BookSourceIndex index;
   final SourceEvidenceGraph graph;
+  /// Called only after the existing relation checkpoint is committed.
+  final VoidCallback? onReviewSaved;
   final SourceAnalysisCheckpointRepository? checkpointRepository;
   final Future<SourceRelationReviewSession> Function(
       BookSourceIndex, SourceEvidenceGraph)? sessionBuilder;
@@ -128,7 +131,10 @@ class _SourceRelationsReviewPanelState
         ? await encodeRelationReviewInWorker(updated)
         : await encoder(updated);
     await _store.write(widget.index.sourceFingerprint, raw);
-    if (mounted) setState(() => _session = updated);
+    if (mounted) {
+      setState(() => _session = updated);
+      widget.onReviewSaved?.call();
+    }
   }
 
   Future<void> _decideRelation(
@@ -209,6 +215,7 @@ class _SourceRelationsReviewPanelState
         _chronology = chronology;
         _stale = false;
       });
+      widget.onReviewSaved?.call();
     } catch (error) {
       if (mounted) setState(() =>
           _error = 'Не удалось сбросить связи: $error');
