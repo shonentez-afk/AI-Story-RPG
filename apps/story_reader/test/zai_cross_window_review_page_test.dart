@@ -138,7 +138,9 @@ void main() {
     await tester.pumpAndSettle();
 
     final button = find.byKey(const Key('zai-open-cross-window-review'));
-    await tester.ensureVisible(button);
+    await tester.scrollUntilVisible(button, 140,
+        scrollable: find.byType(Scrollable).first, maxScrolls: 40);
+    await tester.pumpAndSettle();
     await tester.tap(button);
     await tester.pumpAndSettle();
     expect(find.text('Сквозной анализ книги'), findsOneWidget);
