@@ -504,3 +504,10 @@ Run `41332360623` (SHA `ef004a4`): Python/Dart/analyze PASS, Flutter FAIL из-�
 - Новая ветка feature/m2e2-reviewed-story-composer-20261103, документ docs/M2E2_REVIEWED_STORY_EDITOR_RU.md. Реализован отдельный ручной редактор короткой личной адаптации внутри существующей подготовки: точные подтверждённые цитаты, явные решения канона, 2 source scenes + 1 authored alternate, отдельный draft checkpoint, согласие privateUse, native compiler, установка в BookWorld library и открытие кампаний.
 - Статус M2e2 **CODE / CI PENDING**. Нельзя утверждать, что любая книга автоматически компилируется или что новая UI-функция уже попала в выпуск. Не делать silent promotion из INFERRED; не удалять старые книги/сохранения.
 - После M2e2: полный редактор identities/aliases/chronology/scenes; итоговый readiness report с тремя шкалами; Windows+Android physical E2E и stress; затем BYOK/cloud consent/token budget/model QA.
+
+
+## 2026-11-03 — M2e3 проверяемая готовность установленной личной RPG
+
+- Проверенная база `main` `867b5816`, CI `41506056713` 7/7 PASS, M0 `41506056826` success, релиз `test-build-310` содержит Windows portable и Android debug APK. Это успех **прошлого** M2e2, а не нового этапа.
+- Новая ветка `feature/m2e3-verified-private-game-gate-20261103` добавляет `private_game_readiness.dart`, `private_game_readiness_panel.dart`, тесты и интеграцию в единую страницу подготовки. `PrivateBookworldImporter` независимо проверяет ZIP/SQLite/source SHA ранее установленной личной адаптации; кнопка открытия видна только для проверенного совпадающего мира. Старые книги и прохождения не меняются.
+- Документ: `docs/M2E3_PRIVATE_GAME_READINESS_RU.md`. Текущий статус **CODE / CI PENDING**, нужен exact-head CI и затем принятие PR. Полная сюжетная модель романа, physical E2E, настройки BYOK/cloud согласия — впереди.

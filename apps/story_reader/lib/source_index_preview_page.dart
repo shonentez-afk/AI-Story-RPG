@@ -11,6 +11,7 @@ import 'source_analysis_checkpoint_repository.dart';
 import 'source_narrative_review_panel.dart';
 import 'source_semantic_review_panel.dart';
 import 'reviewed_story_editor_page.dart';
+import 'private_game_readiness_panel.dart';
 import 'world_library_gateway.dart';
 
 /// The single preparation page already opened from Library. M2b2 adds local
@@ -813,14 +814,21 @@ class _SourceIndexPreviewPageState extends State<SourceIndexPreviewPage> {
                           ),
                         ),
                         const SizedBox(height: 8),
+                        PrivateGameReadinessPanel(
+                          key: ValueKey('private-readiness-${index.sourceFingerprint}'),
+                          index: index,
+                          gateway: widget.worldGateway ??
+                              const DeviceWorldLibraryGateway(),
+                        ),
+                        const SizedBox(height: 8),
                         Card(
                           child: ListTile(
                             leading: const Icon(Icons.lock_outline),
-                            title: const Text('Создать RPG по этой книге'),
+                            title: const Text('Полная RPG по всей книге'),
                             subtitle: const Text('Для запуска требуются проверенные сцены и выборы. '
-                                'Встроенная сборка .bworld ещё не связана '
-                                'с редактором книги; завершение поиска само '
-                                'по себе не создаёт игру.'),
+                                'Короткую личную RPG можно собрать в редакторе выше. '
+                                'Автоматическая адаптация всего романа пока '
+                                'не реализована.'),
                           ),
                         ),
                         const SizedBox(height: 8),

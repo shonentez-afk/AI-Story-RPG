@@ -199,7 +199,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Локальная подготовка книги'), findsOneWidget);
     expect(find.text('Выполнить локальную подготовку'), findsOneWidget);
-    expect(find.text('Создать RPG по этой книге'), findsOneWidget);
+    expect(find.text('Полная RPG по всей книге'), findsOneWidget);
     await tester.tap(find.byKey(const Key('prepare-offline-all')));
     await tester.pumpAndSettle();
     expect(find.textContaining('Локальный анализ завершён'), findsOneWidget);
