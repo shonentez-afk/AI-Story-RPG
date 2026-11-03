@@ -11,6 +11,7 @@ import 'source_analysis_checkpoint_repository.dart';
 import 'source_narrative_review_panel.dart';
 import 'source_semantic_review_panel.dart';
 import 'reviewed_story_editor_page.dart';
+import 'source_editorial_review_page.dart';
 import 'private_game_readiness_panel.dart';
 import 'world_library_gateway.dart';
 
@@ -770,6 +771,27 @@ class _SourceIndexPreviewPageState extends State<SourceIndexPreviewPage> {
                           key: ValueKey('${index.sourceFingerprint}-${_narrativeRefresh}'),
                           index: index,
                           sourceMentions: _analysis,
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        Card(
+                          child: ListTile(
+                            key: const Key('prepare-open-expanded-source-editor'),
+                            leading: const Icon(Icons.account_tree_outlined),
+                            title: const Text(
+                                'Редактор персонажей, событий и хронологии'),
+                            subtitle: const Text(
+                                'Проверьте все найденные смысловые утверждения, '
+                                'разделите похожие имена и уточните порядок глав. '
+                                'Редактор не меняет канон автоматически.'),
+                            trailing: const Icon(Icons.chevron_right),
+                            enabled: !_offlineWorking && !_busy,
+                            onTap: () => Navigator.of(context).push<void>(
+                              MaterialPageRoute(
+                                builder: (_) => SourceEditorialReviewPage(
+                                    index: index),
+                              ),
+                            ),
                           ),
                         ),
                         const Divider(height: 28),

@@ -109,6 +109,40 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('long source exposes remaining identities and chronology '
+      'without silently merging them', (tester) async {
+    final longBook = ImportedBook(
+      title: 'Много упоминаний', author: 'Автор',
+      chapters: List.generate(9,
+          (i) => 'Артем по прозвищу Волк открыл дверь. '
+              'Дверь была открыта. Сцена $i.'),
+    );
+    final index = BookSourceIndexer.index(longBook);
+    final graph = sourceGraph(index);
+    final store = MemorySourceAnalysisCheckpointRepository();
+    await tester.pumpWidget(page(index, graph, store));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Открыть связи и хронологию'));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('relations-show-more')), findsOneWidget);
+    expect(find.byKey(const Key('relations-show-more-chapters')), findsOneWidget);
+    await tester.ensureVisible(find.byKey(const Key('relations-show-more')));
+    await tester.tap(find.byKey(const Key('relations-show-more')));
+    await tester.pumpAndSettle();
+    final after = SourceRelationReviewSession.create(index, graph);
+    expect(after.unresolvedCount, greaterThan(4));
+    expect(await store.read(index.sourceFingerprint), isNull);
+    await tester.ensureVisible(
+        find.byKey(const Key('relations-show-more-chapters')));
+    await tester.tap(find.byKey(const Key('relations-show-more-chapters')));
+    await tester.pumpAndSettle();
+    expect(find.text('Глава 4 → глава 5'), findsOneWidget);
+    expect(find.byKey(const Key('relations-show-more-observations')),
+        findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('failed save shows error and does not publish identity',
       (tester) async {
     final index = BookSourceIndexer.index(book);
