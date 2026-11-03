@@ -376,26 +376,15 @@ class _NpcEditorialPageState extends State<NpcEditorialPage> {
                 ),
                 const SizedBox(height: 8),
                 const Text('Основание записи:'),
-                RadioGroup<bool>(
-                  groupValue: sourceId != null,
-                  onChanged: (value) => refresh(() {
-                    sourceId = value == true && choices.isNotEmpty
-                        ? choices.first.id : null;
+                SwitchListTile(
+                  key: const Key('npc-source-toggle'),
+                  title: const Text('Привязать проверенное утверждение '
+                      '(кандидат, не игровой канон)'),
+                  subtitle: const Text('Выключено: авторская версия.'),
+                  value: sourceId != null,
+                  onChanged: choices.isEmpty ? null : (checked) => refresh(() {
+                    sourceId = checked ? choices.first.id : null;
                   }),
-                  child: Column(
-                    children: [
-                      const RadioListTile<bool>(
-                        title: Text('Авторская версия / альтернатива'),
-                        value: false,
-                      ),
-                      RadioListTile<bool>(
-                        title: const Text('Ссылка на проверенное утверждение '
-                            '(кандидат, не канон)'),
-                        value: true,
-                        enabled: choices.isNotEmpty,
-                      ),
-                    ],
-                  ),
                 ),
                 if (sourceId != null && choices.isNotEmpty)
                   DropdownButtonFormField<String>(
