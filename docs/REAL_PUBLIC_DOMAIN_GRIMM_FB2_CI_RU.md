@@ -1,6 +1,6 @@
 # Полная, обязательная FB2-регрессия по сказкам братьев Гримм
 
-Дата: 2026-11-03. База: M2f3a после PR #50 (main squash `9544422674fa3c656cdde2fa7d47397516a0337e`). Ветка: `test/full-public-domain-grimm-fb2-ci-20261103`.
+Дата: 2026-11-03. **PR #51 MERGED / exact-head CI PASS**; код main `12f45882e34830632e6f8fb385d94c833874c1cd`; проверенный PR HEAD `f517af0e5dc49db621d27d234c60ff4e6c841234`.
 
 ## Почему раньше было 2 SKIP
 
@@ -55,3 +55,13 @@ flutter test test/public_domain_grimm_full_fb2_test.dart --reporter expanded
 - До exact-head CI — **CODE/PENDING**. После CI указать SHA, run IDs, реальные PASS/FAIL/SKIP. Не путать CI с пользовательским UX по своей конкретной книге.
 
 Следующий этап M2f3b: согласованная обработка окон на реальных русских FB2 и контроль смысловых ошибок, объединения персонажей и хронологии. Свободная RPG не включается автоматически.
+
+## Принятие PR #51 — фактические результаты GitHub Actions
+
+- PR: https://github.com/shonentez-afk/AI-Story-RPG/pull/51 ; **MERGED** squash `12f45882e34830632e6f8fb385d94c833874c1cd`.
+- Exact проверенный HEAD: `f517af0e5dc49db621d27d234c60ff4e6c841234`.
+- GitHub Actions **41663754137 COMPLETED/SUCCESS 6/6**: Python reference PASS; Dart engine PASS; BookWorld/SQLite PASS; Flutter analyze PASS и **347 PASS / 2 private Andersen SKIP**; Windows portable PASS; Android debug APK PASS. Дополнительный M0 **41663754133 COMPLETED/SUCCESS**.
+- В логе `Build real COMPLETE public-domain Grimm FB2` подтверждены **62 настоящие сказки, 909 абзацев, 514 890 символов**. SHA256 Gutenberg plaintext `377ebb8ca06cd8bc0b1015ddb54766c44f50dece731c53bb030f1cc00f54092a`, полученного FB2 `1273bc9b20bd1a5cdccdbb29489ba0962521539903898f1ae726a376089ca038`.
+- Два новых Dart-теста по полной книге **PASS**: все 62 главы, exact source index, windows, private Z.ai queue, full offline preparation, durable checkpoint replay, BookStorage persist/reopen. Никакой сетевой ИИ книги в тестах не запускался.
+- Во время первого CI `41663507607` Flutter analyze FAIL на один unused import; он был убран в commit `f517af0e`; только финальный exact-head CI принят.
+- Пост-merge main CI и публикация нового тестового релиза требуют отдельной проверки; физические Windows/Android real-device E2E не превращаются автоматически в PASS.
