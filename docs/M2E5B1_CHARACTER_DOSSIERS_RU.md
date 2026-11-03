@@ -32,3 +32,12 @@
 `source_character_dossier_panel_test.dart`: opt-in спойлеров, обновление после сохранённого решения, повреждённый checkpoint без сброса, больше восьми карточек, интеграция с прежней панелью identity-review.
 
 Принятие только после exact-head Python/Dart/Flutter/schema/Windows/Android/M0 CI и review PR. Физические Windows/Android E2E и длинный роман помечать SKIP, а не PASS.
+
+
+## 2026-11-03 — M2e5b1 ПРИНЯТ (точная CI-приёмка)
+
+- PR #31 **MERGED** в `main`: `fb76e6ac8c86fdcc682325f4f79df5f360cff222`; проверяемый head PR: `9d1605f0fee636332b02d9374ff009e6bf39fd5b`.
+- GitHub Actions `41564955358` **completed/success, 6/6 обязательных jobs PASS**: Python, Dart, контракты/BookWorld, Flutter analyze + widget, Windows portable, Android debug APK. M0 `41564955391` **completed/success**. Первое падение на двух неполных тестовых фикстурах устранено до приёмки; итоговый green run относится только к `9d1605f0`.
+- Проверяемые карточки персонажей, псевдонимов и возможных отношений на существующей странице подготовки. Слияние имён только по подтверждённому SAME из `SourceRelationReviewSession`, никакого автоматического NPC-канона. Отзыв цитаты и повреждённый checkpoint — fail-closed; исходные книги/BookWorld/SQLite/`.bwsave` не мигрировались.
+- Документ `docs/M2E5B1_CHARACTER_DOSSIERS_RU.md`. Физические Windows/Android/E2E, полный роман, авторская модель знаний/мотиваций и автоматическая адаптация — **SKIP / PENDING**, не приравнивать к автоматическим CI.
+- **СЛЕДУЮЩИЙ ЭТАП M2e5b2:** безопасный редактируемый NPC-staging (имя/роль/мотивация/отношения/знания) на подтверждённых источниках; затем UX- и сквозной QA, после него — consent/BYOK/лимиты ИИ. Ни облачного API, ни модели пока нет.
