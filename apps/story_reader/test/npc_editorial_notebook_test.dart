@@ -220,7 +220,7 @@ void main() {
     expect(() => checked(build([
       NpcDraftNote(
         id: 'npc_note_1', field: NpcDraftField.role,
-        text: 'a' * 801,
+        text: List.filled(801, 'a').join(),
       ),
     ])), throwsFormatException);
     expect(() => checked(build([
