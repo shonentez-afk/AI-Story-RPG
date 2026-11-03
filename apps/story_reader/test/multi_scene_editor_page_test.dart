@@ -73,7 +73,15 @@ void main() {
     );
   });
 
-  Widget page() => MaterialApp(home: MultiSceneEditorPage(
+  Widget page({bool accessibility = false}) => MaterialApp(
+    builder: accessibility
+        ? (context, child) => MediaQuery(
+            data: MediaQuery.of(context).copyWith(
+                textScaler: const TextScaler.linear(2)),
+            child: child!,
+          )
+        : null,
+    home: MultiSceneEditorPage(
     index: index,
     gateway: const DeviceWorldLibraryGateway(background: false),
     narrativeRepository: narrative,
@@ -94,6 +102,29 @@ void main() {
       await shortStore.write(index.sourceFingerprint, shortDraft.encode());
     }
   }
+
+
+  testWidgets('multi-scene draft primary button remains usable '
+      'on 320dp with 200% accessibility text', (tester) async {
+    tester.view.physicalSize = const Size(320, 640);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+    await seedStores();
+    await tester.pumpWidget(page(accessibility: true));
+    await tester.pumpAndSettle();
+    final start = find.byKey(const Key('multi-copy-short'));
+    expect(start, findsOneWidget);
+    await tester.ensureVisible(start);
+    await tester.pumpAndSettle();
+    await tester.tap(start);
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Сцен: 3'), findsOneWidget);
+    expect(find.byKey(const Key('multi-add-authored')), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
 
   testWidgets('unprepared book shows blocker without game creation',
       (tester) async {

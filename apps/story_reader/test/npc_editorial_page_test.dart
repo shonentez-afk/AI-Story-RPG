@@ -54,7 +54,15 @@ void main() {
     multiStore = MemorySourceAnalysisCheckpointRepository();
   });
 
-  Widget screen() => MaterialApp(home: NpcEditorialPage(
+  Widget screen({bool accessibility = false}) => MaterialApp(
+    builder: accessibility
+        ? (context, child) => MediaQuery(
+            data: MediaQuery.of(context).copyWith(
+                textScaler: const TextScaler.linear(2)),
+            child: child!,
+          )
+        : null,
+    home: NpcEditorialPage(
     index: index, graph: graph, catalog: catalog, editorial: editorial,
     relationsRepository: relationStore,
     notebookRepository: noteStore,
@@ -84,6 +92,30 @@ void main() {
     await tester.tap(find.byKey(const Key('npc-confirm-name')));
     await tester.pumpAndSettle();
   }
+
+
+  testWidgets('NPC selection and new-profile action remain reachable '
+      'on 320dp with 200% accessibility text', (tester) async {
+    tester.view.physicalSize = const Size(320, 640);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+    await tester.pumpWidget(screen(accessibility: true));
+    await tester.pumpAndSettle();
+    final select = find.byKey(Key('npc-select-' + artem.id));
+    await tester.ensureVisible(select);
+    await tester.pumpAndSettle();
+    expect(select.hitTestable(), findsOneWidget);
+    await tester.tap(select);
+    await tester.pumpAndSettle();
+    final create = find.byKey(const Key('npc-create-profile'));
+    await tester.ensureVisible(create);
+    await tester.pumpAndSettle();
+    expect(create, findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
 
   testWidgets('profile and role save privately and resume on reopening',
       (tester) async {
