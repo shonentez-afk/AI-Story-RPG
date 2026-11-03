@@ -446,6 +446,9 @@ class _NpcEditorialPageState extends State<NpcEditorialPage> {
       text: proposal.text,
       sourceAssertionId: proposal.sourceId,
       targetDossierId: proposal.targetId,
+      targetGroupDigest: proposal.targetId == null ? null :
+          NpcEditorialNotebook.groupDigest(_dossiers!.dossiers.firstWhere(
+              (group) => group.id == proposal.targetId)),
     );
     final updated = NpcDraftProfile(
       dossierId: profile.dossierId,
