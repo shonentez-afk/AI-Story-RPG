@@ -5,6 +5,10 @@ import 'intermediate_story_blueprint.dart';
 import 'multi_scene_draft_workbench.dart';
 import 'draft_scene_graph_panel.dart';
 import 'native_private_bookworld_compiler.dart';
+import 'npc_editorial_notebook.dart';
+import 'npc_knowledge_rulebook.dart';
+import 'source_character_dossiers.dart';
+import 'source_relation_review.dart';
 import 'private_adaptation_preflight.dart';
 import 'reviewed_story_editor_page.dart';
 import 'source_analysis_checkpoint_repository.dart';
@@ -24,6 +28,8 @@ class MultiSceneEditorPage extends StatefulWidget {
     this.narrativeRepository, this.catalogRepository,
     this.editorialRepository, this.shortDraftRepository,
     this.multiDraftRepository,
+    this.npcNotebookRepository, this.npcRulesRepository,
+    this.identityRepository,
   });
 
   final BookSourceIndex index;
@@ -33,6 +39,9 @@ class MultiSceneEditorPage extends StatefulWidget {
   final SourceAnalysisCheckpointRepository? editorialRepository;
   final SourceAnalysisCheckpointRepository? shortDraftRepository;
   final SourceAnalysisCheckpointRepository? multiDraftRepository;
+  final SourceAnalysisCheckpointRepository? npcNotebookRepository;
+  final SourceAnalysisCheckpointRepository? npcRulesRepository;
+  final SourceAnalysisCheckpointRepository? identityRepository;
 
   @override
   State<MultiSceneEditorPage> createState() => _MultiSceneEditorPageState();
@@ -60,6 +69,19 @@ class _MultiSceneEditorPageState extends State<MultiSceneEditorPage> {
           const FileSourceAnalysisCheckpointRepository(
               scope: SourceCheckpointScope.multiSceneDraft);
 
+  late final SourceAnalysisCheckpointRepository _npcStore =
+      widget.npcNotebookRepository ??
+          const FileSourceAnalysisCheckpointRepository(
+              scope: SourceCheckpointScope.npcEditorial);
+  late final SourceAnalysisCheckpointRepository _knowledgeStore =
+      widget.npcRulesRepository ??
+          const FileSourceAnalysisCheckpointRepository(
+              scope: SourceCheckpointScope.npcKnowledgeRules);
+  late final SourceAnalysisCheckpointRepository _identityStore =
+      widget.identityRepository ??
+          const FileSourceAnalysisCheckpointRepository(
+              scope: SourceCheckpointScope.identityRelations);
+
   final _flagController = TextEditingController();
   StoryEvidenceReviewSession? _review;
   SourceSemanticCatalog? _catalog;
@@ -76,6 +98,7 @@ class _MultiSceneEditorPageState extends State<MultiSceneEditorPage> {
   bool _loading = true;
   bool _working = false;
   bool _privateConsent = false;
+  bool _includeNpcRules = false;
   bool _dirty = false;
   bool _showSpoilers = false;
 
@@ -110,6 +133,7 @@ class _MultiSceneEditorPageState extends State<MultiSceneEditorPage> {
       _dirty = false;
       _showSpoilers = false;
       _privateConsent = false;
+      _includeNpcRules = false;
     });
     final fingerprint = widget.index.sourceFingerprint;
     try {
@@ -311,11 +335,43 @@ class _MultiSceneEditorPageState extends State<MultiSceneEditorPage> {
         _review == null || _catalog == null || _editorial == null) return;
     setState(() { _working = true; _error = null; });
     try {
-      // Save first, without modifying the short-editor checkpoint.
+      // Optional opt-in overlay. When disabled, the established compiler
+      // path remains bit-for-bit unchanged and does not read NPC checkpoints.
+      NpcKnowledgeRulebook? rules;
+      NpcEditorialNotebook? notebook;
+      SourceCharacterDossierIndex? dossiers;
+      if (_includeNpcRules) {
+        final fingerprint = widget.index.sourceFingerprint;
+        final graph = _review!.graph;
+        final rawRules = await _knowledgeStore.read(fingerprint);
+        final rawNpc = await _npcStore.read(fingerprint);
+        final rawIdentity = await _identityStore.read(fingerprint);
+        if (rawRules == null || rawNpc == null) {
+          throw const FormatException(
+              'Нет сохранённых правил знаний и карточек NPC');
+        }
+        final relations = rawIdentity == null
+            ? SourceRelationReviewSession.create(widget.index, graph)
+            : SourceRelationReviewSession.decode(
+                widget.index, graph, rawIdentity);
+        dossiers = SourceCharacterDossierIndex.build(
+            widget.index, graph, relations, _catalog!, _editorial!);
+        notebook = NpcEditorialNotebook.decode(
+            widget.index, dossiers, graph, _catalog!, _editorial!, rawNpc);
+        rules = NpcKnowledgeRulebook.decode(
+            index: widget.index, dossiers: dossiers, graph: graph,
+            catalog: _catalog!, editorial: _editorial!,
+            notebook: notebook, scenario: draft, raw: rawRules);
+        if (rules.rules.isEmpty) {
+          throw const FormatException(
+              'Сначала добавьте явное правило знания NPC');
+        }
+      }
       MultiSceneDraftWorkbench.checkSafeCheckpoint(widget.index, draft);
       await _multiStore.write(widget.index.sourceFingerprint, draft.encode());
       final bytes = await compileReviewedPrivateBookworldInWorker(
-          widget.index, _review!.graph, _catalog!, _editorial!, draft);
+          widget.index, _review!.graph, _catalog!, _editorial!, draft,
+          npcRules: rules, npcNotebook: notebook, npcDossiers: dossiers);
       final world = await widget.gateway.install(bytes);
       if (!mounted) return;
       setState(() {
@@ -861,6 +917,22 @@ class _MultiSceneEditorPageState extends State<MultiSceneEditorPage> {
                               'финалов · ${_validated!.reachableStates} '
                               'состояний.'),
                         ],
+                        CheckboxListTile(
+                          key: const Key('multi-use-npc-rules'),
+                          value: _includeNpcRules,
+                          onChanged: _working ? null : (checked) =>
+                              setState(() =>
+                                  _includeNpcRules = checked ?? false),
+                          title: const Text(
+                              'Включить вручную проверенные знания NPC'),
+                          subtitle: const Text(
+                              'По умолчанию выключено. При включении '
+                              'требуется отдельная проверка всех NPC, '
+                              'цитат, заметок и переходов. В новую RPG '
+                              'попадут лишь идентификаторы знаний, '
+                              'без текста секретов.'),
+                          controlAffinity: ListTileControlAffinity.leading,
+                        ),
                         CheckboxListTile(
                           key: const Key('multi-private-consent'),
                           value: _privateConsent,
