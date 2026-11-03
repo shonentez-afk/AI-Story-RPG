@@ -4,6 +4,7 @@ import 'package:ai_story_reader/ai_connection.dart';
 import 'package:ai_story_reader/book_import.dart';
 import 'package:ai_story_reader/book_model.dart';
 import 'package:ai_story_reader/book_source_index.dart';
+import 'package:ai_story_reader/source_analysis_checkpoint_repository.dart';
 import 'package:ai_story_reader/zai_semantic_preview.dart';
 import 'package:ai_story_reader/zai_semantic_preview_page.dart';
 import 'package:flutter/material.dart';
@@ -71,7 +72,8 @@ void main() {
       transport: network,
     );
     await tester.pumpWidget(MaterialApp(
-      home: ZaiSemanticPreviewPage(index: index, service: service),
+      home: ZaiSemanticPreviewPage(
+      reviewRepository: MemorySourceAnalysisCheckpointRepository(),index: index, service: service),
     ));
     await tester.pumpAndSettle();
     expect(find.textContaining('Окно 1 из 2'), findsOneWidget);
