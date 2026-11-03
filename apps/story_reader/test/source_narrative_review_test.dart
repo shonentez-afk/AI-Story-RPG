@@ -208,9 +208,11 @@ void main() {
         contains('Свинопас сделал подарок'));
     expect(claims.any((x) => x.evidence.label.contains('не увидел')),
         isFalse);
-    expect(claims.any((x) => x.evidence.label.startsWith('Непринцесса')),
-        isFalse);
+    // The pre-existing proper-name matcher can still nominate an unknown
+    // capitalized word. The NEW role matcher must not treat a prefix as a
+    // known role; neither matcher automatically establishes a character.
     final roles = SourceNarrativeExtractor.roleMentionsInChunk(index, chunk);
+    expect(roles.any((e) => e.label == 'Непринцесса'), isFalse);
     expect(roles.map((x) => x.label),
         containsAll(['Принцесса', 'Принц', 'Свинопас']));
     expect(roles.every((e) => e.status == EvidenceStatus.inferred), true);
