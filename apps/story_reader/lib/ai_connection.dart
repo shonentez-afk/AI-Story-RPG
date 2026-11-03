@@ -77,10 +77,17 @@ class AiSetupException implements Exception {
   String toString() => message;
 }
 
+/// Only transient I/O failures qualify for bounded automatic retries.
+class AiTransientNetworkException extends AiSetupException {
+  const AiTransientNetworkException(super.message);
+}
+
 class AiHttpResponse {
-  const AiHttpResponse(this.statusCode, this.body);
+  const AiHttpResponse(this.statusCode, this.body, {this.retryAfter});
   final int statusCode;
   final String body;
+  /// Optional Retry-After header; absent on many 429 responses.
+  final Duration? retryAfter;
 }
 
 abstract class AiHttpTransport {
@@ -92,9 +99,31 @@ abstract class AiHttpTransport {
 }
 
 /// HTTP implementation for the ONLY supported provider endpoint. No redirects,
-/// untrusted base URLs, request/body logs, tools or background retries.
+/// untrusted base URLs, request/body logs, tools or internal retries.
 class ZaiHttpTransport implements AiHttpTransport {
-  const ZaiHttpTransport();
+  const ZaiHttpTransport({
+    this.responseTimeout = const Duration(seconds: 25),
+  });
+
+  /// A longer response window is used for GLM book excerpts, not for the
+  /// small M2f1 key-connectivity probe.
+  final Duration responseTimeout;
+
+  static Duration? _retryAfter(HttpClientResponse response) {
+    final header = response.headers.value('retry-after')?.trim();
+    if (header == null || header.isEmpty) return null;
+    final seconds = int.tryParse(header);
+    if (seconds != null) {
+      return Duration(seconds: seconds < 0 ? 0 : seconds);
+    }
+    try {
+      final wait = HttpDate.parse(header).toUtc()
+          .difference(DateTime.now().toUtc());
+      return wait.isNegative ? Duration.zero : wait;
+    } catch (_) {
+      return null;
+    }
+  }
 
   @override
   Future<AiHttpResponse> send({
@@ -116,28 +145,33 @@ class ZaiHttpTransport implements AiHttpTransport {
         request.headers.set(entry.key, entry.value);
       }
       request.add(utf8.encode(body));
-      final response = await request.close()
-          .timeout(const Duration(seconds: 25));
+      final response = await request.close().timeout(responseTimeout);
+      final retryAfter = _retryAfter(response);
       final received = <int>[];
-      await for (final bytes in response.timeout(const Duration(seconds: 25))) {
+      await for (final bytes in response.timeout(responseTimeout)) {
         if (received.length + bytes.length > 64 * 1024) {
           throw const AiSetupException(
               'Ответ сервера превышает безопасный размер.');
         }
         received.addAll(bytes);
       }
-      return AiHttpResponse(response.statusCode, utf8.decode(received));
+      return AiHttpResponse(response.statusCode, utf8.decode(received),
+          retryAfter: retryAfter);
     } on AiSetupException {
       rethrow;
     } on TimeoutException {
-      throw const AiSetupException(
-          'Время ожидания Z.ai истекло. Проверьте сеть и повторите.');
-    } on SocketException {
-      throw const AiSetupException(
-          'Нет соединения с Z.ai. Проверьте интернет.');
+      throw const AiTransientNetworkException(
+          'Z.ai не ответил вовремя.');
     } on HandshakeException {
+      // TLS/certificate failures are NOT transient retry candidates.
       throw const AiSetupException(
           'Ошибка защищённого соединения с Z.ai.');
+    } on SocketException {
+      throw const AiTransientNetworkException(
+          'Соединение с Z.ai оборвалось или отсутствует.');
+    } on HttpException {
+      throw const AiTransientNetworkException(
+          'Сетевой ответ Z.ai прервался.');
     } catch (_) {
       // Never expose request headers, API keys or server response bodies.
       throw const AiSetupException(
