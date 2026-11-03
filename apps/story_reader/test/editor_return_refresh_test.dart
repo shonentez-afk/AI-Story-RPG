@@ -74,6 +74,7 @@ void main() {
       final tile = tester.widget<ListTile>(route);
       expect(tile.enabled, isTrue);
       tile.onTap!();
+      tile.onTap!(); // Rapid double press cannot create a second route.
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 400));
       expect(find.byType(pageType), findsOneWidget);
