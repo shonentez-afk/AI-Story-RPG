@@ -31,6 +31,7 @@ void main() {
   late SourceCharacterDossier artem;
   late MemorySourceAnalysisCheckpointRepository relationStore;
   late MemorySourceAnalysisCheckpointRepository noteStore;
+  late MemorySourceAnalysisCheckpointRepository multiStore;
 
   setUp(() {
     index = BookSourceIndexer.index(book);
@@ -50,12 +51,14 @@ void main() {
     artem = dossiers.dossiers.firstWhere((d) => d.labels.contains('Артем'));
     relationStore = MemorySourceAnalysisCheckpointRepository();
     noteStore = MemorySourceAnalysisCheckpointRepository();
+    multiStore = MemorySourceAnalysisCheckpointRepository();
   });
 
   Widget screen() => MaterialApp(home: NpcEditorialPage(
     index: index, graph: graph, catalog: catalog, editorial: editorial,
     relationsRepository: relationStore,
     notebookRepository: noteStore,
+    multiDraftRepository: multiStore,
     sessionBuilder: (i, g) async => SourceRelationReviewSession.create(i, g),
     sessionDecoder: (i, g, raw) async =>
         SourceRelationReviewSession.decode(i, g, raw),
@@ -173,4 +176,24 @@ void main() {
     expect(find.byKey(const Key('npc-search')), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
+  testWidgets('broken independent scene draft warns without erasing NPC',
+      (tester) async {
+    final initial = NpcEditorialNotebook.empty(index).putProfile(
+        NpcEditorialNotebook.freshProfile(artem));
+    final raw = initial.encode();
+    await noteStore.write(index.sourceFingerprint, raw);
+    await multiStore.write(index.sourceFingerprint, '{"broken":true}');
+    await tester.pumpWidget(screen());
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('npc-search')), findsOneWidget);
+    await tester.ensureVisible(
+        find.byKey(const Key('npc-continuity-panel')));
+    await tester.tap(find.byKey(const Key('npc-continuity-panel')));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Черновик сцен не проверен'), findsOneWidget);
+    expect(await noteStore.read(index.sourceFingerprint), raw);
+    expect(await multiStore.read(index.sourceFingerprint), '{"broken":true}');
+    expect(tester.takeException(), isNull);
+  });
+
 }
