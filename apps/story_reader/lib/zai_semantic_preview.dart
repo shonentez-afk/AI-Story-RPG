@@ -214,7 +214,8 @@ class ZaiSemanticPreviewService {
             quote.length > 120 || start < 0 ||
             chunk.text.lastIndexOf(quote) != start ||
             label.trim().isEmpty || label.length > 180 ||
-            uncertainty.trim().isEmpty || uncertainty.length > 240) {
+            uncertainty.trim().isEmpty || uncertainty.length > 240 ||
+            _isNarratorIntro(category, label, quote)) {
           rejected++;
           continue;
         }
@@ -263,8 +264,6 @@ class ZaiSemanticPreviewService {
           'Никакие данные книги или RPG не изменены.');
     }
   }
-}
-
 
   static int? _zaiBusinessCode(String json) {
     try {
@@ -452,6 +451,7 @@ class ZaiSemanticPreviewService {
       'Попытки соединения с Z.ai закончились.',
     );
   }
+}
 
 class ZaiSemanticPreviewResult {
   const ZaiSemanticPreviewResult({
