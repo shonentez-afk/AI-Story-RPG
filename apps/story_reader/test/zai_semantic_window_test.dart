@@ -159,7 +159,7 @@ void main() {
     final payload = jsonDecode(
         (req['messages'] as List<dynamic>)[1]['content'] as String)
         as Map<String, dynamic>;
-    expect(payload.keys, {'book_title', 'source_chunks'});
+    expect(payload.keys.toSet(), {'book_title', 'source_chunks'});
     expect(payload['book_title'], 'Свинопас');
     expect(transport.requests.single, isNot(contains('НЕ ПЕРЕДАВАТЬ')));
     final sourcePieces = payload['source_chunks'] as List<dynamic>;
@@ -197,7 +197,7 @@ void main() {
       },
       {
         'category': 'fact', 'source_id': paragraph,
-        'quote': 'Принц', 'label': 'Принц присутствует',
+        'quote': 'и', 'label': 'Повторяющаяся частица',
         'uncertainty': 'Слово встречается повторно.',
       },
     ];
