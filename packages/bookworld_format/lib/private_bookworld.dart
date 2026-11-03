@@ -239,6 +239,254 @@ class PrivateBookworldImporter {
         blueprint.initial.flags.length > 32) {
       throw const FormatException('Небезопасный размер частного сценария');
     }
+    // Strict private v2 opt-in: only opaque, typed actor/fact catalogs.
+    // Knowledge never participates in branch conditions at this stage.
+    final npcId = RegExp(r'^npc_[a-f0-9]{20}
+    final bitByName = <String, int>{
+      for (var i = 0; i < flags.length; i++) flags[i]: 1 << i,
+    };
+    var initialBits = 0;
+    for (final flag in flags) {
+      if (blueprint.initial.flags[flag] == true) {
+        initialBits |= bitByName[flag]!;
+      }
+    }
+    final queue = <(String, int)>[(blueprint.entrySceneId, initialBits)];
+    final discovered = <String>{
+      '${blueprint.entrySceneId}:${initialBits}',
+    };
+    final seenScenes = <String>{};
+    final predecessors = <String, Set<String>>{};
+    final terminals = <String>{};
+    final endings = <String>{};
+    for (var cursor = 0; cursor < queue.length; cursor++) {
+      if (queue.length > 2500) {
+        throw const FormatException('Превышен лимит причинной симуляции');
+      }
+      final state = queue[cursor];
+      final id = '${state.$1}:${state.$2}';
+      final scene = blueprint.scenes[state.$1]!;
+      seenScenes.add(scene.id);
+      if (scene.terminal) {
+        terminals.add(id);
+        endings.add(scene.id);
+        continue;
+      }
+      var choicesAvailable = 0;
+      for (final choice in scene.choices) {
+        var allowed = true;
+        for (final condition in choice.conditions) {
+          if (condition.op != 'flag_is' ||
+              condition.id == null ||
+              !bitByName.containsKey(condition.id)) {
+            throw const FormatException('Недопустимое условие частного мира');
+          }
+          final active = (state.$2 & bitByName[condition.id]!) != 0;
+          if (active != condition.value) {
+            allowed = false;
+            break;
+          }
+        }
+        if (!allowed) continue;
+        choicesAvailable++;
+        var nextBits = state.$2;
+        for (final effect in choice.effects) {
+          if (effect.op != 'set_flag' ||
+              effect.id == null || effect.value == null ||
+              !bitByName.containsKey(effect.id)) {
+            throw const FormatException('Недопустимый игровой эффект');
+          }
+          if (effect.value!) {
+            nextBits |= bitByName[effect.id]!;
+          } else {
+            nextBits &= ~bitByName[effect.id]!;
+          }
+        }
+        final dest = '${choice.nextSceneId}:${nextBits}';
+        predecessors.putIfAbsent(dest, () => <String>{}).add(id);
+        if (discovered.add(dest)) {
+          queue.add((choice.nextSceneId, nextBits));
+        }
+      }
+      if (choicesAvailable == 0) {
+        throw const FormatException('Есть игровой тупик без доступных действий');
+      }
+    }
+    if (endings.length < 2 || seenScenes.length != blueprint.scenes.length) {
+      throw const FormatException('Недоступные сцены или альтернативные финалы');
+    }
+    final escapable = <String>{...terminals};
+    final stack = terminals.toList();
+    while (stack.isNotEmpty) {
+      final id = stack.removeLast();
+      for (final previous in predecessors[id] ?? const <String>{}) {
+        if (escapable.add(previous)) stack.add(previous);
+      }
+    }
+    if (escapable.length != discovered.length) {
+      throw const FormatException('Игровая ветка зациклена без выхода');
+    }
+  }
+
+  VerifiedPrivateBookworld inspect(Uint8List data) {
+    final files = BworldZipV1.readPrivate(data);
+    final bpRaw = _object(files['scenario/blueprint.json']!, 'blueprint');
+    final blueprint = StoryBlueprint.fromJson(bpRaw);
+    _causality(blueprint);
+    if (blueprint.rightsStatus != 'private_adaptation' ||
+        blueprint.sourceFingerprint == null) {
+      throw const FormatException('Не является частной адаптацией книги');
+    }
+    final source = _object(files['source/provenance.json']!, 'provenance');
+    _provenance(source, blueprint);
+    final manifest = _object(files['manifest.json']!, 'manifest');
+    _manifest(manifest, blueprint, source, files);
+    BworldSqliteV1.inspect(files['world.sqlite']!, blueprint, bpRaw);
+    return VerifiedPrivateBookworld(
+      blueprint: blueprint,
+      sourceFingerprint: blueprint.sourceFingerprint!,
+      archiveSha256: sha256.convert(data).toString(),
+      provenanceSha256:
+          sha256.convert(files['source/provenance.json']!).toString(),
+    );
+  }
+}
+);
+    final factId = RegExp(r'^fact_[a-f0-9]{24}
+    final bitByName = <String, int>{
+      for (var i = 0; i < flags.length; i++) flags[i]: 1 << i,
+    };
+    var initialBits = 0;
+    for (final flag in flags) {
+      if (blueprint.initial.flags[flag] == true) {
+        initialBits |= bitByName[flag]!;
+      }
+    }
+    final queue = <(String, int)>[(blueprint.entrySceneId, initialBits)];
+    final discovered = <String>{
+      '${blueprint.entrySceneId}:${initialBits}',
+    };
+    final seenScenes = <String>{};
+    final predecessors = <String, Set<String>>{};
+    final terminals = <String>{};
+    final endings = <String>{};
+    for (var cursor = 0; cursor < queue.length; cursor++) {
+      if (queue.length > 2500) {
+        throw const FormatException('Превышен лимит причинной симуляции');
+      }
+      final state = queue[cursor];
+      final id = '${state.$1}:${state.$2}';
+      final scene = blueprint.scenes[state.$1]!;
+      seenScenes.add(scene.id);
+      if (scene.terminal) {
+        terminals.add(id);
+        endings.add(scene.id);
+        continue;
+      }
+      var choicesAvailable = 0;
+      for (final choice in scene.choices) {
+        var allowed = true;
+        for (final condition in choice.conditions) {
+          if (condition.op != 'flag_is' ||
+              condition.id == null ||
+              !bitByName.containsKey(condition.id)) {
+            throw const FormatException('Недопустимое условие частного мира');
+          }
+          final active = (state.$2 & bitByName[condition.id]!) != 0;
+          if (active != condition.value) {
+            allowed = false;
+            break;
+          }
+        }
+        if (!allowed) continue;
+        choicesAvailable++;
+        var nextBits = state.$2;
+        for (final effect in choice.effects) {
+          if (effect.op != 'set_flag' ||
+              effect.id == null || effect.value == null ||
+              !bitByName.containsKey(effect.id)) {
+            throw const FormatException('Недопустимый игровой эффект');
+          }
+          if (effect.value!) {
+            nextBits |= bitByName[effect.id]!;
+          } else {
+            nextBits &= ~bitByName[effect.id]!;
+          }
+        }
+        final dest = '${choice.nextSceneId}:${nextBits}';
+        predecessors.putIfAbsent(dest, () => <String>{}).add(id);
+        if (discovered.add(dest)) {
+          queue.add((choice.nextSceneId, nextBits));
+        }
+      }
+      if (choicesAvailable == 0) {
+        throw const FormatException('Есть игровой тупик без доступных действий');
+      }
+    }
+    if (endings.length < 2 || seenScenes.length != blueprint.scenes.length) {
+      throw const FormatException('Недоступные сцены или альтернативные финалы');
+    }
+    final escapable = <String>{...terminals};
+    final stack = terminals.toList();
+    while (stack.isNotEmpty) {
+      final id = stack.removeLast();
+      for (final previous in predecessors[id] ?? const <String>{}) {
+        if (escapable.add(previous)) stack.add(previous);
+      }
+    }
+    if (escapable.length != discovered.length) {
+      throw const FormatException('Игровая ветка зациклена без выхода');
+    }
+  }
+
+  VerifiedPrivateBookworld inspect(Uint8List data) {
+    final files = BworldZipV1.readPrivate(data);
+    final bpRaw = _object(files['scenario/blueprint.json']!, 'blueprint');
+    final blueprint = StoryBlueprint.fromJson(bpRaw);
+    _causality(blueprint);
+    if (blueprint.rightsStatus != 'private_adaptation' ||
+        blueprint.sourceFingerprint == null) {
+      throw const FormatException('Не является частной адаптацией книги');
+    }
+    final source = _object(files['source/provenance.json']!, 'provenance');
+    _provenance(source, blueprint);
+    final manifest = _object(files['manifest.json']!, 'manifest');
+    _manifest(manifest, blueprint, source, files);
+    BworldSqliteV1.inspect(files['world.sqlite']!, blueprint, bpRaw);
+    return VerifiedPrivateBookworld(
+      blueprint: blueprint,
+      sourceFingerprint: blueprint.sourceFingerprint!,
+      archiveSha256: sha256.convert(data).toString(),
+      provenanceSha256:
+          sha256.convert(files['source/provenance.json']!).toString(),
+    );
+  }
+}
+);
+    final hasKnowledge = blueprint.facts.isNotEmpty ||
+        blueprint.actors.length > 1;
+    var declaredEffects = 0;
+    for (final scene in blueprint.scenes.values) {
+      for (final choice in scene.choices) {
+        for (final effect in choice.effects) {
+          if (effect.op == 'learn_fact') declaredEffects++;
+        }
+      }
+    }
+    if (hasKnowledge &&
+        (blueprint.actors.any((id) =>
+            id != 'player' && !npcId.hasMatch(id)) ||
+        blueprint.facts.isEmpty ||
+        blueprint.facts.length > 128 || declaredEffects > 128 ||
+        blueprint.facts.any((id) => !factId.hasMatch(id)) ||
+        blueprint.initial.knowledge.keys.toSet()
+            .difference(blueprint.actors).isNotEmpty ||
+        blueprint.actors.difference(
+            blueprint.initial.knowledge.keys.toSet()).isNotEmpty ||
+        blueprint.initial.knowledge.values.any((known) => known.isNotEmpty))) {
+      throw const FormatException('Недопустимый каталог знаний частной RPG');
+    }
+    final learnedFacts = <String>{};
     final flags = blueprint.initial.flags.keys.toList()..sort();
     final bitByName = <String, int>{
       for (var i = 0; i < flags.length; i++) flags[i]: 1 << i,
