@@ -3,7 +3,6 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:ai_story_reader/book_import.dart';
-import 'package:ai_story_reader/book_model.dart';
 import 'package:ai_story_reader/book_source_analysis.dart';
 import 'package:ai_story_reader/book_source_index.dart';
 import 'package:ai_story_reader/book_storage.dart';
