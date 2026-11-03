@@ -354,9 +354,10 @@ class _AiConnectionSettingsPageState
                   contentPadding: EdgeInsets.zero,
                   leading: Icon(Icons.smart_toy_outlined),
                   title: Text('Анализ книги и свободная RPG'),
-                  subtitle: Text('Будут подключены отдельным этапом. '
-                      'Передача фрагментов книги требует нового согласия; '
-                      'сейчас этот путь полностью выключен.'),
+                  subtitle: Text('В подготовке книги доступен ручной '
+                      'предпросмотр предложений по одному фрагменту: '
+                      'каждая отправка требует нового согласия. '
+                      'Полная адаптация и игровой ИИ ещё не подключены.'),
                 ),
                 const ListTile(
                   contentPadding: EdgeInsets.zero,
