@@ -70,6 +70,8 @@ class _SourceIndexPreviewPageState extends State<SourceIndexPreviewPage> {
   OfflinePreparationProgress? _offlineProgress;
   String? _offlineMessage;
   int _narrativeRefresh = 0;
+  int _editorReturnRevision = 0;
+  bool _openingEditor = false;
   bool _showCandidates = false;
   bool _showChapters = false;
   int _visibleCandidates = 10;
@@ -146,6 +148,27 @@ class _SourceIndexPreviewPageState extends State<SourceIndexPreviewPage> {
       _analysisError = null;
     });
     unawaited(_loadAnalysis(index, _generation));
+  }
+
+  /// Editors persist independent scoped checkpoints. Recreate quote review
+  /// from disk and recheck the installed game only after returning.
+  /// Ignore same-frame repeat taps instead of stacking editor routes.
+  Future<void> _openEditor(Widget editor) async {
+    if (_openingEditor || _offlineWorking || _busy) return;
+    _openingEditor = true;
+    try {
+      await Navigator.of(context).push<void>(
+        MaterialPageRoute(builder: (_) => editor),
+      );
+    } finally {
+      _openingEditor = false;
+      if (mounted) {
+        setState(() {
+          _narrativeRefresh++;
+          _editorReturnRevision++;
+        });
+      }
+    }
   }
 
   /// Publish the new state only AFTER the checkpoint is safely saved. A
@@ -817,12 +840,9 @@ class _SourceIndexPreviewPageState extends State<SourceIndexPreviewPage> {
                                 'Редактор не меняет канон автоматически.'),
                             trailing: const Icon(Icons.chevron_right),
                             enabled: !_offlineWorking && !_busy,
-                            onTap: () => Navigator.of(context).push<void>(
-                              MaterialPageRoute(
-                                builder: (_) => SourceEditorialReviewPage(
-                                    index: index),
-                              ),
-                            ),
+                            onTap: () => unawaited(_openEditor(
+                              SourceEditorialReviewPage(index: index),
+                            )),
                           ),
                         ),
                         const Divider(height: 28),
@@ -855,15 +875,13 @@ class _SourceIndexPreviewPageState extends State<SourceIndexPreviewPage> {
                               'автоматически.'),
                             trailing: const Icon(Icons.chevron_right),
                             enabled: !_offlineWorking && !_busy,
-                            onTap: () => Navigator.of(context).push<void>(
-                              MaterialPageRoute(
-                                builder: (_) => ReviewedStoryEditorPage(
-                                  index: index,
-                                  gateway: widget.worldGateway ??
-                                      const DeviceWorldLibraryGateway(),
-                                ),
+                            onTap: () => unawaited(_openEditor(
+                              ReviewedStoryEditorPage(
+                                index: index,
+                                gateway: widget.worldGateway ??
+                                    const DeviceWorldLibraryGateway(),
                               ),
-                            ),
+                            )),
                           ),
                         ),
                         const SizedBox(height: 8),
@@ -879,20 +897,20 @@ class _SourceIndexPreviewPageState extends State<SourceIndexPreviewPage> {
                               'сборкой и не создаётся автоматически.'),
                             trailing: const Icon(Icons.chevron_right),
                             enabled: !_offlineWorking && !_busy,
-                            onTap: () => Navigator.of(context).push<void>(
-                              MaterialPageRoute(
-                                builder: (_) => MultiSceneEditorPage(
-                                  index: index,
-                                  gateway: widget.worldGateway ??
-                                      const DeviceWorldLibraryGateway(),
-                                ),
+                            onTap: () => unawaited(_openEditor(
+                              MultiSceneEditorPage(
+                                index: index,
+                                gateway: widget.worldGateway ??
+                                    const DeviceWorldLibraryGateway(),
                               ),
-                            ),
+                            )),
                           ),
                         ),
                         const SizedBox(height: 8),
                         PrivateGameReadinessPanel(
-                          key: ValueKey('private-readiness-${index.sourceFingerprint}'),
+                          key: ValueKey('private-readiness-'
+                              '${index.sourceFingerprint}-$_editorReturnRevision'),
+                          checkOnOpen: _editorReturnRevision > 0,
                           index: index,
                           gateway: widget.worldGateway ??
                               const DeviceWorldLibraryGateway(),
