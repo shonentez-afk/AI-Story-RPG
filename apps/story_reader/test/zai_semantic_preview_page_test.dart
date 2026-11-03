@@ -96,6 +96,10 @@ void main() {
     await tester.scrollUntilVisible(find.text('Имя Анна'), 170,
         scrollable: find.byType(Scrollable).first);
     expect(find.text('Имя Анна'), findsOneWidget);
+    await tester.scrollUntilVisible(
+        find.textContaining('не перенесена в редакторы'), 140,
+        scrollable: find.byType(Scrollable).first, maxScrolls: 30);
+    await tester.pumpAndSettle();
     expect(find.textContaining('не перенесена в редакторы'), findsOneWidget);
     expect((await SharedPreferences.getInstance())
         .getString('game-sentinel'), 'intact');
