@@ -113,7 +113,7 @@ void main() {
       } on AiSetupException catch (error) {
         expect(error.toString(), isNot(contains('VERY-SECRET-TEST-KEY')));
         expect(error.toString(), isNot(contains('PRIVATE SERVER BODY')));
-        if (code == 429) expect(error.toString(), contains('лимит'));
+        if (code == 429) expect(error.toString().toLowerCase(), contains('лимит'));
       }
     }
   });
