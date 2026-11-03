@@ -152,4 +152,70 @@ void main() {
     expect(find.text('Для выбранного фильтра записей нет.'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
+  testWidgets('narrative reset preserves editor decisions but revokes '
+      'unverified canon readiness until citations are reapproved',
+      (tester) async {
+    final (index, verified, catalog) = await indexed();
+    final fp = index.sourceFingerprint;
+    final narrative = MemorySourceAnalysisCheckpointRepository();
+    final semantics = MemorySourceAnalysisCheckpointRepository();
+    final editorial = MemorySourceAnalysisCheckpointRepository();
+    final first = catalog.assertions.first.id;
+    final decision = SemanticEditorialReviewSession.create(index, catalog)
+        .decide(catalog, first, SemanticEditorialVerdict.canonCandidate);
+    await narrative.write(fp, verified.encode());
+    await semantics.write(fp, catalog.encode());
+    await editorial.write(fp, decision.encode());
+
+    Future<void> reopen() async {
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpWidget(page(index, narrative, semantics, editorial));
+      await tester.pumpAndSettle();
+    }
+
+    await reopen();
+    expect(find.textContaining(
+        'с действующими подтверждёнными цитатами: 1'), findsOneWidget);
+
+    // An explicit reset of narrative evidence deletes only its own scope.
+    // The editor must block while source evidence is missing.
+    await narrative.delete(fp);
+    await reopen();
+    expect(find.textContaining('Данные редактора не открыты'),
+        findsOneWidget);
+    expect(find.byKey(const Key('source-editor-show-spoilers')),
+        findsNothing);
+    expect(await semantics.read(fp), catalog.encode());
+    expect(await editorial.read(fp), decision.encode());
+
+    // Re-analysis recreates identical source passages but does not
+    // automatically restore the old human confirmations.
+    final pending = StoryEvidenceReviewSession.create(index).scanNext(index);
+    expect(pending.scannedChunks, index.chunks.length);
+    expect(pending.graph.records.any(
+        (e) => e.status == EvidenceStatus.confirmed), isFalse);
+    await narrative.write(fp, pending.encode());
+    await reopen();
+    expect(find.textContaining(
+        'с действующими подтверждёнными цитатами: 0'), findsOneWidget);
+    expect(find.textContaining('Повторная проверка обязательна'),
+        findsOneWidget);
+    await tester.tap(find.byKey(const Key('source-editor-show-spoilers')));
+    await tester.pumpAndSettle();
+    final blocked = tester.widget<OutlinedButton>(
+        find.byKey(Key('source-verdict-$first-canonCandidate')));
+    expect(blocked.onPressed, isNull);
+    expect(await editorial.read(fp), decision.encode());
+
+    // A safe full re-confirmation restores validity, not by deleting
+    // historical decisions or silently changing independent checkpoints.
+    await narrative.write(fp, verified.encode());
+    await reopen();
+    expect(find.textContaining('Повторная проверка обязательна'),
+        findsNothing);
+    expect(find.textContaining(
+        'с действующими подтверждёнными цитатами: 1'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
 }

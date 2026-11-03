@@ -57,6 +57,7 @@ class _SourceNarrativeReviewPanelState
   bool _pause = false;
   bool _needsSync = false;
   String? _error;
+  String? _resetNotice;
 
   @override
   void didUpdateWidget(covariant SourceNarrativeReviewPanel oldWidget) {
@@ -86,6 +87,7 @@ class _SourceNarrativeReviewPanelState
       _expanded = true;
       _busy = true;
       _error = null;
+      _resetNotice = null;
       _showSpoilers = false;
       _visiblePending = 12;
     });
@@ -222,7 +224,10 @@ class _SourceNarrativeReviewPanelState
         content: const Text(
           'Будут удалены только извлечённые кандидаты, отметки о '
           'фактах и событиях этой редакции и прогресс их проверки. '
-          'Книга, упоминания M2b1 и игровые сохранения останутся.',
+          'Книга, упоминания M2b1 и игровые сохранения останутся. '
+          'Сценарии, NPC и редакторские решения не удаляются, '
+          'но после сброса цитат могут потребовать повторной проверки '
+          'перед сборкой RPG.',
         ),
         actions: [
           TextButton(
@@ -245,6 +250,9 @@ class _SourceNarrativeReviewPanelState
             .syncAcceptedMentions(widget.index, widget.sourceMentions);
         _showSpoilers = false;
         _error = null;
+        _resetNotice = 'Цитаты сброшены. Сохранённые сценарии и решения NPC '
+            'не удалены, но прежние подтверждения недействительны. '
+            'Повторите поиск и проверку цитат перед сборкой RPG.';
       });
       // The accepted M2b1 mentions are imported as INFERRED in memory;
       // they are persisted on the next successful review/scan.
@@ -326,6 +334,10 @@ class _SourceNarrativeReviewPanelState
         const SizedBox(height: 6),
         Text('Кандидатов: ${review?.graph.records.length ?? 0} · '
             'Ожидают проверки: ${review?.pendingReviewCount ?? 0}'),
+        if (_resetNotice != null) ...[
+          const SizedBox(height: 8),
+          Text(_resetNotice!, style: TextStyle(color: scheme.error)),
+        ],
         if (_error != null) ...[
           const SizedBox(height: 8),
           Text(_error!, style: TextStyle(color: scheme.error)),
@@ -355,7 +367,7 @@ class _SourceNarrativeReviewPanelState
             ),
             if (_busy && review != null)
               OutlinedButton.icon(
-                onPressed: () => setState(() => _pause = true),
+                onPressed: _pause ? null : () => setState(() => _pause = true),
                 icon: const Icon(Icons.pause),
                 label: Text(_pause ? 'Останавливаем…' : 'Пауза'),
               ),

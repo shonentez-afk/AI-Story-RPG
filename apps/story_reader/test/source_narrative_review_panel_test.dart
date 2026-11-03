@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:ai_story_reader/book_import.dart';
@@ -144,6 +145,55 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('pause can be requested once and stops after a saved chunk',
+      (tester) async {
+    final index = BookSourceIndexer.index(book);
+    final repository = MemorySourceAnalysisCheckpointRepository();
+    final queued = Completer<StoryEvidenceReviewSession>();
+    var scanCalls = 0;
+    await tester.pumpWidget(MaterialApp(home: Scaffold(
+      body: SingleChildScrollView(
+        child: SourceNarrativeReviewPanel(
+          index: index,
+          checkpointRepository: repository,
+          scanProcessor: (source, current) {
+            scanCalls++;
+            return queued.future;
+          },
+          checkpointEncoder: (session) async => session.encode(),
+          checkpointDecoder: (source, raw) async =>
+              StoryEvidenceReviewSession.decode(source, raw),
+        ),
+      ),
+    )));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Открыть проверку утверждений'));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Продолжить поиск'));
+    await tester.tap(find.text('Продолжить поиск'));
+    await tester.pump();
+    expect(find.text('Пауза'), findsOneWidget);
+    await tester.ensureVisible(find.text('Пауза'));
+    await tester.tap(find.text('Пауза'));
+    await tester.pump();
+    final pausing = tester.widget<OutlinedButton>(
+        find.widgetWithText(OutlinedButton, 'Останавливаем…'));
+    expect(pausing.onPressed, isNull);
+    expect(scanCalls, 1);
+
+    // The in-flight batch completes and is committed, but no next
+    // worker invocation starts after the pause request.
+    queued.complete(StoryEvidenceReviewSession.create(index)
+        .scanNext(index, limit: 1));
+    await tester.pumpAndSettle();
+    final stored = StoryEvidenceReviewSession.decode(index,
+        (await repository.read(index.sourceFingerprint))!);
+    expect(stored.scannedChunks, 1);
+    expect(scanCalls, 1);
+    expect(find.text('Проверено фрагментов: 1 из 2'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('reset is explicit, only evidence checkpoint is removed',
       (tester) async {
     final index = BookSourceIndexer.index(book);
@@ -162,12 +212,16 @@ void main() {
     await tester.tap(find.text('Отмена'));
     await tester.pumpAndSettle();
     expect(await repository.read(index.sourceFingerprint), isNotNull);
+    expect(find.textContaining('Цитаты сброшены'), findsNothing);
     await tester.tap(find.text('Сбросить проверку'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Сбросить проверку').last);
     await tester.pumpAndSettle();
     expect(await repository.read(index.sourceFingerprint), isNull);
     expect(find.text('Проверено фрагментов: 0 из 2'), findsOneWidget);
+    expect(find.textContaining('Цитаты сброшены'), findsOneWidget);
+    expect(find.textContaining('Сохранённые сценарии и решения NPC'),
+        findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 }
