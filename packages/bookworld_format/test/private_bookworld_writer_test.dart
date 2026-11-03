@@ -88,7 +88,7 @@ void main() {
     corrupted[105] ^= 0xff;
     expect(() => importer.inspect(corrupted), throwsFormatException);
   });
-  test('bounded NPC learn_fact imports but knowledge conditions remain forbidden',
+  test('bounded NPC learn_fact imports but unearned knowledge remains forbidden',
       () {
     final npc = 'npc_' + List.filled(20, 'a').join();
     final fact = 'fact_' + List.filled(24, 'b').join();
@@ -137,7 +137,7 @@ void main() {
         final bp = data['blueprint'] as Map<String, dynamic>;
         final scene = (bp['scenes'] as List).first as Map;
         ((scene['choices'] as List).first as Map)['conditions'] = [
-          {'op': 'knows_fact', 'id': fact, 'actor': npc},
+          {'op': 'knows_fact', 'id': fact, 'actor': 'player'},
         ];
       },
       (data) {
