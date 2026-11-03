@@ -621,3 +621,11 @@ Run `41332360623` (SHA `ef004a4`): Python/Dart/analyze PASS, Flutter FAIL из-�
 - Новый `private_knowledge_reachability_test.dart`: старый флаговый режим, разблокирование после учёбы NPC, 120 ходов/replay/hash, подмена истории, будущее знание/чужой актёр, отказ на 2500+ состояниях. Документ `docs/M2E5B3B2A_KNOWLEDGE_CAUSALITY_RU.md`.
 - **CODE / EXACT-HEAD CI PENDING**. До полного Flutter+Dart+Python+schema+M0+Windows+Android PASS не сливать в `main`, не называть релизом. Реальные SQLite/.bwsave и физические устройства всё ещё SKIP.
 - Следом M2e5b3b2b: UI-конструктор условий `knows_fact`, сквозные долгие SQLite/.bwsave, UX/UI на 320dp/200%, после этого M2f безопасные настройки ИИ. Live ИИ отключён.
+
+
+## 2026-11-03 — M2e5b3b2a принят, M2e5b3b2b1 SQLite stress в отдельной ветке
+
+- PR #35 **MERGED** squash `5b74a9c225a668557c352b633eb497913446cfff`. Exact PR head `329cfad19d119276459b26cccbab1212ff305a17`, GitHub Actions `41580693590` **completed/success**: Python, Dart, BookWorld/schema, Flutter analyze/widget, Windows portable и Android APK PASS; M0 `41580693511` PASS. Публикация релиза на PR была SKIP, это не новый установленный релиз. Физические устройства SKIP.
+- Приняты `knows_fact` и детерминированный полный анализ `(scene,flags,per-actor knowledge)`, actor/fact allowlist, лимит 2500 состояний, две достижимые концовки, 120 ходов + replay/tamper. Старые сохранения не мигрированы.
+- Следующая независимая ветка `feature/m2e5b3b2b1-npc-sqlite-transfer-20261103`: `packages/campaign_manager/test/private_npc_sqlite_transfer_test.dart`, `docs/M2E5B3B2B1_SQLITE_STRESS_RU.md`. Реальный SQLite: 120 записей, отклонённый выбор, полное закрытие/восстановление, перенос `.bworld` + `.bwsave v2` между отдельными SQLite каталогами, checksum tamper, независимые финалы; это **CODE / EXACT-HEAD CI PENDING** до проверки.
+- Далее M2e5b3b2b2: UI-конструктор правил `knows_fact` и диалогов, полный UX/UI при 320dp/200%, затем физическая Windows/Android приёмка и M2f consent/BYOK/API key safety. Live AI не подключён.
