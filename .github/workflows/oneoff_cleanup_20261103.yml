@@ -1,0 +1,212 @@
+name: One-time cleanup of old test builds and Action storage
+
+on:
+  push:
+    branches:
+      - maintenance/cleanup-old-builds-20261103
+    paths:
+      - .github/workflows/oneoff_cleanup_20261103.yml
+
+permissions:
+  contents: read
+
+jobs:
+  cleanup:
+    if: github.repository == 'shonentez-afk/AI-Story-RPG'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write
+      actions: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      KEEP_TAG: test-build-380
+      KEEP_RELEASE_RUN: "41603920314"
+      KEEP_RELEASE_SHA: c1e2b659ef07abb08427a18e5f818994b7312247
+    steps:
+      - name: Remove obsolete test releases, old build artifacts and closed-PR caches
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import datetime
+          import json
+          import os
+          import re
+          import sys
+          import time
+          from urllib.error import HTTPError, URLError
+          from urllib.request import Request, urlopen
+
+          repo = os.environ['GITHUB_REPOSITORY']
+          token = os.environ['GH_TOKEN']
+          keep_tag = os.environ['KEEP_TAG']
+          keep_run = int(os.environ['KEEP_RELEASE_RUN'])
+          keep_sha = os.environ['KEEP_RELEASE_SHA']
+          assert repo == 'shonentez-afk/AI-Story-RPG'
+          assert keep_tag == 'test-build-380'
+          assert keep_run == 41603920314
+          assert keep_sha == 'c1e2b659ef07abb08427a18e5f818994b7312247'
+
+          root = 'https://api.github.com/repos/' + repo
+          headers = {
+              'Authorization': 'Bearer ' + token,
+              'Accept': 'application/vnd.github+json',
+              'X-GitHub-Api-Version': '2022-11-28',
+              'User-Agent': 'AI-Story-RPG-safe-cleanup',
+          }
+          errors = []
+
+          def api(method, path):
+              request = Request(root + '/' + path, headers=headers, method=method)
+              for attempt in range(4):
+                  try:
+                      with urlopen(request, timeout=45) as response:
+                          raw = response.read()
+                          return json.loads(raw) if raw else None
+                  except HTTPError as ex:
+                      if ex.code in (429, 500, 502, 503, 504) and attempt < 3:
+                          time.sleep(2 ** attempt)
+                          continue
+                      details = ex.read().decode('utf-8', errors='replace')[:400]
+                      raise RuntimeError(f'{method} {path}: HTTP {ex.code} {details}')
+                  except URLError as ex:
+                      if attempt < 3:
+                          time.sleep(2 ** attempt)
+                          continue
+                      raise RuntimeError(f'{method} {path}: {ex}')
+              raise RuntimeError(f'Exhausted retries: {method} {path}')
+
+          def pages(endpoint, key=None):
+              result = []
+              page = 1
+              while True:
+                  sep = '&' if '?' in endpoint else '?'
+                  response = api('GET', f'{endpoint}{sep}per_page=100&page={page}')
+                  items = response if key is None else response[key]
+                  result.extend(items)
+                  if len(items) < 100:
+                      return result
+                  page += 1
+                  if page > 100:
+                      raise RuntimeError('Pagination bound exceeded: ' + endpoint)
+
+          # Fail closed: never delete anything unless the current release
+          # is installed, has the expected three downloads and exact source SHA.
+          current = api('GET', 'releases/tags/' + keep_tag)
+          required = {
+              'AI-Story-RPG-Android-debug.apk',
+              'AI-Story-RPG-Windows-portable.zip',
+              'SHA256SUMS.txt',
+          }
+          actual = {asset['name'] for asset in current.get('assets', [])}
+          if not required.issubset(actual) or current.get('target_commitish') != keep_sha:
+              raise SystemExit('SAFETY STOP: published build #380 is incomplete or unexpected')
+          print('Preserving', keep_tag, 'and all three published release assets')
+
+          release_records = pages('releases')
+          obsolete_releases = []
+          for item in release_records:
+              match = re.fullmatch(r'test-build-(\d+)', item['tag_name'])
+              if match and int(match.group(1)) < 380:
+                  obsolete_releases.append(item)
+          if len(obsolete_releases) > 40:
+              raise SystemExit('SAFETY STOP: too many old releases to remove')
+          release_bytes = sum(
+              sum(asset.get('size', 0) for asset in item.get('assets', []))
+              for item in obsolete_releases
+          )
+
+          artifacts = pages('actions/artifacts', 'artifacts')
+          artifact_names = {
+              'AI-Story-RPG-Android-debug',
+              'AI-Story-RPG-Windows-portable',
+              'AI-Story-RPG-BookWorld-demo',
+          }
+          cutoff = datetime.datetime.fromisoformat('2026-11-03T08:40:07+00:00')
+          old_artifacts = []
+          for item in artifacts:
+              owner = item.get('workflow_run') or {}
+              created = datetime.datetime.fromisoformat(item['created_at'].replace('Z', '+00:00'))
+              if (item['name'] in artifact_names and not item.get('expired', False)
+                  and owner.get('id') != keep_run and created < cutoff):
+                  old_artifacts.append(item)
+
+          # Cache entries on refs/pull/<number> belong to a single PR.
+          # Delete them only when that PR is no longer open. Main caches stay.
+          open_prs = {p['number'] for p in pages('pulls?state=open')}
+          caches = pages('actions/caches', 'actions_caches')
+          old_caches = []
+          for item in caches:
+              match = re.match(r'^refs/pull/(\d+)/', item.get('ref', ''))
+              if match and int(match.group(1)) not in open_prs:
+                  old_caches.append(item)
+          if len(old_artifacts) > 4000 or len(old_caches) > 4000:
+              raise SystemExit('SAFETY STOP: unexpected number of artifacts/caches')
+
+          print('Plan: old releases', len(obsolete_releases),
+                'old Action artifacts', len(old_artifacts),
+                'closed PR caches', len(old_caches))
+          summary = {
+              'old_releases_deleted': 0,
+              'old_tags_deleted': 0,
+              'artifacts_deleted': 0,
+              'caches_deleted': 0,
+              'old_release_bytes': release_bytes,
+              'artifact_bytes': 0,
+              'cache_bytes': 0,
+          }
+
+          for release in obsolete_releases:
+              tag = release['tag_name']
+              try:
+                  api('DELETE', 'releases/' + str(release['id']))
+                  summary['old_releases_deleted'] += 1
+                  print('Deleted release', tag)
+                  try:
+                      api('DELETE', 'git/refs/tags/' + tag)
+                      summary['old_tags_deleted'] += 1
+                  except Exception as ex:
+                      errors.append('Tag ' + tag + ': ' + str(ex))
+              except Exception as ex:
+                  errors.append('Release ' + tag + ': ' + str(ex))
+
+          for item in old_artifacts:
+              try:
+                  api('DELETE', 'actions/artifacts/' + str(item['id']))
+                  summary['artifacts_deleted'] += 1
+                  summary['artifact_bytes'] += item.get('size_in_bytes', 0)
+              except Exception as ex:
+                  errors.append('Artifact ' + str(item['id']) + ': ' + str(ex))
+
+          for item in old_caches:
+              try:
+                  api('DELETE', 'actions/caches/' + str(item['id']))
+                  summary['caches_deleted'] += 1
+                  summary['cache_bytes'] += item.get('size_in_bytes', 0)
+              except Exception as ex:
+                  errors.append('Cache ' + str(item['id']) + ': ' + str(ex))
+
+          # Re-verify the current download after the destructive stage.
+          current_again = api('GET', 'releases/tags/' + keep_tag)
+          if not required.issubset({a['name'] for a in current_again['assets']}):
+              raise SystemExit('CRITICAL: current release files changed unexpectedly')
+          print('Cleanup summary:', json.dumps(summary, ensure_ascii=False))
+          if errors:
+              print('ERRORS:', json.dumps(errors[:30], ensure_ascii=False))
+          summary_file = os.environ.get('GITHUB_STEP_SUMMARY')
+          if summary_file:
+              with open(summary_file, 'a', encoding='utf-8') as out:
+                  out.write('# AI Story RPG storage cleanup\n\n')
+                  out.write('Preserved: **test-build-380** and all its assets; '
+                            'kept most recent Actions run **41603920314**. '
+                            'Workflow run logs, commit history, main caches and '
+                            'non-test releases not deleted.\n\n')
+                  for key, value in summary.items():
+                      out.write(f'- {key}: {value:,}\n')
+                  if errors:
+                      out.write('\n## Errors\n')
+                      for e in errors[:30]:
+                          out.write('- ' + e.replace('\n', ' ') + '\n')
+          if errors:
+              sys.exit(1)
+          PY
