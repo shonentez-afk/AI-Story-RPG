@@ -4,6 +4,10 @@ import 'package:flutter/material.dart';
 import 'book_isolate_workers.dart';
 import 'book_source_index.dart';
 import 'npc_editorial_notebook.dart';
+import 'npc_continuity_audit.dart';
+import 'npc_continuity_panel.dart';
+import 'intermediate_story_blueprint.dart';
+import 'multi_scene_draft_workbench.dart';
 import 'source_analysis_checkpoint_repository.dart';
 import 'source_character_dossiers.dart';
 import 'source_evidence_graph.dart';
@@ -28,6 +32,7 @@ class NpcEditorialPage extends StatefulWidget {
     required this.editorial,
     this.relationsRepository,
     this.notebookRepository,
+    this.multiDraftRepository,
     this.sessionBuilder,
     this.sessionDecoder,
     this.dossierBuilder,
@@ -39,6 +44,7 @@ class NpcEditorialPage extends StatefulWidget {
   final SemanticEditorialReviewSession editorial;
   final SourceAnalysisCheckpointRepository? relationsRepository;
   final SourceAnalysisCheckpointRepository? notebookRepository;
+  final SourceAnalysisCheckpointRepository? multiDraftRepository;
   final Future<SourceRelationReviewSession> Function(
       BookSourceIndex, SourceEvidenceGraph)? sessionBuilder;
   final Future<SourceRelationReviewSession> Function(
@@ -61,13 +67,22 @@ class _NpcEditorialPageState extends State<NpcEditorialPage> {
           const FileSourceAnalysisCheckpointRepository(
               scope: SourceCheckpointScope.npcEditorial);
 
+  late final SourceAnalysisCheckpointRepository _scenes =
+      widget.multiDraftRepository ??
+          const FileSourceAnalysisCheckpointRepository(
+              scope: SourceCheckpointScope.multiSceneDraft);
+
   SourceCharacterDossierIndex? _dossiers;
+  IntermediateStoryBlueprint? _scenario;
+  NpcContinuityAudit? _continuity;
+  String? _scenarioWarning;
   NpcEditorialNotebook? _notebook;
   bool _loading = true;
   bool _busy = false;
   String? _error;
   String? _notice;
   String _search = '';
+  final _searchController = TextEditingController();
   String? _selectedId;
   int _page = 0;
   static const int _pageSize = 8;
@@ -78,6 +93,12 @@ class _NpcEditorialPageState extends State<NpcEditorialPage> {
     _load();
   }
 
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
   Future<void> _load() async {
     if (_busy) return;
     if (mounted) setState(() {
@@ -86,6 +107,9 @@ class _NpcEditorialPageState extends State<NpcEditorialPage> {
       _notice = null;
       _dossiers = null;
       _notebook = null;
+      _continuity = null;
+      _scenario = null;
+      _scenarioWarning = null;
       _selectedId = null;
       _page = 0;
     });
@@ -114,10 +138,31 @@ class _NpcEditorialPageState extends State<NpcEditorialPage> {
           : NpcEditorialNotebook.decode(
               widget.index, dossiers, widget.graph,
               widget.catalog, widget.editorial, stored);
+      IntermediateStoryBlueprint? scenario;
+      String? scenarioWarning;
+      try {
+        final rawScenario = await _scenes.read(fingerprint);
+        if (rawScenario != null) {
+          scenario = IntermediateStoryBlueprint.decode(rawScenario);
+          MultiSceneDraftWorkbench.checkSafeCheckpoint(widget.index, scenario);
+        }
+      } catch (error) {
+        // A broken *independent* scenario must not destroy valid NPC notes.
+        scenario = null;
+        scenarioWarning = 'Черновик сцен не проверен: $error. '
+            'Исходные данные не изменены.';
+      }
+      final continuity = NpcContinuityAudit.inspect(
+          index: widget.index, dossiers: dossiers, graph: widget.graph,
+          catalog: widget.catalog, editorial: widget.editorial,
+          notebook: notebook, scenario: scenario);
       if (!mounted) return;
       setState(() {
         _dossiers = dossiers;
         _notebook = notebook;
+        _scenario = scenario;
+        _scenarioWarning = scenarioWarning;
+        _continuity = continuity;
         _loading = false;
       });
     } catch (error) {
@@ -152,10 +197,16 @@ class _NpcEditorialPageState extends State<NpcEditorialPage> {
       next.validate(widget.index, _dossiers!, widget.graph,
           widget.catalog, widget.editorial);
       // No optimistic success state: persist to the independent atomic file.
+      final audit = NpcContinuityAudit.inspect(
+          index: widget.index, dossiers: _dossiers!,
+          graph: widget.graph, catalog: widget.catalog,
+          editorial: widget.editorial, notebook: next,
+          scenario: _scenario);
       await _notes.write(widget.index.sourceFingerprint, next.encode());
       if (!mounted) return false;
       setState(() {
         _notebook = next;
+        _continuity = audit;
         _notice = 'Заметки NPC сохранены только для этой книги.';
       });
       return true;
@@ -628,8 +679,33 @@ class _NpcEditorialPageState extends State<NpcEditorialPage> {
                           '${index.possibleCharacterGroups}. '
                           'Это не прогресс построения игрового мира.'),
                       const SizedBox(height: 8),
+                      OutlinedButton.icon(
+                        key: const Key('npc-refresh-audit'),
+                        onPressed: _busy ? null : _load,
+                        icon: const Icon(Icons.refresh),
+                        label: const Text('Перепроверить NPC и сценарий'),
+                      ),
+                      if (_continuity != null)
+                        NpcContinuityPanel(
+                          audit: _continuity!,
+                          scenarioWarning: _scenarioWarning,
+                          enabled: !_busy,
+                          onSelectProfile: (id) {
+                            final indexOf = index.dossiers.indexWhere(
+                                (group) => group.id == id);
+                            if (indexOf < 0) return;
+                            _searchController.clear();
+                            setState(() {
+                              _search = '';
+                              _selectedId = id;
+                              _page = indexOf ~/ _pageSize;
+                            });
+                          },
+                        ),
+                      const SizedBox(height: 8),
                       TextField(
                         key: const Key('npc-search'),
+                        controller: _searchController,
                         decoration: const InputDecoration(
                             labelText: 'Поиск упоминаний и псевдонимов',
                             prefixIcon: Icon(Icons.search),
