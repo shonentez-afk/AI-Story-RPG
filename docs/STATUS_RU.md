@@ -777,3 +777,5 @@
 - Дальше exact-head CI+M0, Windows/Android сборки; затем ручной device QA всех 6 FB2, responsive 320dp/200%, verify/checkpoints/editor/NPC/campaigns. `main` не менять до приёмки, AI offline/local/cloud provisioning не включён.
 
 - Добавлены новые 320dp/200% smoke-тесты MultiSceneEditorPage (создать черновик) и NpcEditorialPage (выбор NPC и доступная кнопка карточки). Результат до exact-head CI PENDING, реальные устройства всё ещё не проверены.
+
+- Дополнительно в `LibraryPage` закрыт двойной Navigator.push после повторного нажатия кнопок «Читать»/«Подготовить к RPG»: `_openingBook` до закрытия дочернего маршрута; тест двойного callback → один Back → вновь доступное чтение. Новый exact-head CI обязателен.

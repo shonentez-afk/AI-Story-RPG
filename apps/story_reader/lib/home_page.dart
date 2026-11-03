@@ -327,6 +327,8 @@ class _LibraryPageState extends State<LibraryPage> {
   bool _worldLoading = false;
   bool _worldLoadError = false;
   bool _working = false;
+  // A rapid double-tap must not stack two reader/preparation routes.
+  bool _openingBook = false;
   bool _loadingBooks = true;
   bool _libraryLoadError = false;
   int _unreadableBooks = 0;
@@ -492,17 +494,28 @@ class _LibraryPageState extends State<LibraryPage> {
     }
   }
 
+  Future<void> _openBookRoute(Widget page) async {
+    if (_working || _openingBook) return;
+    _openingBook = true;
+    try {
+      await Navigator.of(context).push<void>(
+        MaterialPageRoute(builder: (_) => page),
+      );
+    } finally {
+      // Do not tie navigation back to an importer/deletion spinner.
+      _openingBook = false;
+    }
+  }
+
   void _readBook(StoredBook entry) {
-    if (_working) return;
-    Navigator.of(context).push<void>(MaterialPageRoute(
-      builder: (_) => BookReaderPage(book: entry.book, bookId: entry.id),
+    unawaited(_openBookRoute(
+      BookReaderPage(book: entry.book, bookId: entry.id),
     ));
   }
 
   void _prepareBook(StoredBook entry) {
-    if (_working) return;
-    Navigator.of(context).push<void>(MaterialPageRoute(
-      builder: (_) => SourceIndexPreviewPage(
+    unawaited(_openBookRoute(
+      SourceIndexPreviewPage(
         book: entry.book,
         worldGateway: widget.worldGateway,
       ),
