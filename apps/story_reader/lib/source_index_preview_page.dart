@@ -11,6 +11,7 @@ import 'source_analysis_checkpoint_repository.dart';
 import 'source_narrative_review_panel.dart';
 import 'source_semantic_review_panel.dart';
 import 'reviewed_story_editor_page.dart';
+import 'multi_scene_editor_page.dart';
 import 'source_editorial_review_page.dart';
 import 'private_game_readiness_panel.dart';
 import 'world_library_gateway.dart';
@@ -827,6 +828,30 @@ class _SourceIndexPreviewPageState extends State<SourceIndexPreviewPage> {
                             onTap: () => Navigator.of(context).push<void>(
                               MaterialPageRoute(
                                 builder: (_) => ReviewedStoryEditorPage(
+                                  index: index,
+                                  gateway: widget.worldGateway ??
+                                      const DeviceWorldLibraryGateway(),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Card(
+                          child: ListTile(
+                            key: const Key('prepare-open-multi-scene-editor'),
+                            leading: const Icon(Icons.account_tree_outlined),
+                            title: const Text('Конструктор многосценной RPG'),
+                            subtitle: const Text(
+                              'Продолжите проверенную короткую адаптацию: '
+                              'добавляйте события, сцены, выборы, условия '
+                              'и последствия. Сценарий проверяется перед '
+                              'сборкой и не создаётся автоматически.'),
+                            trailing: const Icon(Icons.chevron_right),
+                            enabled: !_offlineWorking && !_busy,
+                            onTap: () => Navigator.of(context).push<void>(
+                              MaterialPageRoute(
+                                builder: (_) => MultiSceneEditorPage(
                                   index: index,
                                   gateway: widget.worldGateway ??
                                       const DeviceWorldLibraryGateway(),
