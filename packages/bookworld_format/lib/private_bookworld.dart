@@ -234,95 +234,84 @@ class PrivateBookworldImporter {
   /// Re-check state reachability in the imported, executable DSL, not only
   /// the intermediate draft. This also rejects malicious archives that
   /// recompute every SHA but contain deadlocks or unavailable endings.
+  /// Exact finite-state validation for private classic scenarios.
+  /// Both flags and per-actor knowledge affect reachability. No prose, AI
+  /// prompts, or executable book content participates in this simulation.
   void _causality(StoryBlueprint blueprint) {
     if (blueprint.scenes.length < 3 || blueprint.scenes.length > 192 ||
         blueprint.initial.flags.length > 32) {
       throw const FormatException('Небезопасный размер частного сценария');
     }
-    // Strict private opt-in: only opaque, typed actor/fact catalogs.
-    // Knowledge conditions remain unsupported, preserving exhaustive
-    // flag-state causality independent of monotonic knowledge effects.
-    final npcId = RegExp(r'^npc_[a-f0-9]{20}$');
-    final factId = RegExp(r'^fact_[a-f0-9]{24}$');
-    final hasKnowledge = blueprint.facts.isNotEmpty ||
-        blueprint.actors.length > 1;
-    var declaredEffects = 0;
-    for (final scene in blueprint.scenes.values) {
-      for (final choice in scene.choices) {
-        for (final effect in choice.effects) {
-          if (effect.op == 'learn_fact') declaredEffects++;
-        }
+
+    final flags = blueprint.initial.flags.keys.toList()..sort();
+    final flagBit = <String, int>{
+      for (var i = 0; i < flags.length; i++) flags[i]: 1 << i,
+    };
+    var initialFlags = 0;
+    for (final flag in flags) {
+      if (blueprint.initial.flags[flag] == true) {
+        initialFlags |= flagBit[flag]!;
       }
     }
-    if (hasKnowledge &&
-        (blueprint.actors.any((id) =>
-            id != 'player' && !npcId.hasMatch(id)) ||
-        blueprint.facts.isEmpty ||
-        blueprint.facts.length > 128 || declaredEffects > 128 ||
-        blueprint.facts.any((id) => !factId.hasMatch(id)) ||
+
+    // A fact catalog may contain opaque IDs only. Existing flag-only worlds
+    // retain exactly the same rules and validation path, with K=0.
+    final npcId = RegExp(r'^npc_[a-f0-9]{20}$');
+    final factId = RegExp(r'^fact_[a-f0-9]{24}$');
+    final usesKnowledge = blueprint.facts.isNotEmpty ||
+        blueprint.actors.length > 1;
+    if (usesKnowledge &&
+        (blueprint.facts.isEmpty || blueprint.facts.length > 128 ||
+        blueprint.actors.length > 257 ||
+        blueprint.actors.any((actor) =>
+            actor != 'player' && !npcId.hasMatch(actor)) ||
+        blueprint.facts.any((fact) => !factId.hasMatch(fact)) ||
         blueprint.initial.knowledge.keys.toSet()
             .difference(blueprint.actors).isNotEmpty ||
         blueprint.actors.difference(
             blueprint.initial.knowledge.keys.toSet()).isNotEmpty ||
-        blueprint.initial.knowledge.values.any((known) => known.isNotEmpty))) {
+        blueprint.initial.knowledge.values.any((facts) => facts.isNotEmpty))) {
       throw const FormatException('Недопустимый каталог знаний частной RPG');
     }
-    final learnedFacts = <String>{};
-    final flags = blueprint.initial.flags.keys.toList()..sort();
-    final bitByName = <String, int>{
-      for (var i = 0; i < flags.length; i++) flags[i]: 1 << i,
-    };
-    var initialBits = 0;
-    for (final flag in flags) {
-      if (blueprint.initial.flags[flag] == true) {
-        initialBits |= bitByName[flag]!;
-      }
-    }
-    final queue = <(String, int)>[(blueprint.entrySceneId, initialBits)];
-    final discovered = <String>{
-      '${blueprint.entrySceneId}:${initialBits}',
-    };
-    final seenScenes = <String>{};
-    final predecessors = <String, Set<String>>{};
-    final terminals = <String>{};
-    final endings = <String>{};
-    for (var cursor = 0; cursor < queue.length; cursor++) {
-      if (queue.length > 2500) {
-        throw const FormatException('Превышен лимит причинной симуляции');
-      }
-      final state = queue[cursor];
-      final id = '${state.$1}:${state.$2}';
-      final scene = blueprint.scenes[state.$1]!;
-      seenScenes.add(scene.id);
-      if (scene.terminal) {
-        terminals.add(id);
-        endings.add(scene.id);
-        continue;
-      }
-      var choicesAvailable = 0;
+
+    // Pre-validate *all* rules, including choices that may be unreachable.
+    // This prevents invalid effects hiding behind an impossible condition.
+    String slot(String actor, String fact) => '$actor|$fact';
+    final grantedSlots = <String>{};
+    final requiredSlots = <String>{};
+    final grantedFacts = <String>{};
+    var grants = 0;
+    var gates = 0;
+    for (final scene in blueprint.scenes.values) {
       for (final choice in scene.choices) {
-        var allowed = true;
-        for (final condition in choice.conditions) {
-          if (condition.op != 'flag_is' ||
-              condition.id == null ||
-              !bitByName.containsKey(condition.id)) {
+        for (final rule in choice.conditions) {
+          if (rule.op == 'flag_is') {
+            if (rule.id == null || rule.value == null ||
+                !flagBit.containsKey(rule.id)) {
+              throw const FormatException('Недопустимое условие частного мира');
+            }
+          } else if (rule.op == 'knows_fact') {
+            if (!usesKnowledge || rule.id == null || rule.actor == null ||
+                !factId.hasMatch(rule.id!) ||
+                (rule.actor != 'player' && !npcId.hasMatch(rule.actor!)) ||
+                !blueprint.facts.contains(rule.id) ||
+                !blueprint.actors.contains(rule.actor)) {
+              throw const FormatException('Недопустимое условие знания NPC');
+            }
+            gates++;
+            requiredSlots.add(slot(rule.actor!, rule.id!));
+          } else {
             throw const FormatException('Недопустимое условие частного мира');
           }
-          final active = (state.$2 & bitByName[condition.id]!) != 0;
-          if (active != condition.value) {
-            allowed = false;
-            break;
-          }
         }
-        if (!allowed) continue;
-        choicesAvailable++;
-        var nextBits = state.$2;
         for (final effect in choice.effects) {
-          if (effect.op == 'learn_fact') {
-            // The type is checked again by story_core; player/NPC facts can
-            // only change AFTER an accepted, replayable game choice.
-            if (!hasKnowledge || effect.id == null ||
-                effect.actor == null ||
+          if (effect.op == 'set_flag') {
+            if (effect.id == null || effect.value == null ||
+                !flagBit.containsKey(effect.id)) {
+              throw const FormatException('Недопустимый игровой эффект');
+            }
+          } else if (effect.op == 'learn_fact') {
+            if (!usesKnowledge || effect.id == null || effect.actor == null ||
                 !factId.hasMatch(effect.id!) ||
                 (effect.actor != 'player' &&
                     !npcId.hasMatch(effect.actor!)) ||
@@ -330,44 +319,123 @@ class PrivateBookworldImporter {
                 !blueprint.actors.contains(effect.actor)) {
               throw const FormatException('Недопустимое правило знания NPC');
             }
-            learnedFacts.add(effect.id!);
-            continue;
-          }
-          if (effect.op != 'set_flag' ||
-              effect.id == null || effect.value == null ||
-              !bitByName.containsKey(effect.id)) {
+            grants++;
+            grantedFacts.add(effect.id!);
+            grantedSlots.add(slot(effect.actor!, effect.id!));
+          } else {
             throw const FormatException('Недопустимый игровой эффект');
           }
-          if (effect.value!) {
-            nextBits |= bitByName[effect.id]!;
+        }
+      }
+    }
+    if (usesKnowledge && (grants == 0 || grants > 128 || gates > 128 ||
+        grantedSlots.length > 128 ||
+        grantedFacts.length != blueprint.facts.length ||
+        !grantedFacts.containsAll(blueprint.facts) ||
+        !grantedSlots.containsAll(requiredSlots))) {
+      throw const FormatException(
+          'Знание или условие не имеет подтверждённого игрового источника');
+    }
+
+    // BigInt avoids overflows when 128 independent grants are present.
+    // Store only actor+fact pairs actually granted by a choice. A known fact
+    // for one NPC cannot satisfy a condition for another NPC or the player.
+    final orderedSlots = grantedSlots.toList()..sort();
+    final knowledgeBit = <String, BigInt>{
+      for (var i = 0; i < orderedSlots.length; i++)
+        orderedSlots[i]: BigInt.one << i,
+    };
+
+    String stateKey(String sceneId, int flagMask, BigInt knownMask) =>
+        '$sceneId:' + flagMask.toRadixString(16) + ':' +
+        knownMask.toRadixString(16);
+
+    final initialKey = stateKey(
+        blueprint.entrySceneId, initialFlags, BigInt.zero);
+    final queue = <(String, int, BigInt)>[
+      (blueprint.entrySceneId, initialFlags, BigInt.zero),
+    ];
+    final discovered = <String>{initialKey};
+    final seenScenes = <String>{};
+    final predecessors = <String, Set<String>>{};
+    final terminalStates = <String>{};
+    final endings = <String>{};
+
+    for (var cursor = 0; cursor < queue.length; cursor++) {
+      if (queue.length > 2500) {
+        throw const FormatException('Превышен лимит причинной симуляции');
+      }
+      final current = queue[cursor];
+      final scene = blueprint.scenes[current.$1]!;
+      final state = stateKey(current.$1, current.$2, current.$3);
+      seenScenes.add(scene.id);
+      if (scene.terminal) {
+        terminalStates.add(state);
+        endings.add(scene.id);
+        continue;
+      }
+
+      var available = 0;
+      for (final choice in scene.choices) {
+        var allowed = true;
+        for (final condition in choice.conditions) {
+          if (condition.op == 'flag_is') {
+            final enabled =
+                (current.$2 & flagBit[condition.id!]!) != 0;
+            if (enabled != condition.value!) {
+              allowed = false;
+              break;
+            }
           } else {
-            nextBits &= ~bitByName[effect.id]!;
+            final bit = knowledgeBit[slot(
+                condition.actor!, condition.id!)]!;
+            if ((current.$3 & bit) == BigInt.zero) {
+              allowed = false;
+              break;
+            }
           }
         }
-        final dest = '${choice.nextSceneId}:${nextBits}';
-        predecessors.putIfAbsent(dest, () => <String>{}).add(id);
-        if (discovered.add(dest)) {
-          queue.add((choice.nextSceneId, nextBits));
+        if (!allowed) continue;
+        available++;
+
+        var nextFlags = current.$2;
+        var nextKnowledge = current.$3;
+        for (final effect in choice.effects) {
+          if (effect.op == 'set_flag') {
+            if (effect.value!) {
+              nextFlags |= flagBit[effect.id!]!;
+            } else {
+              nextFlags &= ~flagBit[effect.id!]!;
+            }
+          } else {
+            nextKnowledge |= knowledgeBit[slot(
+                effect.actor!, effect.id!)]!;
+          }
+        }
+        final destination = stateKey(
+            choice.nextSceneId, nextFlags, nextKnowledge);
+        predecessors.putIfAbsent(destination, () => <String>{})
+            .add(state);
+        if (discovered.add(destination)) {
+          queue.add((choice.nextSceneId, nextFlags, nextKnowledge));
         }
       }
-      if (choicesAvailable == 0) {
-        throw const FormatException('Есть игровой тупик без доступных действий');
+      if (available == 0) {
+        throw const FormatException(
+            'Есть игровой тупик без доступных действий');
       }
     }
-    if (hasKnowledge && (learnedFacts.length != blueprint.facts.length ||
-        !learnedFacts.containsAll(blueprint.facts))) {
-      throw const FormatException(
-          'Факт NPC не связан с достижимым игровым переходом');
-    }
+
     if (endings.length < 2 || seenScenes.length != blueprint.scenes.length) {
-      throw const FormatException('Недоступные сцены или альтернативные финалы');
+      throw const FormatException(
+          'Недоступные сцены или альтернативные финалы');
     }
-    final escapable = <String>{...terminals};
-    final stack = terminals.toList();
+    final escapable = <String>{...terminalStates};
+    final stack = terminalStates.toList();
     while (stack.isNotEmpty) {
-      final id = stack.removeLast();
-      for (final previous in predecessors[id] ?? const <String>{}) {
-        if (escapable.add(previous)) stack.add(previous);
+      final state = stack.removeLast();
+      for (final predecessor in predecessors[state] ?? const <String>{}) {
+        if (escapable.add(predecessor)) stack.add(predecessor);
       }
     }
     if (escapable.length != discovered.length) {
