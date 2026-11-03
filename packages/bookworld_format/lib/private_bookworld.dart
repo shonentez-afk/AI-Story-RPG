@@ -291,6 +291,20 @@ class PrivateBookworldImporter {
         choicesAvailable++;
         var nextBits = state.$2;
         for (final effect in choice.effects) {
+          if (effect.op == 'learn_fact') {
+            // Facts are monotonic and never used as conditions here.
+            if (!hasKnowledge || effect.id == null ||
+                effect.actor == null ||
+                !factId.hasMatch(effect.id!) ||
+                (effect.actor != 'player' &&
+                    !npcId.hasMatch(effect.actor!)) ||
+                !blueprint.facts.contains(effect.id) ||
+                !blueprint.actors.contains(effect.actor)) {
+              throw const FormatException('Недопустимое правило знания NPC');
+            }
+            learnedFacts.add(effect.id!);
+            continue;
+          }
           if (effect.op != 'set_flag' ||
               effect.id == null || effect.value == null ||
               !bitByName.containsKey(effect.id)) {
