@@ -680,3 +680,14 @@
 - NPC-просмотр — только `stage_npc` ID, привязка к точным source mentions, предупреждения о ролях/мотивациях/неоднозначных именах и будущих цитатах. Никакие секреты/знания автоматически не раскрываются игроку/ИИ; нет игрового NPC и изменения BookWorld, SQLite, `.bwsave` или книг. Повреждённый сценарий не удаляется.
 - Подробности: `docs/M2E5B3A_GRAPH_AND_NPC_AUDIT_RU.md`. Физические Windows/Android E2E, большая реальная книга и 20–100+ ходов — всё ещё **SKIP**, не PASS. Последняя опубликованная release на момент слияния — `test-build-329` (M2e5b2); сборка `main` после PR #33 запущена отдельно.
 - **Далее M2e5b3b:** полный UX/UI аудит основного меню/книги/сцен/NPC при 320dp/200% текста, редактор явных правил знания/секретов и runtime Actor adapter без автоматического канона, стресс-кейсы длинного сценария и сохранений. Затем device QA Windows/Android; только после этого **M2f** — consent, ключи BYOK, лимиты/провайдеры локального и облачного ИИ. Live ИИ ещё не подключён.
+
+
+## 2026-11-03 — M2e5b3b1: правила знаний NPC, CODE / CI PENDING
+
+- База `main` `1ab9434e`: M2e5b3a PR #33, CI `41573524717`, M0 `41573524543` PASS, опубликована `test-build-332` (Windows/Android).
+- Рабочая ветка `feature/m2e5b3b1-npc-knowledge-rules-20261103`. Реализованы `npc_knowledge_rulebook.dart`, `npc_knowledge_rules_page.dart`, `npc_knowledge_world_bridge.dart`, отдельный атомарный `SourceCheckpointScope.npcKnowledgeRules`.
+- Пользователь вручную связывает подтверждённые заметки NPC `knowledge/secret` с выбором многосценной RPG и получателем знания. Для игрока — галочка + отдельный диалог согласия. Изменения цитат, SAME/DIFFERENT, заметки/перехода блокируют устаревшие правила без удаления данных.
+- К существующему частному компилятору подключена опция `multi-use-npc-rules`, **по умолчанию выключена**. При включении валидируются отдельные правила/NPC/identity, затем создаются реальные `npc_<hash>` Actor ID, `fact_<hash>` IDs и `learn_fact` эффекты в существующем `story_core`. Текст заметок и секретов не копируется в .bworld. Старый режим, старые книги, worlds/SQLite/`.bwsave` не мигрируют.
+- Новые тесты `npc_knowledge_rulebook_test.dart` (в том числе 135 игровых шагов + replay и tamper), `npc_knowledge_rules_page_test.dart` (вкл. 320dp/200%), `npc_knowledge_compiler_integration_test.dart` (private .bworld writer/importer), усилены `multi_scene_editor_page_test.dart`. Подробности `docs/M2E5B3B1_NPC_KNOWLEDGE_RULES_RU.md`.
+- **НЕ МЕРЖИТЬ** до exact-head PASS Python/Dart/schema/Flutter/widget/Windows/Android и M0. Физическая приёмка устройств/реальный длинный роман/полные AI диалоги SKIP.
+- После этого M2e5b3b2: `knows_fact` условия и правила разговора, проверка долгих кампаний SQLite/`.bwsave`, UX/UI аудит всех страниц, затем M2f (безопасные локальная/облачная ИИ конфигурации, BYOK и лимиты). ИИ ещё отключён.
