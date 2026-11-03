@@ -367,7 +367,7 @@ class _SourceNarrativeReviewPanelState
             ),
             if (_busy && review != null)
               OutlinedButton.icon(
-                onPressed: () => setState(() => _pause = true),
+                onPressed: _pause ? null : () => setState(() => _pause = true),
                 icon: const Icon(Icons.pause),
                 label: Text(_pause ? 'Останавливаем…' : 'Пауза'),
               ),
