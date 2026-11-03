@@ -175,7 +175,13 @@ void main() {
         of: toc, matching: find.byType(Scrollable),
       ), maxScrolls: 25,
     );
-    await tester.tap(tocTitle('Примечания'));
+    // scrollUntilVisible may stop as soon as the lazily created ListTile
+    // enters the scroll cache. At 320dp/200% its centre can still be below
+    // the device bottom (CI observed y=672 on a 640px screen).
+    await tester.ensureVisible(tocTitle('Примечания'));
+    await tester.pumpAndSettle();
+    expect(tocTitle('Примечания').hitTestable(), findsOneWidget);
+    await tester.tap(tocTitle('Примечания').hitTestable());
     await tester.pumpAndSettle();
     expect(toc, findsNothing);
     expect(find.text('Глава 8 из 8'), findsOneWidget);
