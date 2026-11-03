@@ -272,6 +272,17 @@ class _SourceEditorialReviewPageState extends State<SourceEditorialReviewPage> {
     final graph = _graph;
     final editorial = _editorial;
     final all = catalog?.assertions ?? <SourceSemanticAssertion>[];
+    // A narrative reset may preserve the user's editorial decisions but
+    // withdraw the verified citations they relied on. Never count those
+    // historical decisions as currently source-verified.
+    final verifiedCanonCount = graph == null || editorial == null
+        ? 0
+        : all.where((claim) =>
+            editorial.verdicts[claim.id] ==
+                SemanticEditorialVerdict.canonCandidate &&
+            _canProposeCanon(claim)).length;
+    final recheckCanonCount =
+        (editorial?.canonCandidates ?? 0) - verifiedCanonCount;
     final search = _search.trim().toLowerCase();
     final filtered = all.where((claim) =>
         (_kind == null || claim.kind == _kind) &&
@@ -326,7 +337,18 @@ class _SourceEditorialReviewPageState extends State<SourceEditorialReviewPage> {
                         Text('Подтверждённых фрагментов: '
                             '${graph.records.where((e) =>
                                 e.status == EvidenceStatus.confirmed).length}. '
-                            'Кандидатов канона: ${editorial.canonCandidates}.'),
+                            'Редакторских кандидатов канона: '
+                            '${editorial.canonCandidates}; '
+                            'с действующими подтверждёнными цитатами: '
+                            '$verifiedCanonCount.'),
+                        if (recheckCanonCount > 0)
+                          Text('Повторная проверка обязательна: '
+                              '$recheckCanonCount прежних решений '
+                              'больше не подкреплены подтверждёнными цитатами. '
+                              'Они сохранены для исправления, '
+                              'но не разрешают сборку RPG.',
+                              style: TextStyle(
+                                  color: Theme.of(context).colorScheme.error)),
                         const SizedBox(height: 8),
                         if (!_revealed)
                           OutlinedButton.icon(
