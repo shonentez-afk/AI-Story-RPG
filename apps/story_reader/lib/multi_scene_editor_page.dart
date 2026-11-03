@@ -340,7 +340,6 @@ class _MultiSceneEditorPageState extends State<MultiSceneEditorPage> {
     }
     final current = _draft;
     if (current == null) return;
-    final nextId = 'scene_';
     _edit((draft) => MultiSceneDraftWorkbench.addSourceScene(
         draft, widget.index, _review!.graph, _catalog!, _editorial!, chosen));
     if (_draft != current && _draft!.scenes.isNotEmpty) {
@@ -402,28 +401,27 @@ class _MultiSceneEditorPageState extends State<MultiSceneEditorPage> {
       for (final item in old) if (item != flag) item,
       if (selected) flag,
     ];
-    // A checkbox cannot make a requires/forbids or adds/removes contradiction.
+    List<String> without(List<String> old) => [
+      for (final item in old) if (item != flag) item,
+    ];
+    // Conflicting flag pairs are mutually exclusive.
     final edited = MultiSceneDraftWorkbench.choiceCopy(choice,
       requires: role == 'requires'
           ? revised(choice.requires)
           : role == 'forbids' && selected
-              ? revised(choice.requires)..remove(flag)
-              : choice.requires,
+              ? without(choice.requires) : choice.requires,
       forbids: role == 'forbids'
           ? revised(choice.forbids)
           : role == 'requires' && selected
-              ? revised(choice.forbids)..remove(flag)
-              : choice.forbids,
+              ? without(choice.forbids) : choice.forbids,
       adds: role == 'adds'
           ? revised(choice.adds)
           : role == 'removes' && selected
-              ? revised(choice.adds)..remove(flag)
-              : choice.adds,
+              ? without(choice.adds) : choice.adds,
       removes: role == 'removes'
           ? revised(choice.removes)
           : role == 'adds' && selected
-              ? revised(choice.removes)..remove(flag)
-              : choice.removes,
+              ? without(choice.removes) : choice.removes,
     );
     _editChoice(scene.id, choice, (_) => edited);
   }
