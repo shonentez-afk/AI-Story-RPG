@@ -179,6 +179,14 @@ jobs:
             --manifest apps/story_reader/test/fixtures/grimm_ci.json \
             --single-output apps/story_reader/test/fixtures/frog_prince_ci.fb2 \
             --single-manifest apps/story_reader/test/fixtures/frog_prince_ci.json
+      - name: Upload standalone public-domain Frog-Prince benchmark
+        uses: actions/upload-artifact@v4
+        with:
+          name: AI-Story-RPG-Grimm-Frog-Prince-FB2
+          path: |
+            apps/story_reader/test/fixtures/frog_prince_ci.fb2
+            apps/story_reader/test/fixtures/frog_prince_ci.json
+          if-no-files-found: error
       - name: Widget tests
         env:
           AI_RPG_GRIMM_PUBLIC_FB2_PATH: test/fixtures/grimm_ci.fb2
