@@ -111,9 +111,6 @@ _fixture() {
   return (queue: queue, items: items);
 }
 
-ZaiCrossWindowEvidenceGraph _graph() =>
-    ZaiCrossWindowEvidenceGraph.fromQueue(_fixture().queue);
-
 String _id(Map<String, SemanticCandidate> m, String key) => m[key]!.id;
 
 void main() {
