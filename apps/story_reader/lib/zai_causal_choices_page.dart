@@ -6,6 +6,7 @@ import 'zai_causal_choice_notebook.dart';
 import 'zai_editorial_consistency.dart';
 import 'zai_semantic_review_queue.dart';
 import 'zai_source_scene_board.dart';
+import 'zai_private_compilation_page.dart';
 
 /// M2f3e: an offline, non-publishing editor over the M2f3d scene checkpoint.
 class ZaiCausalChoicesPage extends StatefulWidget {
@@ -15,12 +16,20 @@ class ZaiCausalChoicesPage extends StatefulWidget {
     required this.board,
     required this.consistency,
     this.repository,
+    this.privateDraftRepository,
+    this.privateNarrativeRepository,
+    this.privateCatalogRepository,
+    this.privateEditorialRepository,
   });
 
   final ZaiWindowReviewQueue queue;
   final ZaiSourceSceneBoard board;
   final ZaiEditorialConsistencyNotebook consistency;
   final SourceAnalysisCheckpointRepository? repository;
+  final SourceAnalysisCheckpointRepository? privateDraftRepository;
+  final SourceAnalysisCheckpointRepository? privateNarrativeRepository;
+  final SourceAnalysisCheckpointRepository? privateCatalogRepository;
+  final SourceAnalysisCheckpointRepository? privateEditorialRepository;
 
   @override
   State<ZaiCausalChoicesPage> createState() => _ZaiCausalChoicesPageState();
@@ -170,6 +179,23 @@ class _ZaiCausalChoicesPageState extends State<ZaiCausalChoicesPage> {
     for (final scene in widget.board.scenes)
       if (_spoilers || scene.chapterIndex == 0) scene,
   ];
+
+  Future<void> _openPrivateCompilation() async {
+    final notebook = _notebook;
+    if (!mounted || notebook == null || _loading || _saving) return;
+    await Navigator.of(context).push<void>(MaterialPageRoute(
+      builder: (_) => ZaiPrivateCompilationPage(
+        queue: widget.queue,
+        notebook: notebook,
+        consistency: widget.consistency,
+        causalRepository: _repo,
+        draftRepository: widget.privateDraftRepository,
+        narrativeRepository: widget.privateNarrativeRepository,
+        catalogRepository: widget.privateCatalogRepository,
+        editorialRepository: widget.privateEditorialRepository,
+      ),
+    ));
+  }
 
   Future<void> _addFlag() async {
     final notebook = _notebook;
@@ -582,8 +608,21 @@ class _ZaiCausalChoicesPageState extends State<ZaiCausalChoicesPage> {
                       title: Text(entry.value),
                     ),
                 ],
-                const Text('M2f3a–d, книги, игровые сохранения, '
-                    'BookWorld и настройки ИИ не меняются.'),
+                const Divider(height: 24),
+                Text('Следующий шаг · M2f3f2',
+                    style: Theme.of(context).textTheme.titleMedium),
+                const Text('Проверить источниковые сцены и авторские альтернативы, '
+                    'собрать частный .bworld и только после отдельного '
+                    'согласия установить его в библиотеку. '
+                    'Без подтверждённых цитат M2c сборка блокируется.'),
+                OutlinedButton.icon(
+                  key: const Key('zai-open-private-compiler'),
+                  onPressed: enabled ? _openPrivateCompilation : null,
+                  icon: const Icon(Icons.fact_check_outlined),
+                  label: const Text('Проверить сценарий и собрать RPG'),
+                ),
+                const Text('Книги и старые сохранения не меняются. '
+                    'Знания NPC и игровой ИИ пока не подключены.'),
               ],
             ),
           ),

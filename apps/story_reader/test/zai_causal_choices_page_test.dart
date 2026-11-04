@@ -10,6 +10,7 @@ import 'package:ai_story_reader/zai_semantic_review_queue.dart';
 import 'package:ai_story_reader/zai_source_scene_board.dart';
 import 'package:ai_story_reader/zai_source_scene_workbench_page.dart';
 import 'package:ai_story_reader/zai_causal_choices_page.dart';
+import 'package:ai_story_reader/zai_private_compilation_draft.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -204,6 +205,56 @@ void main() {
     expect(await repo.read(f.queue.index.sourceFingerprint), isNull);
     expect(find.byKey(const Key('zai-causal-error')), findsNothing);
     expect(f.board.scenes, hasLength(4));
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('M2f3f2 opens from causal editor and saves only '
+      'source-linked private prose without a world install', (tester) async {
+    final f = _setup();
+    final causal = MemorySourceAnalysisCheckpointRepository();
+    final privateDraft = MemorySourceAnalysisCheckpointRepository();
+    await tester.pumpWidget(MaterialApp(home: ZaiCausalChoicesPage(
+      queue: f.queue,
+      board: f.board,
+      consistency: f.consistency,
+      repository: causal,
+      privateDraftRepository: privateDraft,
+      privateNarrativeRepository: MemorySourceAnalysisCheckpointRepository(),
+      privateCatalogRepository: MemorySourceAnalysisCheckpointRepository(),
+      privateEditorialRepository: MemorySourceAnalysisCheckpointRepository(),
+    )));
+    await tester.pumpAndSettle();
+
+    final open = find.byKey(const Key('zai-open-private-compiler'));
+    await _scroll(tester, open, step: 210);
+    await tester.tap(open);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('zai-private-title')), findsOneWidget);
+    expect(find.textContaining('Нет независимого анализа'), findsOneWidget);
+    expect(find.byKey(const Key('zai-private-installed')), findsNothing);
+    expect(await privateDraft.read(f.queue.index.sourceFingerprint), isNull);
+
+    final source = find.byKey(const Key('zai-private-source-toggle'));
+    await _scroll(tester, source, step: 180);
+    await tester.tap(source);
+    await tester.pumpAndSettle();
+    final prose = find.byKey(const Key('zai-private-scene-prose'));
+    await _scroll(tester, prose, step: 170);
+    await tester.enterText(prose, 'Мой частный текст сцены без копирования книги.');
+    final save = find.byKey(const Key('zai-private-save-text'));
+    await _scroll(tester, save, step: 170);
+    await tester.tap(save);
+    await tester.pumpAndSettle();
+
+    final raw = await privateDraft.read(f.queue.index.sourceFingerprint);
+    expect(raw, isNotNull);
+    final restored = ZaiPrivateCompilationDraft.decode(
+        ZaiCausalChoiceNotebook.empty(f.board), raw!);
+    expect(restored.sourceSceneIds, contains(f.board.scenes.first.id));
+    expect(restored.authoredSceneTexts[f.board.scenes.first.id],
+        'Мой частный текст сцены без копирования книги.');
+    expect(await causal.read(f.queue.index.sourceFingerprint), isNull);
+    expect(find.byKey(const Key('zai-private-installed')), findsNothing);
     expect(tester.takeException(), isNull);
   });
 
