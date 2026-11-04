@@ -177,7 +177,7 @@ class _ZaiPrivateCompilationPageState
     } catch (error) {
       if (mounted) setState(() {
         _sources = null;
-        _error = 'Проверка M2f3g: ' + error.toString();
+        _error = 'Проверка цитат: ' + error.toString();
       });
     }
   }
@@ -242,7 +242,7 @@ class _ZaiPrivateCompilationPageState
       builder: (ctx) => AlertDialog(
         title: const Text('Сбросить только этот черновик сборки?'),
         content: const Text('Удалятся только редакторские тексты и ручные '
-            'соответствия событий M2f3f2. Книга, результаты анализа, '
+            'соответствия событий в этом черновике. Книга и результаты анализа, '
             'готовые миры и игровые сохранения останутся.'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx, false),
@@ -250,7 +250,7 @@ class _ZaiPrivateCompilationPageState
           FilledButton(
             key: const Key('zai-private-reset-confirm'),
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Сбросить M2f3f2')),
+            child: const Text('Сбросить черновик')),
         ],
       ));
     if (yes != true || !mounted) return;
@@ -270,7 +270,7 @@ class _ZaiPrivateCompilationPageState
       });
     } catch (_) {
       if (mounted) setState(() => _error =
-          'Не удалось удалить только M2f3f2; остальные данные сохранены.');
+          'Не удалось сбросить черновик; остальные данные сохранены.');
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -369,7 +369,7 @@ class _ZaiPrivateCompilationPageState
     final approved = await _permission(
       'Собрать частный игровой мир?',
       'Текст сцены создан или отдельно утверждён вами. '
-      'Исходные утверждения требуют точных совпадений с M2c. '
+      'Каждое исходное событие требует подтверждённой цитаты. '
       'Компиляция работает без сети. Пакет пока НЕ устанавливается.',
     );
     if (!approved || !mounted) return;
