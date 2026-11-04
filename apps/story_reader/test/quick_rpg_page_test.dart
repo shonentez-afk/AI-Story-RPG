@@ -47,10 +47,14 @@ void main() {
     expect(find.byKey(const Key('quick-rpg-change-fate')), findsOneWidget);
     await tester.tap(follow);
     await tester.pumpAndSettle();
+    final reviewed = find.byKey(const Key('quick-rpg-review-confirm'));
+    await tester.scrollUntilVisible(reviewed, 140, scrollable: scroll);
+    expect(reviewed, findsOneWidget);
+    final privateUse = find.byKey(const Key('quick-rpg-private-confirm'));
+    await tester.scrollUntilVisible(privateUse, 140, scrollable: scroll);
+    expect(privateUse, findsOneWidget);
     final play = find.byKey(const Key('quick-rpg-create-and-play'));
-    await tester.scrollUntilVisible(play, 180, scrollable: scroll);
-    expect(find.byKey(const Key('quick-rpg-review-confirm')), findsOneWidget);
-    expect(find.byKey(const Key('quick-rpg-private-confirm')), findsOneWidget);
+    await tester.scrollUntilVisible(play, 140, scrollable: scroll);
     expect(tester.widget<FilledButton>(play).onPressed, isNull);
     expect(tester.takeException(), isNull);
   });
