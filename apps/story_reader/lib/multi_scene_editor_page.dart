@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'preparation_editor_help.dart';
 
 import 'book_source_index.dart';
 import 'intermediate_story_blueprint.dart';
@@ -786,6 +787,16 @@ class _MultiSceneEditorPageState extends State<MultiSceneEditorPage> {
                         'и последствия решений. Это частная офлайн-адаптация, '
                         'не автоматическая RPG по всему роману. '
                         'Книга не отправляется в сеть, ИИ отключён.'),
+                    const PreparationEditorHelp(
+                      purpose: 'Ручное расширение короткой адаптации до нескольких игровых эпизодов.',
+                      steps: [
+                        'Начните с короткого черновика или его сохранённой копии.',
+                        'Добавляйте сцены, доступные действия, условия и последствия.',
+                        'Проверьте причинные переходы, знания героев и доступность финалов.',
+                      ],
+                      result: 'больший проверенный сценарий, который можно собрать в личный игровой мир.',
+                      next: 'выполните проверку готовности и установите мир.',
+                    ),
                     if (_error != null) ...[
                       const SizedBox(height: 8),
                       Text(_error!, style: TextStyle(
