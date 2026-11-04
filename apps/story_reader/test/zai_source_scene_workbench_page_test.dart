@@ -87,18 +87,20 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('zai-scene-title')), findsOneWidget);
     expect(find.textContaining('Кай раскрыл тайну'), findsNothing);
-    expect(find.byKey(const Key('zai-scene-preflight-title')),
-        findsOneWidget);
 
     final choose = find.byKey(Key('zai-scene-event-${setup.events.first.id}'));
     await tester.ensureVisible(choose);
     await tester.tap(choose);
     await tester.pumpAndSettle();
     final title = find.byKey(const Key('zai-scene-name-input'));
-    await tester.ensureVisible(title);
+    await tester.scrollUntilVisible(title, 140,
+        scrollable: find.byType(Scrollable).first, maxScrolls: 35);
+    await tester.pumpAndSettle();
     await tester.enterText(title, 'Сцена встречи');
     final add = find.byKey(const Key('zai-scene-add'));
-    await tester.ensureVisible(add);
+    await tester.scrollUntilVisible(add, 130,
+        scrollable: find.byType(Scrollable).first, maxScrolls: 35);
+    await tester.pumpAndSettle();
     await tester.tap(add);
     await tester.pumpAndSettle();
     final submit = find.byKey(const Key('zai-scene-confirm-save'));
@@ -126,8 +128,8 @@ void main() {
     expect(find.textContaining('Кай раскрыл тайну'), findsNothing);
 
     final reveal = find.byKey(const Key('zai-scene-reveal-future'));
-    await tester.scrollUntilVisible(reveal, 120,
-        scrollable: find.byType(Scrollable).first, maxScrolls: 35);
+    await tester.scrollUntilVisible(reveal, -160,
+        scrollable: find.byType(Scrollable).first, maxScrolls: 45);
     await tester.pumpAndSettle();
     await tester.tap(reveal);
     await tester.pumpAndSettle();
@@ -197,7 +199,11 @@ void main() {
     await tester.tap(button);
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('zai-scene-title')), findsOneWidget);
-    expect(find.byKey(const Key('zai-scene-preflight-title')), findsOneWidget);
+    final preflight = find.byKey(const Key('zai-scene-preflight-title'));
+    await tester.scrollUntilVisible(preflight, 150,
+        scrollable: find.byType(Scrollable).first, maxScrolls: 45);
+    await tester.pumpAndSettle();
+    expect(preflight, findsOneWidget);
     expect(await sceneRepo.read(setup.queue.index.sourceFingerprint), isNull);
     expect(setup.queue.encode(), oldReview);
     expect(tester.takeException(), isNull);
