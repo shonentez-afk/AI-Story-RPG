@@ -189,11 +189,21 @@ void main() {
     ));
     await tester.pumpAndSettle();
     expect(find.text('Подготовка книги'), findsOneWidget);
-    expect(find.textContaining('Полная автоматическая адаптация книги пока недоступна'),
+    expect(find.textContaining('Автоматической RPG по всей книге пока нет'),
         findsOneWidget);
-    await tester.ensureVisible(find.text('Технические сведения о книге'));
+    final advanced = find.byKey(const Key('prepare-advanced-mode'));
+    await tester.scrollUntilVisible(advanced, 150,
+        scrollable: find.byType(Scrollable).first, maxScrolls: 40);
+    await tester.ensureVisible(advanced);
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Технические сведения о книге'));
+    await tester.tap(advanced);
+    await tester.pumpAndSettle();
+    final diagnostics = find.text('Диагностика импорта книги');
+    await tester.scrollUntilVisible(diagnostics, 140,
+        scrollable: find.byType(Scrollable).first, maxScrolls: 40);
+    await tester.ensureVisible(diagnostics);
+    await tester.pumpAndSettle();
+    await tester.tap(diagnostics);
     await tester.pumpAndSettle();
     await tester.ensureVisible(find.text('Глав с текстом: 2 из 2'));
     expect(find.text('Глав с текстом: 2 из 2'), findsOneWidget);
