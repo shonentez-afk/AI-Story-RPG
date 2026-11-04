@@ -85,7 +85,7 @@ void main() {
     await tester.tap(find.byTooltip('Настройки'));
     await tester.pumpAndSettle();
     await tester.scrollUntilVisible(
-      find.text('0.1.0 · BookWorld · тестовая версия'), 150,
+      find.text('0.1.0 · предварительная версия «Живой книги»'), 150,
       scrollable: find.byType(Scrollable).first,
     );
     expect(find.text('0.1.0 · BookWorld · тестовая версия'), findsOneWidget);
