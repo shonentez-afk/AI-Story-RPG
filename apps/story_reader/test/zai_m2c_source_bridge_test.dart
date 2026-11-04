@@ -246,7 +246,7 @@ void main() {
     final f = _fixture();
     final scene = f.sourceScenes.first;
     expect(_review(f,
-      prose: {...f.prose, scene: 'не готов'},
+      prose: {...f.prose, scene: 'нет'},
     ).canStageForPrivateCompiler, isFalse);
     expect(_review(f,
       events: {f.eventAssertions.keys.first: f.eventAssertions.values.first},
