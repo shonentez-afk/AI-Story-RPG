@@ -39,12 +39,14 @@ void main() {
         ),
       ),
     ));
+    final scroll = find.byType(Scrollable).first;
     final follow = find.byKey(const Key('quick-rpg-follow-book'));
+    // At 320dp/200% these lazy ListView children may not exist until scrolled.
+    await tester.scrollUntilVisible(follow, 140, scrollable: scroll);
     expect(follow, findsOneWidget);
     expect(find.byKey(const Key('quick-rpg-change-fate')), findsOneWidget);
     await tester.tap(follow);
     await tester.pumpAndSettle();
-    final scroll = find.byType(Scrollable).first;
     final play = find.byKey(const Key('quick-rpg-create-and-play'));
     await tester.scrollUntilVisible(play, 180, scrollable: scroll);
     expect(find.byKey(const Key('quick-rpg-review-confirm')), findsOneWidget);
