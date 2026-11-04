@@ -7,6 +7,7 @@ import 'ai_connection_settings_page.dart';
 import 'book_source_index.dart';
 import 'source_semantic_provider.dart';
 import 'zai_auto_whole_book_analysis.dart';
+import 'zai_whole_book_event_outline.dart';
 import 'zai_semantic_preview.dart';
 
 /// User-facing, opt-in book-wide preparation. This screen DOES NOT publish a
@@ -219,6 +220,8 @@ class _ZaiWholeBookAnalysisPageState extends State<ZaiWholeBookAnalysisPage> {
   Widget build(BuildContext context) {
     final progress = _progress;
     final review = _review;
+    final outline = review == null
+        ? null : ZaiWholeBookEventOutline.build(review);
     return Scaffold(
       appBar: AppBar(
         title: const Text('Анализ всей книги'),
@@ -288,6 +291,57 @@ class _ZaiWholeBookAnalysisPageState extends State<ZaiWholeBookAnalysisPage> {
                     'причинных развилок и компиляция сценария. '
                     'Не путайте завершение анализа с готовой игрой.'),
               ],
+            ],
+            if (outline != null && progress != null) ...[
+              const SizedBox(height: 14),
+              Text('Сводка событий',
+                  style: Theme.of(context).textTheme.titleMedium),
+              Text('Предложено событий: ${outline.events.length}; '
+                  'глав с предложениями: '
+                  '${outline.chaptersWithEventProposals} '
+                  'из ${outline.totalChapters}.'),
+              ExpansionTile(
+                key: const Key('whole-book-event-report'),
+                title: const Text('Источники, пробелы и предупреждения'),
+                subtitle: const Text('Возможны спойлеры. '
+                    'Предложения ИИ ещё не сюжетные факты.'),
+                children: [
+                  for (final warning in outline.warnings)
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(14, 3, 14, 7),
+                      child: Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text('• $warning'),
+                      ),
+                    ),
+                  for (final proposal in outline.events.take(12))
+                    Card(
+                      margin: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 4),
+                      child: Padding(
+                        padding: const EdgeInsets.all(12),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('Глава ${proposal.chapterIndex + 1} · '
+                                '${proposal.label}',
+                                style: Theme.of(context).textTheme.titleSmall),
+                            const SizedBox(height: 5),
+                            SelectableText('«${proposal.quote}»'),
+                          ],
+                        ),
+                      ),
+                    ),
+                  if (outline.events.length > 12)
+                    Padding(
+                      padding: const EdgeInsets.all(8),
+                      child: Text('Показаны первые 12 из '
+                          '${outline.events.length} предложений. '
+                          'Полный перечень остаётся в локальном '
+                          'контрольном файле.'),
+                    ),
+                ],
+              ),
             ],
             const SizedBox(height: 12),
             OutlinedButton.icon(
