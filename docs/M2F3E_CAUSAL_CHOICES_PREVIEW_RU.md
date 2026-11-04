@@ -38,3 +38,10 @@
 **M2f3f:** редактор семантических прав и безопасный source-to-M2c compiler bridge с лицензией `privateUse`, явным аудитом `canonCandidate` (классический `SemanticEditorialReviewSession`, а не `keepForReview`), источниками, знаниями NPC/спойлерными воротами, затем полным реальным `PrivateAdaptationPreflight` и проверкой игрового .bworld/сохранений. До этого **никакого автоматического экспорта новой M2f3e схемы в BookWorld**.
 
 **M2f4** после этого — свободный ходовой ИИ, долговременные сейвы, отказоустойчивость облака и offline fallback. Текущий M2f3e — именно авторская структурная подготовка, не готовая RPG.
+
+
+## Принятая регрессия PR #55
+
+- Tested HEAD `fde184025f50dd909c6a1202eb2a96d9c11009dd`; squash main `5bd032570c819c128cf61885f5667abdbf362042`.
+- GitHub Actions `41793157265`: **COMPLETED/SUCCESS, 6/6 обязательных заданий**, Python/Dart/BookWorld+SQLite/Flutter analyze & widget (**381 PASS / 2 личных Andersen SKIP**) / Windows portable / Android debug APK; M0 `41793157215` PASS на том же exact SHA. Gutenberg Grimm #2591 полностью 62 сказки / 909 абзацев / 514890 символов.
+- UX правка в финальной версии: ссылка на M2f3e после списка событий рядом с preflight M2f3d, чтобы верхний список не уходил за маленький экран. Запрещён скрытый экспорт .bworld, автоутверждение NPC и cloud send. Физическая русская FB2/BYOK проверка отдельно ожидается. Post-merge CI/release main проверять отдельно.
