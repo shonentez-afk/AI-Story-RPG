@@ -368,17 +368,6 @@ class _ZaiSourceSceneWorkbenchPageState
                     'вся книга: ${widget.queue.index.chapterCount} глав',
                     key: const Key('zai-scene-counts')),
                 const SizedBox(height: 12),
-                OutlinedButton.icon(
-                  key: const Key('zai-open-causal-editor'),
-                  onPressed: ready && board.scenes.isNotEmpty
-                      ? _openCausalChoices : null,
-                  icon: const Icon(Icons.alt_route),
-                  label: const Text('Игровые решения и причинные последствия'),
-                ),
-                const Text('Изменение списка или порядка сцен делает '
-                    'сохранённые решения M2f3e устаревшими. '
-                    'Их потребуется проверить заново; прежние сцены '
-                    'и книги не удаляются.'),
                 const Text('Будущие главы и их цитаты скрыты, '
                     'пока вы отдельно не разрешите показ спойлеров.'),
                 if (!_revealedFuture &&
@@ -605,6 +594,18 @@ class _ZaiSourceSceneWorkbenchPageState
                     child: const Text('Ещё черновые сцены'),
                   ),
                 const SizedBox(height: 20),
+                OutlinedButton.icon(
+                  key: const Key('zai-open-causal-editor'),
+                  onPressed: ready && board.scenes.isNotEmpty
+                      ? _openCausalChoices : null,
+                  icon: const Icon(Icons.alt_route),
+                  label: const Text('Игровые решения и причинные последствия'),
+                ),
+                const Text('Изменение списка или порядка сцен делает '
+                    'сохранённые решения M2f3e устаревшими. '
+                    'Их потребуется проверить заново; прежние сцены '
+                    'и книги не удаляются.'),
+                const SizedBox(height: 16),
                 Text('Отчёт готовности к RPG',
                     key: const Key('zai-scene-preflight-title'),
                     style: Theme.of(context).textTheme.titleMedium),
