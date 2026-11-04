@@ -5,6 +5,8 @@ import 'package:flutter/material.dart';
 
 import 'ai_connection_settings_page.dart';
 import 'book_source_index.dart';
+import 'quick_rpg_page.dart';
+import 'world_library_gateway.dart';
 import 'zai_auto_whole_book_analysis.dart';
 import 'zai_whole_book_event_outline.dart';
 import 'zai_semantic_preview.dart';
@@ -17,10 +19,12 @@ class ZaiWholeBookAnalysisPage extends StatefulWidget {
     super.key,
     required this.index,
     this.analysis,
+    this.gateway,
   });
 
   final BookSourceIndex index;
   final ZaiAutoWholeBookAnalysis? analysis;
+  final WorldLibraryGateway? gateway;
 
   @override
   State<ZaiWholeBookAnalysisPage> createState() =>
@@ -287,8 +291,30 @@ class _ZaiWholeBookAnalysisPageState extends State<ZaiWholeBookAnalysisPage> {
                 const Icon(Icons.check_circle_outline, size: 32),
                 const Text('Анализ всех выбранных частей завершён.'),
                 const Text('Следующий этап — проверка связей, '
-                    'причинных развилок и компиляция сценария. '
-                    'Не путайте завершение анализа с готовой игрой.'),
+                    'причинных развилок и компиляция полного сценария. '
+                    'Пока можно сыграть короткую RPG по найденным событиям.'),
+                if (outline != null && outline.events.length >= 2) ...[
+                  const SizedBox(height: 10),
+                  FilledButton.icon(
+                    key: const Key('whole-book-quick-play'),
+                    onPressed: _working ? null : () async {
+                      await Navigator.of(context).push<void>(
+                        MaterialPageRoute(
+                          builder: (_) => QuickRpgPage(
+                            index: widget.index,
+                            gateway: widget.gateway ??
+                                const DeviceWorldLibraryGateway(),
+                            eventOutline: outline,
+                          ),
+                        ),
+                      );
+                    },
+                    icon: const Icon(Icons.play_arrow),
+                    label: const Text('Создать пробную RPG по событиям'),
+                  ),
+                  const Text('Потребуется отдельная проверка цитат. '
+                      'Это не полная игра по всему сюжету.'),
+                ],
               ],
             ],
             if (outline != null && progress != null) ...[
