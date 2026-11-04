@@ -118,7 +118,7 @@ class ZaiEditorialConsistencyNotebook {
   static const format = 'ai_story_zai_consistency_m2f3c_v1';
   static const maxQuestions = 600;
   static const maxBytes = 512 * 1024;
-  static final _forbidden = RegExp(r'[\x00-\x1f\x7f]');
+  static final _forbidden = RegExp(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]');
 
   final ZaiCrossWindowEvidenceGraph graph;
   final List<ZaiConsistencyQuestion> questions;
