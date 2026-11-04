@@ -15,6 +15,7 @@ import 'package:ai_story_reader/story_evidence_review_session.dart';
 import 'package:ai_story_reader/zai_semantic_review_queue.dart';
 import 'package:ai_story_reader/zai_cross_window_evidence_graph.dart';
 import 'package:ai_story_reader/zai_editorial_consistency.dart';
+import 'package:ai_story_reader/zai_source_scene_board.dart';
 import 'package:crypto/crypto.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -108,6 +109,17 @@ void main() {
     expect(editorial.canPublishBookworld, false);
     expect(ZaiEditorialConsistencyNotebook.decode(
         graph, editorial.encode()).questions, isEmpty);
+    final storyboard = ZaiSourceSceneBoard.empty(graph);
+    expect(storyboard.scenes, isEmpty);
+    expect(storyboard.contexts, isEmpty);
+    expect(ZaiSourceSceneBoard.decode(graph, storyboard.encode())
+        .scenes, isEmpty);
+    final sourcePreflight = ZaiScenePreflight.assess(
+        reviewQueue, storyboard, consistency: editorial);
+    expect(sourcePreflight.canStartPlayableRpg, false);
+    expect(sourcePreflight.totalEvents, 0);
+    expect(sourcePreflight.findings.map((e) => e.issue),
+        contains(ZaiSceneGateIssue.unfinishedWindows));
   });
 
   test('REAL Grimm full-book offline preparation, checkpoint/resume and '
