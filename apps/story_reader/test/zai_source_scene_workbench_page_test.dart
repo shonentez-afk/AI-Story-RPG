@@ -163,7 +163,7 @@ void main() {
     await tester.ensureVisible(reset);
     await tester.tap(reset);
     await tester.pumpAndSettle();
-    expect(find.text('Удалить только черновик сцен M2f3d?'), findsOneWidget);
+    expect(find.text('Удалить только черновик сцен?'), findsOneWidget);
     await tester.tap(find.text('Отмена'));
     await tester.pumpAndSettle();
     expect(await sceneRepo.read(setup.queue.index.sourceFingerprint),
