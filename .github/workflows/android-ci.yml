@@ -176,11 +176,15 @@ jobs:
         run: |
           python3 tools/build_grimm_public_domain_fb2.py \
             --output apps/story_reader/test/fixtures/grimm_ci.fb2 \
-            --manifest apps/story_reader/test/fixtures/grimm_ci.json
+            --manifest apps/story_reader/test/fixtures/grimm_ci.json \
+            --single-output apps/story_reader/test/fixtures/frog_prince_ci.fb2 \
+            --single-manifest apps/story_reader/test/fixtures/frog_prince_ci.json
       - name: Widget tests
         env:
           AI_RPG_GRIMM_PUBLIC_FB2_PATH: test/fixtures/grimm_ci.fb2
           AI_RPG_GRIMM_PUBLIC_MANIFEST_PATH: test/fixtures/grimm_ci.json
+          AI_RPG_FROG_PRINCE_FB2_PATH: test/fixtures/frog_prince_ci.fb2
+          AI_RPG_FROG_PRINCE_MANIFEST_PATH: test/fixtures/frog_prince_ci.json
         timeout-minutes: 5
         # A widget test blocked on a Future can ignore the Dart test-zone
         # timeout. Stop the external test process rather than consuming a
