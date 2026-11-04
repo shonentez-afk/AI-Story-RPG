@@ -106,14 +106,26 @@ void main() {
         scrollable: find.byType(Scrollable).first, maxScrolls:25);
     expect(find.textContaining('Принято: 1'), findsOneWidget);
 
-    await tester.scrollUntilVisible(
-        find.text('Дополнительно: экспериментальный поиск'), 220,
+    final advanced = find.byKey(const Key('prepare-advanced-mode'));
+    await tester.scrollUntilVisible(advanced, 220,
         scrollable: find.byType(Scrollable).first, maxScrolls:30);
     expect(find.text('Полная RPG по всей книге'), findsOneWidget);
-    expect(find.text('Открыть локальный анализ'), findsNothing);
-    await tester.tap(find.text('Дополнительно: экспериментальный поиск'));
+    expect(find.text('Дополнительно: экспериментальный поиск'), findsNothing);
+    expect(find.byKey(const Key('prepare-advanced-evidence')), findsNothing);
+    expect(find.byKey(const Key('prepare-open-story-editor')), findsOneWidget);
+    await tester.ensureVisible(advanced);
+    await tester.tap(advanced);
     await tester.pumpAndSettle();
-    expect(find.text('Открыть локальный анализ'), findsOneWidget);
+    expect(find.byKey(const Key('prepare-advanced-evidence')), findsOneWidget);
+    expect(find.byKey(const Key('prepare-advanced-ai')), findsOneWidget);
+    expect(find.byKey(const Key('prepare-advanced-story')), findsOneWidget);
+    final glossary = find.byKey(const Key('prepare-advanced-glossary'));
+    await tester.scrollUntilVisible(glossary, 170,
+        scrollable: find.byType(Scrollable).first, maxScrolls:30);
+    await tester.tap(glossary);
+    await tester.pumpAndSettle();
+    expect(find.text('Цитата и факт'), findsOneWidget);
+    expect(find.text('Игровой мир и прохождение'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
