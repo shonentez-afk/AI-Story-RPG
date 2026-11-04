@@ -18,7 +18,7 @@ PR #59: https://github.com/shonentez-afk/AI-Story-RPG/pull/59
 
 ## Точные проверки
 
-PR CI #41852346370: COMPLETED/SUCCESS, 6/6 обязательных задач. Python PASS, Dart PASS, BookWorld/SQLite PASS, Flutter analyze PASS и 399 widget PASS / 2 личных Andersen FB2 SKIP, Windows portable PASS, Android debug APK PASS. M0 #41852346334 SUCCESS. Release-публикация из PR намеренно SKIP, требуется отдельно сверить post-merge main CI #41854014237 и Release из squash SHA bff2efb7afe575020bbbe5d31446ad07f6296037.
+PR CI #41852346370: COMPLETED/SUCCESS, 6/6 обязательных задач. Python PASS, Dart PASS, BookWorld/SQLite PASS, Flutter analyze PASS и 399 widget PASS / 2 личных Andersen FB2 SKIP, Windows portable PASS, Android debug APK PASS. M0 #41852346334 SUCCESS. Main CI #41854014237 COMPLETED/SUCCESS 7/7: Python, Dart, BookWorld/SQLite, Flutter analyze и 399 widget PASS/2 личных SKIP, Windows, Android APK и Publish PASS. Новый релиз test-build-455 (проверено: target_commitish bff2efb7afe575020bbbe5d31446ad07f6296037) опубликован: https://github.com/shonentez-afk/AI-Story-RPG/releases/tag/test-build-455. APK: https://github.com/shonentez-afk/AI-Story-RPG/releases/download/test-build-455/AI-Story-RPG-Android-debug.apk; Windows ZIP: https://github.com/shonentez-afk/AI-Story-RPG/releases/download/test-build-455/AI-Story-RPG-Windows-portable.zip.
 
 ## ЧТО НЕ РЕАЛИЗОВАНО
 
