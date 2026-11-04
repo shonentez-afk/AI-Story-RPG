@@ -59,6 +59,31 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('library book opens quick mode without the technical editor',
+      (tester) async {
+    const source = '<FictionBook><description><title-info>'
+        '<book-title>Прямой запуск</book-title></title-info></description>'
+        '<body><section>'
+        '<p>Герой отправился в дорогу, оставив за собой родной дом.</p>'
+        '<p>На перекрестке ему встретился путешественник с необычным даром.</p>'
+        '<p>В городе появился новый друг, который показал тайную тропу.</p>'
+        '</section></body></FictionBook>';
+    final book = BookImporter.parse(
+        'direct.fb2', Uint8List.fromList(utf8.encode(source)));
+    await tester.pumpWidget(MaterialApp(
+      home: QuickRpgFromBookPage(
+        book: book,
+        gateway: const DeviceWorldLibraryGateway(background: false),
+        indexer: (value) async => BookSourceIndexer.index(value),
+      ),
+    ));
+    await tester.pumpAndSettle();
+    expect(find.text('Как играть'), findsOneWidget);
+    expect(find.byKey(const Key('quick-rpg-follow-book')), findsOneWidget);
+    expect(find.byKey(const Key('quick-rpg-change-fate')), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('an unusably short book reports an explanation instead of '
       'starting a fake world', (tester) async {
     final index = BookSourceIndexer.index(BookImporter.parse(
