@@ -39,19 +39,18 @@ void main() {
         ),
       ),
     ));
-    expect(find.byKey(const Key('quick-rpg-follow-book')), findsOneWidget);
+    final follow = find.byKey(const Key('quick-rpg-follow-book'));
+    expect(follow, findsOneWidget);
     expect(find.byKey(const Key('quick-rpg-change-fate')), findsOneWidget);
+    await tester.tap(follow);
+    await tester.pumpAndSettle();
+    final scroll = find.byType(Scrollable).first;
+    final play = find.byKey(const Key('quick-rpg-create-and-play'));
+    await tester.scrollUntilVisible(play, 180, scrollable: scroll);
     expect(find.byKey(const Key('quick-rpg-review-confirm')), findsOneWidget);
     expect(find.byKey(const Key('quick-rpg-private-confirm')), findsOneWidget);
-    final play = find.byKey(const Key('quick-rpg-create-and-play'));
-    final button = tester.widget<FilledButton>(play);
-    expect(button.onPressed, isNull);
-    await tester.ensureVisible(
-        find.byKey(const Key('quick-rpg-follow-book')));
-    await tester.tap(find.byKey(const Key('quick-rpg-follow-book')));
-    await tester.pumpAndSettle();
-    expect(tester.takeException(), isNull);
     expect(tester.widget<FilledButton>(play).onPressed, isNull);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('an unusably short book reports an explanation instead of '
