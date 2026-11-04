@@ -58,6 +58,44 @@ void main() {
     index = BookSourceIndexer.index(imported);
   });
 
+  test('REAL one-tale Frog-Prince FB2 is importable and source-locked',
+      () async {
+    final file = Platform.environment['AI_RPG_FROG_PRINCE_FB2_PATH'];
+    final meta = Platform.environment['AI_RPG_FROG_PRINCE_MANIFEST_PATH'];
+    if (file == null || meta == null || file.isEmpty || meta.isEmpty) {
+      throw StateError('Mandatory standalone Frog-Prince CI fixture missing.');
+    }
+    final bytes = await File(file).readAsBytes();
+    final info = jsonDecode(await File(meta).readAsString())
+        as Map<String, dynamic>;
+    expect(info['gutenberg_id'], 2591);
+    expect(info['tale'], 'THE FROG-PRINCE');
+    expect(info['chapters'], 1);
+    expect(info['corpus_fb2_sha256'], manifest['fb2_sha256']);
+    expect(sha256.convert(bytes).toString(), info['fb2_sha256']);
+    final single = BookImporter.parse('frog_prince_grimm.fb2',
+        Uint8List.fromList(bytes));
+    expect(single.structuredChapters, hasLength(1));
+    expect(single.chapters, hasLength(1));
+    expect(single.structuredChapters.single.blocks.first.text,
+        'THE FROG-PRINCE');
+    expect(single.chapters.single, contains('frog'));
+    expect(single.chapters.single, isNot(contains('THE GOLDEN BIRD')));
+    final indexed = BookSourceIndexer.index(single);
+    expect(indexed.chapterCount, 1);
+    expect(indexed.indexedChapterCount, 1);
+    expect(indexed.textIndexCoverage, 1.0);
+    // This is only a source book, not a generated or playable world.
+    expect(indexed.canPublishBookworld, false);
+    expect(SourceSemanticWindowPlanner.plan(indexed), isNotEmpty);
+    final queue = ZaiWindowReviewQueue.empty(indexed);
+    expect(queue.results, isEmpty);
+    final graph = ZaiCrossWindowEvidenceGraph.fromQueue(queue);
+    final board = ZaiSourceSceneBoard.empty(graph);
+    expect(board.scenes, isEmpty);
+    expect(ZaiCausalChoiceNotebook.empty(board).choices, isEmpty);
+  });
+
   test('REAL Grimm complete 62-tale FB2: chapters, full text and citations',
       () {
     expect(imported.title, contains("Grimms' Fairy Tales"));

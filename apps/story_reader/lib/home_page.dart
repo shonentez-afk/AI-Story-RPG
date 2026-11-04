@@ -191,14 +191,14 @@ class _HomePageState extends State<HomePage> {
                                 children: [
                                   Text(worldContinue
                                       ? (_recentWorldTitle ?? 'Подготовленный мир')
-                                      : 'Тайна особняка',
+                                      : _hasSave ? 'Тайна особняка' : 'Выберите книгу для игры',
                                       style: text.titleLarge),
                                   const SizedBox(height: 6),
                                   Text(_saveLoading
                                       ? 'Проверяем сохранённые прохождения'
                                       : canContinue
                                           ? 'Продолжить сохранённую игровую историю'
-                                          : 'Демонстрационная история • офлайн',
+                                          : 'Подготовьте игровую историю из своей библиотеки',
                                       style: text.bodyMedium),
                                 ],
                               ),
@@ -215,18 +215,19 @@ class _HomePageState extends State<HomePage> {
                                   gateway: _worldGateway!,
                                   campaignId: _recentWorldId!,
                                 ));
-                              } else {
+                              } else if (_hasSave) {
                                 _open(StoryReaderPage(
-                                  resume: _hasSave,
-                                  campaignId: _hasSave
-                                      ? _recentCampaignId : null,
+                                  resume: true,
+                                  campaignId: _recentCampaignId,
                                 ));
+                              } else {
+                                _open(LibraryPage(worldGateway: _worldGateway));
                               }
                             },
                             icon: Icon(canContinue
                                 ? Icons.play_arrow : Icons.auto_stories),
                             label: Text(_saveLoading ? 'Загрузка…' :
-                                (canContinue ? 'Продолжить' : 'Начать историю')),
+                                (canContinue ? 'Продолжить' : 'Открыть библиотеку')),
                           ),
                         ),
                       ],
@@ -245,8 +246,10 @@ class _HomePageState extends State<HomePage> {
                   final story = _HomeAction(
                     icon: Icons.add_circle_outline,
                     title: 'Новая история',
-                    subtitle: 'Начать заново',
-                    onTap: () => _open(const StoryReaderPage()),
+                    subtitle: 'Выберите свою книгу или игровой мир',
+                    onTap: () => _open(_worldGateway == null
+                        ? const StoryReaderPage()
+                        : LibraryPage(worldGateway: _worldGateway)),
                   );
                   return narrow
                       ? Column(children: [library, const SizedBox(height: 10), story])
@@ -589,15 +592,18 @@ class _LibraryPageState extends State<LibraryPage> {
                 Text('Ваши книги и игровые истории',
                     style: Theme.of(context).textTheme.titleLarge),
                 const SizedBox(height: 12),
-                Card(child: ListTile(
-                  leading: const Icon(Icons.menu_book_outlined),
-                  title: const Text('Тайна особняка'),
-                  subtitle: const Text('Демо RPG • начать новое прохождение'),
-                  trailing: const Icon(Icons.chevron_right),
-                  onTap: () => Navigator.of(context).push(
-                    MaterialPageRoute<void>(
-                      builder: (_) => const StoryReaderPage())),
-                )),
+                // Keep legacy pilot UI only in isolated widget QA hosts.
+                // Production library lists real books and verified BookWorlds.
+                if (widget.worldGateway == null)
+                  Card(child: ListTile(
+                    leading: const Icon(Icons.menu_book_outlined),
+                    title: const Text('Тайна особняка'),
+                    subtitle: const Text('Демо RPG • начать новое прохождение'),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () => Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (_) => const StoryReaderPage())),
+                  )),
                 const SizedBox(height: 14),
                 SizedBox(
                   width: double.infinity,
