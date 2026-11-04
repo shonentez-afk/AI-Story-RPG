@@ -101,6 +101,8 @@ void main() {
     await tester.scrollUntilVisible(add, 130,
         scrollable: find.byType(Scrollable).first, maxScrolls: 35);
     await tester.pumpAndSettle();
+    await tester.ensureVisible(add);
+    await tester.pumpAndSettle();
     await tester.tap(add);
     await tester.pumpAndSettle();
     final submit = find.byKey(const Key('zai-scene-confirm-save'));
@@ -109,6 +111,8 @@ void main() {
     await tester.pumpAndSettle();
     expect(await sceneRepo.read(setup.queue.index.sourceFingerprint), isNull);
 
+    await tester.ensureVisible(add);
+    await tester.pumpAndSettle();
     await tester.tap(add);
     await tester.pumpAndSettle();
     final checkbox = find.byKey(const Key('zai-scene-confirm-check'));
