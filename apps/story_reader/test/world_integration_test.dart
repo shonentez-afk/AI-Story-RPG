@@ -219,7 +219,10 @@ void main() {
     await tester.tap(tile);
     await settleWorker(tester);
     await tester.enterText(find.byKey(const Key('free-text-input')), label);
-    final scroll = find.byKey(const ValueKey('world-scene-scroll'));
+    final scroll = find.descendant(
+      of: find.byKey(const ValueKey('world-scene-scroll')),
+      matching: find.byType(Scrollable),
+    ).first;
     final propose = find.byKey(const Key('free-text-propose'));
     await tester.scrollUntilVisible(propose, 180, scrollable: scroll);
     // ensureVisible can leave controls behind the persistent bottom bar.
