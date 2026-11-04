@@ -1,5 +1,10 @@
 import 'package:ai_story_reader/book_import.dart';
 import 'package:ai_story_reader/book_source_index.dart';
+import 'package:ai_story_reader/source_analysis_checkpoint_repository.dart';
+import 'package:ai_story_reader/zai_cross_window_evidence_graph.dart';
+import 'package:ai_story_reader/zai_manual_source_alignment_page.dart';
+import 'package:ai_story_reader/zai_source_scene_board.dart';
+import 'package:flutter/material.dart';
 import 'package:ai_story_reader/source_evidence_graph.dart';
 import 'package:ai_story_reader/source_semantic_catalog.dart';
 import 'package:ai_story_reader/source_semantic_editorial_review.dart';
@@ -82,8 +87,103 @@ ZaiManualSourceAlignment _accept(_TestCase f, {
   narratorAssertionConfirmedByReader: narrator,
 );
 
+Future<void> _moveTo(WidgetTester tester, String key) async {
+  await tester.scrollUntilVisible(
+    find.byKey(Key(key)), 160,
+    scrollable: find.byType(Scrollable).first,
+    maxScrolls: 45,
+  );
+  await tester.pumpAndSettle();
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  testWidgets('source citation is hidden until spoiler consent; '
+      'both human checks precede a separate atomic checkpoint',
+      (tester) async {
+    final f = _source();
+    final index = f.queue.index;
+    final graph = ZaiCrossWindowEvidenceGraph.fromQueue(f.queue);
+    final board = ZaiSourceSceneBoard.empty(graph).addScene(
+      [f.candidate.id], 'Первая сцена', 'Частная редакторская заметка.',
+    );
+    final narrative = MemorySourceAnalysisCheckpointRepository();
+    final catalog = MemorySourceAnalysisCheckpointRepository();
+    final editorial = MemorySourceAnalysisCheckpointRepository();
+    final alignment = MemorySourceAnalysisCheckpointRepository();
+    await narrative.write(index.sourceFingerprint,
+        f.baseline.narrative.encode());
+    await catalog.write(index.sourceFingerprint,
+        f.baseline.catalog.encode());
+    await editorial.write(index.sourceFingerprint,
+        f.baseline.editorial.encode());
+
+    await tester.pumpWidget(MaterialApp(home: ZaiManualSourceAlignmentPage(
+      queue: f.queue, board: board,
+      narrativeRepository: narrative,
+      catalogRepository: catalog,
+      editorialRepository: editorial,
+      alignmentRepository: alignment,
+    )));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('zai-align-title')), findsOneWidget);
+    expect(find.byKey(const Key('zai-align-exact-quote')), findsNothing);
+    expect(await alignment.read(index.sourceFingerprint), isNull);
+
+    await tester.tap(find.byKey(const Key('zai-align-reveal')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Отмена'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('zai-align-exact-quote')), findsNothing);
+    await tester.tap(find.byKey(const Key('zai-align-reveal')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('zai-align-reveal-confirm')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('zai-align-exact-quote')), findsOneWidget);
+
+    for (final item in [
+      ('zai-align-subject', 'Саша'),
+      ('zai-align-predicate', 'открыла'),
+      ('zai-align-object', 'окно'),
+    ]) {
+      await _moveTo(tester, item.$1);
+      await tester.enterText(find.byKey(Key(item.$1)), item.$2);
+      await tester.pumpAndSettle();
+    }
+    await _moveTo(tester, 'zai-align-save');
+    var save = tester.widget<FilledButton>(
+        find.byKey(const Key('zai-align-save')));
+    expect(save.onPressed, isNull);
+    await _moveTo(tester, 'zai-align-confirm-quote');
+    await tester.tap(find.byKey(const Key('zai-align-confirm-quote')));
+    await tester.pumpAndSettle();
+    await _moveTo(tester, 'zai-align-save');
+    save = tester.widget<FilledButton>(
+        find.byKey(const Key('zai-align-save')));
+    expect(save.onPressed, isNull);
+    await _moveTo(tester, 'zai-align-confirm-narrator');
+    await tester.tap(find.byKey(const Key('zai-align-confirm-narrator')));
+    await tester.pumpAndSettle();
+    await _moveTo(tester, 'zai-align-save');
+    save = tester.widget<FilledButton>(
+        find.byKey(const Key('zai-align-save')));
+    expect(save.onPressed, isNotNull);
+    await tester.tap(find.byKey(const Key('zai-align-save')));
+    await tester.pumpAndSettle();
+    final raw = await alignment.read(index.sourceFingerprint);
+    expect(raw, isNotNull);
+    final restored = ZaiManualSourceAlignment.decode(
+      queue: f.queue, baseline: f.baseline, raw: raw!);
+    expect(restored.entries, hasLength(1));
+    expect(await narrative.read(index.sourceFingerprint),
+        f.baseline.narrative.encode());
+    expect(await catalog.read(index.sourceFingerprint),
+        f.baseline.catalog.encode());
+    expect(await editorial.read(index.sourceFingerprint),
+        f.baseline.editorial.encode());
+    expect(tester.takeException(), isNull);
+  });
 
   test('two independent human approvals add exact source and M2c canon '
       'candidate without changing original independent checkpoints', () {
