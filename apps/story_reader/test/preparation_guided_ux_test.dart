@@ -64,7 +64,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Подготовка книги'), findsOneWidget);
-    expect(find.text('Что делает подготовка?'), findsOneWidget);
+    expect(find.text('Как создать RPG из этой книги'), findsOneWidget);
     expect(find.textContaining('Личная короткая или многосценная RPG собирается'),
         findsOneWidget);
     expect(find.textContaining('Автоматической RPG по всей книге пока нет'),
@@ -178,6 +178,10 @@ void main() {
     await tester.pumpWidget(page(book, store));
     await tester.pumpAndSettle();
     expect(find.text('Глава 1'), findsNothing);
+    final advanced = find.byKey(const Key('prepare-advanced-mode'));
+    await revealInViewport(tester, advanced);
+    await tester.tap(advanced);
+    await tester.pumpAndSettle();
     final toggle = find.byKey(const Key('prepare-show-chapters'));
     await revealInViewport(tester, toggle);
     await tester.tap(toggle);
