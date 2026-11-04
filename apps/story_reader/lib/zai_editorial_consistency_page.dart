@@ -382,7 +382,7 @@ class _ZaiEditorialConsistencyPageState
                 Text('Новый редакторский вопрос',
                     style: Theme.of(context).textTheme.titleMedium),
                 DropdownButtonFormField<ZaiConsistencyKind>(
-                  key: const Key('zai-consistency-kind'),
+                  key: ValueKey('zai-consistency-kind-${_kind.name}'),
                   initialValue: _kind,
                   isExpanded: true,
                   decoration: const InputDecoration(labelText: 'Что проверить'),
@@ -422,7 +422,7 @@ class _ZaiEditorialConsistencyPageState
                     'Для длинной книги используйте поиск.'),
                 const SizedBox(height: 8),
                 DropdownButtonFormField<String>(
-                  key: ValueKey('zai-consistency-first-${_kind.name}'),
+                  key: ValueKey('zai-consistency-first-${_kind.name}-${_firstId ?? 'none'}'),
                   initialValue: _firstId,
                   isExpanded: true,
                   decoration: const InputDecoration(labelText: 'Первая цитата'),
@@ -439,7 +439,7 @@ class _ZaiEditorialConsistencyPageState
                 ),
                 const SizedBox(height: 8),
                 DropdownButtonFormField<String>(
-                  key: ValueKey('zai-consistency-second-${_kind.name}'),
+                  key: ValueKey('zai-consistency-second-${_kind.name}-${_secondId ?? 'none'}'),
                   initialValue: _secondId,
                   isExpanded: true,
                   decoration: const InputDecoration(labelText: 'Вторая цитата'),
