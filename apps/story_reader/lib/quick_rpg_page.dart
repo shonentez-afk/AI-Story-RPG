@@ -1,9 +1,67 @@
 import 'package:flutter/material.dart';
 
 import 'book_source_index.dart';
+import 'book_import.dart';
+import 'book_isolate_workers.dart';
 import 'quick_rpg_builder.dart';
 import 'world_library_gateway.dart';
 import 'world_play_page.dart';
+
+/// Opens the short private RPG wizard directly from the library.
+class QuickRpgFromBookPage extends StatefulWidget {
+  const QuickRpgFromBookPage({super.key, required this.book,
+    required this.gateway, this.indexer});
+  final ImportedBook book;
+  final WorldLibraryGateway gateway;
+  final Future<BookSourceIndex> Function(ImportedBook)? indexer;
+  @override
+  State<QuickRpgFromBookPage> createState() => _QuickRpgFromBookPageState();
+}
+
+class _QuickRpgFromBookPageState extends State<QuickRpgFromBookPage> {
+  late Future<BookSourceIndex> _index;
+  @override
+  void initState() { super.initState(); _load(); }
+  void _load() {
+    _index = (widget.indexer ?? indexImportedBookInWorker)(widget.book);
+  }
+  void _retry() { setState(_load); }
+  @override
+  Widget build(BuildContext context) => FutureBuilder<BookSourceIndex>(
+    future: _index,
+    builder: (context, snapshot) {
+      if (snapshot.hasData) {
+        return QuickRpgPage(index: snapshot.data!, gateway: widget.gateway);
+      }
+      return Scaffold(
+        appBar: AppBar(title: const Text('Создать RPG по книге')),
+        body: SafeArea(child: Center(child: SingleChildScrollView(
+          padding: const EdgeInsets.all(20),
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            if (snapshot.hasError) ...[
+              const Icon(Icons.warning_amber_outlined, size: 36),
+              const SizedBox(height: 12),
+              const Text('Не удалось подготовить текст книги. '
+                  'Исходная книга и сохранения не изменились.'),
+              Text(snapshot.error.toString(), textAlign: TextAlign.center),
+              const SizedBox(height: 12),
+              OutlinedButton(
+                key: const Key('quick-rpg-index-retry'),
+                onPressed: _retry,
+                child: const Text('Повторить'),
+              ),
+            ] else ...[
+              const CircularProgressIndicator(),
+              const SizedBox(height: 12),
+              Text('Подготавливаем «${widget.book.title}»…',
+                  textAlign: TextAlign.center),
+            ],
+          ]),
+        ))),
+      );
+    },
+  );
+}
 
 /// A short path from a source book to an independently verified private
 /// BookWorld. The user never needs to open a technical editor or copy files.
