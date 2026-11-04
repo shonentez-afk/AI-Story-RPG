@@ -3,6 +3,8 @@ name: M0 SDK and reference checks
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - '.github/workflows/storage-prune-once.yml'
   pull_request:
   workflow_dispatch:
 
