@@ -5,7 +5,6 @@ import 'package:flutter/material.dart';
 
 import 'ai_connection_settings_page.dart';
 import 'book_source_index.dart';
-import 'source_semantic_provider.dart';
 import 'zai_auto_whole_book_analysis.dart';
 import 'zai_whole_book_event_outline.dart';
 import 'zai_semantic_preview.dart';
