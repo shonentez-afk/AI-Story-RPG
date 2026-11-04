@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'source_analysis_checkpoint_repository.dart';
+import 'zai_causal_choices_page.dart';
 import 'zai_cross_window_evidence_graph.dart';
 import 'zai_editorial_consistency.dart';
 import 'zai_semantic_review_queue.dart';
@@ -14,11 +15,13 @@ class ZaiSourceSceneWorkbenchPage extends StatefulWidget {
     required this.queue,
     this.scenesRepository,
     this.consistencyRepository,
+    this.choicesRepository,
   });
 
   final ZaiWindowReviewQueue queue;
   final SourceAnalysisCheckpointRepository? scenesRepository;
   final SourceAnalysisCheckpointRepository? consistencyRepository;
+  final SourceAnalysisCheckpointRepository? choicesRepository;
 
   @override
   State<ZaiSourceSceneWorkbenchPage> createState() =>
@@ -279,6 +282,23 @@ class _ZaiSourceSceneWorkbenchPageState
     } on FormatException catch (e) {
       if (mounted) setState(() => _error = e.message);
     }
+  }
+
+  Future<void> _openCausalChoices() async {
+    final board = _board;
+    final consistency = _consistency;
+    if (!mounted || _saving || _loading ||
+        board == null || consistency == null) return;
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute(
+        builder: (_) => ZaiCausalChoicesPage(
+          queue: widget.queue,
+          board: board,
+          consistency: consistency,
+          repository: widget.choicesRepository,
+        ),
+      ),
+    );
   }
 
   void _openWindow(int position) =>
@@ -574,6 +594,18 @@ class _ZaiSourceSceneWorkbenchPageState
                     child: const Text('Ещё черновые сцены'),
                   ),
                 const SizedBox(height: 20),
+                OutlinedButton.icon(
+                  key: const Key('zai-open-causal-editor'),
+                  onPressed: ready && board.scenes.isNotEmpty
+                      ? _openCausalChoices : null,
+                  icon: const Icon(Icons.alt_route),
+                  label: const Text('Игровые решения и причинные последствия'),
+                ),
+                const Text('Изменение списка или порядка сцен делает '
+                    'сохранённые решения M2f3e устаревшими. '
+                    'Их потребуется проверить заново; прежние сцены '
+                    'и книги не удаляются.'),
+                const SizedBox(height: 16),
                 Text('Отчёт готовности к RPG',
                     key: const Key('zai-scene-preflight-title'),
                     style: Theme.of(context).textTheme.titleMedium),

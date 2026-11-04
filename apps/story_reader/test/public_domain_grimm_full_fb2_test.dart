@@ -16,6 +16,7 @@ import 'package:ai_story_reader/zai_semantic_review_queue.dart';
 import 'package:ai_story_reader/zai_cross_window_evidence_graph.dart';
 import 'package:ai_story_reader/zai_editorial_consistency.dart';
 import 'package:ai_story_reader/zai_source_scene_board.dart';
+import 'package:ai_story_reader/zai_causal_choice_notebook.dart';
 import 'package:crypto/crypto.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -120,6 +121,21 @@ void main() {
     expect(sourcePreflight.totalEvents, 0);
     expect(sourcePreflight.findings.map((e) => e.issue),
         contains(ZaiSceneGateIssue.unfinishedWindows));
+    // M2f3e: full real FB2 cannot automatically invent player decisions,
+    // source truth, NPC secrets, or a playable BookWorld without manual edits.
+    final causal = ZaiCausalChoiceNotebook.empty(storyboard);
+    expect(causal.flags, isEmpty);
+    expect(causal.choices, isEmpty);
+    expect(ZaiCausalChoiceNotebook.decode(
+        storyboard, causal.encode()).choices, isEmpty);
+    final causalReport = ZaiCausalPreflight.assess(
+        reviewQueue, causal, consistency: editorial);
+    expect(causalReport.canCompileBookworld, false);
+    expect(causalReport.canStartPlayableRpg, false);
+    expect(causalReport.blockers,
+        contains(ZaiCausalBlocker.emptySourceScenes));
+    expect(causalReport.blockers,
+        contains(ZaiCausalBlocker.unfinishedSourceReview));
   });
 
   test('REAL Grimm full-book offline preparation, checkpoint/resume and '

@@ -23,6 +23,7 @@ class ZaiSemanticPreviewPage extends StatefulWidget {
     this.linksRepository,
     this.consistencyRepository,
     this.scenesRepository,
+    this.choicesRepository,
   });
 
   final BookSourceIndex index;
@@ -31,6 +32,7 @@ class ZaiSemanticPreviewPage extends StatefulWidget {
   final SourceAnalysisCheckpointRepository? linksRepository;
   final SourceAnalysisCheckpointRepository? consistencyRepository;
   final SourceAnalysisCheckpointRepository? scenesRepository;
+  final SourceAnalysisCheckpointRepository? choicesRepository;
 
   @override
   State<ZaiSemanticPreviewPage> createState() =>
@@ -111,6 +113,7 @@ class _ZaiSemanticPreviewPageState extends State<ZaiSemanticPreviewPage> {
           linksRepository: widget.linksRepository,
           consistencyRepository: widget.consistencyRepository,
           scenesRepository: widget.scenesRepository,
+          choicesRepository: widget.choicesRepository,
         ),
       ),
     );
