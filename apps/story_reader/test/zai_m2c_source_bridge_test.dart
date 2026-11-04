@@ -9,6 +9,11 @@ import 'package:ai_story_reader/zai_causal_choice_notebook.dart';
 import 'package:ai_story_reader/zai_cross_window_evidence_graph.dart';
 import 'package:ai_story_reader/zai_editorial_consistency.dart';
 import 'package:ai_story_reader/zai_m2c_source_bridge.dart';
+import 'package:ai_story_reader/zai_private_bookworld_compilation.dart';
+import 'package:ai_story_reader/zai_private_compilation_draft.dart';
+import 'package:ai_story_reader/world_library_gateway.dart';
+import 'package:bookworld_format/bookworld_format.dart';
+import 'dart:typed_data';
 import 'package:ai_story_reader/zai_semantic_preview.dart';
 import 'package:ai_story_reader/zai_semantic_review_queue.dart';
 import 'package:ai_story_reader/zai_source_scene_board.dart';
@@ -174,7 +179,27 @@ ZaiM2cSourceBridgeReview _review(
       consentForPrivateCompilation: consent,
     );
 
+class _PrivateGateway implements WorldLibraryGateway {
+  int installs = 0;
+  bool wrongReceipt = false;
+
+  @override
+  Future<WorldLibraryItem> install(Uint8List bytes) async {
+    installs++;
+    final checked = const PrivateBookworldImporter().inspect(bytes);
+    return WorldLibraryItem(
+      archiveHash: wrongReceipt ? 'wrong' : checked.archiveSha256,
+      bookworldId: checked.bookworldId,
+      title: checked.blueprint.title,
+    );
+  }
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
   test('exact independently confirmed M2c citations can stage private draft',
       () {
     final f = _fixture();
@@ -251,6 +276,113 @@ void main() {
     expect(_review(f,
       events: {f.eventAssertions.keys.first: f.eventAssertions.values.first},
     ).canStageForPrivateCompiler, isFalse);
+  });
+
+
+  test('M2f3f2 source-locks human prose and ID mapping across restart', () {
+    final f = _fixture();
+    var draft = ZaiPrivateCompilationDraft.empty(f.choices);
+    expect(draft.sourceSceneIds, isEmpty);
+    for (final id in f.sourceScenes) {
+      draft = draft.setSource(f.choices, id, true);
+    }
+    for (final item in f.eventAssertions.entries) {
+      draft = draft.setAssertion(f.choices, item.key, item.value);
+    }
+    for (final item in f.prose.entries) {
+      draft = draft.setText(f.choices, item.key, item.value);
+    }
+    final saved = draft.encode(f.choices);
+    final restored = ZaiPrivateCompilationDraft.decode(f.choices, saved);
+    expect(restored.encode(f.choices), saved);
+    expect(restored.sourceSceneIds, f.sourceScenes);
+    expect(restored.eventAssertionIds, f.eventAssertions);
+    expect(saved, isNot(contains('Лесной зверь открыл дверь.')));
+    expect(saved, isNot(contains('Тест приложения')));
+
+    final removing = f.sourceScenes.first;
+    final deleted = restored.setSource(f.choices, removing, false);
+    final sourceEvent = f.choices.board.scenes
+        .firstWhere((scene) => scene.id == removing).eventIds.single;
+    expect(deleted.eventAssertionIds.containsKey(sourceEvent), false);
+    expect(() => deleted.setAssertion(f.choices, sourceEvent,
+        f.eventAssertions[sourceEvent]), throwsFormatException);
+    final corrupted = saved.replaceFirst('PRIVATE_EDITOR_INPUTS_NOT_GAME',
+        'GAME_READY');
+    expect(() => ZaiPrivateCompilationDraft.decode(f.choices, corrupted),
+        throwsFormatException);
+    final foreign = _fixture().choices.addFlag('second_state');
+    expect(() => ZaiPrivateCompilationDraft.decode(foreign, saved),
+        throwsFormatException);
+  });
+
+  test('M2f3f2 truly compiles a verified private BookWorld without cloud '
+      'and installs only after the second confirmation', () async {
+    final f = _fixture();
+    final compiled = await ZaiPrivateBookworldCompilation.compile(
+      queue: f.queue, notebook: f.choices, consistency: f.consistency,
+      evidence: f.evidence, catalog: f.catalog, editorial: f.editorial,
+      sourceSceneIds: f.sourceScenes,
+      eventAssertionIds: f.eventAssertions,
+      authoredSceneTexts: f.prose,
+      consentForPrivateCompilation: true,
+    );
+    final inspected = const PrivateBookworldImporter().inspect(
+        compiled.archive);
+    expect(inspected.sourceFingerprint, f.queue.index.sourceFingerprint);
+    expect(inspected.bookworldId, compiled.bookworldId);
+    expect(inspected.blueprint.scenes.length, 3);
+    expect(inspected.blueprint.rightsStatus, 'private_adaptation');
+    expect(inspected.canDistributePublicly, false);
+    expect(inspected.requiresNetwork, false);
+    expect(compiled.usesCloud, false);
+    expect(compiled.canDistributePublicly, false);
+    expect(compiled.archiveSha256, inspected.archiveSha256);
+
+    final gateway = _PrivateGateway();
+    await expectLater(
+        ZaiPrivateBookworldCompilation.installConfirmed(
+          compiled: compiled, gateway: gateway, userConfirmedInstall: false,
+        ), throwsFormatException);
+    expect(gateway.installs, 0);
+    final installed = await ZaiPrivateBookworldCompilation.installConfirmed(
+      compiled: compiled, gateway: gateway, userConfirmedInstall: true,
+    );
+    expect(installed.bookworldId, compiled.bookworldId);
+    expect(gateway.installs, 1);
+    final altered = Uint8List.fromList(compiled.archive);
+    altered[0] ^= 1;
+    compiled.archive[0] ^= 1;
+    await expectLater(
+        ZaiPrivateBookworldCompilation.installConfirmed(
+          compiled: compiled, gateway: gateway, userConfirmedInstall: true,
+        ), throwsFormatException);
+    expect(gateway.installs, 1);
+  });
+
+  test('M2f3f2 never compiles a speculative or revoked source assertion',
+      () async {
+    final f = _fixture();
+    final rejected = SemanticEditorialReviewSession.create(
+        f.queue.index, f.catalog);
+    await expectLater(
+        ZaiPrivateBookworldCompilation.compile(
+          queue: f.queue, notebook: f.choices, consistency: f.consistency,
+          evidence: f.evidence, catalog: f.catalog, editorial: rejected,
+          sourceSceneIds: f.sourceScenes,
+          eventAssertionIds: f.eventAssertions,
+          authoredSceneTexts: f.prose,
+          consentForPrivateCompilation: true,
+        ), throwsFormatException);
+    await expectLater(
+        ZaiPrivateBookworldCompilation.compile(
+          queue: f.queue, notebook: f.choices, consistency: f.consistency,
+          evidence: f.evidence, catalog: f.catalog, editorial: f.editorial,
+          sourceSceneIds: f.sourceScenes,
+          eventAssertionIds: f.eventAssertions,
+          authoredSceneTexts: f.prose,
+          consentForPrivateCompilation: false,
+        ), throwsFormatException);
   });
 
   test('editing book changes source fingerprint and invalidates old review',
