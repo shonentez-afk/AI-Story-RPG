@@ -1,0 +1,85 @@
+name: One-time cleanup of obsolete RPG build storage
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/storage-prune-once.yml'
+  workflow_dispatch:
+
+permissions:
+  actions: write
+  contents: write
+
+concurrency:
+  group: storage-prune-once-rpg
+  cancel-in-progress: false
+
+jobs:
+  prune:
+    name: Preserve recent builds, remove old artifacts and test releases
+    if: github.repository == 'shonentez-afk/AI-Story-RPG'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - name: Delete duplicate old Actions artifacts (keep 2 newest of each known type)
+        shell: bash
+        run: |
+          set -euo pipefail
+          export LC_ALL=C
+          gh api --paginate "repos/${GH_REPO}/actions/artifacts?per_page=100" \
+            --jq '.artifacts[] | select(.expired == false) | [.created_at, .name, (.id|tostring), (.size_in_bytes|tostring)] | @tsv' \
+            > "${RUNNER_TEMP}/rpg-artifacts.tsv"
+          sort -r "${RUNNER_TEMP}/rpg-artifacts.tsv" > "${RUNNER_TEMP}/rpg-artifacts-sorted.tsv"
+          declare -A seen=()
+          removed=0
+          bytes=0
+          kept=0
+          while IFS=$'\t' read -r created name id size; do
+            case "${name}" in
+              AI-Story-RPG-Android-debug|AI-Story-RPG-Windows-portable|AI-Story-RPG-BookWorld-demo|AI-Story-RPG-Grimm-Frog-Prince-FB2) ;;
+              *) continue ;;
+            esac
+            [[ "${id}" =~ ^[0-9]+$ ]] || exit 2
+            [[ "${size}" =~ ^[0-9]+$ ]] || exit 2
+            n=${seen["${name}"]:-0}
+            seen["${name}"]=$((n+1))
+            if (( n < 2 )); then
+              echo "KEEP ${name} ${id} (${created})"
+              kept=$((kept+1))
+              continue
+            fi
+            if (( removed >= 800 )); then
+              echo "::warning::Reached safe per-run deletion cap of 800."
+              break
+            fi
+            gh api --method DELETE "repos/${GH_REPO}/actions/artifacts/${id}" >/dev/null
+            echo "DELETE ${name} ${id} ${size} bytes"
+            removed=$((removed+1))
+            bytes=$((bytes+size))
+          done < "${RUNNER_TEMP}/rpg-artifacts-sorted.tsv"
+          echo "RPG artifacts: removed ${removed}; bytes ${bytes}; kept ${kept}" | tee -a "${GITHUB_STEP_SUMMARY}"
+
+      - name: Remove obsolete test-build releases (preserve 442, 438 and 433)
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh release view test-build-442 >/dev/null
+          gh release view test-build-438 >/dev/null
+          gh release view test-build-433 >/dev/null
+          mapfile -t tags < <(gh release list --limit 100 --json tagName --jq '.[].tagName' | grep -E '^test-build-[0-9]+$' | sort -t- -k3,3nr)
+          deleted=0
+          for tag in "${tags[@]}"; do
+            number="${tag##*-}"
+            if (( number >= 433 )); then
+              echo "KEEP ${tag}"
+              continue
+            fi
+            echo "DELETE obsolete prerelease ${tag}"
+            gh release delete "${tag}" --cleanup-tag --yes
+            deleted=$((deleted+1))
+          done
+          echo "RPG releases: removed ${deleted}; retained test-build-442/438/433 and all newer tags." | tee -a "${GITHUB_STEP_SUMMARY}"
