@@ -21,6 +21,7 @@ dependencies:
   file_picker: ^10.3.3
   path_provider: ^2.1.5
   xml: ^6.6.1
+  archive: ^4.6.0
   crypto: ^3.0.6
   # Pinned for consistent Windows/Android secure-key support in CI.
   flutter_secure_storage: 10.3.4

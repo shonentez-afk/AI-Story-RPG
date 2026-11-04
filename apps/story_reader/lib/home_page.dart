@@ -452,7 +452,7 @@ class _LibraryPageState extends State<LibraryPage> {
     try {
       final selection = await FilePicker.platform.pickFiles(
         type: FileType.custom,
-        allowedExtensions: ['txt', 'fb2', 'bworld'],
+        allowedExtensions: ['txt', 'fb2', 'zip', 'bworld'],
         withData: true,
       );
       if (selection == null || selection.files.isEmpty) return;
@@ -479,7 +479,7 @@ class _LibraryPageState extends State<LibraryPage> {
         await _refreshWorlds();
         if (mounted) _error('Добавлен игровой мир: ' + installed.title);
       } else {
-        // TXT/FB2 may be up to 20 MiB. Parsing off the UI isolate prevents
+        // TXT/FB2/FB2.ZIP may be up to 20 MiB. Parsing off the UI isolate prevents
         // long synchronous frames on both Android and Windows.
         final sourceName = file.name;
         final book = await parseImportedBookInWorker(sourceName, bytes);
@@ -615,7 +615,7 @@ class _LibraryPageState extends State<LibraryPage> {
                   ),
                 ),
                 const SizedBox(height: 6),
-                Text('TXT, FB2 (до 20 МБ) или подготовленный .bworld (до 12 МБ)',
+                Text('TXT, FB2, FB2.ZIP (до 20 МБ) или .bworld (до 12 МБ)',
                   style: Theme.of(context).textTheme.bodySmall),
                 if (_working)
                   const Padding(
@@ -764,7 +764,7 @@ class _LibraryPageState extends State<LibraryPage> {
                   const Padding(
                     padding: EdgeInsets.all(16),
                     child: Text('Своих книг пока нет. Нажмите «Добавить книгу» '
-                        'выше, чтобы импортировать TXT или FB2.'),
+                        'выше, чтобы импортировать TXT, FB2 или FB2.ZIP.'),
                   ),
               ]),
             ),
@@ -1064,7 +1064,7 @@ class _SettingsPageState extends State<SettingsPage> {
                   contentPadding: EdgeInsets.zero,
                   leading: const Icon(Icons.library_books_outlined),
                   title: const Text('Моя библиотека'),
-                  subtitle: const Text('Импорт TXT/FB2 и .bworld, '
+                  subtitle: const Text('Импорт TXT/FB2/FB2.ZIP и .bworld, '
                       'чтение и подготовка книг'),
                   trailing: const Icon(Icons.chevron_right),
                   onTap: () => _navigate(LibraryPage(

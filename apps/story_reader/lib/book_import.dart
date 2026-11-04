@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:typed_data';
 import 'package:xml/xml.dart';
+import 'package:archive/archive.dart';
 import 'book_model.dart';
 import 'book_text_decoder.dart';
 
@@ -93,8 +94,9 @@ class BookImporter {
       throw const FormatException('Максимальный размер книги — 20 МБ');
     }
     final ext = filename.split('.').last.toLowerCase();
+    if (ext == 'zip') return _fb2Zip(bytes);
     if (ext != 'txt' && ext != 'fb2') {
-      throw const FormatException('Поддерживаются TXT и FB2');
+      throw const FormatException('Поддерживаются TXT, FB2 и FB2.ZIP');
     }
     final text = BookTextDecoder.decode(filename, bytes);
     if (ext == 'txt') {
@@ -109,6 +111,52 @@ class BookImporter {
       );
     }
     return _fb2(text, filename);
+  }
+
+  /// A reader can import a user-owned .fb2.zip without sharing its bytes
+  /// or extracting any files on disk. A ZIP must contain exactly one FB2.
+  /// Inspect central-directory sizes BEFORE CRC-verifying/decompressing.
+  static ImportedBook _fb2Zip(Uint8List bytes) {
+    const maxBytes = 20 * 1024 * 1024;
+    try {
+      final header = ZipDecoder().decodeBytes(bytes);
+      if (header.files.isEmpty || header.files.length > 24) {
+        throw const FormatException('В ZIP слишком много файлов.');
+      }
+      final files = header.files.where((file) => file.isFile).toList();
+      if (files.length != 1) {
+        throw const FormatException(
+            'Архив должен содержать ровно один файл FB2.');
+      }
+      final item = files.single;
+      final segments = item.name.split('/');
+      if (item.name.startsWith('/') ||
+          item.name.contains('\\') ||
+          segments.any((segment) =>
+              segment.isEmpty || segment == '.' || segment == '..') ||
+          !item.name.toLowerCase().endsWith('.fb2')) {
+        throw const FormatException(
+            'В архиве нет единственной безопасной книги FB2.');
+      }
+      if (item.size == 0 || item.size > maxBytes) {
+        throw const FormatException(
+            'Распакованная книга должна быть не больше 20 МБ.');
+      }
+      // The single bounded FB2 is the ONLY file body decoded. CRC errors,
+      // malformed ZIPs and password-protected archives are not accepted.
+      final verified = ZipDecoder().decodeBytes(bytes, verify: true);
+      final safe = verified.files.where((file) => file.isFile).single;
+      final content = safe.readBytes();
+      if (content == null || content.length != item.size) {
+        throw const FormatException('Размер книги в ZIP не совпал.');
+      }
+      return parse(segments.last, content);
+    } on FormatException {
+      rethrow;
+    } catch (_) {
+      throw const FormatException(
+          'Не удалось проверить ZIP. Выберите архив с одним файлом FB2.');
+    }
   }
 
   static ImportedBook _fb2(String source, String filename) {
