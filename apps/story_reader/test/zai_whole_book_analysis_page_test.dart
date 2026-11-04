@@ -83,6 +83,10 @@ void main() {
 
     await tester.tap(go);
     await tester.pumpAndSettle();
+    // AlertDialog content scrolls independently: the consent checkbox is
+    // below the fold at the default 600dp test viewport.
+    await tester.ensureVisible(consent);
+    await tester.pumpAndSettle();
     await tester.tap(consent);
     await tester.pumpAndSettle();
     expect(tester.widget<FilledButton>(approve).onPressed, isNotNull);
@@ -92,6 +96,9 @@ void main() {
     expect(requests, 2);
     expect(store.writes, 2);
     expect(find.textContaining('Обработано: 2 из 2'), findsOneWidget);
+    await tester.scrollUntilVisible(
+      find.byKey(const Key('whole-book-notice')), 100,
+      scrollable: find.byType(Scrollable).first);
     expect(find.textContaining('не готовый сценарий'), findsWidgets);
     expect(find.byKey(const Key('whole-book-start')), findsNothing);
     expect(tester.takeException(), isNull);
@@ -119,7 +126,10 @@ void main() {
       ),
     ));
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('whole-book-start')));
+    final start = find.byKey(const Key('whole-book-start'));
+    await tester.scrollUntilVisible(
+      start, 120, scrollable: find.byType(Scrollable).first);
+    await tester.tap(start);
     await tester.pumpAndSettle();
     expect(tester.widget<FilledButton>(
         find.byKey(const Key('whole-book-approve'))).onPressed, isNull);
