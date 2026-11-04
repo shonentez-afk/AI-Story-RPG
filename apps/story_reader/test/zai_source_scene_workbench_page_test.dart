@@ -89,7 +89,15 @@ void main() {
     expect(find.textContaining('Кай раскрыл тайну'), findsNothing);
 
     final choose = find.byKey(Key('zai-scene-event-${setup.events.first.id}'));
+    await tester.scrollUntilVisible(choose, 150,
+        scrollable: find.byType(Scrollable).first, maxScrolls: 40);
     await tester.ensureVisible(choose);
+    await tester.pumpAndSettle();
+    // The added help card can leave the checkbox 2 px below a 600dp
+    // test viewport. Move the list explicitly before tapping it.
+    await tester.drag(find.byType(Scrollable).first,
+        const Offset(0, -100));
+    await tester.pumpAndSettle();
     await tester.tap(choose);
     await tester.pumpAndSettle();
     final title = find.byKey(const Key('zai-scene-name-input'));
