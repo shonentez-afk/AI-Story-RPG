@@ -2,6 +2,8 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'free_text_action_gate.dart';
 import 'free_text_world_gateway_port.dart';
+import 'ai_connection.dart';
+import 'zai_gameplay_choice_advisor.dart';
 import 'world_library_gateway.dart';
 
 /// Optional, collapsed in WorldPlayPage. No automatic action execution.
@@ -9,12 +11,13 @@ import 'world_library_gateway.dart';
 class FreeTextActionPanel extends StatefulWidget {
   const FreeTextActionPanel({
     super.key, required this.campaignId, required this.gateway,
-    this.onCommitted, this.onBusyChanged,
+    this.onCommitted, this.onBusyChanged, this.aiAdvisor,
   });
   final String campaignId;
   final WorldLibraryGateway gateway;
   final ValueChanged<WorldChoiceResult>? onCommitted;
   final ValueChanged<bool>? onBusyChanged;
+  final ZaiGameplayChoiceAdvisor? aiAdvisor;
 
   @override
   State<FreeTextActionPanel> createState() => _FreeTextActionPanelState();
@@ -27,6 +30,7 @@ class _FreeTextActionPanelState extends State<FreeTextActionPanel> {
   String? _error;
   String? _notice;
   bool _busy = false;
+  ZaiGameplayCancellation? _aiCancellation;
 
   @override
   void didUpdateWidget(covariant FreeTextActionPanel old) {
@@ -40,11 +44,13 @@ class _FreeTextActionPanelState extends State<FreeTextActionPanel> {
 
   @override
   void dispose() {
+    _aiCancellation?.cancel();
     _input.dispose();
     super.dispose();
   }
 
   void _reset() {
+    _aiCancellation?.cancel();
     _preview = null;
     _selected = null;
     _error = null;
@@ -72,6 +78,127 @@ class _FreeTextActionPanelState extends State<FreeTextActionPanel> {
       });
     } finally {
       if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _askAi() async {
+    if (_busy) return;
+    final playerText = _input.text;
+    if (playerText.trim().isEmpty) {
+      setState(() => _error = 'Сначала опишите действие.');
+      return;
+    }
+    FreeTextCampaignHead head;
+    try {
+      head = FreeTextWorldGatewayPort.headFromView(
+          await widget.gateway.load(widget.campaignId));
+    } catch (_) {
+      if (mounted) setState(() => _error =
+          'Не удалось проверить текущую сцену. Обновите игру.');
+      return;
+    }
+    if (!mounted || _busy || head.isTerminal || head.choices.every(
+        (choice) => !choice.enabled)) return;
+    final campaignId = widget.campaignId;
+    final approved = await showDialog<bool>(
+      context: context,
+      builder: (dialog) => AlertDialog(
+        scrollable: true,
+        title: const Text('Передать действие в Z.ai?'),
+        content: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 470),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('Будут отправлены только ваша фраза и '
+                  'подписи доступных сейчас действий. Текст книги, '
+                  'скрытые знания персонажей, журнал, сохранения и '
+                  'ключ API в тексте запроса не передаются.'),
+              const SizedBox(height: 8),
+              const Text('Точно отправляемая фраза:'),
+              SelectableText(playerText),
+              const SizedBox(height: 8),
+              const Text('При тайм-ауте или перегрузке возможно '
+                  'до двух автоматических повторов этого же запроса. '
+                  'ИИ только предложит действие; для выполнения '
+                  'потребуется отдельное подтверждение.'),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialog, false),
+              child: const Text('Отмена')),
+          FilledButton(
+            key: const Key('free-text-ai-consent'),
+            onPressed: () => Navigator.pop(dialog, true),
+            child: const Text('Отправить эту фразу'),
+          ),
+        ],
+      ),
+    );
+    if (approved != true || !mounted || _busy ||
+        widget.campaignId != campaignId || _input.text != playerText) return;
+    final token = ZaiGameplayCancellation();
+    setState(() {
+      _reset();
+      _busy = true;
+      _aiCancellation = token;
+      _notice = 'Проверяем разрешённый ход через Z.ai…';
+    });
+    try {
+      final advisor = widget.aiAdvisor ?? ZaiGameplayChoiceAdvisor();
+      final preview = await advisor.suggest(
+        head: head,
+        playerText: playerText,
+        consentForThisAction: true,
+        cancellation: token,
+        onProgress: (attempt, total, status) {
+          if (mounted && !token.isCancelled) {
+            setState(() => _notice =
+                'ИИ: ' + status + ' (' +
+                attempt.toString() + '/' + total.toString() + ')');
+          }
+        },
+      );
+      if (!mounted || token.isCancelled || _input.text != playerText ||
+          widget.campaignId != campaignId) return;
+      final fresh = FreeTextWorldGatewayPort.headFromView(
+          await widget.gateway.load(campaignId));
+      if (!mounted || token.isCancelled) return;
+      if (fresh.fingerprint != head.fingerprint) {
+        setState(() {
+          _error = 'Сцена изменилась во время запроса. '
+              'Получите новое предложение.';
+          _notice = null;
+        });
+        return;
+      }
+      setState(() {
+        _preview = preview;
+        _selected = null;
+        _error = preview.error;
+        _notice = preview.canChoose
+            ? 'ИИ предложил разрешённый ход. Выберите вариант и '
+              'подтвердите — ничего ещё не сохранено.'
+            : null;
+      });
+    } on AiSetupException catch (error) {
+      if (mounted && !token.isCancelled) setState(() {
+        _error = error.message;
+        _notice = null;
+      });
+    } catch (_) {
+      if (mounted && !token.isCancelled) setState(() {
+        _error = 'Не удалось проверить предложение ИИ. '
+            'Выберите доступное действие вручную.';
+        _notice = null;
+      });
+    } finally {
+      if (mounted) setState(() {
+        _busy = false;
+        if (identical(_aiCancellation, token)) _aiCancellation = null;
+      });
     }
   }
 
@@ -154,6 +281,12 @@ class _FreeTextActionPanelState extends State<FreeTextActionPanel> {
             onPressed: _busy ? null : _propose,
             icon: const Icon(Icons.search),
             label: const Text('Найти доступные действия'),
+          ),
+          OutlinedButton.icon(
+            key: const Key('free-text-ai-propose'),
+            onPressed: _busy ? null : _askAi,
+            icon: const Icon(Icons.auto_awesome),
+            label: const Text('Подобрать с помощью ИИ'),
           ),
           if (_busy) const LinearProgressIndicator(),
           if (_error != null)

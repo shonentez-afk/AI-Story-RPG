@@ -146,6 +146,47 @@ class FreeTextActionGate {
     );
   }
 
+
+  /// Accept an untrusted AI choice ID ONLY when it is a real, currently
+  /// enabled choice. The model never manufactures proposals or executes turns.
+  /// Confirmation still re-reads the active SQLite campaign and revision.
+  static FreeTextPreview previewAiChoice(
+      FreeTextCampaignHead head, String playerText, String choiceId) {
+    if (!_valid(head)) {
+      return FreeTextPreview(
+          error: 'Некорректное состояние игры.', offers: const []);
+    }
+    if (head.isTerminal) {
+      return FreeTextPreview(error: 'История завершена.', offers: const []);
+    }
+    if (playerText.trim().isEmpty ||
+        playerText.runes.length > maxTextRunes ||
+        _unsafe.hasMatch(playerText) ||
+        _words(playerText).isEmpty) {
+      return FreeTextPreview(
+          error: 'Некорректный текст игрового действия.', offers: const []);
+    }
+    final choices = head.choices.where((c) =>
+        c.id == choiceId && c.enabled && c.label.trim().isNotEmpty).toList();
+    if (choices.length != 1) {
+      return FreeTextPreview(
+          error: 'ИИ не нашёл допустимого хода в текущем сценарии. '
+              'Выберите действие вручную.', offers: const []);
+    }
+    final choice = choices.single;
+    return FreeTextPreview(error: null, offers: [
+      FreeTextProposal._(
+        campaignId: head.campaignId,
+        sceneId: head.sceneId,
+        expectedRevision: head.revision,
+        fingerprint: head.fingerprint,
+        choiceId: choice.id,
+        label: choice.label,
+        score: 0.0,
+      ),
+    ]);
+  }
+
   /// Must be checked AGAIN immediately before a real SQLite transaction.
   /// No user text, AI proposal, translated label or parser result is used
   /// as an executable story_core choice ID.

@@ -225,8 +225,6 @@ void main() {
     ).first;
     final propose = find.byKey(const Key('free-text-propose'));
     await tester.scrollUntilVisible(propose, 180, scrollable: scroll);
-    // ensureVisible can leave controls behind the persistent bottom bar.
-    // Scroll the same way a real player does before tapping.
     await tester.drag(scroll, const Offset(0, -190));
     await settleWorker(tester);
     await tester.tap(propose);
@@ -258,6 +256,49 @@ void main() {
     ));
     await settleWorker(tester);
     expect(find.text('Ходов: 1'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('gameplay AI needs per-turn consent and cancelling writes no '
+      'SQLite action', (tester) async {
+    final world = await install();
+    final id = await gateway.start(world.archiveHash);
+    await tester.pumpWidget(MaterialApp(
+      home: WorldPlayPage(gateway: gateway, campaignId: id),
+    ));
+    await settleWorker(tester);
+    final tile = find.byKey(ValueKey('world-free-text-' + id + '-0'));
+    await tester.scrollUntilVisible(
+      tile, 180, scrollable: find.descendant(
+        of: find.byKey(const ValueKey('world-scene-scroll')),
+        matching: find.byType(Scrollable),
+      ).first,
+    );
+    await tester.tap(tile);
+    await settleWorker(tester);
+    final input = find.byKey(const Key('free-text-input'));
+    await tester.ensureVisible(input);
+    await tester.enterText(input, 'Хочу пройти к воротам');
+    final ask = find.byKey(const Key('free-text-ai-propose'));
+    await tester.scrollUntilVisible(
+      ask, 180,
+      scrollable: find.descendant(
+        of: find.byKey(const ValueKey('world-scene-scroll')),
+        matching: find.byType(Scrollable),
+      ).first,
+    );
+    await tester.drag(find.byKey(const ValueKey('world-scene-scroll')),
+        const Offset(0, -190));
+    await settleWorker(tester);
+    await tester.tap(ask);
+    await settleWorker(tester);
+    expect(find.text('Передать действие в Z.ai?'), findsOneWidget);
+    expect(find.text('Хочу пройти к воротам'), findsWidgets);
+    expect((await gateway.load(id)).revision, 0);
+    await tester.tap(find.text('Отмена').last);
+    await settleWorker(tester);
+    expect((await gateway.load(id)).revision, 0);
+    expect(find.byKey(const Key('free-text-confirm')), findsNothing);
     expect(tester.takeException(), isNull);
   });
 
