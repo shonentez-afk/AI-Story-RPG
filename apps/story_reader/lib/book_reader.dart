@@ -621,7 +621,7 @@ class _BookReaderPageState extends State<BookReaderPage>
                           ],
                         ),
                         const SizedBox(height: 24),
-                        Text('Режим чтения • RPG по этой книге появится позже',
+                        Text('Создать RPG можно в библиотеке: «Подготовить к RPG»',
                           style: readerText.copyWith(fontSize: 12)),
                       ],
                     ),
