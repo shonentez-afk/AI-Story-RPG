@@ -13,6 +13,8 @@ import 'package:ai_story_reader/source_semantic_catalog.dart';
 import 'package:ai_story_reader/source_semantic_window.dart';
 import 'package:ai_story_reader/story_evidence_review_session.dart';
 import 'package:ai_story_reader/zai_semantic_review_queue.dart';
+import 'package:ai_story_reader/zai_cross_window_evidence_graph.dart';
+import 'package:ai_story_reader/zai_editorial_consistency.dart';
 import 'package:crypto/crypto.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -96,6 +98,16 @@ void main() {
     final restored = ZaiWindowReviewQueue.decode(index, reviewQueue.encode());
     expect(restored.pendingCount, windows.length);
     expect(restored.candidateCount, 0);
+    // M2f3c must stay empty on a full real book unless actual cloud
+    // candidates were separately approved by the reader. No guessing
+    // aliases, facts or timeline from the title or from book length.
+    final graph = ZaiCrossWindowEvidenceGraph.fromQueue(restored);
+    expect(graph.reviewed, isEmpty);
+    expect(ZaiConsistencyHints.reviewCues(graph), isEmpty);
+    final editorial = ZaiEditorialConsistencyNotebook.empty(graph);
+    expect(editorial.canPublishBookworld, false);
+    expect(ZaiEditorialConsistencyNotebook.decode(
+        graph, editorial.encode()).questions, isEmpty);
   });
 
   test('REAL Grimm full-book offline preparation, checkpoint/resume and '
