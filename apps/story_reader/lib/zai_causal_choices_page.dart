@@ -20,6 +20,7 @@ class ZaiCausalChoicesPage extends StatefulWidget {
     this.privateNarrativeRepository,
     this.privateCatalogRepository,
     this.privateEditorialRepository,
+    this.privateAlignmentRepository,
   });
 
   final ZaiWindowReviewQueue queue;
@@ -30,6 +31,7 @@ class ZaiCausalChoicesPage extends StatefulWidget {
   final SourceAnalysisCheckpointRepository? privateNarrativeRepository;
   final SourceAnalysisCheckpointRepository? privateCatalogRepository;
   final SourceAnalysisCheckpointRepository? privateEditorialRepository;
+  final SourceAnalysisCheckpointRepository? privateAlignmentRepository;
 
   @override
   State<ZaiCausalChoicesPage> createState() => _ZaiCausalChoicesPageState();
@@ -193,6 +195,7 @@ class _ZaiCausalChoicesPageState extends State<ZaiCausalChoicesPage> {
         narrativeRepository: widget.privateNarrativeRepository,
         catalogRepository: widget.privateCatalogRepository,
         editorialRepository: widget.privateEditorialRepository,
+        alignmentRepository: widget.privateAlignmentRepository,
       ),
     ));
   }

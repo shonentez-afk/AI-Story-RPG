@@ -8,10 +8,11 @@ import 'source_analysis_checkpoint_repository.dart';
 import 'source_evidence_graph.dart';
 import 'source_semantic_catalog.dart';
 import 'source_semantic_editorial_review.dart';
-import 'story_evidence_review_session.dart';
 import 'world_library_gateway.dart';
 import 'world_play_page.dart';
 import 'zai_causal_choice_notebook.dart';
+import 'zai_manual_source_alignment.dart';
+import 'zai_manual_source_alignment_page.dart';
 import 'zai_cross_window_evidence_graph.dart';
 import 'zai_editorial_consistency.dart';
 import 'zai_m2c_source_bridge.dart';
@@ -34,6 +35,7 @@ class ZaiPrivateCompilationPage extends StatefulWidget {
     this.narrativeRepository,
     this.catalogRepository,
     this.editorialRepository,
+    this.alignmentRepository,
     this.gateway,
   });
 
@@ -45,6 +47,7 @@ class ZaiPrivateCompilationPage extends StatefulWidget {
   final SourceAnalysisCheckpointRepository? narrativeRepository;
   final SourceAnalysisCheckpointRepository? catalogRepository;
   final SourceAnalysisCheckpointRepository? editorialRepository;
+  final SourceAnalysisCheckpointRepository? alignmentRepository;
   final WorldLibraryGateway? gateway;
 
   @override
@@ -81,6 +84,10 @@ class _ZaiPrivateCompilationPageState
       widget.editorialRepository ??
       const FileSourceAnalysisCheckpointRepository(
           scope: SourceCheckpointScope.semanticEditorial);
+  late final SourceAnalysisCheckpointRepository _alignmentRepo =
+      widget.alignmentRepository ??
+      const FileSourceAnalysisCheckpointRepository(
+          scope: SourceCheckpointScope.zaiSourceAlignment);
   late final WorldLibraryGateway _gateway =
       widget.gateway ?? const DeviceWorldLibraryGateway();
 
@@ -116,29 +123,62 @@ class _ZaiPrivateCompilationPageState
   }
 
   Future<_EditorialSources> _readSources() async {
-    final narrative = await _narrativeRepo.read(_fingerprint);
-    if (narrative == null) {
-      throw const FormatException(
-          'Нет независимого анализа исходных событий M2b/M2c.');
+    final baseline = await ZaiSourceAlignmentBaseline.load(
+      index: widget.queue.index,
+      narrativeRepository: _narrativeRepo,
+      catalogRepository: _catalogRepo,
+      editorialRepository: _editorialRepo,
+    );
+    final overlayRaw = await _alignmentRepo.read(_fingerprint);
+    if (overlayRaw == null) {
+      return _EditorialSources(
+          baseline.narrative.graph, baseline.catalog, baseline.editorial);
     }
-    final review = StoryEvidenceReviewSession.decode(
-        widget.queue.index, narrative);
-    if (review.scannedChunks != widget.queue.index.chunks.length) {
-      throw const FormatException(
-          'Анализ всех фрагментов книги не завершён.');
+    final ledger = ZaiManualSourceAlignment.decode(
+      queue: widget.queue, baseline: baseline, raw: overlayRaw);
+    final applied = ledger.apply(queue: widget.queue, baseline: baseline);
+    return _EditorialSources(
+        applied.evidence, applied.catalog, applied.editorial);
+  }
+
+  Future<void> _openSourceAlignment() async {
+    if (_busy || _loading || _corrupt || _draft == null ||
+        _scenes.isEmpty || !mounted) return;
+    if (_sceneText.text !=
+        (_draft!.authoredSceneTexts[_scene.id] ?? '')) {
+      setState(() => _error = 'Сначала сохраните введённый текст сцены.');
+      return;
     }
-    final catalogText = await _catalogRepo.read(_fingerprint);
-    if (catalogText == null) {
-      throw const FormatException('Не подготовлен смысловой каталог M2c.');
+    await Navigator.of(context).push<void>(MaterialPageRoute(
+      builder: (_) => ZaiManualSourceAlignmentPage(
+        queue: widget.queue,
+        board: widget.notebook.board,
+        narrativeRepository: _narrativeRepo,
+        catalogRepository: _catalogRepo,
+        editorialRepository: _editorialRepo,
+        alignmentRepository: _alignmentRepo,
+      ),
+    ));
+    if (!mounted) return;
+    setState(() {
+      _compiled = null;
+      _compiledEditorSha = null;
+      _compiledM2cSha = null;
+      _error = null;
+    });
+    try {
+      final updated = await _readSources();
+      if (mounted) setState(() {
+        _sources = updated;
+        _notice = 'Соответствия перезагружены. '
+            'Укажите подтверждённые факты для исходных сцен.';
+      });
+    } catch (error) {
+      if (mounted) setState(() {
+        _sources = null;
+        _error = 'Проверка M2f3g: ' + error.toString();
+      });
     }
-    final catalog = SourceSemanticCatalog.decode(
-        widget.queue.index, review.graph, catalogText);
-    final editorialText = await _editorialRepo.read(_fingerprint);
-    final editorial = editorialText == null
-        ? SemanticEditorialReviewSession.create(widget.queue.index, catalog)
-        : SemanticEditorialReviewSession.decode(
-            widget.queue.index, review.graph, catalog, editorialText);
-    return _EditorialSources(review.graph, catalog, editorial);
   }
 
   Future<void> _load() async {
@@ -486,6 +526,13 @@ class _ZaiPrivateCompilationPageState
                   '${draft.sourceSceneIds.length} · '
                   'ручных соответствий: ${draft.eventAssertionIds.length}',
                   key: const Key('zai-private-stats')),
+              OutlinedButton.icon(
+                key: const Key('zai-private-open-source-alignment'),
+                onPressed: enabled && _scenes.isNotEmpty
+                    ? _openSourceAlignment : null,
+                icon: const Icon(Icons.library_books_outlined),
+                label: const Text('Сопоставить цитаты с M2c'),
+              ),
               if (_sources == null)
                 const Text('Для сборки подготовьте и утвердите '
                     'исходные цитаты через «Персонажи, события '
