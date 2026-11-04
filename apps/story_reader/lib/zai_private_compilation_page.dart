@@ -18,6 +18,7 @@ import 'zai_m2c_source_bridge.dart';
 import 'zai_private_bookworld_compilation.dart';
 import 'zai_private_compilation_draft.dart';
 import 'zai_semantic_review_queue.dart';
+import 'zai_source_scene_board.dart';
 
 /// M2f3f2: manual, source-locked private compiler UI.
 /// The original book is never uploaded or bundled into a generated package.
@@ -499,7 +500,7 @@ class _ZaiPrivateCompilationPageState
               if (_scenes.isNotEmpty) ...[
                 const SizedBox(height: 12),
                 DropdownButtonFormField<int>(
-                  key: const Key('zai-private-select-scene'),
+                  key: ValueKey('zai-private-select-scene-$_scenePosition-$_showFuture'),
                   initialValue: shown ? _scenePosition : null,
                   isExpanded: true,
                   decoration: const InputDecoration(
