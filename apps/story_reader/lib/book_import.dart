@@ -147,10 +147,10 @@ class BookImporter {
       final verified = ZipDecoder().decodeBytes(bytes, verify: true);
       final safe = verified.files.where((file) => file.isFile).single;
       final content = safe.readBytes();
-      if (content.length != item.size) {
+      if (content == null || content.length != item.size) {
         throw const FormatException('Размер книги в ZIP не совпал.');
       }
-      return parse(segments.last, Uint8List.fromList(content));
+      return parse(segments.last, content);
     } on FormatException {
       rethrow;
     } catch (_) {
