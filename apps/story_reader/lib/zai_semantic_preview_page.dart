@@ -21,12 +21,14 @@ class ZaiSemanticPreviewPage extends StatefulWidget {
     this.service,
     this.reviewRepository,
     this.linksRepository,
+    this.consistencyRepository,
   });
 
   final BookSourceIndex index;
   final ZaiSemanticPreviewService? service;
   final SourceAnalysisCheckpointRepository? reviewRepository;
   final SourceAnalysisCheckpointRepository? linksRepository;
+  final SourceAnalysisCheckpointRepository? consistencyRepository;
 
   @override
   State<ZaiSemanticPreviewPage> createState() =>
@@ -105,6 +107,7 @@ class _ZaiSemanticPreviewPageState extends State<ZaiSemanticPreviewPage> {
         builder: (_) => ZaiCrossWindowReviewPage(
           queue: _queue!,
           linksRepository: widget.linksRepository,
+          consistencyRepository: widget.consistencyRepository,
         ),
       ),
     );
