@@ -1,11 +1,64 @@
 import 'dart:convert';
 import 'dart:typed_data';
+import 'package:archive/archive.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:ai_story_reader/book_import.dart';
 import 'package:ai_story_reader/book_model.dart';
 import 'package:ai_story_reader/book_source_index.dart';
 
 void main() {
+  Uint8List zipBooks(List<(String, String)> entries) {
+    final archive = Archive();
+    for (final (name, body) in entries) {
+      final bytes = utf8.encode(body);
+      archive.addFile(ArchiveFile(name, bytes.length, bytes));
+    }
+    return Uint8List.fromList(ZipEncoder().encode(archive));
+  }
+
+  const frog = '<FictionBook><description><title-info>'
+      '<book-title>Король-лягушонок</book-title></title-info></description>'
+      '<body><section><p>Золотой мяч упал в колодец.</p>'
+      '<p>Лягушонок достал мяч.</p></section></body></FictionBook>';
+
+  test('single FB2 ZIP imports as a book and preserves real source text',
+      () {
+    final bytes = zipBooks([('Сказка.fb2', frog)]);
+    final book = BookImporter.parse('Король-лягушонок.fb2.zip', bytes);
+    expect(book.title, 'Король-лягушонок');
+    expect(book.chapters.single, contains('Золотой мяч'));
+    final index = BookSourceIndexer.index(book);
+    expect(index.chapterCount, 1);
+    expect(index.textIndexCoverage, 1.0);
+  });
+
+  test('FB2 ZIP blocks multi-books and unrelated archives', () {
+    final many = zipBooks([
+      ('one.fb2', frog),
+      ('two.fb2', frog),
+    ]);
+    expect(() => BookImporter.parse('two.zip', many), throwsFormatException);
+    final unrelated = zipBooks([('readme.txt', 'not a book')]);
+    expect(() => BookImporter.parse('notes.zip', unrelated),
+        throwsFormatException);
+  });
+
+  test('FB2 ZIP rejects path traversal, corruption, empty source and huge input',
+      () {
+    final badPath = zipBooks([('../secret.fb2', frog)]);
+    expect(() => BookImporter.parse('bad.zip', badPath),
+        throwsFormatException);
+    final broken = zipBooks([('book.fb2', frog)]);
+    broken[broken.length ~/ 2] ^= 0xff;
+    expect(() => BookImporter.parse('corrupt.zip', broken),
+        throwsFormatException);
+    final empty = zipBooks([('empty.fb2', '')]);
+    expect(() => BookImporter.parse('empty.zip', empty),
+        throwsFormatException);
+    expect(() => BookImporter.parse('huge.fb2.zip',
+        Uint8List(20 * 1024 * 1024 + 1)), throwsFormatException);
+  });
+
   test('TXT UTF-8 import', () {
     final book = BookImporter.parse('story.txt', Uint8List.fromList(utf8.encode('Привет')));
     expect(book.title, 'story');
