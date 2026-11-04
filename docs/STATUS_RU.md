@@ -1,3 +1,12 @@
+# ОБНОВЛЕНИЕ 2026-11-05: СОСТОЯНИЕ ПОСЛЕ ПРИНЯТИЯ UX PR #61
+
+- main: UX PR #61 merged, squash commit 0d5ef10f7a56cac3d8a14df66247655d0a04f248. Exact-head CI #41875901041 SUCCESS: Python, Dart, Flutter, BookWorld, Android и Windows successful; PR publish SKIP. Post-merge main CI/релиз отдельно ещё требуется проверить.
+- PR #60: ещё OPEN, не является выпущенной функцией. В feature/m2f4a-safe-free-text-world-gateway-20261104 исправлен ListTile внутри окрашенной темы через собственный Material(color: Colors.transparent), commit d97facf9460f45205a75a5aa03cde87b44869f9b. Новые Flutter tests/CI после этой правки не подтверждены, НЕ MERGE до полного SUCCESS.
+- На GitHub доступны прежние test-build-457 и test-build-455: не утверждать, что они включают merged UX #61.
+- Следующие шаги: проверить полный CI PR #60 и post-merge main, устранить новые failures, совместная регрессия 320dp/200%, офлайн free text + SQLite + обычный выбор, затем merge #60, проверить сборки/релиз. Потом M2f4b GLM BYOK только для интерпретации allowlisted choices.
+- Не публиковать приватные FB2, не удалять библиотеку/сохранения/checkpoints; CI не заменяет физический Android/Windows E2E.
+
+---
 # Текущий статус AI Story RPG
 **Дата актуализации:** 2026-11-02. **Состояние:** M1.7.4c3 + UX/UI M1.7 baseline принят CI #170 (6/6, Flutter 92/92); аппаратный Android/Windows E2E — SKIP.
 
