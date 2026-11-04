@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:crypto/crypto.dart';
 import 'package:flutter/material.dart';
+import 'preparation_editor_help.dart';
 
 import 'intermediate_story_blueprint.dart';
 import 'source_analysis_checkpoint_repository.dart';
@@ -507,6 +508,16 @@ class _ZaiPrivateCompilationPageState
             const Text('Это ручная проверка перед сборкой. Ответы ИИ '
                 'keepForReview не считаются каноном. '
                 'Публикация и отправка исходного текста запрещены.'),
+            const PreparationEditorHelp(
+              purpose: 'Последняя проверка перед созданием личного игрового мира.',
+              steps: [
+                'Сопоставьте каждое исходное событие с проверенной цитатой.',
+                'Сохраните текст сцен и отделите придуманные альтернативы.',
+                'Нажмите «Проверить и собрать», затем отдельно подтвердите установку и начните игру.',
+              ],
+              result: 'проверенный локальный игровой мир и новая кампания только после подтверждения.',
+              next: 'перейдите в библиотеку или продолжите сохранённую игру.',
+            ),
             if (_loading || _busy) const LinearProgressIndicator(),
             if (_error != null)
               Text(_error!, key: const Key('zai-private-error'),
