@@ -80,6 +80,28 @@ void main() {
     }
   });
 
+  test('real Gutenberg Frog Prince makes a private excerpt-based route',
+      () async {
+    final path = Platform.environment['AI_RPG_FROG_PRINCE_FB2_PATH'];
+    if (path == null) return;
+    final bytes = await File(path).readAsBytes();
+    final book = BookImporter.parse('frog_prince_public.fb2',
+        Uint8List.fromList(bytes));
+    final index = BookSourceIndexer.index(book);
+    final plan = QuickRpgBuilder.propose(index);
+    expect(plan.sourceScenes, inInclusiveRange(2, 8));
+    expect(plan.anchors.last.chapterIndex, lessThan(index.chapterCount));
+    final result = await QuickRpgBuilder.compile(
+      plan: plan,
+      allQuotesReviewedByUser: true,
+      privateUseConfirmed: true,
+    );
+    final inspected = const PrivateBookworldImporter().inspect(result.archive);
+    expect(inspected.blueprint.scenes.length, greaterThanOrEqualTo(3));
+    expect(inspected.sourceFingerprint, index.sourceFingerprint);
+    expect(inspected.canDistributePublicly, false);
+  });
+
   test('quick plan keeps exact quotes and needs consent', () async {
     final index = sample();
     final plan = QuickRpgBuilder.propose(index);
