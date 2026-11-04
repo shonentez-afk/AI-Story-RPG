@@ -74,6 +74,15 @@ void main() {
 
   testWidgets('source scene creation is explicitly confirmed and '
       'future-chapter quotes stay hidden until opt-in', (tester) async {
+    // This test asserts confirmation workflow, not small-screen layout.
+    // Use a tall viewport for the newly added optional instructions;
+    // responsive layouts are covered by separate 320dp/200% tests.
+    tester.view.physicalSize = const Size(900, 1200);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
     final setup = _review();
     final sceneRepo = MemorySourceAnalysisCheckpointRepository();
     final consistencyRepo = MemorySourceAnalysisCheckpointRepository();
@@ -92,11 +101,6 @@ void main() {
     await tester.scrollUntilVisible(choose, 150,
         scrollable: find.byType(Scrollable).first, maxScrolls: 40);
     await tester.ensureVisible(choose);
-    await tester.pumpAndSettle();
-    // The added help card can leave the checkbox 2 px below a 600dp
-    // test viewport. Move the list explicitly before tapping it.
-    await tester.drag(find.byType(Scrollable).first,
-        const Offset(0, -100));
     await tester.pumpAndSettle();
     await tester.tap(choose);
     await tester.pumpAndSettle();
