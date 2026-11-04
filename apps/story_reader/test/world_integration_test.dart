@@ -10,6 +10,7 @@ import 'package:ai_story_reader/campaigns_page.dart';
 import 'package:ai_story_reader/world_campaigns_page.dart';
 import 'package:ai_story_reader/world_library_gateway.dart';
 import 'package:ai_story_reader/world_play_page.dart';
+import 'package:ai_story_reader/free_text_world_gateway_port.dart';
 import 'package:ai_story_reader/reading_preferences.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -196,6 +197,88 @@ void main() {
     await settleWorker(tester);
     expect(find.textContaining('1. '), findsWidgets);
     expect(tester.takeException(), isNull);
+  });
+
+
+  testWidgets('offline free text needs explicit selection and confirmation '
+      'before writing to the SAME SQLite campaign', (tester) async {
+    final world = await install();
+    final id = await gateway.start(world.archiveHash);
+    final first = await gateway.load(id);
+    final label = first.choices
+        .singleWhere((c) => c.id == 'inspect_gate').label;
+    await tester.pumpWidget(MaterialApp(
+      home: WorldPlayPage(gateway: gateway, campaignId: id),
+    ));
+    await settleWorker(tester);
+
+    final tile = find.byKey(ValueKey('world-free-text-' + id + '-0'));
+    await tester.scrollUntilVisible(
+      tile, 180, scrollable: find.byType(Scrollable).first,
+    );
+    await tester.tap(tile);
+    await settleWorker(tester);
+    await tester.enterText(find.byKey(const Key('free-text-input')), label);
+    final scroll = find.descendant(
+      of: find.byKey(const ValueKey('world-scene-scroll')),
+      matching: find.byType(Scrollable),
+    ).first;
+    final propose = find.byKey(const Key('free-text-propose'));
+    await tester.scrollUntilVisible(propose, 180, scrollable: scroll);
+    // ensureVisible can leave controls behind the persistent bottom bar.
+    // Scroll the same way a real player does before tapping.
+    await tester.drag(scroll, const Offset(0, -190));
+    await settleWorker(tester);
+    await tester.tap(propose);
+    await settleWorker(tester);
+    final suggestion = find.byKey(
+        const Key('free-text-choice-inspect_gate'));
+    await tester.scrollUntilVisible(suggestion, 150, scrollable: scroll);
+    expect(suggestion, findsOneWidget);
+    expect((await gateway.load(id)).revision, 0);
+    final button = tester.widget<FilledButton>(
+        find.byKey(const Key('free-text-confirm')));
+    expect(button.onPressed, isNull);
+    await tester.tap(suggestion);
+    await settleWorker(tester);
+    expect((await gateway.load(id)).revision, 0);
+    final confirm = find.byKey(const Key('free-text-confirm'));
+    await tester.ensureVisible(confirm);
+    await tester.tap(confirm);
+    await settleWorker(tester);
+    expect((await gateway.load(id)).revision, 1);
+    expect((await gateway.load(id)).journal, hasLength(1));
+    expect(find.text('Ходов: 1'), findsOneWidget);
+
+    // Reopen the exact existing campaign: free input did not start a
+    // separate game and did not replace the normal save mechanism.
+    await tester.pumpWidget(const SizedBox());
+    await tester.pumpWidget(MaterialApp(
+      home: WorldPlayPage(gateway: gateway, campaignId: id),
+    ));
+    await settleWorker(tester);
+    expect(find.text('Ходов: 1'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  test('gateway rejects free text proposal when another action committed',
+      () async {
+    final world = await install();
+    final id = await gateway.start(world.archiveHash);
+    final port = FreeTextWorldGatewayPort(gateway);
+    final label = (await gateway.load(id)).choices
+        .singleWhere((c) => c.id == 'inspect_gate').label;
+    final offered = await port.preview(id, label);
+    final suggestion = offered.offers.singleWhere(
+        (c) => c.choiceId == 'inspect_gate');
+    final direct = await gateway.choose(id,
+        actionId: 'direct_before_free',
+        choiceId: 'inspect_gate', expectedRevision: 0);
+    expect(direct.applied, true);
+    await expectLater(port.confirm(
+        proposal: suggestion, actionId: 'free_stale_after_direct',
+        userConfirmed: true), throwsFormatException);
+    expect((await gateway.load(id)).revision, 1);
   });
 
   testWidgets('35 real UI choices commit to SQLite and reopen after 23',
