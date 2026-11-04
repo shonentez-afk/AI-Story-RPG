@@ -89,7 +89,7 @@ class _ZaiCausalChoicesPageState extends State<ZaiCausalChoicesPage> {
       if (mounted) setState(() {
         _error = 'Причинный черновик повреждён или исходные сцены '
             'изменились. Старый файл не перезаписан; разрешён '
-            'только отдельный подтверждённый сброс M2f3e.';
+            'только отдельный подтверждённый сброс этого черновика.';
       });
     } finally {
       if (mounted) setState(() => _loading = false);
@@ -117,7 +117,7 @@ class _ZaiCausalChoicesPageState extends State<ZaiCausalChoicesPage> {
     final yes = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Удалить только решения M2f3e?'),
+        title: const Text('Удалить только черновик игровых решений?'),
         content: const Text('Сбросится только отдельный список '
             'состояний и причинных выборов M2f3e. Книга, сцены M2f3d, '
             'цитаты M2f3a–c, кампании и игровые сохранения не затронутся.'),
@@ -127,7 +127,7 @@ class _ZaiCausalChoicesPageState extends State<ZaiCausalChoicesPage> {
           FilledButton(
             key: const Key('zai-causal-reset-confirm'),
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Сбросить только M2f3e'),
+            child: const Text('Сбросить игровые решения'),
           ),
         ],
       ),
@@ -371,11 +371,11 @@ class _ZaiCausalChoicesPageState extends State<ZaiCausalChoicesPage> {
             child: ListView(
               padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
               children: [
-                Text('M2f3e · альтернативы и причинность',
+                Text('Выборы игрока и последствия',
                     key: const Key('zai-causal-title'),
                     style: Theme.of(context).textTheme.titleLarge),
                 const Text('Это только частная схема игровых выборов, '
-                    'проверяемая существующим движком M2c. Она не '
+                    'проверяемая игровым движком. Она не '
                     'устанавливает факты книги, не запускает игру '
                     'и не создаёт .bworld.'),
                 const PreparationEditorHelp(
@@ -402,7 +402,7 @@ class _ZaiCausalChoicesPageState extends State<ZaiCausalChoicesPage> {
                 ],
                 const SizedBox(height: 10),
                 Text('Сцены: ${widget.board.scenes.length} · '
-                    'флаги: ${notebook?.flags.length ?? 0} · '
+                    'условия: ${notebook?.flags.length ?? 0} · '
                     'ручные выборы: ${notebook?.choices.length ?? 0}',
                     key: const Key('zai-causal-counts')),
                 if (!_spoilers && widget.board.scenes.any((e) =>
@@ -605,7 +605,7 @@ class _ZaiCausalChoicesPageState extends State<ZaiCausalChoicesPage> {
                         ),
                   ),
                 const Divider(height: 24),
-                Text('Причинный preflight M2c',
+                Text('Проверка логики сюжета',
                     key: const Key('zai-causal-preflight-title'),
                     style: Theme.of(context).textTheme.titleMedium),
                 const Text('Ни один успешный структурный тест не '
@@ -623,12 +623,12 @@ class _ZaiCausalChoicesPageState extends State<ZaiCausalChoicesPage> {
                     ),
                 ],
                 const Divider(height: 24),
-                Text('Следующий шаг · M2f3f2',
+                Text('Следующий шаг · сборка игры',
                     style: Theme.of(context).textTheme.titleMedium),
                 const Text('Проверить источниковые сцены и авторские альтернативы, '
                     'собрать частный .bworld и только после отдельного '
                     'согласия установить его в библиотеку. '
-                    'Без подтверждённых цитат M2c сборка блокируется.'),
+                    'Без подтверждённых цитат сборка будет остановлена.'),
                 OutlinedButton.icon(
                   key: const Key('zai-open-private-compiler'),
                   onPressed: enabled ? _openPrivateCompilation : null,
