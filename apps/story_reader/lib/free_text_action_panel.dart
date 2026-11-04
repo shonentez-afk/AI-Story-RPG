@@ -261,8 +261,10 @@ class _FreeTextActionPanelState extends State<FreeTextActionPanel> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Text('Офлайн-подбор из уже разрешённых действий. '
-              'ИИ не создаёт события и не получает доступ к будущему сюжету.'),
+          const Text('Опишите действие своим текстом. '
+              'Можно подобрать доступный ход офлайн или запросить подсказку '
+              'ИИ после отдельного согласия. ИИ не создаёт события '
+              'и не получает доступ к будущему сюжету.'),
           const SizedBox(height: 8),
           TextField(
             key: const Key('free-text-input'), controller: _input,
