@@ -323,17 +323,25 @@ void main() {
         expect(installed.archiveHash, compiled.archiveSha256);
         final originalId = store.createCampaign(installed.archiveHash);
         var steps = 0;
+        final extraChecks =
+            (20 - 2 * (mainIds.length - 1)).clamp(0, 20).toInt();
         for (var i = 0; i < mainIds.length - 1; i++) {
           var game = store.loadCampaign(originalId);
           expect(game.coordinator.isTerminal, false);
-          final inspect = game.coordinator.choices.singleWhere(
-              (choice) => choice.label == 'Examine the current scene again');
-          final inspectResult = store.commitChoice(originalId,
-            actionId: 'inspection_' + i.toString(),
-            choiceId: inspect.id, expectedRevision: game.metadata.revision);
-          expect(inspectResult.applied, true);
-          steps++;
-          game = store.loadCampaign(originalId);
+          // 20+ is a transaction/replay stress check, not a claim that
+          // the short literary work contains 20 different semantic events.
+          // Revisit a few optional observations where source density is low.
+          final inspections = 1 + (i < extraChecks ? 1 : 0);
+          for (var j = 0; j < inspections; j++) {
+            final inspect = game.coordinator.choices.singleWhere(
+                (choice) => choice.label == 'Examine the current scene again');
+            final inspected = store.commitChoice(originalId,
+              actionId: 'inspection_' + i.toString() + '_' + j.toString(),
+              choiceId: inspect.id, expectedRevision: game.metadata.revision);
+            expect(inspected.applied, true);
+            steps++;
+            game = store.loadCampaign(originalId);
+          }
           final next = game.coordinator.choices.singleWhere(
               (choice) => choice.label == 'Continue the original fairy tale');
           final result = store.commitChoice(originalId,
