@@ -11,7 +11,9 @@ import 'source_analysis_checkpoint_repository.dart';
 import 'source_narrative_review_panel.dart';
 import 'source_semantic_catalog.dart';
 import 'zai_semantic_preview_page.dart';
+import 'zai_whole_book_analysis_page.dart';
 import 'reviewed_story_editor_page.dart';
+import 'quick_rpg_page.dart';
 import 'multi_scene_editor_page.dart';
 import 'source_editorial_review_page.dart';
 import 'private_game_readiness_panel.dart';
@@ -816,6 +818,32 @@ class _SourceIndexPreviewPageState extends State<SourceIndexPreviewPage> {
 
                         Card(
                           child: ListTile(
+                            key: const Key('prepare-open-quick-rpg'),
+                            leading: const Icon(Icons.auto_stories_outlined),
+                            title: const Text('Быстрая RPG из книги'),
+                            subtitle: const Text(
+                              'Выберите «Сохранить сюжет» или «Менять сюжет», '
+                              'подтвердите показанные цитаты и начинайте '
+                              'играть. Короткий маршрут из подлинных '
+                              'отрывков, без ручного конструктора.'),
+                            trailing: const Icon(Icons.chevron_right),
+                            enabled: !_offlineWorking && !_busy,
+                            onTap: () => unawaited(_openEditor(
+                              QuickRpgPage(
+                                index: index,
+                                gateway: widget.worldGateway ??
+                                    const DeviceWorldLibraryGateway(),
+                              ),
+                            )),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        const Text('Если нужен собственный текст и '
+                            'альтернативный финал, используйте '
+                            'ручной редактор ниже.'),
+                        const SizedBox(height: 8),
+                        Card(
+                          child: ListTile(
                             key: const Key('prepare-open-story-editor'),
                             leading: const Icon(Icons.edit_note),
                             title: const Text('Создать короткую RPG'),
@@ -946,6 +974,24 @@ class _SourceIndexPreviewPageState extends State<SourceIndexPreviewPage> {
                                       'После проверки переходите к сценам.'),
                                 ),
 
+                        Card(
+                          child: ListTile(
+                            key: const Key('prepare-open-whole-book-ai'),
+                            leading: const Icon(Icons.menu_book_outlined),
+                            title: const Text('ИИ: анализ всей книги'),
+                            subtitle: const Text(
+                              'Обработать все главы через Z.ai, '
+                              'с возобновлением после обрыва. Передача '
+                              'текста только после явного согласия. '
+                              'Результат — предложения событий, '
+                              'не готовая игра.'),
+                            trailing: const Icon(Icons.chevron_right),
+                            enabled: !_offlineWorking && !_busy,
+                            onTap: () => unawaited(_openEditor(
+                              ZaiWholeBookAnalysisPage(index: index),
+                            )),
+                          ),
+                        ),
                         Card(
                           child: ListTile(
                             key: const Key('prepare-open-zai-preview'),
