@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'preparation_editor_help.dart';
 
 import 'source_analysis_checkpoint_repository.dart';
 import 'source_semantic_provider.dart';
@@ -279,6 +280,16 @@ class _ZaiManualSourceAlignmentPageState
                 style: Theme.of(context).textTheme.titleLarge),
             const Text('Две независимые проверки: точный фрагмент '
                 'и ручное утверждение. Автоматической канонизации нет.'),
+            const PreparationEditorHelp(
+              purpose: 'Подтверждает, что игровое событие действительно описано в книге.',
+              steps: [
+                'Разрешите показ цитат, включая возможные спойлеры.',
+                'Сравните точную цитату с книгой и своими словами укажите, кто и что сделал.',
+                'Отдельно подтвердите цитату и смысл события, затем сохраните связку.',
+              ],
+              result: 'частное подтверждение источника; оно не меняет оригинальную книгу.',
+              next: 'вернитесь к сборке RPG и выберите подтверждённый факт.',
+            ),
             if (_loading || _busy) const LinearProgressIndicator(),
             if (_error != null)
               Text(_error!, key: const Key('zai-align-error'),
