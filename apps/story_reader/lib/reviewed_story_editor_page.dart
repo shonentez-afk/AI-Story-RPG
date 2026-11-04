@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'preparation_editor_help.dart';
 
 import 'book_source_index.dart';
 import 'intermediate_story_blueprint.dart';
@@ -348,6 +349,16 @@ class _ReviewedStoryEditorPageState extends State<ReviewedStoryEditorPage> {
                     'Здесь нет ИИ и отправки текста в сеть.',
                   ),
                   const SizedBox(height: 12),
+                  const PreparationEditorHelp(
+                    purpose: 'Самый короткий путь от проверенных событий к личной игре.',
+                    steps: [
+                      'Выберите начало и завершение из проверенных событий книги.',
+                      'Напишите вариант, при котором решение игрока меняет исход.',
+                      'Проверьте два варианта финала, затем соберите и установите игру.',
+                    ],
+                    result: 'короткая офлайн-RPG с двумя исходами.',
+                    next: 'для дополнительных сцен откройте расширенный конструктор.',
+                  ),
                   if (_error != null)
                     Text(_error!, style: TextStyle(
                         color: Theme.of(context).colorScheme.error)),
