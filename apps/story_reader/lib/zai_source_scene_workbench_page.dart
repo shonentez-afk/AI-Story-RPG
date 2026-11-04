@@ -76,6 +76,9 @@ class _ZaiSourceSceneWorkbenchPageState
       final consistency = rawConsistency == null
           ? ZaiEditorialConsistencyNotebook.empty(_graph)
           : ZaiEditorialConsistencyNotebook.decode(_graph, rawConsistency);
+      // Keep the valid M2f3c notebook available when ONLY the M2f3d
+      // scene file is corrupt. A confirmed reset must never touch M2f3c.
+      if (mounted) setState(() => _consistency = consistency);
       final rawBoard = await _scenesRepository.read(source);
       final board = rawBoard == null
           ? ZaiSourceSceneBoard.empty(_graph)
