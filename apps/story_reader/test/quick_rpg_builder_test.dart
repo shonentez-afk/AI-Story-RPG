@@ -1,5 +1,7 @@
 import 'dart:convert';
 import 'dart:typed_data';
+import 'dart:io';
+import 'package:campaign_manager/campaign_manager.dart';
 
 import 'package:ai_story_reader/book_import.dart';
 import 'package:ai_story_reader/book_source_index.dart';
@@ -21,6 +23,63 @@ BookSourceIndex sample() => BookSourceIndexer.index(
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  test('generated world performs real SQLite choices and survives restart',
+      () async {
+    final plan = QuickRpgBuilder.propose(sample(),
+        mode: QuickRpgMode.changeFate);
+    final built = await QuickRpgBuilder.compile(
+      plan: plan, allQuotesReviewedByUser: true,
+      privateUseConfirmed: true,
+    );
+    final temp = await Directory.systemTemp.createTemp('quick-rpg-sqlite-');
+    late String campaign;
+    try {
+      var store = BookworldCampaignStore.openPrivateDirectory(temp.path);
+      try {
+        final installed = store.installBookworld(built.archive);
+        campaign = store.createCampaign(installed.archiveHash);
+        var moves = 0;
+        while (true) {
+          final current = store.loadCampaign(campaign);
+          if (current.coordinator.isTerminal) break;
+          final next = current.coordinator.choices.singleWhere(
+              (choice) => choice.label == 'Следовать книге');
+          expect(store.commitChoice(campaign,
+              actionId: 'quick_continue_${moves + 1}',
+              choiceId: next.id,
+              expectedRevision: current.metadata.revision).applied, true);
+          moves++;
+          expect(moves, lessThan(30));
+        }
+        expect(moves, plan.sourceScenes - 1);
+        expect(store.loadCampaign(campaign).coordinator.events, hasLength(moves));
+        final alternateId = store.createCampaign(installed.archiveHash);
+        final alternate = store.loadCampaign(alternateId);
+        final branch = alternate.coordinator.choices.singleWhere(
+            (choice) => choice.label == 'Изменить судьбу');
+        expect(store.commitChoice(alternateId,
+            actionId: 'quick_change_fate',
+            choiceId: branch.id,
+            expectedRevision: alternate.metadata.revision).applied, true);
+        expect(store.loadCampaign(alternateId).coordinator.isTerminal, true);
+        expect(store.loadCampaign(campaign).metadata.revision, moves);
+      } finally {
+        store.close();
+      }
+      store = BookworldCampaignStore.openPrivateDirectory(temp.path);
+      try {
+        expect(store.loadCampaign(campaign).coordinator.isTerminal, true);
+        expect(store.installedWorlds(), hasLength(1));
+        expect(store.campaigns(), hasLength(2));
+      } finally {
+        store.close();
+      }
+    } finally {
+      await temp.delete(recursive: true);
+    }
+  });
+
   test('quick plan keeps exact quotes and needs consent', () async {
     final index = sample();
     final plan = QuickRpgBuilder.propose(index);
