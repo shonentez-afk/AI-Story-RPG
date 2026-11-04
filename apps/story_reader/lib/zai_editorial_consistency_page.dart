@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'preparation_editor_help.dart';
 
 import 'source_analysis_checkpoint_repository.dart';
 import 'source_semantic_provider.dart';
@@ -326,6 +327,16 @@ class _ZaiEditorialConsistencyPageState
                     'героев и время событий здесь НЕ подтверждаются. '
                     'Нет сетевых запросов и автоматического изменения RPG.'),
                 const SizedBox(height: 8),
+                const PreparationEditorHelp(
+                  purpose: 'Помогает заметить спорные имена, время событий и противоречия.',
+                  steps: [
+                    'Сравните точные цитаты и проверьте, об одном ли герое идёт речь.',
+                    'Отметьте спорные факты как вопросы, а не как истину.',
+                    'Перед редактированием игрового сюжета устраните важные противоречия.',
+                  ],
+                  result: 'список проверенных редактором вопросов; никаких автоматических исправлений книги.',
+                  next: 'вернитесь к событиям и сценам.',
+                ),
                 Text('Источников: ${graph.reviewed.length} · '
                     'возможных противоречий по формулировке: ${_hints.length} · '
                     'вопросов редактора: ${notes?.questions.length ?? 0}',
