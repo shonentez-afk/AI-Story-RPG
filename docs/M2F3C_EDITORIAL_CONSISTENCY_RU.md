@@ -20,8 +20,15 @@
 
 ## Статус
 
-**CODE / EXACT-HEAD CI PENDING**. Не сливать PR и не создавать релиз, пока CI и M0 на одной HEAD не завершатся PASS.
+**PR #53 MERGED / EXACT-HEAD CI PASS**. Не сливать PR и не создавать релиз, пока CI и M0 на одной HEAD не завершатся PASS.
 
 ## Дальше по ТЗ
 
 M2f3d: объединение проверяемых событий в source-backed сцену, список конфликтных временных гипотез, редактор истинности утверждений, идентификация NPC под спойлерными воротами и source-based preflight. После этого M2f4 — интеграция ИИ в ходовую RPG со свободным вводом, ограничениями знания, сохранениями и отказоустойчивым взаимодействием. **Ни одна текущая заметка M2f3c сама по себе не публикует RPG канон.**
+
+
+## Приёмка PR #53 (2026-11-04)
+
+- Code squash main `0a0de53947a1aa95c32e5a0ceb202a8cb988d9c2`, tested PR HEAD `ca6558ef75225bf9610f792f2851a43116b26b9c`.
+- GitHub Actions `41767639819`: **COMPLETED/SUCCESS, 6/6 jobs** — Python, Dart engine, BookWorld/SQLite/schema, Flutter analyze/widget, Windows portable и Android APK. M0 `41767639908`: **COMPLETED/SUCCESS** на том же HEAD. Flutter `363 PASS / 2 private Andersen SKIP`. Подлинный Gutenberg Grimm FB2 `62 tales / 909 paragraphs / 514890 characters` проверен в обязательном наборе.
+- Реальная физическая установка Android/Windows и интеллектуальная проверка русской книги с ключом пользователя ещё отдельно PENDING. Разделение `INFERRED/OPEN_EDITORIAL_QUESTION` и `CANON` не менялось; записанный вопрос не считается доказанной сюжетной истиной. Post-merge CI main и релиз отдельно отслеживать.
