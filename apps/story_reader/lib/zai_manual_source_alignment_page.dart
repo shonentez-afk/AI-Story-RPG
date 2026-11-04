@@ -120,7 +120,7 @@ class _ZaiManualSourceAlignmentPageState
         _broken = true;
         _error = 'Подтверждения относятся к другой версии книги или сцен: ' +
             error.toString() +
-            '. Старый checkpoint сохранён, доступен только отдельный сброс.';
+            '. Прежние подтверждения сохранены, их можно сбросить отдельно.';
       });
     } finally {
       if (mounted) setState(() => _loading = false);
@@ -237,7 +237,7 @@ class _ZaiManualSourceAlignmentPageState
           FilledButton(
             key: const Key('zai-align-reset-confirm'),
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Сбросить M2f3g')),
+            child: const Text('Сбросить подтверждения')),
         ],
       ));
     if (yes != true || !mounted) return;
