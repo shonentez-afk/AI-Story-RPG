@@ -147,7 +147,7 @@ jobs:
           name: AI-Story-RPG-BookWorld-demo
           path: artifacts/bookworld/
           if-no-files-found: error
-          retention-days: 14
+          retention-days: 2
 
   flutter-reader:
     name: Flutter analyze and widget tests
@@ -187,6 +187,7 @@ jobs:
             apps/story_reader/test/fixtures/frog_prince_ci.fb2
             apps/story_reader/test/fixtures/frog_prince_ci.json
           if-no-files-found: error
+          retention-days: 2
       - name: Widget tests
         env:
           AI_RPG_GRIMM_PUBLIC_FB2_PATH: test/fixtures/grimm_ci.fb2
@@ -249,7 +250,7 @@ jobs:
           name: AI-Story-RPG-Android-debug
           path: artifacts/android/
           if-no-files-found: error
-          retention-days: 14
+          retention-days: 2
   windows-exe:
     name: Windows portable bundle (release)
     runs-on: windows-latest
@@ -292,7 +293,7 @@ jobs:
           name: AI-Story-RPG-Windows-portable
           path: artifacts/windows/AI-Story-RPG-Windows/
           if-no-files-found: error
-          retention-days: 14
+          retention-days: 2
 
   publish-release:
     name: Publish Windows + Android test release
