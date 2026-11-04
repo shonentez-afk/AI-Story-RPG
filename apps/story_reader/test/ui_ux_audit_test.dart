@@ -88,7 +88,7 @@ void main() {
       find.text('0.1.0 · предварительная версия «Живой книги»'), 150,
       scrollable: find.byType(Scrollable).first,
     );
-    expect(find.text('0.1.0 · BookWorld · тестовая версия'), findsOneWidget);
+    expect(find.text('0.1.0 · предварительная версия «Живой книги»'), findsOneWidget);
     await tester.scrollUntilVisible(
       find.text('Мои прохождения'), -150,
       scrollable: find.byType(Scrollable).first,
