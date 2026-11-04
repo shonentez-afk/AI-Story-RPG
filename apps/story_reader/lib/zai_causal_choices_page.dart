@@ -119,8 +119,8 @@ class _ZaiCausalChoicesPageState extends State<ZaiCausalChoicesPage> {
       builder: (ctx) => AlertDialog(
         title: const Text('Удалить только черновик игровых решений?'),
         content: const Text('Сбросится только отдельный список '
-            'состояний и причинных выборов M2f3e. Книга, сцены M2f3d, '
-            'цитаты M2f3a–c, кампании и игровые сохранения не затронутся.'),
+            'условий и переходов. Книга, исходные сцены, '
+            'проверенные цитаты, кампании и сохранения не затронутся.'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx, false),
               child: const Text('Отмена')),
@@ -150,7 +150,7 @@ class _ZaiCausalChoicesPageState extends State<ZaiCausalChoicesPage> {
       });
     } catch (_) {
       if (mounted) setState(() => _error =
-          'Не удалось сбросить M2f3e, другие файлы не изменены.');
+          'Не удалось сбросить черновик решений; остальные данные сохранены.');
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -397,7 +397,7 @@ class _ZaiCausalChoicesPageState extends State<ZaiCausalChoicesPage> {
                       key: const Key('zai-causal-reset'),
                       onPressed: !_saving ? _reset : null,
                       icon: const Icon(Icons.restart_alt),
-                      label: const Text('Сбросить только M2f3e'),
+                      label: const Text('Сбросить черновик решений'),
                     ),
                 ],
                 const SizedBox(height: 10),
