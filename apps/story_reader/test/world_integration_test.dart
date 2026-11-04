@@ -219,13 +219,18 @@ void main() {
     await tester.tap(tile);
     await settleWorker(tester);
     await tester.enterText(find.byKey(const Key('free-text-input')), label);
+    final scroll = find.byKey(const ValueKey('world-scene-scroll'));
     final propose = find.byKey(const Key('free-text-propose'));
-    await tester.ensureVisible(propose);
+    await tester.scrollUntilVisible(propose, 180, scrollable: scroll);
+    // ensureVisible can leave controls behind the persistent bottom bar.
+    // Scroll the same way a real player does before tapping.
+    await tester.drag(scroll, const Offset(0, -190));
+    await settleWorker(tester);
     await tester.tap(propose);
     await settleWorker(tester);
     final suggestion = find.byKey(
         const Key('free-text-choice-inspect_gate'));
-    await tester.ensureVisible(suggestion);
+    await tester.scrollUntilVisible(suggestion, 150, scrollable: scroll);
     expect(suggestion, findsOneWidget);
     expect((await gateway.load(id)).revision, 0);
     final button = tester.widget<FilledButton>(
