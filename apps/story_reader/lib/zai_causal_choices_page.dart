@@ -558,7 +558,7 @@ class _ZaiCausalChoicesPageState extends State<ZaiCausalChoicesPage> {
                           trailing: IconButton(
                             tooltip: 'Удалить частный выбор',
                             onPressed: enabled
-                                ? () => _store(notebook!.removeChoice(choice.id))
+                                ? () => _store(notebook.removeChoice(choice.id))
                                 : null,
                             icon: const Icon(Icons.delete_outline),
                           ),
