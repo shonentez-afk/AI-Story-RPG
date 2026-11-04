@@ -350,8 +350,6 @@ void main() {
     );
     expect(installed.bookworldId, compiled.bookworldId);
     expect(gateway.installs, 1);
-    final altered = Uint8List.fromList(compiled.archive);
-    altered[0] ^= 1;
     compiled.archive[0] ^= 1;
     await expectLater(
         ZaiPrivateBookworldCompilation.installConfirmed(
