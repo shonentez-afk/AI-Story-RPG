@@ -129,8 +129,16 @@ void main() {
     final start = find.byKey(const Key('whole-book-start'));
     await tester.scrollUntilVisible(
       start, 120, scrollable: find.byType(Scrollable).first);
+    // scrollUntilVisible may stop once the lazily built control exists,
+    // even though its center is below the actual 760dp screen.
+    // Move it fully into the hit-testable viewport before tapping.
+    await tester.drag(
+        find.byType(ListView).first, const Offset(0, -240));
+    await tester.pumpAndSettle();
+    expect(start.hitTestable(), findsOneWidget);
     await tester.tap(start);
     await tester.pumpAndSettle();
+    expect(find.byType(AlertDialog), findsOneWidget);
     expect(tester.widget<FilledButton>(
         find.byKey(const Key('whole-book-approve'))).onPressed, isNull);
     expect(requests, 0);
