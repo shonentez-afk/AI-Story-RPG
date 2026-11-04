@@ -84,6 +84,10 @@ void main() {
     final send = find.byKey(const Key('zai-send-single-chunk'));
     await tester.scrollUntilVisible(send, 170,
         scrollable: find.byType(Scrollable).first);
+    await tester.ensureVisible(send);
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(send);
+    await tester.pumpAndSettle();
     await tester.tap(send);
     await tester.pumpAndSettle();
     expect(find.text('Передать этот фрагмент в Z.ai?'), findsOneWidget);
