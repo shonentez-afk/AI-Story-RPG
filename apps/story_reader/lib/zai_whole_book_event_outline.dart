@@ -1,5 +1,6 @@
 import 'source_semantic_provider.dart';
 import 'zai_auto_whole_book_analysis.dart';
+import 'zai_semantic_review_queue.dart';
 
 /// One EXACT quote with a proposed (unverified) event label.
 /// Position in the book is NOT proof of in-world chronological order.
@@ -97,7 +98,9 @@ class ZaiWholeBookEventOutline {
       chaptersProcessed.add(window.chapterIndex);
       final permitted = {for (final chunk in window.chunks) chunk.id};
       for (final candidate in stored.candidates) {
-        if (candidate.category != SemanticCategory.event) continue;
+        if (candidate.category != SemanticCategory.event ||
+            review.queue.decisions[candidate.id] ==
+                ZaiEditorialDecision.rejected) continue;
         if (!allIds.add(candidate.id)) {
           throw const FormatException('Дублированное событие в разных окнах.');
         }
