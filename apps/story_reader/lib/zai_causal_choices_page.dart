@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'preparation_editor_help.dart';
 
 import 'source_analysis_checkpoint_repository.dart';
 import 'source_semantic_provider.dart';
@@ -377,6 +378,16 @@ class _ZaiCausalChoicesPageState extends State<ZaiCausalChoicesPage> {
                     'проверяемая существующим движком M2c. Она не '
                     'устанавливает факты книги, не запускает игру '
                     'и не создаёт .bworld.'),
+                const PreparationEditorHelp(
+                  purpose: 'Здесь сцены становятся вариантами выбора с последствиями.',
+                  steps: [
+                    'Добавьте условие только там, где выбор зависит от прежнего решения.',
+                    'Задайте, из какой сцены в какую ведёт выбор и что изменится.',
+                    'Пометьте придуманные альтернативы, проверьте связность и два достижимых исхода.',
+                  ],
+                  result: 'сценарий, который можно проверить компилятором; пока не запущенная игра.',
+                  next: 'нажмите «Проверить сценарий и собрать RPG».',
+                ),
                 if (_loading || _saving) const LinearProgressIndicator(),
                 if (_error != null) ...[
                   Text(_error!, key: const Key('zai-causal-error'),
