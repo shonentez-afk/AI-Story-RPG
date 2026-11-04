@@ -99,8 +99,8 @@ class _ZaiEditorialConsistencyPageState
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Сбросить вопросы согласованности?'),
-        content: const Text('Удалится только отдельный блокнот M2f3c. '
-            'Книги, цитаты, решения редактора, связи M2f3b и '
+        content: const Text('Удалится только список проверочных вопросов. '
+            'Книги, цитаты, проверки событий, связи и '
             'игровые сохранения останутся без изменений.'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx, false),
@@ -350,7 +350,7 @@ class _ZaiEditorialConsistencyPageState
                       key: const Key('zai-consistency-reset'),
                       onPressed: _saving ? null : _resetOnlyConsistency,
                       icon: const Icon(Icons.restart_alt),
-                      label: const Text('Сбросить только вопросы M2f3c'),
+                      label: const Text('Сбросить список проверочных вопросов'),
                     ),
                 ],
                 const SizedBox(height: 18),
