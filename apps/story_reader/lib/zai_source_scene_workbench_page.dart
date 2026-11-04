@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'preparation_editor_help.dart';
 
 import 'source_analysis_checkpoint_repository.dart';
 import 'zai_causal_choices_page.dart';
@@ -349,6 +350,16 @@ class _ZaiSourceSceneWorkbenchPageState
                 const Text('Только локальный черновик. Не создаёт '
                     'готовую RPG, персонажей или альтернативные развилки. '
                     'События сохраняют точные ссылки на книгу.'),
+                const PreparationEditorHelp(
+                  purpose: 'Собирает события книги в последовательные игровые сцены.',
+                  steps: [
+                    'Выберите подтверждённые исходные события.',
+                    'Создайте для каждого эпизода понятное название и порядок.',
+                    'Проверьте ссылки на книгу и готовность черновика.',
+                  ],
+                  result: 'сохранённые сцены с точными источниками, ещё без игровых выборов.',
+                  next: 'откройте «Игровые решения и последствия».',
+                ),
                 if (_loading || _saving) const LinearProgressIndicator(),
                 if (_error != null) ...[
                   Text(_error!, key: const Key('zai-scene-error'),
