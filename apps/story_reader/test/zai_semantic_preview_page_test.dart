@@ -192,6 +192,8 @@ void main() {
     final send = find.byKey(const Key('zai-send-single-chunk'));
     await tester.scrollUntilVisible(send, 140,
         scrollable: find.byType(Scrollable).first);
+    await tester.ensureVisible(send);
+    await tester.pumpAndSettle();
     await tester.tap(send);
     await tester.pumpAndSettle();
     expect(find.textContaining('автоматическими повторами'), findsOneWidget);
@@ -233,6 +235,8 @@ void main() {
     final send = find.byKey(const Key('zai-send-single-chunk'));
     await tester.scrollUntilVisible(send, 140,
         scrollable: find.byType(Scrollable).first);
+    await tester.ensureVisible(send);
+    await tester.pumpAndSettle();
     await tester.tap(send);
     await tester.pumpAndSettle();
     final permission = find.byKey(const Key('zai-consent-exact-checkbox'));
