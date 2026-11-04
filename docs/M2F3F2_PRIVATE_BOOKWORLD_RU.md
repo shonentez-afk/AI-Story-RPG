@@ -5,7 +5,7 @@
 
 ## Проверено
 
-- PR CI #41843542930 COMPLETED/SUCCESS: Python, Dart engine, BookWorld/SQLite, Flutter analyze/widgets 393 PASS / 2 личных FB2 SKIP, Windows portable и Android debug APK. M0 #41843542902 SUCCESS. Выпуск релиза из PR намеренно SKIP. Отдельный post-merge main CI и опубликованные сборки проверяются независимо.
+- PR CI #41843542930 COMPLETED/SUCCESS: Python, Dart engine, BookWorld/SQLite, Flutter analyze/widgets 393 PASS / 2 личных FB2 SKIP, Windows portable и Android debug APK. M0 #41843542902 SUCCESS. Выпуск релиза из PR намеренно SKIP. Отдельный post-merge main CI #41845075895 COMPLETED/SUCCESS 7/7; опубликован test-build-448 из исходного merge SHA 5a170634490be6fbf55a359207e76591b2cb9465 с Android APK, Windows ZIP и SHA256SUMS.
 - Новый zai_private_bookworld_compilation.dart действительно переводит подтверждённый M2c IntermediateStoryBlueprint через существующий compileReviewedPrivateBookworldInWorker в частный BookWorld: независимая верификация ZIP, manifest, provenance, story_core, SQLite, sourceFingerprint и SHA-256; публичное распространение и сеть не разрешены.
 - Метод installConfirmed требует второго, независимого согласия. До него новая игра не устанавливается в SQLite и старые кампании не меняются. Несовпадение архива, источник или подменённые свойства приводят к отказу.
 - Новый zai_private_compilation_draft.dart создаёт отдельный локальный checkpoint M2f3f2 со ссылками на исходник/каузальную схему, явным source/adaptation, картой Z.ai event → независимый M2c assertion и авторским текстом сцены. Хранятся только редакторские поля, а не исходная книга, не ключи API и не разрешение на публикацию.
