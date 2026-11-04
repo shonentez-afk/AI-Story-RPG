@@ -131,7 +131,7 @@ def extract_tales(source: str) -> list[tuple[str, list[str]]]:
     return tales
 
 
-def build_fb2(tales: list[tuple[str, list[str]]]) -> bytes:
+def build_fb2(tales: list[tuple[str, list[str]]], *, book_title: str = FB2_TITLE) -> bytes:
     def tag(name: str) -> str:
         return "{" + FB2_NAMESPACE + "}" + name
 
@@ -139,7 +139,7 @@ def build_fb2(tales: list[tuple[str, list[str]]]) -> bytes:
     book = ET.Element(tag("FictionBook"))
     description = ET.SubElement(book, tag("description"))
     title_info = ET.SubElement(description, tag("title-info"))
-    ET.SubElement(title_info, tag("book-title")).text = FB2_TITLE
+    ET.SubElement(title_info, tag("book-title")).text = book_title
     for given_name in ("Jacob", "Wilhelm"):
         author = ET.SubElement(title_info, tag("author"))
         ET.SubElement(author, tag("first-name")).text = given_name
@@ -160,7 +160,11 @@ def main() -> None:
     parser.add_argument("--input", type=Path, help="Local Gutenberg TXT; no network")
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--manifest", type=Path, required=True)
+    parser.add_argument("--single-output", type=Path, help="Standalone THE FROG-PRINCE FB2")
+    parser.add_argument("--single-manifest", type=Path, help="Standalone fixture SHA/provenance")
     args = parser.parse_args()
+    if (args.single_output is None) != (args.single_manifest is None):
+        parser.error("--single-output and --single-manifest must be supplied together")
 
     if args.input:
         raw, source_location = args.input.read_bytes(), str(args.input)
@@ -189,6 +193,38 @@ def main() -> None:
         json.dumps(manifest, ensure_ascii=False, indent=2) + "\n",
         encoding="utf-8",
     )
+    if args.single_output is not None:
+        # The full 62-tale strict check above is mandatory: never silently
+        # substitute an invented excerpt, a different translation or a
+        # partial collection. One book is one playable test source.
+        selection = [entry for entry in tales if entry[0] == "THE FROG-PRINCE"]
+        if len(selection) != 1:
+            raise ValueError("Canonical THE FROG-PRINCE not found exactly once")
+        single = build_fb2(selection, book_title="The Frog-Prince (Grimm #2591 RPG test)")
+        args.single_output.parent.mkdir(parents=True, exist_ok=True)
+        args.single_output.write_bytes(single)
+        single_info = {
+            "source": source_location,
+            "gutenberg_id": 2591,
+            "translation": "Edgar Taylor and Marian Edwardes",
+            "corpus_fb2_sha256": sha256(fb2),
+            "fb2_sha256": sha256(single),
+            "tale": "THE FROG-PRINCE",
+            "chapters": 1,
+            "paragraphs": len(selection[0][1]),
+            "source_chars": sum(len(p) for p in selection[0][1]),
+            "text_sha256": sha256("\n\n".join(selection[0][1]).encode("utf-8")),
+            "language": "en",
+            "game_status": "BOOK_ONLY_NOT_PLAYABLE",
+        }
+        args.single_manifest.parent.mkdir(parents=True, exist_ok=True)
+        args.single_manifest.write_text(
+            json.dumps(single_info, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+        print("SINGLE THE FROG-PRINCE -> FB2: "
+              f"{single_info['paragraphs']} paragraphs; "
+              f"SHA256={single_info['fb2_sha256']}")
     print(
         "FULL Gutenberg #2591 -> FB2: "
         f"{manifest['tales']} tales, {manifest['paragraphs']} paragraphs, "
