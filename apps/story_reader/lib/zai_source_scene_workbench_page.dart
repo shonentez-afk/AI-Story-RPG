@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 
 import 'source_analysis_checkpoint_repository.dart';
-import 'source_semantic_provider.dart';
 import 'zai_cross_window_evidence_graph.dart';
 import 'zai_editorial_consistency.dart';
 import 'zai_semantic_review_queue.dart';
@@ -541,14 +540,14 @@ class _ZaiSourceSceneWorkbenchPageState
                                   IconButton(
                                     tooltip: 'Поднять сцену',
                                     onPressed: ready && entry.$1 > 0
-                                        ? () => _store(board!.moveScene(
+                                        ? () => _store(board.moveScene(
                                             entry.$2.id, entry.$1 - 1))
                                         : null,
                                     icon: const Icon(Icons.arrow_upward),
                                   ),
                                   IconButton(
                                     tooltip: 'Опустить сцену',
-                                    onPressed: ready && board != null &&
+                                    onPressed: ready &&
                                         entry.$1 < board.scenes.length - 1
                                         ? () => _store(board.moveScene(
                                             entry.$2.id, entry.$1 + 1))
@@ -558,7 +557,7 @@ class _ZaiSourceSceneWorkbenchPageState
                                   IconButton(
                                     tooltip: 'Удалить только сцену',
                                     onPressed: ready ? () => _store(
-                                        board!.removeScene(entry.$2.id)) : null,
+                                        board.removeScene(entry.$2.id)) : null,
                                     icon: const Icon(Icons.delete_outline),
                                   ),
                                 ],
