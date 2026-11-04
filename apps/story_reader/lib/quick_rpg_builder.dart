@@ -86,7 +86,7 @@ class QuickRpgBuilder {
     final first = RegExp(r'\S').firstMatch(text.substring(offset));
     if (first == null) return null;
     final start = offset + first.start;
-    var end = (start + quoteLimit).clamp(start + 1, text.length);
+    var end = (start + quoteLimit).clamp(start + 1, text.length).toInt();
     if (end < text.length && _low(text.codeUnitAt(end))) end--;
     if (end > start && _high(text.codeUnitAt(end - 1))) end--;
     if (end - start < 28) return null;
