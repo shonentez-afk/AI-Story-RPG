@@ -4,6 +4,7 @@ import 'package:ai_story_reader/source_analysis_checkpoint_repository.dart';
 import 'package:ai_story_reader/source_semantic_provider.dart';
 import 'package:ai_story_reader/zai_auto_whole_book_analysis.dart';
 import 'package:ai_story_reader/zai_semantic_preview.dart';
+import 'package:ai_story_reader/zai_semantic_review_queue.dart';
 import 'package:ai_story_reader/zai_whole_book_event_outline.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -100,6 +101,17 @@ void main() {
         quote.startUtf16 - chunk.startUtf16,
         quote.startUtf16 - chunk.startUtf16 + quote.quote.length),
         quote.quote);
+    final rejectedEventId = finalOutline.events.first.id;
+    final reviewedQueue = done.queue.decide(
+      rejectedEventId, ZaiEditorialDecision.rejected);
+    final marked = ZaiWholeBookReviewResult(
+      manifest: done.manifest,
+      queue: reviewedQueue,
+      progress: done.progress,
+    );
+    final filtered = ZaiWholeBookEventOutline.build(marked);
+    expect(filtered.events, hasLength(2));
+    expect(filtered.events.any((e) => e.id == rejectedEventId), false);
     expect(finalOutline.canInferCausality, false);
     expect(finalOutline.canPublishPublicly, false);
     // Document order, especially the flashback in chapter 3,
