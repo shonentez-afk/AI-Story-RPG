@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'source_analysis_checkpoint_repository.dart';
 import 'zai_cross_window_evidence_graph.dart';
+import 'zai_editorial_consistency_page.dart';
 import 'zai_semantic_review_queue.dart';
 
 /// A read-only overview of source-backed, manually retained findings,
@@ -12,10 +13,12 @@ class ZaiCrossWindowReviewPage extends StatefulWidget {
     super.key,
     required this.queue,
     this.linksRepository,
+    this.consistencyRepository,
   });
 
   final ZaiWindowReviewQueue queue;
   final SourceAnalysisCheckpointRepository? linksRepository;
+  final SourceAnalysisCheckpointRepository? consistencyRepository;
 
   @override
   State<ZaiCrossWindowReviewPage> createState() =>
@@ -219,6 +222,20 @@ class _ZaiCrossWindowReviewPageState
     return result == true;
   }
 
+  Future<void> _openConsistency() async {
+    if (!mounted || _saving) return;
+    final position = await Navigator.of(context).push<int>(
+      MaterialPageRoute(
+        builder: (_) => ZaiEditorialConsistencyPage(
+          graph: _graph,
+          repository: widget.consistencyRepository,
+        ),
+      ),
+    );
+    if (!mounted || position == null) return;
+    Navigator.of(context).pop(position);
+  }
+
   void _toWindow(int position) {
     // Parent page navigates to the exact originally reviewed window.
     Navigator.of(context).pop(position);
@@ -277,6 +294,13 @@ class _ZaiCrossWindowReviewPageState
                     'событий ${events.length} · '
                     'состояний и фактов ${statements.length}',
                     key: const Key('zai-graph-summary')),
+                const SizedBox(height: 10),
+                OutlinedButton.icon(
+                  key: const Key('zai-open-editorial-consistency'),
+                  onPressed: _saving ? null : _openConsistency,
+                  icon: const Icon(Icons.fact_check_outlined),
+                  label: const Text('Проверить алиасы, противоречия и хронологию'),
+                ),
                 if (_loading || _saving)
                   const LinearProgressIndicator(),
                 if (_error != null) ...[

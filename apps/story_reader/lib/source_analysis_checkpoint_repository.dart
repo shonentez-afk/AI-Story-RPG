@@ -28,6 +28,7 @@ enum SourceCheckpointScope {
   npcKnowledgeRules,
   zaiWindowReview,
   zaiCrossWindowLinks,
+  zaiEditorialConsistency,
 }
 
 /// Private app-support storage shared by Android and Windows.
@@ -58,6 +59,7 @@ class FileSourceAnalysisCheckpointRepository
   static const _knowledgeFolder = 'ai_story_npc_knowledge_rules_m2e5b3b1_v1';
   static const _zaiReviewFolder = 'ai_story_zai_private_window_review_m2f3a_v1';
   static const _zaiLinksFolder = 'ai_story_zai_private_links_m2f3b_v1';
+  static const _zaiConsistencyFolder = 'ai_story_zai_private_editorial_consistency_m2f3c_v1';
 
   static void _checkFingerprint(String fingerprint) {
     if (!_validFingerprint.hasMatch(fingerprint)) {
@@ -81,6 +83,7 @@ class FileSourceAnalysisCheckpointRepository
       SourceCheckpointScope.npcKnowledgeRules => _knowledgeFolder,
       SourceCheckpointScope.zaiWindowReview => _zaiReviewFolder,
       SourceCheckpointScope.zaiCrossWindowLinks => _zaiLinksFolder,
+      SourceCheckpointScope.zaiEditorialConsistency => _zaiConsistencyFolder,
     };
     final folder = Directory('${base.path}/$name');
     if (!await folder.exists()) await folder.create(recursive: true);
