@@ -167,8 +167,9 @@ void main() {
     );
     expect(find.byKey(ValueKey('library-world-' + world.archiveHash)),
         findsOneWidget);
-    // Existing pilot is still present and world is NOT a BookReaderPage.
-    expect(find.text('Демо RPG • начать новое прохождение'), findsOneWidget);
+    // Production library does not advertise the synthetic pilot.
+    // Legacy campaigns remain available through the unified saves screen.
+    expect(find.text('Демо RPG • начать новое прохождение'), findsNothing);
     await tester.ensureVisible(find.byKey(
       ValueKey('library-world-' + world.archiveHash)));
     await tester.tap(find.byKey(
@@ -259,6 +260,21 @@ void main() {
     await tapChoice(tester, 'inspect_gate');
     expect((await CampaignStore().all()).length, 1);
     expect((await gateway.load(worldId)).revision, 1);
+  });
+
+  testWidgets('production empty home opens real library instead of demo',
+      (tester) async {
+    await tester.pumpWidget(MaterialApp(
+      home: HomePage(worldGateway: gateway),
+    ));
+    await settleWorker(tester);
+    expect(find.text('Выберите книгу для игры'), findsOneWidget);
+    expect(find.text('Тайна особняка'), findsNothing);
+    expect(find.text('Открыть библиотеку'), findsOneWidget);
+    await tester.tap(find.text('Открыть библиотеку'));
+    await settleWorker(tester);
+    expect(find.text('Добавить книгу'), findsOneWidget);
+    expect(find.text('Демо RPG • начать новое прохождение'), findsNothing);
   });
 
   testWidgets('home continues last BookWorld when no pilot slot exists',
