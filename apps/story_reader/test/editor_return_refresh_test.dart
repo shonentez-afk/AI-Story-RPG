@@ -54,6 +54,26 @@ void main() {
     ));
     await tester.pumpAndSettle();
 
+    // Advanced source and multi-scene editors are intentionally collapsed.
+    // Open them explicitly before verifying the old checkpoint refresh flow.
+    final advanced = find.byKey(const Key('prepare-advanced-mode'));
+    await tester.scrollUntilVisible(advanced, 180,
+        scrollable: find.byType(Scrollable).first, maxScrolls: 45);
+    await tester.ensureVisible(advanced);
+    await tester.pumpAndSettle();
+    await tester.tap(advanced);
+    await tester.pumpAndSettle();
+    for (final groupKey in ['prepare-advanced-evidence',
+        'prepare-advanced-story']) {
+      final group = find.byKey(Key(groupKey));
+      await tester.scrollUntilVisible(group, 150,
+          scrollable: find.byType(Scrollable).first, maxScrolls: 45);
+      await tester.ensureVisible(group);
+      await tester.pumpAndSettle();
+      await tester.tap(group);
+      await tester.pumpAndSettle();
+    }
+
     final routes = <(String, Type)>[
       ('prepare-open-expanded-source-editor', SourceEditorialReviewPage),
       ('prepare-open-story-editor', ReviewedStoryEditorPage),
@@ -62,8 +82,8 @@ void main() {
     for (var revision = 0; revision < routes.length; revision++) {
       final (key, pageType) = routes[revision];
       final route = find.byKey(Key(key));
-      await tester.scrollUntilVisible(route, 300,
-          scrollable: find.byType(Scrollable).first);
+      await tester.scrollUntilVisible(route, 160,
+          scrollable: find.byType(Scrollable).first, maxScrolls: 55);
       await tester.ensureVisible(route);
       await tester.pumpAndSettle();
 
