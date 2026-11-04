@@ -1046,8 +1046,9 @@ class _SettingsPageState extends State<SettingsPage> {
                   contentPadding: EdgeInsets.zero,
                   leading: Icon(Icons.offline_bolt_outlined),
                   title: Text('Режим игры'),
-                  subtitle: Text('Демо и подготовленные миры — офлайн. '
-                      'ИИ-анализ книги и свободное общение ещё не включены.'),
+                  subtitle: Text('Подготовленные игровые миры работают офлайн. '
+                      'Выбранный фрагмент можно проверить с Z.ai по вашему '
+                      'разрешению; свободный игровой ИИ ещё не подключён.'),
                 ),
                 ListTile(
                   key: const Key('settings-ai-connect'),
@@ -1083,9 +1084,9 @@ class _SettingsPageState extends State<SettingsPage> {
                   contentPadding: EdgeInsets.zero,
                   leading: Icon(Icons.privacy_tip_outlined),
                   title: Text('Анализ книги и приватность'),
-                  subtitle: Text('Поиск цитат и подготовка книги остаются '
-                      'локальными. Настройки Z.ai не отправляют текст '
-                      'книги и не включают автоматический анализ.'),
+                  subtitle: Text('Обычный анализ книги выполняется локально. '
+                      'Отправка выбранного фрагмента в Z.ai возможна '
+                      'только после вашего согласия.'),
                 ),
                 const Divider(height: 30),
                 Text('О программе',
@@ -1094,7 +1095,7 @@ class _SettingsPageState extends State<SettingsPage> {
                   contentPadding: EdgeInsets.zero,
                   leading: Icon(Icons.info_outline),
                   title: Text('Версия'),
-                  subtitle: Text('0.1.0 · BookWorld · тестовая версия'),
+                  subtitle: Text('0.1.0 · предварительная версия «Живой книги»'),
                 ),
               ],
             ),
