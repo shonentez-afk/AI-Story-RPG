@@ -10,7 +10,6 @@ import 'offline_preparation_coordinator.dart';
 import 'source_analysis_checkpoint_repository.dart';
 import 'source_narrative_review_panel.dart';
 import 'source_semantic_catalog.dart';
-import 'source_semantic_review_panel.dart';
 import 'zai_semantic_preview_page.dart';
 import 'reviewed_story_editor_page.dart';
 import 'multi_scene_editor_page.dart';
@@ -75,6 +74,7 @@ class _SourceIndexPreviewPageState extends State<SourceIndexPreviewPage> {
   bool _openingEditor = false;
   bool _showCandidates = false;
   bool _showChapters = false;
+  bool _advancedModeOpen = false;
   int _visibleCandidates = 10;
   static const int _candidatesPerPage = 10;
   int _generation = 0;
@@ -447,58 +447,54 @@ class _SourceIndexPreviewPageState extends State<SourceIndexPreviewPage> {
     final searchStatus = analysis == null || analysis.processedCount == 0
         ? 'ещё не запускался'
         : analysis.pendingCount == 0 && analysis.failedCount == 0
-            ? 'завершён; проверьте находки'
-            : 'просмотрено ${analysis.processedCount} из ${index.chunks.length} фрагментов';
+            ? 'завершён; проверьте результаты'
+            : 'обработано ${analysis.processedCount} '
+                'из ${index.chunks.length} фрагментов';
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(12),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Что делает подготовка?',
+            Text('Как создать RPG из этой книги',
                 style: Theme.of(context).textTheme.titleMedium),
-            const SizedBox(height: 4),
-            const Text('Сначала анализируем текст локально, затем вы '
-                'проверяете находки и вручную собираете сюжет. '
-                'Автоматической RPG по всей книге пока нет.'),
             const SizedBox(height: 6),
-            Text('Текст разобран: ${index.chapterCount} разделов. '
-                'Поиск имён: $searchStatus.'),
-            const SizedBox(height: 4),
-            const Text('Личная короткая или многосценная RPG собирается '
-                'в редакторах ниже после проверки источника и сценария. '
-                'Полная автоматическая адаптация книги пока недоступна.'),
+            const Text('Начните с локального анализа, затем проверьте '
+                'найденные события и создайте короткую игровую историю. '
+                'Подробные редакторы находятся в «Расширенной настройке».'),
+            const SizedBox(height: 8),
+            Text('Книга: ${index.chapterCount} разделов. '
+                'Локальный поиск: $searchStatus.'),
+            const SizedBox(height: 8),
+            const Text('Автоматической RPG по всей книге пока нет. '
+                'Личная короткая или многосценная RPG собирается '
+                'после проверки источника и сценария.'),
+            const SizedBox(height: 6),
             ExpansionTile(
               key: const Key('prepare-how-it-works'),
               tilePadding: EdgeInsets.zero,
-              title: const Text('Маршрут подготовки: 5 шагов'),
+              title: const Text('Как пройти подготовку: 4 шага'),
               children: [
-                _preparationStep('1', 'Разобрать текст — готово',
-                    'Найдены ${index.chapterCount} разделов и '
-                    '${index.chunks.length} фрагментов. '
-                    'Иллюстрации отдельно не анализируются.'),
-                const SizedBox(height: 8),
-                _preparationStep('2', 'Локально найти имена, цитаты и факты',
-                    'Нажмите «Выполнить локальную подготовку» выше. '
-                    'Сохранение выполняется порциями, ИИ не используется.'),
-                const SizedBox(height: 8),
-                _preparationStep('3', 'Проверить найденное',
-                    'Можно вручную проверить имена, события, '
-                    'предполагаемые связи и спорные цитаты.'),
-                const SizedBox(height: 8),
-                _preparationStep('4', 'Создать и проверить сценарий',
-                    'Редакторы ниже позволяют вручную составить сцены, '
-                    'выборы, последствия и проверить причинные переходы.'),
-                const SizedBox(height: 8),
-                _preparationStep('5', 'Собрать личную RPG',
-                    'Локальный компилятор доступен для проверенного '
-                    'короткого или многосценного черновика. '
-                    'Для всей книги автоматической сборки нет.'),
-                const SizedBox(height: 8),
+                _preparationStep('1', 'Найти события в книге',
+                    'Нажмите «Выполнить локальную подготовку». '
+                    'Можно остановить процесс и продолжить позже.'),
+                _preparationStep('2', 'Проверить важные находки',
+                    'Убедитесь, что цитаты действительно описывают '
+                    'события. При необходимости откройте '
+                    '«Расширенную настройку».'),
+                _preparationStep('3', 'Написать игровой вариант',
+                    'Начните с короткой RPG: выберите исходные события, '
+                    'решение игрока и альтернативный финал. '
+                    'Для большого сценария есть расширенный редактор.'),
+                _preparationStep('4', 'Проверить и начать игру',
+                    'Компилятор проверит связи и установит личный игровой '
+                    'мир после вашего подтверждения. Создание '
+                    'игры не удаляет исходную книгу или прохождения.'),
               ],
             ),
-            const Text('Текст не отправляется в облако; '
-                'книга и игровые сохранения не меняются.'),
+            const Text('Локальная подготовка не отправляет книгу в интернет. '
+                'В расширенном режиме можно отдельно разрешить '
+                'ИИ проверить выбранные фрагменты.'),
           ],
         ),
       ),
