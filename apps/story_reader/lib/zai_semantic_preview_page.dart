@@ -92,7 +92,7 @@ class _ZaiSemanticPreviewPageState extends State<ZaiSemanticPreviewPage> {
       return true;
     } catch (_) {
       if (mounted) setState(() => _reviewError = 'Не удалось сохранить '
-          'проверку ИИ. Прежний checkpoint не изменён.');
+          'проверку ИИ. Ранее сохранённые решения не изменены.');
       return false;
     } finally {
       if (mounted) setState(() => _reviewSaving = false);
@@ -594,10 +594,10 @@ class _ZaiSemanticPreviewPageState extends State<ZaiSemanticPreviewPage> {
                   ],
                   const SizedBox(height: 8),
                   const Text('Гипотезы хранятся только в отдельной приватной '
-                      'очереди проверки, не в каноне, кампании или BookWorld. '
+                      'очереди проверки, но не в проверенных фактах или игре. '
                       'Включение в RPG будет отдельным проверяемым шагом. '
                       'Ни одна находка не перенесена в редакторы, '
-                      'канон, кампанию или BookWorld.'),
+                      'подтверждённые факты, кампанию или игровой мир.'),
                 ],
               ],
             ),
