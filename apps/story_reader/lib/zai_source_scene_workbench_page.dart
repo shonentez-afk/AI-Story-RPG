@@ -622,7 +622,7 @@ class _ZaiSourceSceneWorkbenchPageState
                     style: Theme.of(context).textTheme.titleMedium),
                 const Text('Готовый игровой мир пока НЕ собирается. '
                     'Причины ниже — проверяемые, но ни одна галочка '
-                    'не заменяет отдельный компилятор BookWorld.'),
+                    'не означает, что игровая история уже собрана.'),
                 if (report != null) ...[
                   Text('Покрытие оставленных событий: '
                       '${report.coveredEvents} / ${report.totalEvents} · '
