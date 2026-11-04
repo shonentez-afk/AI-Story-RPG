@@ -263,7 +263,7 @@ class _ZaiPrivateCompilationPageState
               child: const Text('Подтвердить'),
             ),
           ],
-        )));
+        ))) ?? false;
   }
 
   List<SourceSemanticAssertion> _possibleClaims(String eventId) {
