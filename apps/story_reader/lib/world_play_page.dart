@@ -426,9 +426,9 @@ class _WorldPlayPageState extends State<WorldPlayPage> {
                                           view.campaignId + '-' +
                                           view.revision.toString()),
                                       title: const Text(
-                                          'Свободное действие (офлайн)'),
+                                          'Свободное действие'),
                                       subtitle: const Text(
-                                          'Подбор разрешённых ходов по тексту'),
+                                          'Офлайн или с помощью ИИ — с подтверждением'),
                                       initiallyExpanded: false,
                                       children: [
                                         FreeTextActionPanel(
