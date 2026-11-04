@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'preparation_editor_help.dart';
 
 import 'source_analysis_checkpoint_repository.dart';
 import 'source_semantic_provider.dart';
@@ -117,9 +118,9 @@ class _ZaiManualSourceAlignmentPageState
     } catch (error) {
       if (mounted) setState(() {
         _broken = true;
-        _error = 'M2f3g относится к другой редакции/решениям: ' +
+        _error = 'Подтверждения относятся к другой версии книги или сцен: ' +
             error.toString() +
-            '. Старый checkpoint сохранён, доступен только отдельный сброс.';
+            '. Прежние подтверждения сохранены, их можно сбросить отдельно.';
       });
     } finally {
       if (mounted) setState(() => _loading = false);
@@ -205,8 +206,8 @@ class _ZaiManualSourceAlignmentPageState
     final yes = await showDialog<bool>(context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Отозвать подтверждение?'),
-        content: const Text('Удалится только ручная привязка M2f3g. '
-            'M2c, исходная книга и сохранения не затрагиваются.'),
+        content: const Text('Удалится только выбранная связь с цитатой. '
+            'Исходная книга, проверенные факты и сохранения не изменятся.'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx, false),
               child: const Text('Отмена')),
@@ -227,8 +228,8 @@ class _ZaiManualSourceAlignmentPageState
     if (_busy) return;
     final yes = await showDialog<bool>(context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Сбросить только M2f3g?'),
-        content: const Text('Исходная книга, отдельный M2c, '
+        title: const Text('Сбросить только подтверждения цитат?'),
+        content: const Text('Исходная книга, проверенные факты, '
             'все игровые миры и сохранения останутся.'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx, false),
@@ -236,7 +237,7 @@ class _ZaiManualSourceAlignmentPageState
           FilledButton(
             key: const Key('zai-align-reset-confirm'),
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Сбросить M2f3g')),
+            child: const Text('Сбросить подтверждения')),
         ],
       ));
     if (yes != true || !mounted) return;
@@ -255,7 +256,7 @@ class _ZaiManualSourceAlignmentPageState
       });
     } catch (error) {
       if (mounted) setState(() => _error =
-          'Сброс M2f3g не выполнен: ' + error.toString());
+          'Сброс подтверждений не выполнен: ' + error.toString());
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -268,17 +269,27 @@ class _ZaiManualSourceAlignmentPageState
     final accepted = _ledger?.entries.any(
         (e) => e.findingId == source?.id) ?? false;
     return Scaffold(
-      appBar: AppBar(title: const Text('Сопоставление цитат M2c')),
+      appBar: AppBar(title: const Text('Проверка цитат из книги')),
       body: SafeArea(child: Center(child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 780),
         child: ListView(
           padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
           children: [
-            Text('M2f3g · проверка источника',
+            Text('Подтверждение событий из книги',
                 key: const Key('zai-align-title'),
                 style: Theme.of(context).textTheme.titleLarge),
             const Text('Две независимые проверки: точный фрагмент '
                 'и ручное утверждение. Автоматической канонизации нет.'),
+            const PreparationEditorHelp(
+              purpose: 'Подтверждает, что игровое событие действительно описано в книге.',
+              steps: [
+                'Разрешите показ цитат, включая возможные спойлеры.',
+                'Сравните точную цитату с книгой и своими словами укажите, кто и что сделал.',
+                'Отдельно подтвердите цитату и смысл события, затем сохраните связку.',
+              ],
+              result: 'частное подтверждение источника; оно не меняет оригинальную книгу.',
+              next: 'вернитесь к сборке RPG и выберите подтверждённый факт.',
+            ),
             if (_loading || _busy) const LinearProgressIndicator(),
             if (_error != null)
               Text(_error!, key: const Key('zai-align-error'),
@@ -292,7 +303,7 @@ class _ZaiManualSourceAlignmentPageState
                 key: const Key('zai-align-reset'),
                 onPressed: _busy ? null : _reset,
                 icon: const Icon(Icons.restart_alt),
-                label: const Text('Сбросить только M2f3g'),
+                label: const Text('Сбросить только подтверждения цитат'),
               ),
             if (enabled && !_revealed)
               OutlinedButton(
@@ -373,7 +384,7 @@ class _ZaiManualSourceAlignmentPageState
               ],
               const SizedBox(height: 12),
               const Text('Результат не публикует игру, не меняет '
-                  'оригинальный редактор M2c и не обращается к сети.'),
+                  'исходную книгу или проверенные факты и не обращается к сети.'),
             ],
           ],
         ),

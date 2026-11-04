@@ -10,7 +10,6 @@ import 'offline_preparation_coordinator.dart';
 import 'source_analysis_checkpoint_repository.dart';
 import 'source_narrative_review_panel.dart';
 import 'source_semantic_catalog.dart';
-import 'source_semantic_review_panel.dart';
 import 'zai_semantic_preview_page.dart';
 import 'reviewed_story_editor_page.dart';
 import 'multi_scene_editor_page.dart';
@@ -75,6 +74,7 @@ class _SourceIndexPreviewPageState extends State<SourceIndexPreviewPage> {
   bool _openingEditor = false;
   bool _showCandidates = false;
   bool _showChapters = false;
+  bool _advancedModeOpen = false;
   int _visibleCandidates = 10;
   static const int _candidatesPerPage = 10;
   int _generation = 0;
@@ -203,7 +203,7 @@ class _SourceIndexPreviewPageState extends State<SourceIndexPreviewPage> {
     } catch (error) {
       if (mounted) setState(() =>
           _analysisError = 'Не удалось сохранить очередную порцию: $error. '
-              'Предыдущий checkpoint сохранён.');
+              'Ранее проверенные результаты сохранены.');
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -271,7 +271,7 @@ class _SourceIndexPreviewPageState extends State<SourceIndexPreviewPage> {
       if (mounted && generation == _generation) {
         setState(() {
           _offlineMessage = 'Локальная подготовка прервана: $error. '
-              'Последний сохранённый этап остаётся в приватном checkpoint.';
+              'Ранее сохранённые результаты остались на устройстве.';
         });
       }
     } finally {
@@ -447,58 +447,54 @@ class _SourceIndexPreviewPageState extends State<SourceIndexPreviewPage> {
     final searchStatus = analysis == null || analysis.processedCount == 0
         ? 'ещё не запускался'
         : analysis.pendingCount == 0 && analysis.failedCount == 0
-            ? 'завершён; проверьте находки'
-            : 'просмотрено ${analysis.processedCount} из ${index.chunks.length} фрагментов';
+            ? 'завершён; проверьте результаты'
+            : 'обработано ${analysis.processedCount} '
+                'из ${index.chunks.length} фрагментов';
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(12),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Что делает подготовка?',
+            Text('Как создать RPG из этой книги',
                 style: Theme.of(context).textTheme.titleMedium),
-            const SizedBox(height: 4),
-            const Text('Сначала анализируем текст локально, затем вы '
-                'проверяете находки и вручную собираете сюжет. '
-                'Автоматической RPG по всей книге пока нет.'),
             const SizedBox(height: 6),
-            Text('Текст разобран: ${index.chapterCount} разделов. '
-                'Поиск имён: $searchStatus.'),
-            const SizedBox(height: 4),
-            const Text('Личная короткая или многосценная RPG собирается '
-                'в редакторах ниже после проверки источника и сценария. '
-                'Полная автоматическая адаптация книги пока недоступна.'),
+            const Text('Начните с локального анализа, затем проверьте '
+                'найденные события и создайте короткую игровую историю. '
+                'Подробные редакторы находятся в «Расширенной настройке».'),
+            const SizedBox(height: 8),
+            Text('Книга: ${index.chapterCount} разделов. '
+                'Локальный поиск: $searchStatus.'),
+            const SizedBox(height: 8),
+            const Text('Автоматической RPG по всей книге пока нет. '
+                'Личная короткая или многосценная RPG собирается '
+                'после проверки источника и сценария.'),
+            const SizedBox(height: 6),
             ExpansionTile(
               key: const Key('prepare-how-it-works'),
               tilePadding: EdgeInsets.zero,
-              title: const Text('Маршрут подготовки: 5 шагов'),
+              title: const Text('Как пройти подготовку: 4 шага'),
               children: [
-                _preparationStep('1', 'Разобрать текст — готово',
-                    'Найдены ${index.chapterCount} разделов и '
-                    '${index.chunks.length} фрагментов. '
-                    'Иллюстрации отдельно не анализируются.'),
-                const SizedBox(height: 8),
-                _preparationStep('2', 'Локально найти имена, цитаты и факты',
-                    'Нажмите «Выполнить локальную подготовку» выше. '
-                    'Сохранение выполняется порциями, ИИ не используется.'),
-                const SizedBox(height: 8),
-                _preparationStep('3', 'Проверить найденное',
-                    'Можно вручную проверить имена, события, '
-                    'предполагаемые связи и спорные цитаты.'),
-                const SizedBox(height: 8),
-                _preparationStep('4', 'Создать и проверить сценарий',
-                    'Редакторы ниже позволяют вручную составить сцены, '
-                    'выборы, последствия и проверить причинные переходы.'),
-                const SizedBox(height: 8),
-                _preparationStep('5', 'Собрать личную RPG',
-                    'Локальный компилятор доступен для проверенного '
-                    'короткого или многосценного черновика. '
-                    'Для всей книги автоматической сборки нет.'),
-                const SizedBox(height: 8),
+                _preparationStep('1', 'Найти события в книге',
+                    'Нажмите «Выполнить локальную подготовку». '
+                    'Можно остановить процесс и продолжить позже.'),
+                _preparationStep('2', 'Проверить важные находки',
+                    'Убедитесь, что цитаты действительно описывают '
+                    'события. При необходимости откройте '
+                    '«Расширенную настройку».'),
+                _preparationStep('3', 'Написать игровой вариант',
+                    'Начните с короткой RPG: выберите исходные события, '
+                    'решение игрока и альтернативный финал. '
+                    'Для большого сценария есть расширенный редактор.'),
+                _preparationStep('4', 'Проверить и начать игру',
+                    'Компилятор проверит связи и установит личный игровой '
+                    'мир после вашего подтверждения. Создание '
+                    'игры не удаляет исходную книгу или прохождения.'),
               ],
             ),
-            const Text('Текст не отправляется в облако; '
-                'книга и игровые сохранения не меняются.'),
+            const Text('Локальная подготовка не отправляет книгу в интернет. '
+                'В расширенном режиме можно отдельно разрешить '
+                'ИИ проверить выбранные фрагменты.'),
           ],
         ),
       ),
@@ -811,15 +807,99 @@ class _SourceIndexPreviewPageState extends State<SourceIndexPreviewPage> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         const Divider(height: 28),
-                        Text('Шаг 3. Проверка событий, фактов и связей',
+                        Text('Шаг 2. Создайте первую RPG',
                             style: Theme.of(context).textTheme.titleMedium),
                         const SizedBox(height: 6),
-                        const Text('Откройте этот раздел, чтобы найти '
-                            'отдельные фразы о событиях и сопоставить '
-                            'их с текстом. Вы сами решаете, какие цитаты '
-                            'сохранить для последующей проверки. '
-                            'Внутри есть раздел связей персонажей и хронологии.'),
+                        const Text('Начните с короткой истории: выберите '
+                            'события книги, решение игрока и альтернативный '
+                            'исход. Это проще, чем сразу строить большой сюжет.'),
+
+                        Card(
+                          child: ListTile(
+                            key: const Key('prepare-open-story-editor'),
+                            leading: const Icon(Icons.edit_note),
+                            title: const Text('Создать короткую RPG'),
+                            subtitle: const Text(
+                              'Выберите два проверенных события, напишите '
+                              'альтернативный финал и создайте короткую '
+                              'офлайн-RPG. Не создаёт игру по всей книге '
+                              'автоматически.'),
+                            trailing: const Icon(Icons.chevron_right),
+                            enabled: !_offlineWorking && !_busy,
+                            onTap: () => unawaited(_openEditor(
+                              ReviewedStoryEditorPage(
+                                index: index,
+                                gateway: widget.worldGateway ??
+                                    const DeviceWorldLibraryGateway(),
+                              ),
+                            )),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        Text('Шаг 3. Проверьте и запустите',
+                            style: Theme.of(context).textTheme.titleMedium),
+                        const Text('Проверка покажет, какие события, '
+                            'выборы или концовки ещё не готовы. '
+                            'Установленный игровой мир появится в библиотеке.'),
+
+                        PrivateGameReadinessPanel(
+                          key: ValueKey('private-readiness-'
+                              '${index.sourceFingerprint}-$_editorReturnRevision'),
+                          checkOnOpen: _editorReturnRevision > 0,
+                          index: index,
+                          gateway: widget.worldGateway ??
+                              const DeviceWorldLibraryGateway(),
+                        ),
                         const SizedBox(height: 10),
+
+                        Card(
+                          child: ListTile(
+                            leading: const Icon(Icons.lock_outline),
+                            title: const Text('Полная RPG по всей книге'),
+                            subtitle: const Text('Сейчас можно создать проверенную короткую игру. '
+                                'Короткую личную RPG можно собрать в редакторе выше. '
+                                'Автоматическая RPG по всей книге пока '
+                                'не реализована.'),
+                          ),
+                        ),
+                        const Divider(height: 30),
+                        ExpansionTile(
+                          key: const Key('prepare-advanced-mode'),
+                          initiallyExpanded: false,
+                          onExpansionChanged: (open) =>
+                              setState(() => _advancedModeOpen = open),
+                          tilePadding: EdgeInsets.zero,
+                          leading: const Icon(Icons.tune_outlined),
+                          title: const Text('Расширенная настройка RPG'),
+                          subtitle: const Text('Необязательно: исправить '
+                              'события, привлечь ИИ, создать больше сцен '
+                              'или проверить импорт. Начните с нужного раздела.'),
+                          children: [
+                            const Padding(
+                              padding: EdgeInsets.fromLTRB(8, 4, 8, 12),
+                              child: Text('Редакторские инструменты нужны '
+                                  'только для сложных случаев. Их результаты '
+                                  'сохраняются отдельно от книги и '
+                                  'прохождений. Откройте раздел и прочитайте '
+                                  'его назначение перед работой.'),
+                            ),
+                            ExpansionTile(
+                              key: const Key('prepare-advanced-evidence'),
+                              title: const Text(
+                                  '1. Уточнить цитаты, персонажей и события'),
+                              subtitle: const Text('Если анализ пропустил '
+                                  'событие, перепутал имена или хронологию. '
+                                  'Результат — проверенные факты, ещё не игра.'),
+                              children: [
+                                const Padding(
+                                  padding: EdgeInsets.all(8),
+                                  child: Text('Найдите фразу в книге, '
+                                      'подтвердите или отклоните цитату. '
+                                      'Затем уточните, кто действовал '
+                                      'и в каком порядке. Это основа '
+                                      'для игровых сцен.'),
+                                ),
+
                         IgnorePointer(
                           ignoring: _offlineWorking || _busy,
                           child: SourceNarrativeReviewPanel(
@@ -828,7 +908,7 @@ class _SourceIndexPreviewPageState extends State<SourceIndexPreviewPage> {
                           sourceMentions: _analysis,
                           ),
                         ),
-                        const SizedBox(height: 10),
+
                         Card(
                           child: ListTile(
                             key: const Key('prepare-open-expanded-source-editor'),
@@ -846,7 +926,26 @@ class _SourceIndexPreviewPageState extends State<SourceIndexPreviewPage> {
                             )),
                           ),
                         ),
-                        const SizedBox(height: 10),
+                              ],
+                            ),
+                            ExpansionTile(
+                              key: const Key('prepare-advanced-ai'),
+                              title: const Text(
+                                  '2. Помощь ИИ при разборе фрагментов'),
+                              subtitle: const Text('Необязательно: '
+                                  'получить предложения по выбранному '
+                                  'отрывку и проверить их вручную.'),
+                              children: [
+                                const Padding(
+                                  padding: EdgeInsets.all(8),
+                                  child: Text('Нужен настроенный Z.ai. '
+                                      'Вы увидите точный текст отправки '
+                                      'и отдельно разрешите каждый запрос. '
+                                      'Ответы ИИ — предположения, '
+                                      'а не подтверждённые события. '
+                                      'После проверки переходите к сценам.'),
+                                ),
+
                         Card(
                           child: ListTile(
                             key: const Key('prepare-open-zai-preview'),
@@ -866,46 +965,26 @@ class _SourceIndexPreviewPageState extends State<SourceIndexPreviewPage> {
                             )),
                           ),
                         ),
-                        const Divider(height: 28),
-                        ExpansionTile(
-                          key: ValueKey('prepare-experimental-${index.sourceFingerprint}'),
-                          tilePadding: EdgeInsets.zero,
-                          childrenPadding: const EdgeInsets.only(bottom: 12),
-                          leading: const Icon(Icons.science_outlined),
-                          title: const Text('Дополнительно: экспериментальный поиск'),
-                          subtitle: const Text('Повторно ищет отдельные имена '
-                              'и места; это не полноценный ИИ. '
-                              'Для обычной подготовки необязателен.'),
-                          children: [
-                            SourceSemanticReviewPanel(
-                              key: ValueKey('semantic-${index.sourceFingerprint}'),
-                              index: index,
+                              ],
                             ),
-                          ],
-                        ),
-                        const Divider(height: 28),
-                        Card(
-                          child: ListTile(
-                            key: const Key('prepare-open-story-editor'),
-                            leading: const Icon(Icons.edit_note),
-                            title: const Text('Редактор личной адаптации'),
-                            subtitle: const Text(
-                              'Выберите два проверенных события, напишите '
-                              'альтернативный финал и создайте короткую '
-                              'офлайн-RPG. Не создаёт игру по всей книге '
-                              'автоматически.'),
-                            trailing: const Icon(Icons.chevron_right),
-                            enabled: !_offlineWorking && !_busy,
-                            onTap: () => unawaited(_openEditor(
-                              ReviewedStoryEditorPage(
-                                index: index,
-                                gateway: widget.worldGateway ??
-                                    const DeviceWorldLibraryGateway(),
-                              ),
-                            )),
-                          ),
-                        ),
-                        const SizedBox(height: 8),
+                            ExpansionTile(
+                              key: const Key('prepare-advanced-story'),
+                              title: const Text(
+                                  '3. Написать расширенный сюжет'),
+                              subtitle: const Text('Добавить сцены, '
+                                  'развилки, условия и последствия. '
+                                  'Начните с короткой RPG выше.'),
+                              children: [
+                                const Padding(
+                                  padding: EdgeInsets.all(8),
+                                  child: Text('Сцена — эпизод игры. '
+                                      'Выбор ведёт к другой сцене; '
+                                      'условие проверяет, можно ли его '
+                                      'сделать, а последствие меняет '
+                                      'игровое состояние. После редактирования '
+                                      'снова проверьте готовность игры.'),
+                                ),
+
                         Card(
                           child: ListTile(
                             key: const Key('prepare-open-multi-scene-editor'),
@@ -927,33 +1006,56 @@ class _SourceIndexPreviewPageState extends State<SourceIndexPreviewPage> {
                             )),
                           ),
                         ),
-                        const SizedBox(height: 8),
-                        PrivateGameReadinessPanel(
-                          key: ValueKey('private-readiness-'
-                              '${index.sourceFingerprint}-$_editorReturnRevision'),
-                          checkOnOpen: _editorReturnRevision > 0,
-                          index: index,
-                          gateway: widget.worldGateway ??
-                              const DeviceWorldLibraryGateway(),
-                        ),
-                        const SizedBox(height: 8),
-                        Card(
-                          child: ListTile(
-                            leading: const Icon(Icons.lock_outline),
-                            title: const Text('Полная RPG по всей книге'),
-                            subtitle: const Text('Для запуска требуются проверенные сцены и выборы. '
-                                'Короткую личную RPG можно собрать в редакторе выше. '
-                                'Автоматическая адаптация всего романа пока '
-                                'не реализована.'),
-                          ),
-                        ),
-                        const SizedBox(height: 8),
+                              ],
+                            ),
+                            ExpansionTile(
+                              key: const Key('prepare-advanced-glossary'),
+                              title: const Text(
+                                  'Справка: что означают термины'),
+                              childrenPadding:
+                                  const EdgeInsets.symmetric(horizontal: 8),
+                              children: const [
+                                ListTile(
+                                  title: Text('Цитата и факт'),
+                                  subtitle: Text('Цитата — точные слова '
+                                      'книги. Факт — проверенное '
+                                      'утверждение о событии. Одно '
+                                      'не заменяет другое.'),
+                                ),
+                                ListTile(
+                                  title: Text('Сцена и выбор'),
+                                  subtitle: Text('Сцена — текущий эпизод. '
+                                      'Выбор — действие игрока, '
+                                      'доступное в этом эпизоде.'),
+                                ),
+                                ListTile(
+                                  title: Text('Условие и последствие'),
+                                  subtitle: Text('Условие определяет '
+                                      'доступность выбора. Последствие '
+                                      'меняет ход истории или состояние мира.'),
+                                ),
+                                ListTile(
+                                  title: Text('Канон и альтернатива'),
+                                  subtitle: Text('Канон опирается '
+                                      'на проверенное событие книги. '
+                                      'Альтернативу придумывает редактор; '
+                                      'она не выдаётся за исходный текст.'),
+                                ),
+                                ListTile(
+                                  title: Text('Игровой мир и прохождение'),
+                                  subtitle: Text('Мир — готовый сценарий. '
+                                      'Прохождение — решения игрока '
+                                      'и сохранённый прогресс в этом мире.'),
+                                ),
+                              ],
+                            ),
+
                         ExpansionTile(
                           key: const Key('prepare-source-details'),
                           tilePadding: EdgeInsets.zero,
-                          title: const Text('Технические сведения о книге'),
-                          subtitle: const Text('Индексация, фрагменты '
-                              'и иллюстрации — для диагностики'),
+                          title: const Text('Диагностика импорта книги'),
+                          subtitle: const Text('Проверяйте, если главы или изображения '
+                              'распознались не полностью'),
                           children: [
                             Align(
                               alignment: Alignment.centerLeft,
@@ -977,7 +1079,7 @@ class _SourceIndexPreviewPageState extends State<SourceIndexPreviewPage> {
                             ),
                           ],
                         ),
-                        const SizedBox(height: 6),
+
                         TextButton.icon(
                           key: const Key('prepare-show-chapters'),
                           onPressed: () => setState(
@@ -989,11 +1091,14 @@ class _SourceIndexPreviewPageState extends State<SourceIndexPreviewPage> {
                               : 'Показать разделы книги '
                                   '(${index.chapters.length})'),
                         ),
+                          ],
+                        ),
                       ],
                     ),
                   ),
                 ),
-                if (_showChapters)
+
+                if (_showChapters && _advancedModeOpen)
                   SliverList.builder(
                     itemCount: index.chapters.length,
                     itemBuilder: (context, i) {

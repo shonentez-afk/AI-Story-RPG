@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'preparation_editor_help.dart';
 
 import 'book_source_index.dart';
 import 'source_semantic_window.dart';
@@ -91,7 +92,7 @@ class _ZaiSemanticPreviewPageState extends State<ZaiSemanticPreviewPage> {
       return true;
     } catch (_) {
       if (mounted) setState(() => _reviewError = 'Не удалось сохранить '
-          'проверку ИИ. Прежний checkpoint не изменён.');
+          'проверку ИИ. Ранее сохранённые решения не изменены.');
       return false;
     } finally {
       if (mounted) setState(() => _reviewSaving = false);
@@ -401,6 +402,16 @@ class _ZaiSemanticPreviewPageState extends State<ZaiSemanticPreviewPage> {
                     key: const Key('zai-preview-book-title'),
                     style: Theme.of(context).textTheme.bodyMedium),
                 const SizedBox(height: 12),
+                const PreparationEditorHelp(
+                  purpose: 'Помощь ИИ для трудных фрагментов книги, а не автоматический генератор RPG.',
+                  steps: [
+                    'Проверьте название книги и прочитайте выбранный отрывок.',
+                    'Разрешите отправку только этого отрывка в Z.ai.',
+                    'Сверьте ответы с цитатами, отклоните ошибки и оставьте подходящие находки для дальнейшей проверки.',
+                  ],
+                  result: 'предложения по событиям и персонажам, ещё не факты и не игра.',
+                  next: 'откройте сводку находок и подготовьте сцены.',
+                ),
                 if (_reviewLoading)
                   const Text('Загружаем локальную очередь проверки ИИ…'),
                 if (_reviewSaving)
@@ -583,10 +594,10 @@ class _ZaiSemanticPreviewPageState extends State<ZaiSemanticPreviewPage> {
                   ],
                   const SizedBox(height: 8),
                   const Text('Гипотезы хранятся только в отдельной приватной '
-                      'очереди проверки, не в каноне, кампании или BookWorld. '
+                      'очереди проверки, но не в проверенных фактах или игре. '
                       'Включение в RPG будет отдельным проверяемым шагом. '
                       'Ни одна находка не перенесена в редакторы, '
-                      'канон, кампанию или BookWorld.'),
+                      'подтверждённые факты, кампанию или игровой мир.'),
                 ],
               ],
             ),

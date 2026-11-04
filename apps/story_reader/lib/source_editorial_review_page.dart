@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'preparation_editor_help.dart';
 
 import 'book_source_index.dart';
 import 'source_analysis_checkpoint_repository.dart';
@@ -316,6 +317,18 @@ class _SourceEditorialReviewPageState extends State<SourceEditorialReviewPage> {
                           'игровой канон. Редакторские решения не '
                           'изменяют оригинал, созданные миры или '
                           'сохранения. ИИ не используется.'),
+                      const PreparationEditorHelp(
+                        purpose: 'Ручная проверка событий и персонажей книги.',
+                        steps: [
+                          'Сверьте каждую важную цитату с оригиналом.',
+                          'Уточните, кто действует, что происходит и '
+                              'в каком порядке.',
+                          'Подтвердите только обоснованные факты, '
+                              'остальные оставьте спорными или отклоните.',
+                        ],
+                        result: 'проверенная основа для будущих игровых сцен.',
+                        next: 'вернитесь к короткому редактору RPG.',
+                      ),
                       if (_error != null)
                         Text(_error!, style: TextStyle(
                             color: Theme.of(context).colorScheme.error)),

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'preparation_editor_help.dart';
 
 import 'source_analysis_checkpoint_repository.dart';
 import 'zai_causal_choices_page.dart';
@@ -126,17 +127,17 @@ class _ZaiSourceSceneWorkbenchPageState
     final approved = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Удалить только черновик сцен M2f3d?'),
+        title: const Text('Удалить только черновик сцен?'),
         content: const Text('Это удалит только отдельные сцены и заметки '
-            'о контексте утверждений M2f3d. Все книги, цитаты, '
-            'редакторские решения M2f3a–c и RPG-сохранения сохранятся.'),
+            'о контексте событий. Книги и цитаты, '
+            'проверенные факты и сохранения игр останутся.'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx, false),
               child: const Text('Отмена')),
           FilledButton(
             key: const Key('zai-scene-reset-confirm'),
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Сбросить только M2f3d'),
+            child: const Text('Сбросить черновик сцен'),
           ),
         ],
       ),
@@ -342,13 +343,23 @@ class _ZaiSourceSceneWorkbenchPageState
             child: ListView(
               padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
               children: [
-                Text('M2f3d · сцены из исходных событий',
+                Text('Сцены по событиям книги',
                     key: const Key('zai-scene-title'),
                     style: Theme.of(context).textTheme.titleLarge),
                 const SizedBox(height: 6),
                 const Text('Только локальный черновик. Не создаёт '
                     'готовую RPG, персонажей или альтернативные развилки. '
                     'События сохраняют точные ссылки на книгу.'),
+                const PreparationEditorHelp(
+                  purpose: 'Собирает события книги в последовательные игровые сцены.',
+                  steps: [
+                    'Выберите подтверждённые исходные события.',
+                    'Создайте для каждого эпизода понятное название и порядок.',
+                    'Проверьте ссылки на книгу и готовность черновика.',
+                  ],
+                  result: 'сохранённые сцены с точными источниками, ещё без игровых выборов.',
+                  next: 'откройте «Игровые решения и последствия».',
+                ),
                 if (_loading || _saving) const LinearProgressIndicator(),
                 if (_error != null) ...[
                   Text(_error!, key: const Key('zai-scene-error'),
@@ -602,7 +613,7 @@ class _ZaiSourceSceneWorkbenchPageState
                   label: const Text('Игровые решения и причинные последствия'),
                 ),
                 const Text('Изменение списка или порядка сцен делает '
-                    'сохранённые решения M2f3e устаревшими. '
+                    'сохранённые игровые выборы требуют повторной проверки. '
                     'Их потребуется проверить заново; прежние сцены '
                     'и книги не удаляются.'),
                 const SizedBox(height: 16),
@@ -611,7 +622,7 @@ class _ZaiSourceSceneWorkbenchPageState
                     style: Theme.of(context).textTheme.titleMedium),
                 const Text('Готовый игровой мир пока НЕ собирается. '
                     'Причины ниже — проверяемые, но ни одна галочка '
-                    'не заменяет отдельный компилятор BookWorld.'),
+                    'не означает, что игровая история уже собрана.'),
                 if (report != null) ...[
                   Text('Покрытие оставленных событий: '
                       '${report.coveredEvents} / ${report.totalEvents} · '
@@ -625,7 +636,7 @@ class _ZaiSourceSceneWorkbenchPageState
                     ),
                 ],
                 const SizedBox(height: 16),
-                const Text('Данные M2f3a–c, библиотека и игровые '
+                const Text('Исходные данные, библиотека и игровые '
                     'сохранения остаются нетронутыми. Для создания '
                     'полноценной RPG требуются проверенные выборы, '
                     'последствия и независимая приёмка сценария.'),

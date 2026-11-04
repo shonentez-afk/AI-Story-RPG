@@ -50,7 +50,7 @@ class _PrivateGameReadinessPanelState
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Готовность книги к RPG',
+          Text('Что уже готово для игры?',
               style: Theme.of(context).textTheme.titleMedium),
           const SizedBox(height: 8),
           Text('1. Текст: ${widget.index.indexedChapterCount} '
@@ -59,14 +59,14 @@ class _PrivateGameReadinessPanelState
               'авторскую альтернативу в редакторе.'),
           const SizedBox(height: 8),
           if (_pending == null)
-            const Text('3. Игра: наличие установленного и проверенного '
-                '.bworld ещё не проверялось.')
+            const Text('3. Игра: наличие установленного игрового мира '
+                'ещё не проверено.')
           else
             FutureBuilder<PrivateGameReadiness>(
               future: _pending,
               builder: (context, snapshot) {
                 if (snapshot.connectionState != ConnectionState.done) {
-                  return const Text('3. Игра: проверяем локальные пакеты…');
+                  return const Text('3. Игра: проверяем сохранённые игровые миры…');
                 }
                 if (snapshot.hasError || !snapshot.hasData) {
                   return Text('3. Игра: проверка не завершена. '

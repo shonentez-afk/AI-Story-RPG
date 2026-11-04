@@ -77,7 +77,10 @@ void main() {
     ));
     await tester.pumpAndSettle();
     expect(find.textContaining('Окно 1 из 2'), findsOneWidget);
-    expect(find.byKey(const Key('zai-chunk-text')), findsOneWidget);
+    final sourceText = find.byKey(const Key('zai-chunk-text'));
+    await tester.scrollUntilVisible(sourceText, 120,
+        scrollable: find.byType(Scrollable).first, maxScrolls: 35);
+    expect(sourceText, findsOneWidget);
 
     final send = find.byKey(const Key('zai-send-single-chunk'));
     await tester.scrollUntilVisible(send, 140,

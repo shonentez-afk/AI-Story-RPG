@@ -78,7 +78,11 @@ void main() {
 
     expect(find.byKey(const Key('zai-graph-summary')), findsOneWidget);
     expect(find.textContaining('цитат на дальнейшую проверку 4'), findsOneWidget);
-    expect(find.textContaining('Порядок цитат не обязательно'), findsOneWidget);
+    final quoteOrder = find.textContaining('Порядок цитат не обязательно');
+    await tester.scrollUntilVisible(quoteOrder, 120,
+        scrollable: find.byType(Scrollable).first, maxScrolls: 45);
+    await tester.ensureVisible(quoteOrder);
+    expect(quoteOrder, findsOneWidget);
     expect(find.textContaining('Кай'), findsWidgets);
     final expansion = find.text('Кай').first;
     await tester.ensureVisible(expansion);

@@ -74,6 +74,15 @@ void main() {
 
   testWidgets('source scene creation is explicitly confirmed and '
       'future-chapter quotes stay hidden until opt-in', (tester) async {
+    // This test asserts confirmation workflow, not small-screen layout.
+    // Use a tall viewport for the newly added optional instructions;
+    // responsive layouts are covered by separate 320dp/200% tests.
+    tester.view.physicalSize = const Size(900, 1200);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
     final setup = _review();
     final sceneRepo = MemorySourceAnalysisCheckpointRepository();
     final consistencyRepo = MemorySourceAnalysisCheckpointRepository();
@@ -89,7 +98,10 @@ void main() {
     expect(find.textContaining('Кай раскрыл тайну'), findsNothing);
 
     final choose = find.byKey(Key('zai-scene-event-${setup.events.first.id}'));
+    await tester.scrollUntilVisible(choose, 150,
+        scrollable: find.byType(Scrollable).first, maxScrolls: 40);
     await tester.ensureVisible(choose);
+    await tester.pumpAndSettle();
     await tester.tap(choose);
     await tester.pumpAndSettle();
     final title = find.byKey(const Key('zai-scene-name-input'));
@@ -101,6 +113,8 @@ void main() {
     await tester.scrollUntilVisible(add, 130,
         scrollable: find.byType(Scrollable).first, maxScrolls: 35);
     await tester.pumpAndSettle();
+    await tester.ensureVisible(add);
+    await tester.pumpAndSettle();
     await tester.tap(add);
     await tester.pumpAndSettle();
     final submit = find.byKey(const Key('zai-scene-confirm-save'));
@@ -109,6 +123,8 @@ void main() {
     await tester.pumpAndSettle();
     expect(await sceneRepo.read(setup.queue.index.sourceFingerprint), isNull);
 
+    await tester.ensureVisible(add);
+    await tester.pumpAndSettle();
     await tester.tap(add);
     await tester.pumpAndSettle();
     final checkbox = find.byKey(const Key('zai-scene-confirm-check'));
@@ -163,7 +179,7 @@ void main() {
     await tester.ensureVisible(reset);
     await tester.tap(reset);
     await tester.pumpAndSettle();
-    expect(find.text('Удалить только черновик сцен M2f3d?'), findsOneWidget);
+    expect(find.text('Удалить только черновик сцен?'), findsOneWidget);
     await tester.tap(find.text('Отмена'));
     await tester.pumpAndSettle();
     expect(await sceneRepo.read(setup.queue.index.sourceFingerprint),

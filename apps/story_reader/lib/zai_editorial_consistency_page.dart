@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'preparation_editor_help.dart';
 
 import 'source_analysis_checkpoint_repository.dart';
 import 'source_semantic_provider.dart';
@@ -98,8 +99,8 @@ class _ZaiEditorialConsistencyPageState
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Сбросить вопросы согласованности?'),
-        content: const Text('Удалится только отдельный блокнот M2f3c. '
-            'Книги, цитаты, решения редактора, связи M2f3b и '
+        content: const Text('Удалится только список проверочных вопросов. '
+            'Книги, цитаты, проверки событий, связи и '
             'игровые сохранения останутся без изменений.'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx, false),
@@ -107,7 +108,7 @@ class _ZaiEditorialConsistencyPageState
           FilledButton(
             key: const Key('zai-consistency-reset-confirm'),
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Сбросить блокнот M2f3c'),
+            child: const Text('Сбросить вопросы'),
           ),
         ],
       ),
@@ -326,6 +327,16 @@ class _ZaiEditorialConsistencyPageState
                     'героев и время событий здесь НЕ подтверждаются. '
                     'Нет сетевых запросов и автоматического изменения RPG.'),
                 const SizedBox(height: 8),
+                const PreparationEditorHelp(
+                  purpose: 'Помогает заметить спорные имена, время событий и противоречия.',
+                  steps: [
+                    'Сравните точные цитаты и проверьте, об одном ли герое идёт речь.',
+                    'Отметьте спорные факты как вопросы, а не как истину.',
+                    'Перед редактированием игрового сюжета устраните важные противоречия.',
+                  ],
+                  result: 'список проверенных редактором вопросов; никаких автоматических исправлений книги.',
+                  next: 'вернитесь к событиям и сценам.',
+                ),
                 Text('Источников: ${graph.reviewed.length} · '
                     'возможных противоречий по формулировке: ${_hints.length} · '
                     'вопросов редактора: ${notes?.questions.length ?? 0}',
@@ -339,7 +350,7 @@ class _ZaiEditorialConsistencyPageState
                       key: const Key('zai-consistency-reset'),
                       onPressed: _saving ? null : _resetOnlyConsistency,
                       icon: const Icon(Icons.restart_alt),
-                      label: const Text('Сбросить только вопросы M2f3c'),
+                      label: const Text('Сбросить список проверочных вопросов'),
                     ),
                 ],
                 const SizedBox(height: 18),
@@ -509,7 +520,7 @@ class _ZaiEditorialConsistencyPageState
                 const SizedBox(height: 16),
                 const Text('Это не генератор игрового канона. '
                     'Алиасы, отношения, расхождения и порядок событий '
-                    'не публикуются в BookWorld или игровые сохранения.'),
+                    'не влияют на установленную игру или сохранения.'),
               ],
             ),
           ),

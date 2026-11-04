@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'preparation_editor_help.dart';
 
 import 'source_analysis_checkpoint_repository.dart';
 import 'zai_cross_window_evidence_graph.dart';
@@ -308,6 +309,16 @@ class _ZaiCrossWindowReviewPageState
                     'нерассмотренные предложения не объединяются. '
                     'Это НЕ готовый сюжет, не канон и не игровая хронология.'),
                 const SizedBox(height: 10),
+                const PreparationEditorHelp(
+                  purpose: 'Сравнение результатов разных отрывков одной книги.',
+                  steps: [
+                    'Просмотрите совпадения имён и событий, не объединяйте их по одному написанию.',
+                    'При необходимости отметьте предполагаемые связи и проверьте противоречия.',
+                    'Передайте выбранные события в редактор сцен.',
+                  ],
+                  result: 'редакторские заметки для проверки, а не подтверждённая хронология.',
+                  next: 'проверьте смысл событий и создайте сцены.',
+                ),
                 Text('Окон проверено ${widget.queue.completedCount} '
                     'из ${widget.queue.windows.length} · '
                     'цитат на дальнейшую проверку ${_graph.reviewed.length} · '
