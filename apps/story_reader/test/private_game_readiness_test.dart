@@ -154,7 +154,7 @@ void main() {
     await tester.pumpWidget(MaterialApp(home: Scaffold(body:
         PrivateGameReadinessPanel(index: index, gateway: gateway))));
     await tester.pump();
-    expect(find.textContaining('Готовность книги к RPG'), findsOneWidget);
+    expect(find.textContaining('Что уже готово для игры?'), findsOneWidget);
     expect(find.byKey(const Key('prepare-open-verified-private-rpg')),
         findsNothing);
     await tester.tap(find.byKey(const Key('prepare-recheck-game')));
