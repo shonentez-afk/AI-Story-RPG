@@ -16,12 +16,14 @@ class ZaiCrossWindowReviewPage extends StatefulWidget {
     this.linksRepository,
     this.consistencyRepository,
     this.scenesRepository,
+    this.choicesRepository,
   });
 
   final ZaiWindowReviewQueue queue;
   final SourceAnalysisCheckpointRepository? linksRepository;
   final SourceAnalysisCheckpointRepository? consistencyRepository;
   final SourceAnalysisCheckpointRepository? scenesRepository;
+  final SourceAnalysisCheckpointRepository? choicesRepository;
 
   @override
   State<ZaiCrossWindowReviewPage> createState() =>
@@ -246,6 +248,7 @@ class _ZaiCrossWindowReviewPageState
         builder: (_) => ZaiSourceSceneWorkbenchPage(
           queue: widget.queue,
           scenesRepository: widget.scenesRepository,
+          choicesRepository: widget.choicesRepository,
           consistencyRepository: widget.consistencyRepository,
         ),
       ),
