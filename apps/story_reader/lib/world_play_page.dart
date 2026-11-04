@@ -416,37 +416,43 @@ class _WorldPlayPageState extends State<WorldPlayPage> {
                                   ],
                                   // Uses the existing gateway/SQLite campaign;
                                   // does not replace the classic choice buttons.
-                                  ExpansionTile(
-                                    key: ValueKey('world-free-text-' +
-                                        view.campaignId + '-' +
-                                        view.revision.toString()),
-                                    title: const Text(
-                                        'Свободное действие (офлайн)'),
-                                    subtitle: const Text(
-                                        'Подбор разрешённых ходов по тексту'),
-                                    initiallyExpanded: false,
-                                    children: [
-                                      FreeTextActionPanel(
-                                        campaignId: widget.campaignId,
-                                        gateway: widget.gateway,
-                                        onBusyChanged: (busy) {
-                                          if (mounted) {
-                                            setState(() => _choosing = busy);
-                                          }
-                                        },
-                                        onCommitted: (result) {
-                                          if (!mounted) return;
-                                          setState(() {
-                                            _view = result.view;
-                                            _choosing = false;
-                                            _errorText = null;
-                                          });
-                                          if (_sceneScroll.hasClients) {
-                                            _sceneScroll.jumpTo(0);
-                                          }
-                                        },
-                                      ),
-                                    ],
+                                  // ExpansionTile builds a ListTile internally; it
+                                  // also needs its own Material painting surface
+                                  // above the opaque reading palette ColoredBox.
+                                  Material(
+                                    color: Colors.transparent,
+                                    child: ExpansionTile(
+                                      key: ValueKey('world-free-text-' +
+                                          view.campaignId + '-' +
+                                          view.revision.toString()),
+                                      title: const Text(
+                                          'Свободное действие (офлайн)'),
+                                      subtitle: const Text(
+                                          'Подбор разрешённых ходов по тексту'),
+                                      initiallyExpanded: false,
+                                      children: [
+                                        FreeTextActionPanel(
+                                          campaignId: widget.campaignId,
+                                          gateway: widget.gateway,
+                                          onBusyChanged: (busy) {
+                                            if (mounted) {
+                                              setState(() => _choosing = busy);
+                                            }
+                                          },
+                                          onCommitted: (result) {
+                                            if (!mounted) return;
+                                            setState(() {
+                                              _view = result.view;
+                                              _choosing = false;
+                                              _errorText = null;
+                                            });
+                                            if (_sceneScroll.hasClients) {
+                                              _sceneScroll.jumpTo(0);
+                                            }
+                                          },
+                                        ),
+                                      ],
+                                    ),
                                   ),
                                   const SizedBox(height: 8),
                                   if (_choosing) const LinearProgressIndicator(
