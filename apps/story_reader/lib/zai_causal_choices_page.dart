@@ -204,9 +204,8 @@ class _ZaiCausalChoicesPageState extends State<ZaiCausalChoicesPage> {
     final forbids = _forbidden.isEmpty ? <String>[] : [_forbidden];
     final adds = _added.isEmpty ? <String>[] : [_added];
     final removes = _removed.isEmpty ? <String>[] : [_removed];
-    ZaiCausalChoiceNotebook proposed;
     try {
-      proposed = notebook.addChoice(
+      notebook.addChoice(
         from: from, to: to, label: label, reason: reason,
         requires: requires, forbids: forbids,
         adds: adds, removes: removes,
