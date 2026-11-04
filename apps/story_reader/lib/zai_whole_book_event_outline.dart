@@ -1,4 +1,3 @@
-import 'book_source_index.dart';
 import 'source_semantic_provider.dart';
 import 'zai_auto_whole_book_analysis.dart';
 
