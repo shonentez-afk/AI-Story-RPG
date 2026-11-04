@@ -3,6 +3,8 @@ name: AI Story RPG CI
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - '.github/workflows/storage-prune-once.yml'
   pull_request:
   workflow_dispatch:
 
