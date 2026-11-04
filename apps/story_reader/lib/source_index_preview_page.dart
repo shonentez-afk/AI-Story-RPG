@@ -988,7 +988,10 @@ class _SourceIndexPreviewPageState extends State<SourceIndexPreviewPage> {
                             trailing: const Icon(Icons.chevron_right),
                             enabled: !_offlineWorking && !_busy,
                             onTap: () => unawaited(_openEditor(
-                              ZaiWholeBookAnalysisPage(index: index),
+                              ZaiWholeBookAnalysisPage(
+                                index: index,
+                                gateway: widget.worldGateway,
+                              ),
                             )),
                           ),
                         ),
