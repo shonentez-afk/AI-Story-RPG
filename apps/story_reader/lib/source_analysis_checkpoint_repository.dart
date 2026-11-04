@@ -33,6 +33,7 @@ enum SourceCheckpointScope {
   zaiCausalChoices,
   zaiPrivateCompilation,
   zaiSourceAlignment,
+  zaiAutoWholeBookReview,
 }
 
 /// Private app-support storage shared by Android and Windows.
@@ -68,6 +69,7 @@ class FileSourceAnalysisCheckpointRepository
   static const _zaiCausalFolder = 'ai_story_zai_private_causal_choices_m2f3e_v1';
   static const _zaiCompileFolder = 'ai_story_zai_private_compile_inputs_m2f3f2_v1';
   static const _zaiAlignFolder = 'ai_story_zai_source_alignment_m2f3g_v1';
+  static const _zaiAutoBookFolder = 'ai_story_zai_auto_book_review_m2g2_v1';
 
   static void _checkFingerprint(String fingerprint) {
     if (!_validFingerprint.hasMatch(fingerprint)) {
@@ -96,6 +98,7 @@ class FileSourceAnalysisCheckpointRepository
       SourceCheckpointScope.zaiCausalChoices => _zaiCausalFolder,
       SourceCheckpointScope.zaiPrivateCompilation => _zaiCompileFolder,
       SourceCheckpointScope.zaiSourceAlignment => _zaiAlignFolder,
+      SourceCheckpointScope.zaiAutoWholeBookReview => _zaiAutoBookFolder,
     };
     final folder = Directory('${base.path}/$name');
     if (!await folder.exists()) await folder.create(recursive: true);
