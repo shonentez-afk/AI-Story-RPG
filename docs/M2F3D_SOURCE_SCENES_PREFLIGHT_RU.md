@@ -17,8 +17,15 @@
 - `zai_source_scene_board_test.dart`: группировка событий одного окна/главы, независимые главы, смена порядка, отдельные категории утверждений, защита от дублирования, чужих или отозванных IDs, подмены checksum, source-lock, непротиворечивость временных вопросов и отсутствие «готовой RPG».
 - `zai_source_scene_workbench_page_test.dart`: создание сцены с **отдельным согласием**, отмена не пишет на диск, первоначально скрытые будущие главы, spoiler opt-in, повреждённый checkpoint не затирается без специального сброса, открытие через существующую сводку без сети.
 - `public_domain_grimm_full_fb2_test.dart`: **полный настоящий FB2 Гримм #2591** (62 сказки, 909 абзацев, 514 890 символов) остаётся обязательным тестом и подтверждает, что без явно сохранённых источников M2f3d не придумывает сцены или игровые факты. Два старых личных FB2 Андерсена остаются SKIP только при отсутствии файлов в публичном runner.
-- **CODE / EXACT-HEAD CI PENDING.** Обязательны `Python reference`, `Dart engine`, `BookWorld/SQLite/schema`, `Flutter analyze + all widgets + real Grimm`, `Windows portable`, `Android debug APK`, `M0`. Не мержить в main до PASS всех критериев. Реальный физический Android/Windows с длинной русской FB2 и живым BYOK отдельно DEVICE PENDING.
+- **PR #54 MERGED / EXACT-HEAD CI PASS.** Обязательны `Python reference`, `Dart engine`, `BookWorld/SQLite/schema`, `Flutter analyze + all widgets + real Grimm`, `Windows portable`, `Android debug APK`, `M0`. Не мержить в main до PASS всех критериев. Реальный физический Android/Windows с длинной русской FB2 и живым BYOK отдельно DEVICE PENDING.
 
 ## Следующее
 
 M2f3e: строгий семантический preflight сцен и конфликтов, редактор альтернатив и последствий, NPC-спойлеры/знания, связка с уже существующим M2c `IntermediateStoryBlueprint` и локальным `BookWorld` **только после отдельного подтверждения**. Затем M2f4 — свободная игровая LLM с сохранениями и контролем ошибок. M2f3d сам по себе не создаёт играбельную RPG.
+
+
+## Приёмка PR #54
+
+- Exact PR HEAD `4672d324652bb2298239c2464cf57f5559ed80d1`, main squash `fe274bc09560d9297f5d2725185589084cc5a2ae`.
+- CI `41787697020` COMPLETED/SUCCESS **6/6**: Python/Dart/BookWorld+SQLite/Flutter analyze & widget (371 PASS / 2 private FB2 SKIP, 62 полного Grimm)/Windows portable/Android APK. M0 `41787696945` COMPLETED/SUCCESS на том же SHA.
+- Исправлены 4 warning в Flutter analyzer и три виджет-регрессии прокрутки/безопасного сброса; всё проверено финальным CI без исключения тестов. Реальные устройства и BYOK-русская FB2 DEVICE PENDING. Post-merge main CI/release ещё требуют отдельного фактического подтверждения.
