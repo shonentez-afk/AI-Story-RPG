@@ -164,13 +164,18 @@ class _FreeTextActionPanelState extends State<FreeTextActionPanel> {
             const SizedBox(height: 8),
             const Text('Варианты (ничего ещё не выполнено):'),
             for (final offer in preview!.offers)
-              ListTile(
-                key: Key('free-text-choice-' + offer.choiceId),
-                title: Text(offer.label),
-                trailing: Icon(_selected?.choiceId == offer.choiceId
-                    ? Icons.check_circle : Icons.radio_button_unchecked),
-                onTap: _busy ? null :
-                    () => setState(() => _selected = offer),
+              // ListTile must paint onto its own Material surface when the
+              // reader page uses an opaque reading-themed ColoredBox.
+              Material(
+                color: Colors.transparent,
+                child: ListTile(
+                  key: Key('free-text-choice-' + offer.choiceId),
+                  title: Text(offer.label),
+                  trailing: Icon(_selected?.choiceId == offer.choiceId
+                      ? Icons.check_circle : Icons.radio_button_unchecked),
+                  onTap: _busy ? null :
+                      () => setState(() => _selected = offer),
+                ),
               ),
             FilledButton.icon(
               key: const Key('free-text-confirm'),
