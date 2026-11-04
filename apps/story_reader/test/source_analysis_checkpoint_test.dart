@@ -99,7 +99,7 @@ void main() {
 
     await tester.pumpAndSettle();
     expect(find.text('Обработано фрагментов: 0 из 1'), findsOneWidget);
-    expect(find.textContaining('Предыдущий checkpoint сохранён'),
+    expect(find.textContaining('Ранее проверенные результаты сохранены'),
         findsOneWidget);
     await tester.ensureVisible(find.byKey(const Key('prepare-search-mentions')));
     await tester.pumpAndSettle();
