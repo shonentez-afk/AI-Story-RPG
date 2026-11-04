@@ -452,7 +452,7 @@ class _LibraryPageState extends State<LibraryPage> {
     try {
       final selection = await FilePicker.platform.pickFiles(
         type: FileType.custom,
-        allowedExtensions: ['txt', 'fb2', 'bworld'],
+        allowedExtensions: ['txt', 'fb2', 'zip', 'bworld'],
         withData: true,
       );
       if (selection == null || selection.files.isEmpty) return;
