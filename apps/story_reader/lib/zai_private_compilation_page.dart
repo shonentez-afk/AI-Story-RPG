@@ -207,8 +207,8 @@ class _ZaiPrivateCompilationPageState
     } catch (_) {
       if (mounted) setState(() {
         _corrupt = true;
-        _error = 'Редакторский checkpoint изменился или повреждён. '
-            'Исходный файл оставлен без замены. Можно сбросить только M2f3f2.';
+        _error = 'Сохранённый черновик изменился или повреждён. '
+            'Книга не изменена. Можно отдельно сбросить черновик сборки.';
       });
     } finally {
       if (mounted) setState(() => _loading = false);
@@ -230,7 +230,7 @@ class _ZaiPrivateCompilationPageState
       });
     } catch (_) {
       if (mounted) setState(() =>
-          _error = 'Не удалось сохранить M2f3f2. Прежний файл не заменён.');
+          _error = 'Не удалось сохранить изменения. Прежний черновик сохранён.');
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -240,7 +240,7 @@ class _ZaiPrivateCompilationPageState
     if (_busy || _loading) return;
     final yes = await showDialog<bool>(context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Сбросить только подготовку M2f3f2?'),
+        title: const Text('Сбросить только этот черновик сборки?'),
         content: const Text('Удалятся только редакторские тексты и ручные '
             'соответствия событий M2f3f2. Книга, результаты анализа, '
             'готовые миры и игровые сохранения останутся.'),
@@ -341,8 +341,8 @@ class _ZaiPrivateCompilationPageState
     if (latest == null ||
         latest != widget.notebook.encode()) {
       throw const FormatException(
-          'Причинный план M2f3e изменён или не сохранён. '
-          'Откройте заново редактор M2f3f2.');
+          'Игровые решения изменились или ещё не сохранены. '
+          'Откройте заново редактор сборки.');
     }
     final draft = _draft;
     if (draft == null ||
@@ -350,7 +350,7 @@ class _ZaiPrivateCompilationPageState
             draft.encode(widget.notebook)) {
       throw const FormatException(
           'Редакторские тексты изменились на диске. '
-          'Перезагрузите M2f3f2 без перезаписи прежних решений.');
+          'Перезагрузите редактор без потери прежних решений.');
     }
   }
 
@@ -358,7 +358,7 @@ class _ZaiPrivateCompilationPageState
     final draft = _draft;
     if (_loading || _busy || draft == null || _corrupt) return;
     if (_scenes.isEmpty) {
-      setState(() => _error = 'Сначала создайте сцены в M2f3d.');
+      setState(() => _error = 'Сначала создайте сцены в редакторе событий.');
       return;
     }
     if (_sceneText.text !=
@@ -441,7 +441,7 @@ class _ZaiPrivateCompilationPageState
         compiled: built, gateway: _gateway, userConfirmedInstall: true);
       if (mounted) setState(() {
         _installed = world;
-        _notice = 'Частный BookWorld установлен. '
+        _notice = 'Личный игровой мир установлен. '
             'Для начала создайте новую кампанию.';
       });
     } catch (error) {
@@ -502,11 +502,11 @@ class _ZaiPrivateCompilationPageState
         child: ListView(
           padding: const EdgeInsets.fromLTRB(16, 16, 16, 36),
           children: [
-            Text('M2f3f2 · из книги в BookWorld',
+            Text('Из проверенного сценария в игру',
                 key: const Key('zai-private-title'),
                 style: Theme.of(context).textTheme.titleLarge),
             const Text('Это ручная проверка перед сборкой. Ответы ИИ '
-                'keepForReview не считаются каноном. '
+                'с пометкой «проверить» ещё не подтверждены. '
                 'Публикация и отправка исходного текста запрещены.'),
             const PreparationEditorHelp(
               purpose: 'Последняя проверка перед созданием личного игрового мира.',
@@ -529,7 +529,7 @@ class _ZaiPrivateCompilationPageState
                 key: const Key('zai-private-reset'),
                 onPressed: !_busy ? _reset : null,
                 icon: const Icon(Icons.restore),
-                label: const Text('Сбросить только M2f3f2'),
+                label: const Text('Сбросить только подготовку сборки'),
               ),
             if (!_corrupt && draft != null) ...[
               const SizedBox(height: 12),
@@ -542,12 +542,12 @@ class _ZaiPrivateCompilationPageState
                 onPressed: enabled && _scenes.isNotEmpty
                     ? _openSourceAlignment : null,
                 icon: const Icon(Icons.library_books_outlined),
-                label: const Text('Сопоставить цитаты с M2c'),
+                label: const Text('Сопоставить игровые события с книгой'),
               ),
               if (_sources == null)
                 const Text('Для сборки подготовьте и утвердите '
                     'исходные цитаты через «Персонажи, события '
-                    'и хронология» (M2c).'),
+                    'и хронология».'),
               if (!_showFuture && _scenes.any((s) => s.chapterIndex > 0))
                 OutlinedButton.icon(
                   key: const Key('zai-private-reveal'),
@@ -625,7 +625,7 @@ class _ZaiPrivateCompilationPageState
                                   ? selected : null,
                               isExpanded: true,
                               decoration: const InputDecoration(
-                                labelText: 'Отдельно подтверждённый факт M2c',
+                                labelText: 'Подтверждённый факт из книги',
                               ),
                               hint: const Text('Выбрать проверенную цитату'),
                               items: [
@@ -649,7 +649,7 @@ class _ZaiPrivateCompilationPageState
                                   } : null,
                             ),
                             if (possible.isEmpty)
-                              const Text('Нет точной подтверждённой пары M2c. '
+                              const Text('Для события нет проверенного факта книги. '
                                   'Откройте независимый редактор событий.'),
                             const SizedBox(height: 12),
                           ],
@@ -687,7 +687,7 @@ class _ZaiPrivateCompilationPageState
               Text('Проверка и частная компиляция',
                   style: Theme.of(context).textTheme.titleMedium),
               const Text('Только исходные цитаты с точными диапазонами '
-                  'и подтверждениями M2c попадут в историю как источник. '
+                  'и подтверждениями редактора попадут в историю как источник. '
                   'Требуются две достижимые концовки и последствия выбора.'),
               FilledButton.icon(
                 key: const Key('zai-private-compile'),
@@ -721,7 +721,7 @@ class _ZaiPrivateCompilationPageState
                 key: const Key('zai-private-reset'),
                 onPressed: !_busy ? _reset : null,
                 icon: const Icon(Icons.restart_alt),
-                label: const Text('Сбросить только редактор M2f3f2'),
+                label: const Text('Сбросить только черновик сборки'),
               ),
               const Text('Оригинальная книга, настройки подключения '
                   'ИИ и старые игровые сохранения остаются неизменными.'),
