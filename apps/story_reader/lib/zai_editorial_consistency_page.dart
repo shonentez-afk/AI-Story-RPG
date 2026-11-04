@@ -108,7 +108,7 @@ class _ZaiEditorialConsistencyPageState
           FilledButton(
             key: const Key('zai-consistency-reset-confirm'),
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Сбросить блокнот M2f3c'),
+            child: const Text('Сбросить вопросы'),
           ),
         ],
       ),
@@ -520,7 +520,7 @@ class _ZaiEditorialConsistencyPageState
                 const SizedBox(height: 16),
                 const Text('Это не генератор игрового канона. '
                     'Алиасы, отношения, расхождения и порядок событий '
-                    'не публикуются в BookWorld или игровые сохранения.'),
+                    'не влияют на установленную игру или сохранения.'),
               ],
             ),
           ),
