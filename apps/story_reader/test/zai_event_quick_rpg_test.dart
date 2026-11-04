@@ -1,3 +1,6 @@
+import 'dart:io';
+import 'dart:typed_data';
+
 import 'package:ai_story_reader/book_import.dart';
 import 'package:ai_story_reader/book_source_index.dart';
 import 'package:ai_story_reader/quick_rpg_builder.dart';
@@ -35,6 +38,74 @@ BookSourceIndex _story([String suffix = '']) =>
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  test('real public-domain Frog Prince FB2 can use exact AI-style '
+      'event anchors in the private runtime (without real network)', () async {
+    final path = Platform.environment['AI_RPG_FROG_PRINCE_FB2_PATH'];
+    if (path == null) return;
+    final book = BookImporter.parse(
+        'frog_prince_ci.fb2', Uint8List.fromList(
+            await File(path).readAsBytes()));
+    final index = BookSourceIndexer.index(book);
+    final manifest = ZaiWholeBookConsentManifest.fromIndex(index);
+    expect(manifest.plannedRequests, greaterThan(0));
+    final memory = _Store();
+    final analyzer = ZaiAutoWholeBookAnalysis(
+      repository: memory,
+      preview: (index, window, token, includeTitle) async {
+        final found = [
+          for (final chunk in window.chunks)
+            if (chunk.blockKind.name == 'paragraph' && chunk.text.length >= 60)
+              SemanticCandidate.propose(
+                index, chunk,
+                category: SemanticCategory.event,
+                startUtf16: chunk.startUtf16,
+                endUtf16: chunk.startUtf16 + 60,
+                label: 'Отрывок для проверки события',
+                uncertainty: 'Проверена только точность текста, '
+                    'не смысл события.',
+              ),
+        ];
+        final entries = found.isEmpty ? <SemanticCandidate>[] : [found.first];
+        return ZaiSemanticPreviewResult(
+          batch: SemanticCandidateBatch(
+            providerId: ZaiSemanticPreviewService.providerId,
+            providerVersion: ZaiSemanticPreviewService.providerVersion,
+            sourceFingerprint: index.sourceFingerprint,
+            chunkIds: [for (final c in window.chunks) c.id],
+            candidates: entries,
+          ),
+          totalSuggestions: entries.length,
+          rejectedCount: 0,
+          rejectedNonRussian: 0,
+        );
+      },
+    );
+    var result = await analyzer.read(index);
+    var batches = 0;
+    while (!result.complete && batches < 64) {
+      result = await analyzer.analyze(
+        index: index,
+        approvedManifestDigest: manifest.approvalDigest,
+        explicitWholeBookConsent: true,
+        maxWindowsPerRun: 64,
+      );
+      batches++;
+    }
+    expect(result.complete, true);
+    final outline = ZaiWholeBookEventOutline.build(result);
+    expect(outline.events.length, greaterThanOrEqualTo(2));
+    final plan = QuickRpgBuilder.proposeFromEventOutline(index, outline);
+    final compiled = await QuickRpgBuilder.compile(
+      plan: plan,
+      allQuotesReviewedByUser: true,
+      privateUseConfirmed: true,
+    );
+    final checked = const PrivateBookworldImporter().inspect(compiled.archive);
+    expect(checked.sourceFingerprint, index.sourceFingerprint);
+    expect(checked.requiresNetwork, false);
+    expect(checked.canDistributePublicly, false);
+  });
 
   test('all book event quotes compile to a private, playable '
       'two-mode source-verified world', () async {
