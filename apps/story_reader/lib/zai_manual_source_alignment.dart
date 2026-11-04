@@ -75,7 +75,7 @@ class ZaiSourceAlignmentBaseline {
     final narrativeText = await narrativeRepository.read(fingerprint);
     if (narrativeText == null) {
       throw const FormatException(
-          'Сначала завершите независимый анализ событий M2b/M2c.');
+          'Нет независимого анализа исходных событий M2b/M2c. Завершите подготовку книги.');
     }
     final narrative = StoryEvidenceReviewSession.decode(index, narrativeText);
     if (narrative.scannedChunks != index.chunks.length) {
