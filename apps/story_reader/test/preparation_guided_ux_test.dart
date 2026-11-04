@@ -120,11 +120,16 @@ void main() {
     expect(find.byKey(const Key('prepare-advanced-ai')), findsOneWidget);
     expect(find.byKey(const Key('prepare-advanced-story')), findsOneWidget);
     final glossary = find.byKey(const Key('prepare-advanced-glossary'));
-    await tester.scrollUntilVisible(glossary, 170,
-        scrollable: find.byType(Scrollable).first, maxScrolls:30);
+    await tester.scrollUntilVisible(glossary, 140,
+        scrollable: find.byType(Scrollable).first, maxScrolls:45);
+    await tester.ensureVisible(glossary);
+    await tester.pumpAndSettle();
     await tester.tap(glossary);
     await tester.pumpAndSettle();
-    expect(find.text('Цитата и факт'), findsOneWidget);
+    final term = find.text('Цитата и факт');
+    await tester.scrollUntilVisible(term, 120,
+        scrollable: find.byType(Scrollable).first, maxScrolls: 45);
+    expect(term, findsOneWidget);
     expect(find.text('Игровой мир и прохождение'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
