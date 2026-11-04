@@ -807,79 +807,13 @@ class _SourceIndexPreviewPageState extends State<SourceIndexPreviewPage> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         const Divider(height: 28),
-                        Text('Шаг 3. Проверка событий, фактов и связей',
+                        Text('Шаг 2. Создайте первую RPG',
                             style: Theme.of(context).textTheme.titleMedium),
                         const SizedBox(height: 6),
-                        const Text('Откройте этот раздел, чтобы найти '
-                            'отдельные фразы о событиях и сопоставить '
-                            'их с текстом. Вы сами решаете, какие цитаты '
-                            'сохранить для последующей проверки. '
-                            'Внутри есть раздел связей персонажей и хронологии.'),
-                        const SizedBox(height: 10),
-                        IgnorePointer(
-                          ignoring: _offlineWorking || _busy,
-                          child: SourceNarrativeReviewPanel(
-                          key: ValueKey('${index.sourceFingerprint}-${_narrativeRefresh}'),
-                          index: index,
-                          sourceMentions: _analysis,
-                          ),
-                        ),
-                        const SizedBox(height: 10),
-                        Card(
-                          child: ListTile(
-                            key: const Key('prepare-open-expanded-source-editor'),
-                            leading: const Icon(Icons.account_tree_outlined),
-                            title: const Text(
-                                'Редактор персонажей, событий и хронологии'),
-                            subtitle: const Text(
-                                'Проверьте все найденные смысловые утверждения, '
-                                'разделите похожие имена и уточните порядок глав. '
-                                'Редактор не меняет канон автоматически.'),
-                            trailing: const Icon(Icons.chevron_right),
-                            enabled: !_offlineWorking && !_busy,
-                            onTap: () => unawaited(_openEditor(
-                              SourceEditorialReviewPage(index: index),
-                            )),
-                          ),
-                        ),
-                        const SizedBox(height: 10),
-                        Card(
-                          child: ListTile(
-                            key: const Key('prepare-open-zai-preview'),
-                            leading: const Icon(Icons.auto_awesome_outlined),
-                            title: const Text(
-                                'ИИ: проверить отдельный фрагмент книги'),
-                            subtitle: const Text('GLM-4.7-Flash предложит '
-                                'персонажей, места, события и факты. '
-                                'Вы заранее увидите точный текст отправки '
-                                'и отдельно подтвердите каждый запрос. '
-                                'Результат — только предпросмотр без '
-                                'автоматического сохранения или изменения RPG.'),
-                            trailing: const Icon(Icons.chevron_right),
-                            enabled: !_offlineWorking && !_busy,
-                            onTap: () => unawaited(_openEditor(
-                              ZaiSemanticPreviewPage(index: index),
-                            )),
-                          ),
-                        ),
-                        const Divider(height: 28),
-                        ExpansionTile(
-                          key: ValueKey('prepare-experimental-${index.sourceFingerprint}'),
-                          tilePadding: EdgeInsets.zero,
-                          childrenPadding: const EdgeInsets.only(bottom: 12),
-                          leading: const Icon(Icons.science_outlined),
-                          title: const Text('Дополнительно: экспериментальный поиск'),
-                          subtitle: const Text('Повторно ищет отдельные имена '
-                              'и места; это не полноценный ИИ. '
-                              'Для обычной подготовки необязателен.'),
-                          children: [
-                            SourceSemanticReviewPanel(
-                              key: ValueKey('semantic-${index.sourceFingerprint}'),
-                              index: index,
-                            ),
-                          ],
-                        ),
-                        const Divider(height: 28),
+                        const Text('Начните с короткой истории: выберите '
+                            'события книги, решение игрока и альтернативный '
+                            'исход. Это проще, чем сразу строить большой сюжет.'),
+
                         Card(
                           child: ListTile(
                             key: const Key('prepare-open-story-editor'),
@@ -901,7 +835,156 @@ class _SourceIndexPreviewPageState extends State<SourceIndexPreviewPage> {
                             )),
                           ),
                         ),
-                        const SizedBox(height: 8),
+                        const SizedBox(height: 12),
+                        Text('Шаг 3. Проверьте и запустите',
+                            style: Theme.of(context).textTheme.titleMedium),
+                        const Text('Проверка покажет, какие события, '
+                            'выборы или концовки ещё не готовы. '
+                            'Установленный игровой мир появится в библиотеке.'),
+
+                        PrivateGameReadinessPanel(
+                          key: ValueKey('private-readiness-'
+                              '${index.sourceFingerprint}-$_editorReturnRevision'),
+                          checkOnOpen: _editorReturnRevision > 0,
+                          index: index,
+                          gateway: widget.worldGateway ??
+                              const DeviceWorldLibraryGateway(),
+                        ),
+                        const SizedBox(height: 10),
+
+                        Card(
+                          child: ListTile(
+                            leading: const Icon(Icons.lock_outline),
+                            title: const Text('Полная RPG по всей книге'),
+                            subtitle: const Text('Сейчас можно создать проверенную короткую игру. '
+                                'Короткую личную RPG можно собрать в редакторе выше. '
+                                'Автоматическая адаптация всего романа пока '
+                                'не реализована.'),
+                          ),
+                        ),
+                        const Divider(height: 30),
+                        ExpansionTile(
+                          key: const Key('prepare-advanced-mode'),
+                          initiallyExpanded: false,
+                          onExpansionChanged: (open) =>
+                              setState(() => _advancedModeOpen = open),
+                          tilePadding: EdgeInsets.zero,
+                          leading: const Icon(Icons.tune_outlined),
+                          title: const Text('Расширенная настройка RPG'),
+                          subtitle: const Text('Необязательно: исправить '
+                              'события, привлечь ИИ, создать больше сцен '
+                              'или проверить импорт. Начните с нужного раздела.'),
+                          children: [
+                            const Padding(
+                              padding: EdgeInsets.fromLTRB(8, 4, 8, 12),
+                              child: Text('Редакторские инструменты нужны '
+                                  'только для сложных случаев. Их результаты '
+                                  'сохраняются отдельно от книги и '
+                                  'прохождений. Откройте раздел и прочитайте '
+                                  'его назначение перед работой.'),
+                            ),
+                            ExpansionTile(
+                              key: const Key('prepare-advanced-evidence'),
+                              title: const Text(
+                                  '1. Уточнить цитаты, персонажей и события'),
+                              subtitle: const Text('Если анализ пропустил '
+                                  'событие, перепутал имена или хронологию. '
+                                  'Результат — проверенные факты, ещё не игра.'),
+                              children: [
+                                const Padding(
+                                  padding: EdgeInsets.all(8),
+                                  child: Text('Найдите фразу в книге, '
+                                      'подтвердите или отклоните цитату. '
+                                      'Затем уточните, кто действовал '
+                                      'и в каком порядке. Это основа '
+                                      'для игровых сцен.'),
+                                ),
+
+                        IgnorePointer(
+                          ignoring: _offlineWorking || _busy,
+                          child: SourceNarrativeReviewPanel(
+                          key: ValueKey('${index.sourceFingerprint}-${_narrativeRefresh}'),
+                          index: index,
+                          sourceMentions: _analysis,
+                          ),
+                        ),
+
+                        Card(
+                          child: ListTile(
+                            key: const Key('prepare-open-expanded-source-editor'),
+                            leading: const Icon(Icons.account_tree_outlined),
+                            title: const Text(
+                                'Редактор персонажей, событий и хронологии'),
+                            subtitle: const Text(
+                                'Проверьте все найденные смысловые утверждения, '
+                                'разделите похожие имена и уточните порядок глав. '
+                                'Редактор не меняет канон автоматически.'),
+                            trailing: const Icon(Icons.chevron_right),
+                            enabled: !_offlineWorking && !_busy,
+                            onTap: () => unawaited(_openEditor(
+                              SourceEditorialReviewPage(index: index),
+                            )),
+                          ),
+                        ),
+                              ],
+                            ),
+                            ExpansionTile(
+                              key: const Key('prepare-advanced-ai'),
+                              title: const Text(
+                                  '2. Помощь ИИ при разборе фрагментов'),
+                              subtitle: const Text('Необязательно: '
+                                  'получить предложения по выбранному '
+                                  'отрывку и проверить их вручную.'),
+                              children: [
+                                const Padding(
+                                  padding: EdgeInsets.all(8),
+                                  child: Text('Нужен настроенный Z.ai. '
+                                      'Вы увидите точный текст отправки '
+                                      'и отдельно разрешите каждый запрос. '
+                                      'Ответы ИИ — предположения, '
+                                      'а не подтверждённые события. '
+                                      'После проверки переходите к сценам.'),
+                                ),
+
+                        Card(
+                          child: ListTile(
+                            key: const Key('prepare-open-zai-preview'),
+                            leading: const Icon(Icons.auto_awesome_outlined),
+                            title: const Text(
+                                'ИИ: проверить отдельный фрагмент книги'),
+                            subtitle: const Text('GLM-4.7-Flash предложит '
+                                'персонажей, места, события и факты. '
+                                'Вы заранее увидите точный текст отправки '
+                                'и отдельно подтвердите каждый запрос. '
+                                'Результат — только предпросмотр без '
+                                'автоматического сохранения или изменения RPG.'),
+                            trailing: const Icon(Icons.chevron_right),
+                            enabled: !_offlineWorking && !_busy,
+                            onTap: () => unawaited(_openEditor(
+                              ZaiSemanticPreviewPage(index: index),
+                            )),
+                          ),
+                        ),
+                              ],
+                            ),
+                            ExpansionTile(
+                              key: const Key('prepare-advanced-story'),
+                              title: const Text(
+                                  '3. Написать расширенный сюжет'),
+                              subtitle: const Text('Добавить сцены, '
+                                  'развилки, условия и последствия. '
+                                  'Начните с короткой RPG выше.'),
+                              children: [
+                                const Padding(
+                                  padding: EdgeInsets.all(8),
+                                  child: Text('Сцена — эпизод игры. '
+                                      'Выбор ведёт к другой сцене; '
+                                      'условие проверяет, можно ли его '
+                                      'сделать, а последствие меняет '
+                                      'игровое состояние. После редактирования '
+                                      'снова проверьте готовность игры.'),
+                                ),
+
                         Card(
                           child: ListTile(
                             key: const Key('prepare-open-multi-scene-editor'),
@@ -923,33 +1006,56 @@ class _SourceIndexPreviewPageState extends State<SourceIndexPreviewPage> {
                             )),
                           ),
                         ),
-                        const SizedBox(height: 8),
-                        PrivateGameReadinessPanel(
-                          key: ValueKey('private-readiness-'
-                              '${index.sourceFingerprint}-$_editorReturnRevision'),
-                          checkOnOpen: _editorReturnRevision > 0,
-                          index: index,
-                          gateway: widget.worldGateway ??
-                              const DeviceWorldLibraryGateway(),
-                        ),
-                        const SizedBox(height: 8),
-                        Card(
-                          child: ListTile(
-                            leading: const Icon(Icons.lock_outline),
-                            title: const Text('Полная RPG по всей книге'),
-                            subtitle: const Text('Для запуска требуются проверенные сцены и выборы. '
-                                'Короткую личную RPG можно собрать в редакторе выше. '
-                                'Автоматическая адаптация всего романа пока '
-                                'не реализована.'),
-                          ),
-                        ),
-                        const SizedBox(height: 8),
+                              ],
+                            ),
+                            ExpansionTile(
+                              key: const Key('prepare-advanced-glossary'),
+                              title: const Text(
+                                  'Справка: что означают термины'),
+                              childrenPadding:
+                                  const EdgeInsets.symmetric(horizontal: 8),
+                              children: const [
+                                ListTile(
+                                  title: Text('Цитата и факт'),
+                                  subtitle: Text('Цитата — точные слова '
+                                      'книги. Факт — проверенное '
+                                      'утверждение о событии. Одно '
+                                      'не заменяет другое.'),
+                                ),
+                                ListTile(
+                                  title: Text('Сцена и выбор'),
+                                  subtitle: Text('Сцена — текущий эпизод. '
+                                      'Выбор — действие игрока, '
+                                      'доступное в этом эпизоде.'),
+                                ),
+                                ListTile(
+                                  title: Text('Условие и последствие'),
+                                  subtitle: Text('Условие определяет '
+                                      'доступность выбора. Последствие '
+                                      'меняет ход истории или состояние мира.'),
+                                ),
+                                ListTile(
+                                  title: Text('Канон и альтернатива'),
+                                  subtitle: Text('Канон опирается '
+                                      'на проверенное событие книги. '
+                                      'Альтернативу придумывает редактор; '
+                                      'она не выдаётся за исходный текст.'),
+                                ),
+                                ListTile(
+                                  title: Text('Игровой мир и прохождение'),
+                                  subtitle: Text('Мир — готовый сценарий. '
+                                      'Прохождение — решения игрока '
+                                      'и сохранённый прогресс в этом мире.'),
+                                ),
+                              ],
+                            ),
+
                         ExpansionTile(
                           key: const Key('prepare-source-details'),
                           tilePadding: EdgeInsets.zero,
-                          title: const Text('Технические сведения о книге'),
-                          subtitle: const Text('Индексация, фрагменты '
-                              'и иллюстрации — для диагностики'),
+                          title: const Text('Диагностика импорта книги'),
+                          subtitle: const Text('Проверяйте, если главы или изображения '
+                              'распознались не полностью'),
                           children: [
                             Align(
                               alignment: Alignment.centerLeft,
@@ -973,7 +1079,7 @@ class _SourceIndexPreviewPageState extends State<SourceIndexPreviewPage> {
                             ),
                           ],
                         ),
-                        const SizedBox(height: 6),
+
                         TextButton.icon(
                           key: const Key('prepare-show-chapters'),
                           onPressed: () => setState(
@@ -985,11 +1091,21 @@ class _SourceIndexPreviewPageState extends State<SourceIndexPreviewPage> {
                               : 'Показать разделы книги '
                                   '(${index.chapters.length})'),
                         ),
+                            const Padding(
+                              padding: EdgeInsets.fromLTRB(8, 8, 8, 12),
+                              child: Text('Старый экспериментальный '
+                                  'повторный поиск убран из меню: '
+                                  'он дублировал часть основного анализа. '
+                                  'Его данные сохранены и не удаляются.'),
+                            ),
+                          ],
+                        ),
                       ],
                     ),
                   ),
                 ),
-                if (_showChapters)
+
+                if (_showChapters && _advancedModeOpen)
                   SliverList.builder(
                     itemCount: index.chapters.length,
                     itemBuilder: (context, i) {
