@@ -16,12 +16,14 @@ class ZaiCausalChoicesPage extends StatefulWidget {
     required this.board,
     required this.consistency,
     this.repository,
+    this.privateDraftRepository,
   });
 
   final ZaiWindowReviewQueue queue;
   final ZaiSourceSceneBoard board;
   final ZaiEditorialConsistencyNotebook consistency;
   final SourceAnalysisCheckpointRepository? repository;
+  final SourceAnalysisCheckpointRepository? privateDraftRepository;
 
   @override
   State<ZaiCausalChoicesPage> createState() => _ZaiCausalChoicesPageState();
@@ -181,6 +183,7 @@ class _ZaiCausalChoicesPageState extends State<ZaiCausalChoicesPage> {
         notebook: notebook,
         consistency: widget.consistency,
         causalRepository: _repo,
+        draftRepository: widget.privateDraftRepository,
       ),
     ));
   }
