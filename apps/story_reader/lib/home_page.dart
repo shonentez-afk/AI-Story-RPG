@@ -6,6 +6,7 @@ import 'book_isolate_workers.dart';
 import 'book_storage.dart';
 import 'book_reader.dart';
 import 'source_index_preview_page.dart';
+import 'quick_rpg_page.dart';
 import 'world_library_gateway.dart';
 import 'world_campaigns_page.dart';
 import 'world_play_page.dart';
@@ -526,6 +527,16 @@ class _LibraryPageState extends State<LibraryPage> {
     ));
   }
 
+  void _quickRpg(StoredBook entry) {
+    unawaited(_openBookRoute(
+      QuickRpgFromBookPage(
+        book: entry.book,
+        gateway: widget.worldGateway ??
+            const DeviceWorldLibraryGateway(),
+      ),
+    ));
+  }
+
   Future<void> _deleteBook(StoredBook entry) async {
     if (_working) return;
     final confirmed = await showDialog<bool>(
@@ -822,6 +833,13 @@ class _LibraryPageState extends State<LibraryPage> {
                                     () => _readBook(entry),
                                 icon: const Icon(Icons.menu_book_outlined),
                                 label: const Text('Читать'),
+                              ),
+                              FilledButton.icon(
+                                key: ValueKey('library-quick-rpg-${entry.id}'),
+                                onPressed: _working ? null :
+                                    () => _quickRpg(entry),
+                                icon: const Icon(Icons.play_arrow),
+                                label: const Text('Играть по книге'),
                               ),
                               OutlinedButton.icon(
                                 key: ValueKey('library-prepare-${entry.id}'),
