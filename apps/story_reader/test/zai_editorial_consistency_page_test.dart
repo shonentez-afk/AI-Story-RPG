@@ -88,7 +88,9 @@ void main() {
         findsOneWidget);
 
     final hint = find.text('Сравнить эти цитаты вручную');
-    await tester.ensureVisible(hint);
+    await tester.scrollUntilVisible(hint, 130,
+        scrollable: find.byType(Scrollable).first, maxScrolls: 30);
+    await tester.pumpAndSettle();
     await tester.tap(hint);
     await tester.pumpAndSettle();
     final propose = find.byKey(const Key('zai-consistency-propose'));
