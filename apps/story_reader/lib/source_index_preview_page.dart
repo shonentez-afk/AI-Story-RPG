@@ -203,7 +203,7 @@ class _SourceIndexPreviewPageState extends State<SourceIndexPreviewPage> {
     } catch (error) {
       if (mounted) setState(() =>
           _analysisError = 'Не удалось сохранить очередную порцию: $error. '
-              'Предыдущий checkpoint сохранён.');
+              'Ранее проверенные результаты сохранены.');
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -271,7 +271,7 @@ class _SourceIndexPreviewPageState extends State<SourceIndexPreviewPage> {
       if (mounted && generation == _generation) {
         setState(() {
           _offlineMessage = 'Локальная подготовка прервана: $error. '
-              'Последний сохранённый этап остаётся в приватном checkpoint.';
+              'Ранее сохранённые результаты остались на устройстве.';
         });
       }
     } finally {
@@ -818,7 +818,7 @@ class _SourceIndexPreviewPageState extends State<SourceIndexPreviewPage> {
                           child: ListTile(
                             key: const Key('prepare-open-story-editor'),
                             leading: const Icon(Icons.edit_note),
-                            title: const Text('Редактор личной адаптации'),
+                            title: const Text('Создать короткую RPG'),
                             subtitle: const Text(
                               'Выберите два проверенных события, напишите '
                               'альтернативный финал и создайте короткую '
@@ -858,7 +858,7 @@ class _SourceIndexPreviewPageState extends State<SourceIndexPreviewPage> {
                             title: const Text('Полная RPG по всей книге'),
                             subtitle: const Text('Сейчас можно создать проверенную короткую игру. '
                                 'Короткую личную RPG можно собрать в редакторе выше. '
-                                'Автоматическая адаптация всего романа пока '
+                                'Автоматическая RPG по всей книге пока '
                                 'не реализована.'),
                           ),
                         ),
@@ -1091,13 +1091,6 @@ class _SourceIndexPreviewPageState extends State<SourceIndexPreviewPage> {
                               : 'Показать разделы книги '
                                   '(${index.chapters.length})'),
                         ),
-                            const Padding(
-                              padding: EdgeInsets.fromLTRB(8, 8, 8, 12),
-                              child: Text('Старый экспериментальный '
-                                  'повторный поиск убран из меню: '
-                                  'он дублировал часть основного анализа. '
-                                  'Его данные сохранены и не удаляются.'),
-                            ),
                           ],
                         ),
                       ],
