@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'source_analysis_checkpoint_repository.dart';
 import 'zai_cross_window_evidence_graph.dart';
 import 'zai_editorial_consistency_page.dart';
+import 'zai_source_scene_workbench_page.dart';
 import 'zai_semantic_review_queue.dart';
 
 /// A read-only overview of source-backed, manually retained findings,
@@ -14,11 +15,13 @@ class ZaiCrossWindowReviewPage extends StatefulWidget {
     required this.queue,
     this.linksRepository,
     this.consistencyRepository,
+    this.scenesRepository,
   });
 
   final ZaiWindowReviewQueue queue;
   final SourceAnalysisCheckpointRepository? linksRepository;
   final SourceAnalysisCheckpointRepository? consistencyRepository;
+  final SourceAnalysisCheckpointRepository? scenesRepository;
 
   @override
   State<ZaiCrossWindowReviewPage> createState() =>
@@ -236,6 +239,21 @@ class _ZaiCrossWindowReviewPageState
     Navigator.of(context).pop(position);
   }
 
+  Future<void> _openScenes() async {
+    if (!mounted || _saving) return;
+    final position = await Navigator.of(context).push<int>(
+      MaterialPageRoute(
+        builder: (_) => ZaiSourceSceneWorkbenchPage(
+          queue: widget.queue,
+          scenesRepository: widget.scenesRepository,
+          consistencyRepository: widget.consistencyRepository,
+        ),
+      ),
+    );
+    if (!mounted || position == null) return;
+    Navigator.of(context).pop(position);
+  }
+
   void _toWindow(int position) {
     // Parent page navigates to the exact originally reviewed window.
     Navigator.of(context).pop(position);
@@ -300,6 +318,12 @@ class _ZaiCrossWindowReviewPageState
                   onPressed: _saving ? null : _openConsistency,
                   icon: const Icon(Icons.fact_check_outlined),
                   label: const Text('Проверить алиасы, противоречия и хронологию'),
+                ),
+                OutlinedButton.icon(
+                  key: const Key('zai-open-scene-workbench'),
+                  onPressed: _saving ? null : _openScenes,
+                  icon: const Icon(Icons.movie_creation_outlined),
+                  label: const Text('Черновые сцены и отчёт готовности RPG'),
                 ),
                 if (_loading || _saving)
                   const LinearProgressIndicator(),
