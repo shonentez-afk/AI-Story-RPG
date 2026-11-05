@@ -213,7 +213,7 @@ class _SourceLockedProsePreviewPageState
             if (widget.plan.situations.isNotEmpty)
               DropdownButtonFormField<String>(
                 key: const Key('prose-scene-selector'),
-                value: _sceneId,
+                initialValue: _sceneId,
                 isExpanded: true,
                 decoration: const InputDecoration(
                   labelText: 'Игровая ситуация для черновика',
