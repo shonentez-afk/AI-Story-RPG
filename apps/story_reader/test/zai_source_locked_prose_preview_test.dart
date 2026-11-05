@@ -18,6 +18,9 @@ import 'package:ai_story_reader/source_locked_prose_preview_page.dart';
 import 'package:ai_story_reader/zai_source_locked_prose_batch.dart';
 import 'package:ai_story_reader/source_locked_prose_batch_page.dart';
 import 'package:ai_story_reader/reviewed_prose_scene_overlay.dart';
+import 'package:ai_story_reader/zai_source_locked_prose_audit.dart';
+import 'package:ai_story_reader/source_locked_prose_audit_checkpoint_store.dart';
+import 'package:ai_story_reader/source_locked_prose_audit_page.dart';
 import 'package:ai_story_reader/zai_whole_book_event_outline.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -76,6 +79,60 @@ AiHttpResponse _answer(String scene, String prose, {
     },
   }],
 }));
+
+AiHttpResponse _auditResponse(String sceneId, {
+  String verdict = 'needsRevision',
+  String? evidenceQuote,
+  bool withFinding = true,
+  String kind = 'promise',
+  String severity = 'high',
+  bool extraField = false,
+  String finishReason = 'stop',
+}) => AiHttpResponse(200, jsonEncode({
+  'choices': [{
+    'finish_reason': finishReason,
+    'message': {
+      'content': jsonEncode({
+        'scene_id': sceneId,
+        'verdict': verdict,
+        'findings': [
+          if (withFinding)
+            {
+              'kind': kind,
+              'severity': severity,
+              'problem': 'В описании возможно появляется '
+                  'обязательство, которое герой не принимал.',
+              'evidence_quote': evidenceQuote,
+            },
+        ],
+        'uncertainty': 'Неизвестно, имеются ли в других главах '
+            'подтверждения этой причинно-следственной связи.',
+        if (extraField) 'canon_confirmed': true,
+      }),
+    },
+  }],
+}));
+
+SourceLockedProseDraft _draftFor(
+    SourceLockedProseContext context) => SourceLockedProseDraft(
+  sourceFingerprint: context.index.sourceFingerprint,
+  situationId: context.situation.id,
+  approvalDigest: context.approvalDigest,
+  text: _prose,
+  uncertainty: 'Связи событий пока не проверены по всей книге.',
+  route: context.situation.route,
+);
+
+ZaiSourceLockedProseAuditService _auditService(_Network net, {
+  bool enabled = true,
+  String? key = 'SYNTHETIC-SECRET-KEY',
+  Future<void> Function(Duration)? wait,
+}) => ZaiSourceLockedProseAuditService(
+  preferences: _Preferences(enabled),
+  vault: _Vault(key),
+  transport: net,
+  retryWait: wait ?? (Duration duration) async {},
+);
 
 const _prose = 'Путник остановился у двери, прислушиваясь к словам '
     'собеседника. Тишина затянулась, и решение ещё не было принято. '
@@ -791,6 +848,242 @@ void main() {
     ));
     await tester.pumpAndSettle();
     expect(net.bodies, hasLength(1));
+  });
+
+
+  test('AI literary critique is consent-bound to EXACT generated prose',
+      () async {
+    final (index, book, plan) = await _fixture();
+    final base = SourceLockedProseContext.forSituation(
+      index: index, book: book, plan: plan, situationId: 'turning_point');
+    final context = SourceLockedProseAuditContext.forDraft(
+      index: index, book: book, plan: plan,
+      draft: _draftFor(base),
+    );
+    final net = _Network([_auditResponse('turning_point')]);
+    final review = await _auditService(net).review(
+      context: context,
+      approvedDigest: context.approvalDigest,
+      explicitReviewConsent: true,
+    );
+    expect(review.verdict, AiProseAuditVerdict.needsRevision);
+    expect(review.findings, hasLength(1));
+    expect(review.findings.single.kind, AiProseFindingKind.promise);
+    expect(review.hasHighRiskFinding, true);
+    expect(review.literaryCanonConfirmed, false);
+    expect(review.mayAutoApprove, false);
+    expect(review.mayEditGameRules, false);
+    expect(review.evidenceIsFullBook, false);
+    expect(net.bodies, hasLength(1));
+    final sent = net.bodies.single;
+    final request = jsonDecode(sent) as Map<String, dynamic>;
+    expect(request['model'], ZaiModel.id);
+    expect(request['thinking'], {'type': 'disabled'});
+    expect(request['response_format'], {'type': 'json_object'});
+    expect(request.containsKey('tools'), false);
+    final user = jsonDecode((request['messages'] as List).last['content']
+        as String) as Map<String, dynamic>;
+    expect(user, context.sentContext);
+    expect(user['draft_prose'], _prose);
+    expect(sent, contains(base.sourceEvent!.source.quote));
+    expect(sent, isNot(contains(index.title)));
+    expect(sent, isNot(contains(index.author)));
+    expect(sent, isNot(contains(index.sourceFingerprint)));
+    expect(sent, isNot(contains('SYNTHETIC-SECRET-KEY')));
+    expect(net.sentHeaders.single['Authorization'],
+        'Bearer SYNTHETIC-SECRET-KEY');
+  });
+
+  test('AI reviewer never posts without NEW consent, correct digest '
+      'and existing provider opt-in/key', () async {
+    final (index, book, plan) = await _fixture();
+    final base = SourceLockedProseContext.forSituation(
+      index: index, book: book, plan: plan, situationId: 'turning_point');
+    final context = SourceLockedProseAuditContext.forDraft(
+      index: index, book: book, plan: plan, draft: _draftFor(base));
+    final net = _Network([]);
+    await expectLater(_auditService(net).review(
+      context: context, approvedDigest: context.approvalDigest,
+      explicitReviewConsent: false), throwsA(isA<AiSetupException>()));
+    await expectLater(_auditService(net).review(
+      context: context, approvedDigest: 'stale',
+      explicitReviewConsent: true), throwsA(isA<AiSetupException>()));
+    await expectLater(_auditService(net, enabled: false).review(
+      context: context, approvedDigest: context.approvalDigest,
+      explicitReviewConsent: true), throwsA(isA<AiSetupException>()));
+    await expectLater(_auditService(net, key: null).review(
+      context: context, approvedDigest: context.approvalDigest,
+      explicitReviewConsent: true), throwsA(isA<AiSetupException>()));
+    expect(net.bodies, isEmpty);
+    final different = SourceLockedProseDraft(
+      sourceFingerprint: base.index.sourceFingerprint,
+      situationId: base.situation.id,
+      approvalDigest: base.approvalDigest,
+      text: _prose + ' Он посмотрел назад.',
+      uncertainty: 'Недостаточно сведений об обстоятельствах.',
+      route: base.situation.route,
+    );
+    final changed = SourceLockedProseAuditContext.forDraft(
+      index: index, book: book, plan: plan, draft: different);
+    expect(changed.approvalDigest, isNot(context.approvalDigest));
+    await expectLater(_auditService(net).review(
+      context: changed, approvedDigest: context.approvalDigest,
+      explicitReviewConsent: true), throwsA(isA<AiSetupException>()));
+    expect(net.bodies, isEmpty);
+  });
+
+  test('AI critique rejects forged citation, invented canon claim, '
+      'truncated result, wrong ID and unsupported verdict',
+      () async {
+    final (index, book, plan) = await _fixture();
+    final base = SourceLockedProseContext.forSituation(
+      index: index, book: book, plan: plan, situationId: 'turning_point');
+    final context = SourceLockedProseAuditContext.forDraft(
+      index: index, book: book, plan: plan, draft: _draftFor(base));
+    final bad = [
+      _auditResponse('foreign_scene'),
+      _auditResponse('turning_point', evidenceQuote: 'ПРИДУМАННАЯ ЦИТАТА'),
+      _auditResponse('turning_point', extraField: true),
+      _auditResponse('turning_point', finishReason: 'length'),
+      _auditResponse('turning_point', verdict: 'CANON_APPROVED'),
+      _auditResponse('turning_point', verdict: 'possibleConsistency'),
+    ];
+    for (final response in bad) {
+      final net = _Network([response]);
+      await expectLater(_auditService(net).review(
+        context: context,
+        approvedDigest: context.approvalDigest,
+        explicitReviewConsent: true,
+      ), throwsA(isA<AiSetupException>()));
+      expect(net.bodies, hasLength(1));
+    }
+  });
+
+  test('absence of source quote forbids false positive '
+      'even when model says "possibleConsistency"', () async {
+    final (index, book, plan) = await _fixture();
+    final base = SourceLockedProseContext.forSituation(
+      index: index, book: book, plan: plan, situationId: 'search_path');
+    final context = SourceLockedProseAuditContext.forDraft(
+      index: index, book: book, plan: plan, draft: _draftFor(base));
+    final wrong = _Network([_auditResponse('search_path',
+      verdict: 'possibleConsistency', withFinding: false)]);
+    await expectLater(_auditService(wrong).review(
+      context: context, approvedDigest: context.approvalDigest,
+      explicitReviewConsent: true), throwsA(isA<AiSetupException>()));
+    final good = _Network([_auditResponse('search_path',
+      verdict: 'insufficientEvidence', withFinding: false)]);
+    final review = await _auditService(good).review(
+      context: context, approvedDigest: context.approvalDigest,
+      explicitReviewConsent: true);
+    expect(review.verdict, AiProseAuditVerdict.insufficientEvidence);
+    expect(review.literaryCanonConfirmed, false);
+  });
+
+  test('429 repeats exactly consented critique payload without extra text',
+      () async {
+    final (index, book, plan) = await _fixture();
+    final base = SourceLockedProseContext.forSituation(
+      index: index, book: book, plan: plan, situationId: 'turning_point');
+    final context = SourceLockedProseAuditContext.forDraft(
+      index: index, book: book, plan: plan, draft: _draftFor(base));
+    final net = _Network([
+      const AiHttpResponse(429, '{"error":"rate"}', retryAfter: '0'),
+      _auditResponse('turning_point'),
+    ]);
+    final delays = <Duration>[];
+    final review = await _auditService(net,
+      wait: (duration) async { delays.add(duration); },
+    ).review(
+      context: context, approvedDigest: context.approvalDigest,
+      explicitReviewConsent: true);
+    expect(review.findings, hasLength(1));
+    expect(net.bodies, hasLength(2));
+    expect(net.bodies[0], net.bodies[1]);
+    expect(delays, [Duration.zero]);
+  });
+
+  test('private reviewer checkpoint survives restart, rejects forged '
+      'model status and never changes BookWorld', () async {
+    final (index, book, plan) = await _fixture();
+    final base = SourceLockedProseContext.forSituation(
+      index: index, book: book, plan: plan, situationId: 'turning_point');
+    final context = SourceLockedProseAuditContext.forDraft(
+      index: index, book: book, plan: plan, draft: _draftFor(base));
+    final net = _Network([_auditResponse('turning_point',
+        evidenceQuote: base.sourceEvent!.source.quote)]);
+    final report = await _auditService(net).review(
+      context: context, approvedDigest: context.approvalDigest,
+      explicitReviewConsent: true);
+    final rawRepo = MemorySourceAnalysisCheckpointRepository();
+    final store = SourceLockedProseAuditCheckpointStore(repository: rawRepo);
+    await store.save(context: context, report: report);
+    final saved = (await rawRepo.read(index.sourceFingerprint))!;
+    expect(saved, contains('UNVERIFIED_MODEL_CRITIQUE'));
+    expect(saved, isNot(contains('SYNTHETIC-SECRET-KEY')));
+    expect(saved, isNot(contains(index.title)));
+    expect(saved, isNot(contains(_prose)));
+    final reopened = SourceLockedProseAuditCheckpointStore(
+        repository: rawRepo);
+    final recovered = await reopened.read(context);
+    expect(recovered!.findings.single.evidenceQuote,
+        base.sourceEvent!.source.quote);
+    expect(recovered.mayAutoApprove, false);
+    await reopened.save(context: context, report: report);
+    expect(await rawRepo.read(index.sourceFingerprint), saved);
+    final json = jsonDecode(saved) as Map<String, dynamic>;
+    ((json['entries'] as List).first as Map)['status'] = 'CANON_APPROVED';
+    await rawRepo.write(index.sourceFingerprint, jsonEncode(json));
+    await expectLater(reopened.read(context), throwsFormatException);
+  });
+
+  testWidgets('literary AI screen never makes hidden POST; separate '
+      'consent is required and cached result reopens offline',
+      (tester) async {
+    final (index, book, plan) = await _fixture();
+    final base = SourceLockedProseContext.forSituation(
+      index: index, book: book, plan: plan, situationId: 'turning_point');
+    final draft = _draftFor(base);
+    final store = SourceLockedProseAuditCheckpointStore(
+        repository: MemorySourceAnalysisCheckpointRepository());
+    final net = _Network([_auditResponse('turning_point')]);
+    await tester.pumpWidget(MaterialApp(home: SourceLockedProseAuditPage(
+      index: index, book: book, plan: plan, draft: draft,
+      store: store, auditService: _auditService(net),
+    )));
+    await tester.pumpAndSettle();
+    expect(net.bodies, isEmpty);
+    final submit = find.byKey(const Key('literary-audit-submit'));
+    await tester.scrollUntilVisible(submit, 180,
+        scrollable: find.byType(Scrollable).first);
+    expect(tester.widget<FilledButton>(submit).onPressed, isNull);
+    final check = find.byKey(const Key('literary-audit-consent'));
+    await tester.scrollUntilVisible(check, -150,
+        scrollable: find.byType(Scrollable).first);
+    await tester.tap(check);
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(submit, 180,
+        scrollable: find.byType(Scrollable).first);
+    expect(tester.widget<FilledButton>(submit).onPressed, isNotNull);
+    await tester.tap(submit);
+    await tester.pumpAndSettle();
+    expect(net.bodies, hasLength(1));
+    await tester.scrollUntilVisible(
+        find.byKey(const Key('literary-audit-verdict')), 160,
+        scrollable: find.byType(Scrollable).first);
+    expect(find.byKey(const Key('literary-audit-verdict')), findsOneWidget);
+    await tester.pumpWidget(const SizedBox.shrink());
+    final noNetwork = _Network([]);
+    await tester.pumpWidget(MaterialApp(home: SourceLockedProseAuditPage(
+      index: index, book: book, plan: plan, draft: draft,
+      store: store, auditService: _auditService(noNetwork),
+    )));
+    await tester.pumpAndSettle();
+    expect(noNetwork.bodies, isEmpty);
+    await tester.scrollUntilVisible(
+        find.byKey(const Key('literary-audit-verdict')), 160,
+        scrollable: find.byType(Scrollable).first);
+    expect(find.byKey(const Key('literary-audit-verdict')), findsOneWidget);
   });
 
 }
