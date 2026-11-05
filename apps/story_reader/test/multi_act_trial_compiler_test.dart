@@ -440,10 +440,10 @@ void main() {
     final firstAccepted = yes.first as Map;
     final firstRefused = no.first as Map;
     expect(firstAccepted['choice_id'], 'act_1_accept_offer');
-    expect(firstAccepted['flags_before'], isNot(contains('act_1_accepted')));
-    expect(firstAccepted['flags_after'], contains('act_1_accepted'));
+    expect(firstAccepted['flags_before'], isNot(contains('act_1_disclosure_accepted')));
+    expect(firstAccepted['flags_after'], contains('act_1_disclosure_accepted'));
     expect(firstRefused['choice_id'], 'act_1_refuse_offer');
-    expect(firstRefused['flags_after'], isNot(contains('act_1_accepted')));
+    expect(firstRefused['flags_after'], isNot(contains('act_1_disclosure_accepted')));
     expect((paths.first as Map)['terminal_scene_id'],
         isNot((paths.last as Map)['terminal_scene_id']));
     final evidence = packet.sentContext['source_evidence'] as List;
