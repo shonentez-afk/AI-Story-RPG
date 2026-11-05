@@ -15,6 +15,7 @@ import 'source_semantic_catalog.dart';
 import 'source_semantic_editorial_review.dart';
 import 'story_plan.dart';
 import 'story_plan_trial_compiler.dart';
+import 'reviewed_prose_scene_overlay.dart';
 
 /// A playable *PRIVATE* and *FICTIONAL* multi-act trial, never the full
 /// literary CANON. This uses the original M2c compiler, BookWorld importer
@@ -31,6 +32,7 @@ class MultiActTrialCompiler {
     required Set<String> sourceEventIdsReviewedByUser,
     required bool privateUseConfirmed,
     required bool fictionalTrialAcknowledged,
+    List<ReviewedProseSceneApproval> reviewedProse = const [],
   }) async {
     if (!privateUseConfirmed || !fictionalTrialAcknowledged) {
       throw const FormatException(
@@ -237,6 +239,17 @@ class MultiActTrialCompiler {
           'за проверенную хронологию мира книги.');
     }
 
+    // The text overlay changes only scene prose, never source evidence,
+    // choice IDs, requires/forbids/adds/removes or SQLite state.
+    // An overlay approved for the old plan fails closed if a new
+    // cross-act rule changes the final plan after the user's review.
+    final reviewedProseTexts = ReviewedProseSceneOverlay.validate(
+      index: index,
+      book: book,
+      finalPlan: plan,
+      approvals: reviewedProse,
+    );
+
     final sourceSceneIds = <String>{
       for (var i = 0; i < draft.parts.length; i++) ...[
         'act_' + (i + 1).toString() + '_turning_point',
@@ -261,7 +274,12 @@ class MultiActTrialCompiler {
               reference!.$1.source.quote +
               '»\n\nДАЛЕЕ — ВЫМЫШЛЕННАЯ ИГРОВАЯ ИНТЕРПРЕТАЦИЯ:\n'
           : 'ВЫМЫШЛЕННАЯ ИГРОВАЯ АДАПТАЦИЯ, НЕ ТЕКСТ КНИГИ:\n';
-      final body = words + scene.goal + '\n\n' + scene.conflict;
+      final approvedText = reviewedProseTexts[scene.id];
+      final body = approvedText == null
+          ? words + scene.goal + '\n\n' + scene.conflict
+          : words + 'ХУДОЖЕСТВЕННАЯ ЧАСТНАЯ АДАПТАЦИЯ '
+              '(ЯВНО ОДОБРЕННЫЙ ЧЕРНОВИК, НЕ КАНОН):\n' +
+              approvedText;
       scenes.add(DraftScene(
         id: scene.id,
         chapterIndex: scene.chapterIndex,
