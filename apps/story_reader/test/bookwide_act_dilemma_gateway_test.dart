@@ -304,10 +304,9 @@ void main() {
     expect(draft.isFullBookRpg, false);
     expect(draft.isReadyToInstall, false);
     expect(draft.hasConfirmedWorldChronology, false);
-    await expectLater(
-      Future.value(service.composeLocal(
-        index: index, bookMap: map, book: book,
-        candidates: [bResult, aResult],
-      )), throwsA(isA<FormatException>()));
+    expect(() => service.composeLocal(
+      index: index, bookMap: map, book: book,
+      candidates: [bResult, aResult],
+    ), throwsFormatException);
   });
 }
