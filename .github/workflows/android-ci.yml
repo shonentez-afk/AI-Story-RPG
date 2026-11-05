@@ -92,6 +92,9 @@ jobs:
       - uses: dart-lang/setup-dart@v1
         with:
           sdk: stable
+      - name: Prepare verified native SQLite source for Linux test workspaces
+        run: |
+          python3 tools/ci_prepare_verified_sqlite.py --project packages/bookworld_format --project packages/campaign_manager
       - name: Analyze pure Dart story_core
         working-directory: packages/story_core
         run: |
@@ -161,6 +164,8 @@ jobs:
         with:
           channel: stable
           cache: true
+      - name: Prepare verified native SQLite source for Flutter tests
+        run: python3 tools/ci_prepare_verified_sqlite.py --project apps/story_reader
       - name: Resolve dependencies
         run: flutter pub get
         working-directory: apps/story_reader
@@ -232,6 +237,8 @@ jobs:
         with:
           channel: stable
           cache: true
+      - name: Prepare verified native SQLite source for Android APK
+        run: python3 tools/ci_prepare_verified_sqlite.py --project apps/story_reader
       - name: Generate Android host and build APK
         run: |
           flutter create --platforms=android --project-name ai_story_reader --org com.aistoryrpg .
