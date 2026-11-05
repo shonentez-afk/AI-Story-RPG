@@ -105,6 +105,39 @@ class RichPrivateTests(unittest.TestCase):
             compile_rich_from_project(self.project_dir, changed)
         self.assertEqual(err.exception.code, "wrong_enrichment")
 
+    def test_flag_only_book_without_fabricated_items_or_stats(self):
+        # Source-bound story with no invented possessions, stats or facts.
+        plain = deepcopy(self.overlay)
+        plain["items"] = {}
+        plain["stats"] = {}
+        plain["facts"] = {}
+        plain["choices"] = {}
+        raw, attribution = compile_rich_from_project(
+            self.project_dir, plain, model_id="gpt-6")
+        self.assertEqual(private_rich_bookworld.verify(raw)["format_version"], 3)
+        self.assertTrue(attribution)
+        with zipfile.ZipFile(io.BytesIO(raw)) as archive:
+            bp = json.loads(archive.read("scenario/blueprint.json"))
+            meta = json.loads(archive.read("source/provenance.json"))
+        self.assertEqual(bp["items"], [])
+        self.assertEqual(bp["facts"], [])
+        self.assertEqual(bp["initial_state"]["stats"], {})
+        self.assertEqual(bp["initial_state"]["inventory"], [])
+        self.assertEqual(bp["initial_state"]["flags"], {"rope": False})
+        self.assertEqual(meta["presentation"]["item_names"], {})
+        self.assertEqual(meta["presentation"]["stat_names"], {})
+        self.assertEqual(meta["presentation"]["fact_names"], {})
+        self.assertEqual(meta["presentation"]["hero"]["name"], "Лена")
+
+        # Empty catalogs still reject ghost items in game actions.
+        dishonest = deepcopy(plain)
+        dishonest["choices"]["take_rope"] = {
+            "conditions": [],
+            "effects": [{"op": "grant_item", "id": "fictional_amulet"}],
+        }
+        with self.assertRaises((bookworld.BookworldError, AuthoringError)):
+            compile_rich_from_project(self.project_dir, dishonest)
+
     def test_forged_or_unknown_items_rejected(self):
         altered = deepcopy(self.overlay)
         altered["choices"]["rescue"]["conditions"] = []
