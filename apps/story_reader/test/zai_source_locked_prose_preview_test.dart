@@ -15,6 +15,7 @@ import 'package:ai_story_reader/zai_semantic_preview.dart';
 import 'package:ai_story_reader/zai_source_locked_prose_preview.dart';
 import 'package:ai_story_reader/source_locked_prose_checkpoint_store.dart';
 import 'package:ai_story_reader/source_locked_prose_preview_page.dart';
+import 'package:ai_story_reader/reviewed_prose_scene_overlay.dart';
 import 'package:ai_story_reader/zai_whole_book_event_outline.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -463,6 +464,78 @@ void main() {
     expect(await storage.read(context), isNull);
     expect(noPost.bodies, isEmpty);
     expect(find.byKey(const Key('prose-scene-draft-text')), findsNothing);
+  });
+
+
+  testWidgets('accepting cached prose for game requires TWO separate '
+      'confirmations; reopening never posts to cloud', (tester) async {
+    final (index, book, plan) = await _fixture();
+    final store = SourceLockedProseCheckpointStore(
+      repository: MemorySourceAnalysisCheckpointRepository(),
+    );
+    final context = SourceLockedProseContext.forSituation(
+      index: index, book: book, plan: plan,
+      situationId: 'turning_point',
+    );
+    final generated = _Network([_answer('turning_point', _prose)]);
+    final draft = await _service(generated).preview(
+      context: context,
+      approvedContextDigest: context.approvalDigest,
+      userReviewedExactContext: true,
+    );
+    await store.save(context: context, draft: draft);
+    final noNetwork = _Network([]);
+    ReviewedProseSceneApproval? accepted;
+    await tester.pumpWidget(MaterialApp(home: Builder(
+      builder: (parentContext) => Scaffold(
+        body: Center(
+          child: FilledButton(
+            onPressed: () async {
+              accepted = await Navigator.of(parentContext)
+                  .push<ReviewedProseSceneApproval>(MaterialPageRoute(
+                builder: (_) => SourceLockedProsePreviewPage(
+                  index: index, book: book, plan: plan, store: store,
+                  previewService: _service(noNetwork),
+                ),
+              ));
+            },
+            child: const Text('Открыть художественный черновик'),
+          ),
+        ),
+      ),
+    )));
+    await tester.tap(find.text('Открыть художественный черновик'));
+    await tester.pumpAndSettle();
+    final accept = find.byKey(
+        const Key('prose-scene-accept-for-private-game'));
+    await tester.scrollUntilVisible(accept, 180,
+        scrollable: find.byType(Scrollable).first);
+    expect(tester.widget<FilledButton>(accept).onPressed, isNull);
+    final checkedText = find.byKey(
+        const Key('prose-scene-text-reviewed-for-game'));
+    await tester.scrollUntilVisible(checkedText, -120,
+        scrollable: find.byType(Scrollable).first);
+    await tester.tap(checkedText);
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(accept, 180,
+        scrollable: find.byType(Scrollable).first);
+    expect(tester.widget<FilledButton>(accept).onPressed, isNull);
+    final fiction = find.byKey(
+        const Key('prose-scene-fiction-acknowledged'));
+    await tester.scrollUntilVisible(fiction, 120,
+        scrollable: find.byType(Scrollable).first);
+    await tester.tap(fiction);
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(accept, 150,
+        scrollable: find.byType(Scrollable).first);
+    expect(tester.widget<FilledButton>(accept).onPressed, isNotNull);
+    await tester.tap(accept);
+    await tester.pumpAndSettle();
+    expect(accepted, isNotNull);
+    expect(accepted!.prose, _prose);
+    expect(accepted!.contextDigest, context.approvalDigest);
+    expect(accepted!.canPublishAsCanon, false);
+    expect(noNetwork.bodies, isEmpty);
   });
 
 }
