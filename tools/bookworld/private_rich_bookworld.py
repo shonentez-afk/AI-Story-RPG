@@ -185,6 +185,15 @@ def _blueprint(bp):
 
 def _causality(bp):
     scenes = {s["id"]: s for s in bp["scenes"]}
+    granted_items = {r["id"] for s in bp["scenes"] for c in s["choices"]
+                     for r in c["effects"] if r["op"] == "grant_item"}
+    learned_facts = {r["id"] for s in bp["scenes"] for c in s["choices"]
+                     for r in c["effects"] if r["op"] == "learn_fact"}
+    changed_stats = {r["id"] for s in bp["scenes"] for c in s["choices"]
+                     for r in c["effects"] if r["op"] == "stat_delta"}
+    if granted_items != set(bp["items"]) or learned_facts != set(bp["facts"]) or \
+            not changed_stats:
+        fail("Unreachable item/fact catalog or static hero")
     initial = bp["initial_state"]
     start = (bp["entry_scene_id"],
              tuple(sorted(k for k, v in initial["flags"].items() if v)),
