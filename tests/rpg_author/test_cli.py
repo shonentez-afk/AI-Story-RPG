@@ -47,3 +47,28 @@ class CommandLineTests(unittest.TestCase):
             result = self.run_cli("verify", "--input", package)
             self.assertFalse(result["authorship_certified"])
             self.assertEqual(package.read_bytes(), data)
+
+    def test_opted_in_legacy_build_and_bundle_verify_using_real_cli(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            base = Path(temporary)
+            book, root = base / "test_story.txt", base / "work"
+            book.write_text(TEXT, encoding="utf-8")
+            self.run_cli("init", "--book", book, "--project", root)
+            record, plan = base / "analysis.json", base / "story.json"
+            record.write_text(json.dumps(analysis(), ensure_ascii=False), encoding="utf-8")
+            plan.write_text(json.dumps(story(), ensure_ascii=False), encoding="utf-8")
+            self.run_cli("accept-analysis", "--project", root, "--input", record)
+            self.run_cli("accept-story", "--project", root, "--input", plan)
+            package = base / "river.bworld"
+            denied = self.run_cli("build-legacy", "--project", root, "--output", package, code=2)
+            self.assertEqual(denied["code"], "legacy_ack_required")
+            self.assertFalse(package.exists())
+            result = self.run_cli("build-legacy", "--project", root, "--output", package,
+                                  "--model-id", "gpt-6", "--ack-legacy-provenance")
+            self.assertEqual(result["status"], "private_legacy_package_built")
+            self.assertTrue(package.exists())
+            sidecar = package.with_suffix(".attribution.json")
+            self.assertTrue(sidecar.exists())
+            audit = self.run_cli("verify-bundle", "--input", package, "--attribution", sidecar)
+            self.assertEqual(audit["status"], "bundle_structurally_verified")
+            self.assertFalse(audit["authorship_cryptographically_attested"])
