@@ -4,6 +4,7 @@ import 'dart:typed_data';
 
 import 'package:story_core/story_core.dart';
 import 'package:bookworld_format/bookworld_format.dart';
+import 'package:campaign_manager/campaign_manager.dart';
 
 import '../../../apps/story_reader/lib/book_import.dart';
 import '../../../apps/story_reader/lib/book_source_index.dart';
@@ -142,6 +143,64 @@ Future<void> main() async {
       'v2_rejected_v3': olderRejected,
       'private_only': !verified.canDistributePublicly,
     }));
+  } else if (input['operation'] == 'rich_campaign') {
+    final archive = Uint8List.fromList(base64Decode(input['data'] as String));
+    final temp = Directory.systemTemp.createTempSync('rpg_e4_campaign_');
+    BookworldCampaignStore? store;
+    try {
+      store = BookworldCampaignStore.openPrivateDirectory(temp.path);
+      final installed = store.installBookworld(archive);
+      final campaignId = store.createCampaign(installed.archiveHash);
+      for (final choice in input['path'] as List<dynamic>) {
+        final record = store.loadCampaign(campaignId);
+        final outcome = store.commitChoice(
+          campaignId,
+          actionId: 'demo_action_' + (record.metadata.revision + 1).toString(),
+          choiceId: choice as String,
+          expectedRevision: record.metadata.revision,
+        );
+        if (!outcome.applied) {
+          throw FormatException('SQLite rejected real game action: ' +
+              outcome.reason.toString());
+        }
+      }
+      final record = store.loadCampaign(campaignId);
+      final expectedHash = record.metadata.stateHash;
+      final save = store.exportPortable(campaignId);
+      final fork = store.createCampaign(installed.archiveHash,
+          parentCampaignId: campaignId);
+      final forkRecord = store.loadCampaign(fork);
+      store.close();
+      store = null;
+
+      store = BookworldCampaignStore.openPrivateDirectory(temp.path);
+      final resumed = store.loadCampaign(campaignId);
+      if (resumed.metadata.stateHash != expectedHash ||
+          resumed.coordinator.events.length != record.coordinator.events.length) {
+        throw const FormatException('SQLite failed rich game persistence');
+      }
+      final importedId = store.importPortable(save);
+      final imported = store.loadCampaign(importedId);
+      if (imported.metadata.stateHash != expectedHash ||
+          forkRecord.metadata.stateHash != expectedHash) {
+        throw const FormatException('Rich .bwsave or fork lost the game state');
+      }
+      stdout.write(jsonEncode({
+        'revision': resumed.metadata.revision,
+        'stats': resumed.coordinator.state.stats,
+        'inventory': resumed.coordinator.state.inventory.toList()..sort(),
+        'facts': (resumed.coordinator.state.knowledge['player'] ?? <String>{})
+            .toList()..sort(),
+        'journal': resumed.coordinator.events.map((e) => e.choiceId).toList(),
+        'state_hash': expectedHash,
+        'restart_ok': true,
+        'save_import_ok': true,
+        'fork_ok': true,
+      }));
+    } finally {
+      store?.close();
+      temp.deleteSync(recursive: true);
+    }
   } else {
     throw const FormatException('Unknown probe operation');
   }
