@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:ai_story_reader/book_import.dart';
 import 'package:ai_story_reader/book_source_index.dart';
 import 'package:ai_story_reader/intermediate_story_blueprint.dart';
@@ -5,6 +6,7 @@ import 'package:ai_story_reader/narrative_book_model.dart';
 import 'package:ai_story_reader/source_analysis_checkpoint_repository.dart';
 import 'package:ai_story_reader/source_semantic_provider.dart';
 import 'package:ai_story_reader/story_plan.dart';
+import 'package:ai_story_reader/story_plan_dilemma_generator.dart';
 import 'package:ai_story_reader/zai_auto_whole_book_analysis.dart';
 import 'package:ai_story_reader/zai_semantic_preview.dart';
 import 'package:ai_story_reader/zai_whole_book_event_outline.dart';
@@ -186,4 +188,93 @@ void main() {
     );
     expect(() => dangling.validate(book), throwsFormatException);
   });
+  StoryDilemmaProposal proposalFor(NarrativeBookModel book) =>
+      StoryDilemmaProposal(
+        sourceFingerprint: book.sourceFingerprint,
+        setupEventId: book.events.first.id,
+        outcomeEventId: book.events.last.id,
+        kind: StoryDilemmaKind.agreement,
+        dilemma: 'Принять условие помощи или искать новый путь?',
+        acceptIntent: 'Согласиться на предложенное условие',
+        refuseIntent: 'Отказаться от условия без обещания',
+        followupGoal: 'Решить, как исполнить данное обязательство',
+        finishOriginalIntent: 'Исполнить ранее принятое обязательство',
+        originalEnding: 'Обязательство исполнено, первоначальная линия закончена',
+        alternativeSearchGoal: 'Найти способ выполнить задачу без обещания',
+        searchIntent: 'Изучить другой путь и поговорить с очевидцами',
+        alternativeDiscovery: 'Найден другой возможный способ продвижения',
+        useDiscoveryIntent: 'Реализовать найденный вариант без прежних условий',
+        alternativeEnding: 'Другой результат без обязательства из исходной линии',
+      );
+
+  test('M2g3b generator expands source events into a nontrivial '
+      'conditional two-route DRAFT without title-specific rules', () async {
+    final book = await _book();
+    final proposed = proposalFor(book);
+    final reread = StoryDilemmaProposal.decode(
+        const JsonEncoder.withIndent('  ').convert(proposed.toJson()));
+    expect(reread.setupEventId, book.events.first.id);
+    expect(reread.outcomeEventId, book.events.last.id);
+    final plan = StoryPlanDilemmaGenerator.propose(book, reread);
+    final report = plan.validate(book);
+    expect(report.isStructurallySound, true);
+    expect(report.terminalSituations, 2);
+    expect(report.branchChangesState, true);
+    expect(report.reachableSituations, 7);
+    expect(plan.isPlayable, false);
+    expect(plan.canPublish, false);
+    final byId = {for (final s in plan.situations) s.id: s};
+    final start = byId['turning_point']!;
+    expect(start.sourceEventId, book.events.first.id);
+    expect(start.decisions, hasLength(2));
+    expect(start.decisions[0].adds, ['agreement_accepted']);
+    expect(start.decisions[1].adds, ['agreement_declined']);
+    final honor = byId['accept_path']!.decisions.single;
+    expect(honor.requires, contains('agreement_accepted'));
+    expect(honor.forbids, contains('agreement_declined'));
+    expect(byId['search_path']!.decisions.single.requires,
+        contains('agreement_declined'));
+    expect(byId['search_path']!.decisions.single.forbids,
+        contains('agreement_accepted'));
+    expect(byId['discovery_path']!.decisions.single.requires,
+        contains('alternative_found'));
+    expect(byId['alternate_resolution']!.decisions.single.requires,
+        contains('alternate_outcome'));
+    final draft = plan.toIntermediateDraft(book,
+        rights: PreparationRights.privateUse);
+    expect(draft.canPublishBookworld, false);
+    expect(draft.scenes, hasLength(7));
+    expect(draft.entrySceneId, 'turning_point');
+    expect(StoryPlan.decode(plan.encode()).encode(), plan.encode());
+  });
+
+  test('reject a forged edition, backwards event pair, unknown source '
+      'and unauthorized publication status', () async {
+    final book = await _book();
+    final proposal = proposalFor(book);
+    final fields = Map<String, Object>.from(proposal.toJson());
+    fields['source_fingerprint'] = 'another-edition';
+    final altered = StoryDilemmaProposal.decode(jsonEncode(fields));
+    expect(() => StoryPlanDilemmaGenerator.propose(book, altered),
+        throwsFormatException);
+    fields['source_fingerprint'] = book.sourceFingerprint;
+    fields['setup_event_id'] = book.events.last.id;
+    fields['outcome_event_id'] = book.events.first.id;
+    expect(() => StoryPlanDilemmaGenerator.propose(
+        book, StoryDilemmaProposal.decode(jsonEncode(fields))),
+        throwsFormatException);
+    fields['setup_event_id'] = 'no_such_source_event';
+    expect(() => StoryPlanDilemmaGenerator.propose(
+        book, StoryDilemmaProposal.decode(jsonEncode(fields))),
+        throwsFormatException);
+    fields['status'] = 'READY_TO_PLAY';
+    expect(() => StoryDilemmaProposal.decode(jsonEncode(fields)),
+        throwsFormatException);
+    fields['status'] = 'UNREVIEWED_PROPOSAL';
+    fields['unexpected_key'] = 'untrusted';
+    expect(() => StoryDilemmaProposal.decode(jsonEncode(fields)),
+        throwsFormatException);
+    expect(() => proposal.encode(), returnsNormally);
+  });
+
 }
