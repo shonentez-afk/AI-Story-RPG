@@ -82,6 +82,34 @@ void main() {
     output.writeAsBytesSync(bytes, flush: true);
   });
 
+  test('native v3 records configured Z.ai model request, without claiming literary truth', () {
+    final input = _richSample();
+    final provenance = _asObject(input['provenance']);
+    provenance['model_provenance'] = {
+      'provider': 'zai',
+      'model_id': 'glm-4.7-flash',
+      'model_id_status': 'requested',
+      'tool': 'AI Story RPG',
+      'method': 'built_in',
+    };
+    final package = writer.build(
+      blueprint: _asObject(input['blueprint']),
+      provenance: provenance,
+      sourceIndex: _asObject(input['source_index']),
+    );
+    final imported = importer.inspect(package);
+    expect(imported.presentation['hero'], containsPair('name', 'Игрок'));
+    expect(imported.sourceFingerprint, 'a' * 64);
+    final wrong = _asObject(provenance['model_provenance']);
+    wrong['model_id'] = 'different_model';
+    provenance['model_provenance'] = wrong;
+    expect(() => writer.build(
+      blueprint: _asObject(input['blueprint']),
+      provenance: provenance,
+      sourceIndex: _asObject(input['source_index']),
+    ), throwsFormatException);
+  });
+
   test('native v3 replays two real flag-based endings without fake inventory', () {
     final input = _richSample();
     final raw = writer.build(
