@@ -398,19 +398,23 @@ void main() {
     await tester.pumpAndSettle();
     expect(net.bodies, isEmpty);
     final action = find.byKey(const Key('prose-scene-generate'));
-    await tester.scrollUntilVisible(action, 190);
+    await tester.scrollUntilVisible(action, 190,
+        scrollable: find.byType(Scrollable).first);
     expect(tester.widget<FilledButton>(action).onPressed, isNull);
     final checkbox = find.byKey(const Key('prose-scene-approved'));
-    await tester.scrollUntilVisible(checkbox, -160);
+    await tester.scrollUntilVisible(checkbox, -160,
+        scrollable: find.byType(Scrollable).first);
     await tester.tap(checkbox);
     await tester.pumpAndSettle();
-    await tester.scrollUntilVisible(action, 190);
+    await tester.scrollUntilVisible(action, 190,
+        scrollable: find.byType(Scrollable).first);
     expect(tester.widget<FilledButton>(action).onPressed, isNotNull);
     await tester.tap(action);
     await tester.pumpAndSettle();
     expect(net.bodies, hasLength(1));
     await tester.scrollUntilVisible(
-        find.byKey(const Key('prose-scene-draft-text')), 160);
+        find.byKey(const Key('prose-scene-draft-text')), 160,
+        scrollable: find.byType(Scrollable).first);
     expect(find.byKey(const Key('prose-scene-draft-text')), findsOneWidget);
     final noPost = _Network([]);
     await tester.pumpWidget(const SizedBox.shrink());
@@ -444,7 +448,8 @@ void main() {
     )));
     await tester.pumpAndSettle();
     final delete = find.byKey(const Key('prose-scene-delete'));
-    await tester.scrollUntilVisible(delete, 180);
+    await tester.scrollUntilVisible(delete, 180,
+        scrollable: find.byType(Scrollable).first);
     await tester.tap(delete);
     await tester.pumpAndSettle();
     final confirmation = find.byKey(const Key('prose-scene-confirm-delete'));

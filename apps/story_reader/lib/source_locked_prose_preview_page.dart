@@ -38,6 +38,7 @@ class _SourceLockedProsePreviewPageState
   SourceLockedProseDraft? _draft;
   ZaiPreviewCancellation? _requestToken;
   bool _approved = false, _working = false, _loading = true;
+  bool _storageBlocked = false;
   String? _error, _progress;
 
   @override
@@ -74,6 +75,7 @@ class _SourceLockedProsePreviewPageState
       _loading = true;
       _error = null;
       _progress = null;
+      _storageBlocked = false;
     });
     try {
       final context = _context();
@@ -82,10 +84,12 @@ class _SourceLockedProsePreviewPageState
       setState(() => _draft = saved);
     } catch (_) {
       if (!mounted || _sceneId != sceneId) return;
-      setState(() => _error =
-          'Не удалось проверить локальный черновик. '
+      setState(() {
+        _storageBlocked = true;
+        _error = 'Не удалось проверить локальный черновик. '
           'Для безопасности повторная отправка заблокирована, '
-          'пока хранилище не будет исправлено.');
+          'пока хранилище не будет исправлено.';
+      });
     } finally {
       if (mounted && _sceneId == sceneId) {
         setState(() => _loading = false);
@@ -95,7 +99,7 @@ class _SourceLockedProsePreviewPageState
 
   Future<void> _generate() async {
     if (_working || _loading || !_approved || _sceneId == null ||
-        _error != null || _draft != null) return;
+        _storageBlocked || _error != null || _draft != null) return;
     final sceneId = _sceneId!;
     setState(() {
       _working = true;
@@ -107,7 +111,12 @@ class _SourceLockedProsePreviewPageState
       final context = _context();
       // Cache-first: a new POST must not be made if this exact edition,
       // plan revision and scene already have a finished private draft.
-      result = await _store.read(context);
+      try {
+        result = await _store.read(context);
+      } catch (_) {
+        _storageBlocked = true;
+        rethrow;
+      }
       if (result == null) {
         final cancellation = ZaiPreviewCancellation();
         _requestToken = cancellation;
@@ -135,12 +144,17 @@ class _SourceLockedProsePreviewPageState
       });
     } catch (_) {
       if (!mounted || _sceneId != sceneId) return;
-      setState(() => _error = _draft == null
+      setState(() {
+        // A fresh manually confirmed tap can retry after a network error.
+        // Never submit another paid request automatically after exhaustion.
+        _approved = false;
+        _error = _draft == null
           ? 'Черновик не создан. Проверьте настройки Z.ai, '
               'согласие и доступность сети. Существующая игра не изменена.'
           : 'Текст получен, но не удалось сохранить локально. '
               'Скопируйте его перед закрытием, повторно отправлять '
-              'запрос автоматически не будем.');
+              'запрос автоматически не будем.';
+      });
     } finally {
       _requestToken = null;
       if (mounted && _sceneId == sceneId) {
@@ -282,17 +296,21 @@ class _SourceLockedProsePreviewPageState
                 contentPadding: EdgeInsets.zero,
                 value: _approved,
                 onChanged: _working || _loading || _draft != null ||
-                        _error != null
+                        _storageBlocked
                     ? null
-                    : (value) => setState(() =>
-                        _approved = value == true),
+                    : (value) => setState(() {
+                        _approved = value == true;
+                        _error = null;
+                        _progress = null;
+                      }),
                 title: const Text('Разрешаю отправить именно показанный '
                     'контекст ОДНОЙ сцены для художественного черновика'),
               ),
               FilledButton.icon(
                 key: const Key('prose-scene-generate'),
                 onPressed: _working || _loading ||
-                        !_approved || _draft != null || _error != null
+                        !_approved || _draft != null ||
+                        _error != null || _storageBlocked
                     ? null : _generate,
                 icon: const Icon(Icons.auto_stories),
                 label: const Text('Создать художественный черновик'),
