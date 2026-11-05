@@ -113,18 +113,14 @@ class SourceWorldTimeAuditor {
     }
     final edges = <String, Set<String>>{};
     for (final link in links) {
-      String? before, after;
-      switch (link.relation) {
-        case GameWorldTimeRelation.unknown:
-        case GameWorldTimeRelation.simultaneous:
-          continue;
-        case GameWorldTimeRelation.firstBeforeSecond:
-          before = link.fromEventId;
-          after = link.toEventId;
-        case GameWorldTimeRelation.secondBeforeFirst:
-          before = link.toEventId;
-          after = link.fromEventId;
+      if (link.relation == GameWorldTimeRelation.unknown ||
+          link.relation == GameWorldTimeRelation.simultaneous) {
+        continue;
       }
+      final before = link.relation == GameWorldTimeRelation.firstBeforeSecond
+          ? link.fromEventId : link.toEventId;
+      final after = link.relation == GameWorldTimeRelation.firstBeforeSecond
+          ? link.toEventId : link.fromEventId;
       final from = root(before);
       final to = root(after);
       if (from == to) {
