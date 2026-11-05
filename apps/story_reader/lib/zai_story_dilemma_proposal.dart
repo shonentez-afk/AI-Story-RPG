@@ -294,7 +294,10 @@ class ZaiStoryDilemmaProposalService {
           {
             'event_id': event.id,
             'source_order': event.narrativePosition,
-            'suggested_label': event.suggestedLabel,
+            // Act-scoped consent covers exact quotes, NOT model-generated
+            // labels; keep the original global-preview payload unchanged.
+            if (approvedExactEventIds == null)
+              'suggested_label': event.suggestedLabel,
             'quote': event.source.quote,
           },
       ],
