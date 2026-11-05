@@ -134,7 +134,7 @@ void main() {
     expect(built.canDistributePublicly, false);
     expect(built.sceneCount, 7);
     expect(built.sourceQuoteCount, 2);
-    final check = const PrivateBookworldImporter().inspect(built.archive);
+    final check = const RichPrivateBookworldImporter().inspect(built.archive);
     expect(check.sourceFingerprint, index.sourceFingerprint);
     expect(check.requiresNetwork, false);
     expect(check.canDistributePublicly, false);
