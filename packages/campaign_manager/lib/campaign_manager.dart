@@ -171,11 +171,20 @@ CREATE TABLE events(
     try {
       return const BookworldImporter().inspect(archive);
     } on FormatException {
-      final private = const PrivateBookworldImporter().inspect(archive);
-      return VerifiedBookworld(
-        blueprint: private.blueprint,
-        archiveHash: private.archiveSha256,
-      );
+      try {
+        final private = const PrivateBookworldImporter().inspect(archive);
+        return VerifiedBookworld(
+          blueprint: private.blueprint,
+          archiveHash: private.archiveSha256,
+        );
+      } on FormatException {
+        // A separately versioned private v3 gate; no relaxed v1/v2 checks.
+        final rich = const RichPrivateBookworldImporter().inspect(archive);
+        return VerifiedBookworld(
+          blueprint: rich.blueprint,
+          archiveHash: rich.archiveSha256,
+        );
+      }
     }
   }
 
