@@ -242,6 +242,9 @@ void main() {
     await tester.tap(find.byKey(const Key('whole-book-dilemma-approve')));
     await tester.pumpAndSettle();
     expect(fake.requests, 1);
+    await tester.scrollUntilVisible(
+      find.byKey(const Key('whole-book-notice')), 100,
+      scrollable: find.byType(Scrollable).first);
     expect(find.textContaining('Подходящая причинная развилка'),
         findsWidgets);
     expect(find.byKey(const Key('whole-book-dilemma-preview')), findsNothing);
