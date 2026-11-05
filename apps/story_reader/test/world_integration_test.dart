@@ -151,6 +151,135 @@ void main() {
     expect((await worker.campaigns()).length, 1);
   });
 
+
+  testWidgets('PRIVATE .bworld v2 has a real persisted Journal but never '
+      'invents Hero stats, inventory or facts', (tester) async {
+    final raw = Uint8List.fromList(File(
+      '../../artifacts/bookworld/book_private_sample.bworld',
+    ).readAsBytesSync());
+    final world = await gateway.install(raw);
+    final id = await gateway.start(world.archiveHash);
+    final start = await gateway.load(id);
+    expect(start.stats, isEmpty);
+    expect(start.inventory, isEmpty);
+    expect(start.knownFacts, isEmpty);
+    expect(start.journal, isEmpty);
+
+    await tester.pumpWidget(MaterialApp(
+      home: WorldPlayPage(gateway: gateway, campaignId: id),
+    ));
+    await settleWorker(tester);
+    await tester.tap(find.text('Герой'));
+    await settleWorker(tester);
+    expect(find.text('Игровое время: 0'), findsOneWidget);
+    expect(find.text('Открыто сведений: 0'), findsOneWidget);
+    expect(find.textContaining('Наблюдательность:'), findsNothing);
+    await tester.tap(find.byTooltip('Закрыть'));
+    await settleWorker(tester);
+    await tester.tap(find.text('Предметы'));
+    await settleWorker(tester);
+    expect(find.text('Предметов пока нет'), findsOneWidget);
+    await tester.tap(find.byTooltip('Закрыть'));
+    await settleWorker(tester);
+    await tester.tap(find.text('Журнал'));
+    await settleWorker(tester);
+    expect(find.text('Решений пока нет'), findsOneWidget);
+    await tester.tap(find.byTooltip('Закрыть'));
+    await settleWorker(tester);
+
+    await tapChoice(tester, 'wait');
+    final advanced = await gateway.load(id);
+    expect(advanced.revision, 1);
+    expect(advanced.journal, hasLength(1));
+    expect(advanced.stats, isEmpty);
+    expect(advanced.inventory, isEmpty);
+    await tester.tap(find.text('Журнал'));
+    await settleWorker(tester);
+    expect(find.text('1. ' + advanced.journal.first.choiceLabel),
+        findsOneWidget);
+    await tester.tap(find.byTooltip('Закрыть'));
+    await settleWorker(tester);
+
+    final portable = await gateway.exportSave(id);
+    expect((await gateway.previewSave(portable,
+      expectedWorldHash: world.archiveHash)).revision, 1);
+    final imported = await gateway.importSave(portable,
+      expectedWorldHash: world.archiveHash);
+    final restored = await gateway.load(imported);
+    expect(restored.revision, 1);
+    expect(restored.journal.single.choiceLabel,
+        advanced.journal.single.choiceLabel);
+    expect(restored.stats, isEmpty);
+    expect(restored.inventory, isEmpty);
+    expect(restored.knownFacts, isEmpty);
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pumpWidget(MaterialApp(
+      home: WorldPlayPage(gateway: gateway, campaignId: imported),
+    ));
+    await settleWorker(tester);
+    await tester.tap(find.text('Журнал'));
+    await settleWorker(tester);
+    expect(find.text('1. ' + restored.journal.first.choiceLabel),
+        findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('v1 .bworld proves real Hero changes, owned Items and Journal '
+      'are replayed after a fresh UI page', (tester) async {
+    final world = await install();
+    final id = await gateway.start(world.archiveHash);
+    final actions = [
+      'inspect_gate', 'walk_market', 'ask_guard',
+      'walk_market', 'buy_map', 'walk_market', 'find_key',
+    ];
+    for (var step = 0; step < actions.length; step++) {
+      final state = await gateway.load(id);
+      final choice = state.choices.singleWhere(
+        (candidate) => candidate.id == actions[step],
+      );
+      expect(choice.enabled, true);
+      final result = await gateway.choose(
+        id, actionId: 'panels_test_' + step.toString(),
+        choiceId: choice.id, expectedRevision: step,
+      );
+      expect(result.applied, true);
+    }
+    final saved = await gateway.load(id);
+    expect(saved.revision, actions.length);
+    expect(saved.inventory, containsAll(['map', 'key']));
+    expect(saved.stats['insight'], greaterThan(0));
+    expect(saved.journal, hasLength(actions.length));
+
+    await tester.pumpWidget(MaterialApp(
+      home: WorldPlayPage(gateway: gateway, campaignId: id),
+    ));
+    await settleWorker(tester);
+    await tester.tap(find.text('Герой'));
+    await settleWorker(tester);
+    expect(find.text('Наблюдательность: ' +
+        saved.stats['insight'].toString()), findsOneWidget);
+    await tester.tap(find.byTooltip('Закрыть'));
+    await settleWorker(tester);
+    await tester.tap(find.text('Предметы'));
+    await settleWorker(tester);
+    expect(find.text('map'), findsOneWidget);
+    expect(find.text('key'), findsOneWidget);
+    await tester.tap(find.byTooltip('Закрыть'));
+    await settleWorker(tester);
+    await tester.tap(find.text('Журнал'));
+    await settleWorker(tester);
+    expect(find.text(actions.length.toString() + '. ' +
+        saved.journal.last.choiceLabel), findsOneWidget);
+    expect(tester.takeException(), isNull);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    final after = await gateway.load(id);
+    expect(after.stats, saved.stats);
+    expect(after.inventory, saved.inventory);
+    expect(after.journal.map((e) => e.choiceLabel),
+        saved.journal.map((e) => e.choiceLabel));
+  });
+
   testWidgets('one library imports and displays verified worlds separately '
       'from legacy books and reading', (tester) async {
     final world = await install();
