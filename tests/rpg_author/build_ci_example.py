@@ -24,7 +24,7 @@ def main() -> None:
     target_dir.mkdir(parents=True, mode=0o700)
     with tempfile.TemporaryDirectory() as temporary:
         base = Path(temporary)
-        text_file = base / "synthetic_story.txt"
+        text_file = base / "test_story.txt"
         text_file.write_text(TEXT, encoding="utf-8")
         project_dir = base / "project"
         project.init_project(project_dir, text_file)
