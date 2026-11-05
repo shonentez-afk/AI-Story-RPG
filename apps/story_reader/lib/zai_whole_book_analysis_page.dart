@@ -8,6 +8,7 @@ import 'book_source_index.dart';
 import 'narrative_book_model.dart';
 import 'story_plan_quality_gate.dart';
 import 'quick_rpg_page.dart';
+import 'story_plan_trial_page.dart';
 import 'world_library_gateway.dart';
 import 'zai_auto_whole_book_analysis.dart';
 import 'zai_whole_book_event_outline.dart';
@@ -448,19 +449,40 @@ class _ZaiWholeBookAnalysisPageState extends State<ZaiWholeBookAnalysisPage> {
                   FilledButton.icon(
                     key: const Key('whole-book-quick-play'),
                     onPressed: _working ? null : () async {
-                      await Navigator.of(context).push<void>(
-                        MaterialPageRoute(
-                          builder: (_) => QuickRpgPage(
-                            index: widget.index,
-                            gateway: widget.gateway ??
-                                const DeviceWorldLibraryGateway(),
-                            eventOutline: outline,
+                      final report = _qualityReport;
+                      final preview = _dilemmaPreview;
+                      if (report != null && report.passedFormalPreflight &&
+                          preview != null && preview.foundCandidate) {
+                        final book = NarrativeBookModel.fromExisting(
+                            index: widget.index, outline: outline);
+                        if (!mounted) return;
+                        await Navigator.of(context).push<void>(
+                          MaterialPageRoute(
+                            builder: (_) => StoryPlanTrialPage(
+                              index: widget.index, book: book,
+                              preview: preview, quality: report,
+                              gateway: widget.gateway ??
+                                  const DeviceWorldLibraryGateway(),
+                            ),
                           ),
-                        ),
-                      );
+                        );
+                      } else {
+                        await Navigator.of(context).push<void>(
+                          MaterialPageRoute(
+                            builder: (_) => QuickRpgPage(
+                              index: widget.index,
+                              gateway: widget.gateway ??
+                                  const DeviceWorldLibraryGateway(),
+                              eventOutline: outline,
+                            ),
+                          ),
+                        );
+                      }
                     },
                     icon: const Icon(Icons.play_arrow),
-                    label: const Text('Создать пробную RPG по событиям'),
+                    label: Text(_qualityReport?.passedFormalPreflight == true
+                        ? 'Создать и играть в пробную RPG с развилкой'
+                        : 'Создать пробную RPG по событиям'),
                   ),
                   const Text('Потребуется отдельная проверка цитат. '
                       'Это не полная игра по всему сюжету.'),
