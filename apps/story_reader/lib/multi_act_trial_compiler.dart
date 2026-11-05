@@ -3,6 +3,8 @@ import 'package:bookworld_format/bookworld_format.dart';
 import 'book_source_index.dart';
 import 'bookwide_act_planner.dart';
 import 'bookwide_storyplan_composer.dart';
+import 'branch_continuity_auditor.dart';
+import 'source_world_time_auditor.dart';
 import 'source_bound_bridge_auditor.dart';
 import 'cross_act_consequence_gate.dart';
 import 'intermediate_story_blueprint.dart';
@@ -176,6 +178,63 @@ class MultiActTrialCompiler {
         bridgeAudit.canDeclareLiteraryCausality) {
       throw const FormatException(
           'Непроверенная связь между актами не может считаться каноном.');
+    }
+
+    // M2h7b: replay every possible act route independently. An accepted
+    // GAME_FICTION obligation may exist only after its accepting action;
+    // refusal must not unlock later performance of an unmade promise.
+    // This is a private game-state audit, NOT a claim about book meaning.
+    final promiseRules = <BranchContinuityRule>[];
+    for (var i = 0; i < draft.parts.length; i++) {
+      final prefix = 'act_' + (i + 1).toString() + '_';
+      final accepted = plan.flags.where((flag) =>
+          flag.startsWith(prefix) && flag.endsWith('_accepted')).toList();
+      if (accepted.length != 1) {
+        throw const FormatException(
+            'Не найдено однозначное состояние принятия игрового условия.');
+      }
+      promiseRules.add(BranchContinuityRule(
+        id: prefix + 'promise_gate',
+        sourceFingerprint: index.sourceFingerprint,
+        kind: ContinuityLedgerKind.promise,
+        subjectId: 'player',
+        resourceId: prefix + 'fictional_offer',
+        sourceEventId: draft.parts[i].setupEventId,
+        stateFlag: accepted.single,
+        grantDecisionId: prefix + 'accept_offer',
+        protectedDecisionIds: [prefix + 'honor_condition'],
+        refusalDecisionIds: [prefix + 'refuse_offer'],
+        reviewedAsGameFiction: true,
+      ));
+    }
+    final continuityCheck = BranchContinuityAuditor.audit(
+      index: index, book: book, plan: plan, rules: promiseRules);
+    if (!continuityCheck.passedFormalStateAudit ||
+        continuityCheck.verifiesBookMeaning ||
+        continuityCheck.canPublishCanonicalRpg) {
+      throw const FormatException('Игровое обязательство возникает '
+          'без согласия, после отказа или без проверенного состояния.');
+    }
+
+    // Page order is not historical world time. Keep all inferred act-to-act
+    // timelines explicitly UNKNOWN until separately reviewed as fiction.
+    final timeReport = SourceWorldTimeAuditor.audit(
+      index: index, book: book,
+      links: [
+        for (var i = 1; i < draft.parts.length; i++)
+          SourceWorldTimeLink(
+            id: 'act_time_' + i.toString(),
+            sourceFingerprint: index.sourceFingerprint,
+            fromEventId: draft.parts[i - 1].outcomeEventId,
+            toEventId: draft.parts[i].setupEventId,
+            relation: GameWorldTimeRelation.unknown,
+          ),
+      ],
+    );
+    if (timeReport.unknownWorldOrderLinks != draft.parts.length - 1 ||
+        timeReport.establishesBookWorldChronology) {
+      throw const FormatException('Порядок текста нельзя выдавать '
+          'за проверенную хронологию мира книги.');
     }
 
     final sourceSceneIds = <String>{
