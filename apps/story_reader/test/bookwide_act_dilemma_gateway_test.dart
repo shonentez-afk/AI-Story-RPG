@@ -177,6 +177,8 @@ void main() {
         as Map<String, dynamic>;
     final samples = payload['event_samples'] as List;
     expect(samples.length, 3);
+    expect(samples.every((s) =>
+        !(s as Map).containsKey('suggested_label')), true);
     expect([for (final s in samples) (s as Map)['event_id']],
         target.eventIds);
     expect(request, contains(target.snippets.first.source.quote));
