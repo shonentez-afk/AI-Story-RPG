@@ -46,12 +46,16 @@ class _DilemmaStub extends ZaiStoryDilemmaProposalService {
   Future<ZaiStoryDilemmaPreview> propose({
     required NarrativeBookModel book,
     required bool consentForTheseSampledQuotes,
+    List<String>? approvedExactEventIds,
+    String? approvedExcerptDigest,
     bool consentForBookTitle = false,
     ZaiPreviewCancellation? cancellation,
     void Function(int attempt, int total, String status)? onProgress,
   }) async {
     expect(consentForTheseSampledQuotes, true);
     expect(consentForBookTitle, false);
+    expect(approvedExactEventIds, isNull);
+    expect(approvedExcerptDigest, isNull);
     requests++;
     if (returnDraft) {
       final proposal = StoryDilemmaProposal(
