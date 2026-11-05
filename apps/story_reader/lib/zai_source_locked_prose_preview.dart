@@ -210,6 +210,10 @@ class ZaiSourceLockedProsePreviewService {
       final choices = outer['choices'] as List;
       if (choices.isEmpty) throw const FormatException();
       final entry = choices.first as Map;
+      if (entry['finish_reason'] != null &&
+          entry['finish_reason'] != 'stop') {
+        throw const FormatException();
+      }
       final message = entry['message'] as Map;
       final raw = message['content'] as String;
       if (utf8.encode(raw).length > maxOutputBytes) {
