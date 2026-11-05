@@ -83,7 +83,7 @@ def main():
     # A real, independently verified four-entry BookWorld v2, not only a JSON
     # blueprint. Keep all synthetic book bytes/checkpoints outside checkout.
     with tempfile.TemporaryDirectory() as temporary:
-        source_path = Path(temporary) / "synthetic.txt"
+        source_path = Path(temporary) / "test_story.txt"
         source_path.write_text(TEXT, encoding="utf-8")
         project_path = Path(temporary) / "author-project"
         project.init_project(project_path, source_path)
