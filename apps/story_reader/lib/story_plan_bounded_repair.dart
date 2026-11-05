@@ -105,6 +105,37 @@ class StoryPlanBoundedRepair {
     );
   }
 
+  /// Reject a "repair" that disables the choice forever, even if the
+  /// surrounding scene and two endings remain structurally reachable.
+  static bool _decisionRemainsAvailable(StoryPlan plan, String choiceId) {
+    final scenes = {for (final s in plan.situations) s.id: s};
+    final flags = plan.flags.toList()..sort();
+    final bitByFlag = <String, int>{
+      for (var i = 0; i < flags.length; i++) flags[i]: 1 << i,
+    };
+    int mask(List<String> set) =>
+        set.fold(0, (n, flag) => n | bitByFlag[flag]!);
+    final queue = <(String, int)>[
+      (plan.entrySituationId, mask(plan.initialFlags)),
+    ];
+    final seen = <String>{};
+    for (var cursor = 0; cursor < queue.length; cursor++) {
+      if (queue.length > 2500) return false;
+      final node = queue[cursor];
+      if (!seen.add(node.$1 + ':' + node.$2.toString())) continue;
+      for (final decision in scenes[node.$1]!.decisions) {
+        if ((node.$2 & mask(decision.requires)) !=
+                mask(decision.requires) ||
+            (node.$2 & mask(decision.forbids)) != 0) continue;
+        if (decision.id == choiceId) return true;
+        final after = (node.$2 | mask(decision.adds)) &
+            ~mask(decision.removes);
+        queue.add((decision.nextSituationId, after));
+      }
+    }
+    return false;
+  }
+
   /// At most three local patches. Each patch must:
   /// 1. make a previously unsafe choice unavailable in that state;
   /// 2. keep all situations and both endings reachable;
@@ -180,6 +211,11 @@ class StoryPlanBoundedRepair {
       try {
         final candidate = _replace(current, original.id,
             _tighten(original, missingRequired, missingForbidden));
+        if (!_decisionRemainsAvailable(candidate, original.id)) {
+          blockers.add('Правка полностью запрещает действие и удаляет '
+              'игровую возможность; нужна смысловая проверка.');
+          break;
+        }
         final checked = StoryPlanCausalAuditor.audit(
             plan: candidate, book: book, contract: contract);
         if (checked.counterexamples.length >=
