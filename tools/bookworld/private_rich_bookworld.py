@@ -56,6 +56,13 @@ def _model(value):
                                              else "not_attested") or \
                 value["tool"] != "ChatGPT" or value["method"] != "external":
             fail("Unverified or incompatible model attribution")
+    elif value["provider"] == "zai":
+        # The application requested this precise model through z.ai.
+        # "requested" does NOT assert that a server response was audited.
+        if value != {"provider": "zai", "model_id": "glm-4.7-flash",
+                     "model_id_status": "requested",
+                     "tool": "AI Story RPG", "method": "built_in"}:
+            fail("Unverified built-in GLM attribution")
     elif value != {"provider": "none", "model_id": None,
                    "model_id_status": "not_applicable", "tool": "none",
                    "method": "local_fixture"}:

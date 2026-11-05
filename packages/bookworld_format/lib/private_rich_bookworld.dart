@@ -448,12 +448,19 @@ class RichPrivateBookworldImporter {
         model['model_id_status'] ==
             (model['model_id'] == null ? 'not_attested' : 'user_declared') &&
         model['tool'] == 'ChatGPT' && model['method'] == 'external';
+    // Captures the configured REQUEST made by built-in Z.ai, not a claim
+    // that the remote response was independently authenticated as CANON.
+    final isZai = _same(model, {
+      'provider': 'zai', 'model_id': 'glm-4.7-flash',
+      'model_id_status': 'requested',
+      'tool': 'AI Story RPG', 'method': 'built_in',
+    });
     final noAI = _same(model, {
       'provider': 'none', 'model_id': null,
       'model_id_status': 'not_applicable',
       'tool': 'none', 'method': 'local_fixture',
     });
-    if ((!isOpenAI && !noAI) ||
+    if ((!isOpenAI && !isZai && !noAI) ||
         !_same(manifest['model_provenance'], model)) {
       throw const FormatException('Некорректное происхождение v3');
     }

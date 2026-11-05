@@ -9,7 +9,7 @@ import 'src/zip_v1.dart';
 
 export 'private_bookworld.dart' show PrivateBookworldImporter, VerifiedPrivateBookworld;
 export 'private_rich_bookworld.dart' show RichPrivateBookworldImporter, VerifiedRichPrivateBookworld;
-export 'private_bookworld_writer.dart' show PrivateBookworldWriter;
+export 'private_bookworld_writer.dart' show PrivateBookworldWriter, RichPrivateBookworldWriter;
 
 /// Validated compiled game rules (legacy demo or explicit private source v2),
 /// not a game save, a reader book, or distribution permission.
