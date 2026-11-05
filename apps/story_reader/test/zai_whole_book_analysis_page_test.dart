@@ -223,7 +223,9 @@ void main() {
     );
     await tester.pumpWidget(MaterialApp(
       home: ZaiWholeBookAnalysisPage(
-          index: index, analysis: analysis, dilemmaService: fake),
+          index: index, analysis: analysis, dilemmaService: fake,
+          dilemmaCheckpoint: StoryPlanDraftCheckpointStore(
+              repository: _PrivateStore())),
     ));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('whole-book-start')));
@@ -314,7 +316,9 @@ void main() {
     );
     await tester.pumpWidget(MaterialApp(
       home: ZaiWholeBookAnalysisPage(
-        index: index, analysis: analysis, dilemmaService: fake),
+        index: index, analysis: analysis, dilemmaService: fake,
+        dilemmaCheckpoint: StoryPlanDraftCheckpointStore(
+            repository: _PrivateStore())),
     ));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('whole-book-start')));
