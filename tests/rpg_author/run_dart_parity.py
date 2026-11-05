@@ -172,6 +172,25 @@ def main():
         assert help_route["turns"][0]["inventory"] == []
         assert help_route["turns"][0]["stats"]["insight"] == 2
         assert help_route["turns"][1]["journal"] == ["leave_rope", "go_for_help"]
+        durable = dart({
+            "operation": "rich_campaign",
+            "data": base64.b64encode(rich_bytes).decode("ascii"),
+            "path": ["take_rope", "rescue"],
+        })
+        assert durable["revision"] == 2 and durable["inventory"] == []
+        assert durable["stats"]["courage"] == 4
+        assert durable["facts"] == ["rescue_fact"]
+        assert durable["journal"] == ["take_rope", "rescue"]
+        assert durable["restart_ok"] and durable["save_import_ok"] and durable["fork_ok"]
+        alternative = dart({
+            "operation": "rich_campaign",
+            "data": base64.b64encode(rich_bytes).decode("ascii"),
+            "path": ["leave_rope", "go_for_help"],
+        })
+        assert alternative["revision"] == 2 and alternative["inventory"] == []
+        assert alternative["stats"]["insight"] == 2
+        assert alternative["journal"] == ["leave_rope", "go_for_help"]
+        assert alternative["restart_ok"] and alternative["save_import_ok"] and alternative["fork_ok"]
     print(json.dumps({"source_comparisons": checked, "candidate_accepted_by_dart_blueprint": True,
                       "known_lossy_source_forms_refused": 1,
                       "application_modified": False,
@@ -181,7 +200,8 @@ def main():
                       "panel_world_dynamic_items_stats_facts_journal": True,
                       "rich_v3_python_compiled_dart_imported": True,
                       "rich_v3_state_replayed_in_two_routes": True,
-                      "legacy_v2_rejects_v3": True}))
+                      "legacy_v2_rejects_v3": True,
+                      "rich_v3_sqlite_restart_fork_portable_save": True}))
 
 
 if __name__ == "__main__":
