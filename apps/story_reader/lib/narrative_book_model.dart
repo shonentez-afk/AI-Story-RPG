@@ -41,8 +41,12 @@ class NarrativeCitation {
     if (chunks.length != 1) {
       throw const FormatException('Исходный отрывок не найден.');
     }
-    final chunk = chunks.single;
-    if (chapterIndex != chunk.chapterIndex ||
+    _validateAgainstChunk(chunks.single);
+  }
+
+  void _validateAgainstChunk(SourceChunk chunk) {
+    if (chunk.id != chunkId ||
+        chapterIndex != chunk.chapterIndex ||
         blockIndex != chunk.blockIndex ||
         startUtf16 < chunk.startUtf16 ||
         endUtf16 > chunk.endUtf16 ||
@@ -109,6 +113,27 @@ class NarrativeEvent {
     'time_status': timeStatus.name,
     'meaning_confirmed': false,
     'causality_confirmed': false,
+  };
+}
+
+/// Next-in-TEXT adjacency never implies an in-world timeline, cause,
+/// or a permitted game transition. These edges help the next stage identify
+/// which source events it needs to reason about.
+class NarrativeTextAdjacency {
+  const NarrativeTextAdjacency(this.fromEventId, this.toEventId);
+
+  final String fromEventId;
+  final String toEventId;
+
+  bool get establishesWorldTime => false;
+  bool get establishesCausation => false;
+
+  Map<String, Object> toJson() => {
+    'from_event_id': fromEventId,
+    'to_event_id': toEventId,
+    'meaning': 'NEXT_IN_SOURCE_TEXT_ONLY',
+    'establishes_world_time': false,
+    'establishes_causation': false,
   };
 }
 
@@ -210,6 +235,10 @@ class NarrativeBookModel {
     required List<NarrativeCharacter> characters,
     required List<NarrativeClaim> claims,
   }) : events = List.unmodifiable(events),
+       textAdjacency = List.unmodifiable([
+         for (var i = 1; i < events.length; i++)
+           NarrativeTextAdjacency(events[i - 1].id, events[i].id),
+       ]),
        characters = List.unmodifiable(characters),
        claims = List.unmodifiable(claims);
 
@@ -223,6 +252,7 @@ class NarrativeBookModel {
   final bool analysisComplete;
   final int chaptersWithEventProposals;
   final List<NarrativeEvent> events;
+  final List<NarrativeTextAdjacency> textAdjacency;
   final List<NarrativeCharacter> characters;
   final List<NarrativeClaim> claims;
 
@@ -256,6 +286,7 @@ class NarrativeBookModel {
     'analysis_complete': analysisComplete,
     'chapters_with_event_proposals': chaptersWithEventProposals,
     'events': [for (final e in events) e.toJson()],
+    'text_adjacency': [for (final edge in textAdjacency) edge.toJson()],
     'characters': [for (final a in characters) a.toJson()],
     'claims': [for (final c in claims) c.toJson()],
     'has_proven_chronology': false,
@@ -294,6 +325,12 @@ class NarrativeBookModel {
       // The existing catalog is the authority for meaning proposal validation.
       SourceSemanticCatalog.checked(index, evidence!, catalog.assertions);
     }
+    final byChunkId = {
+      for (final chunk in index.chunks) chunk.id: chunk,
+    };
+    if (byChunkId.length != index.chunks.length) {
+      throw const FormatException('Нарушена уникальность исходных фрагментов.');
+    }
     final eventIds = <String>{};
     final events = <NarrativeEvent>[];
     for (final item in outline.events) {
@@ -302,6 +339,10 @@ class NarrativeBookModel {
           item.label.length > 240) {
         throw const FormatException('Повторное или некорректное событие.');
       }
+      final chunk = byChunkId[item.chunkId];
+      if (chunk == null) {
+        throw const FormatException('Событие ссылается на чужую книгу.');
+      }
       final citation = NarrativeCitation(
         chunkId: item.chunkId,
         chapterIndex: item.chapterIndex,
@@ -309,7 +350,8 @@ class NarrativeBookModel {
         startUtf16: item.startUtf16,
         endUtf16: item.startUtf16 + item.quote.length,
         quote: item.quote,
-      )..validate(index);
+      );
+      citation._validateAgainstChunk(chunk);
       events.add(NarrativeEvent(
         id: item.id,
         suggestedLabel: item.label,
