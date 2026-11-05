@@ -8,6 +8,7 @@ import 'package:ai_story_reader/bookwide_act_planner.dart';
 import 'package:ai_story_reader/bookwide_storyplan_composer.dart';
 import 'package:ai_story_reader/cross_act_consequence_gate.dart';
 import 'package:ai_story_reader/narrative_book_model.dart';
+import 'package:ai_story_reader/multi_act_trial_compiler.dart';
 import 'package:ai_story_reader/source_analysis_checkpoint_repository.dart';
 import 'package:ai_story_reader/source_semantic_provider.dart';
 import 'package:ai_story_reader/story_plan_dilemma_generator.dart';
@@ -15,6 +16,8 @@ import 'package:ai_story_reader/zai_auto_whole_book_analysis.dart';
 import 'package:ai_story_reader/zai_semantic_preview.dart';
 import 'package:ai_story_reader/zai_whole_book_event_outline.dart';
 import 'package:crypto/crypto.dart';
+import 'package:bookworld_format/bookworld_format.dart';
+import 'package:campaign_manager/campaign_manager.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// Real PUBLIC-DOMAIN text, obtained by CI from Gutenberg 2591 and isolated
@@ -185,4 +188,127 @@ void main() {
     expect(details, isNot(contains(_anchors.first)));
     expect(details, isNot(contains(index.sourceFingerprint)));
   });
+
+  test('REAL Grimm Frog-Prince FB2 becomes a 14-scene private playable '
+      'multi-act BookWorld; earlier choice affects later act and '
+      'offline SQLite campaigns survive restart', () async {
+    final index = await _frogSource();
+    final book = await _analyzeLocally(index);
+    final map = BookwideActPlanner.build(
+        index: index, book: book, eventsPerPart: 4);
+    final draft = BookwideStoryPlanComposer.compose(
+      index: index, book: book, bookMap: map,
+      actProposals: [
+        _proposal(book, map.acts[0]),
+        _proposal(book, map.acts[1]),
+      ],
+    );
+    final link = CrossActConsequenceRule(
+      id: 'real_frog_test_fictional_dependency',
+      earlierActId: draft.parts[0].actId,
+      laterActId: draft.parts[1].actId,
+      earlierSourceEventId: draft.parts[0].outcomeEventId,
+      laterSourceEventId: draft.parts[1].setupEventId,
+      laterDecisionId: 'act_2_accept_offer',
+      priorOutcome: CrossActPriorOutcome.original,
+      mode: CrossActRuleMode.requiresPriorOutcome,
+      reviewedAsGameFiction: true,
+      privateReviewReason: 'Два исхода тестируются как отдельная '
+          'частная игровая интерпретация, а не литературный факт.',
+    );
+    final continuation = CrossActConsequenceGate.apply(
+      index: index, book: book, bookMap: map,
+      draft: draft, rules: [link],
+    );
+    final archive = await MultiActTrialCompiler.compile(
+      index: index, book: book, bookMap: map,
+      draft: draft, continuity: continuation,
+      sourceEventIdsReviewedByUser: {
+        for (final p in draft.parts) ...[
+          p.setupEventId, p.outcomeEventId,
+        ],
+      },
+      privateUseConfirmed: true,
+      fictionalTrialAcknowledged: true,
+    );
+    expect(archive.isPrivateTrial, true);
+    expect(archive.isFullBookAdaptation, false);
+    expect(archive.sceneCount, 14);
+    expect(archive.sourceQuoteCount, 4);
+    final verified = const PrivateBookworldImporter().inspect(archive.archive);
+    expect(verified.sourceFingerprint, index.sourceFingerprint);
+    expect(verified.requiresNetwork, false);
+    expect(verified.canDistributePublicly, false);
+
+    final dir = await Directory.systemTemp.createTemp('real-frog-multiact-');
+    late String canonTrialId, alternateTrialId;
+    try {
+      var store = BookworldCampaignStore.openPrivateDirectory(dir.path);
+      try {
+        final world = store.installBookworld(archive.archive);
+        canonTrialId = store.createCampaign(world.archiveHash);
+        alternateTrialId = store.createCampaign(world.archiveHash);
+        var revision = 0;
+        for (final choice in [
+          'act_1_accept_offer', 'act_1_honor_condition',
+          'act_1_continue_original',
+          'act_2_accept_offer', 'act_2_honor_condition',
+        ]) {
+          final current = store.loadCampaign(canonTrialId);
+          expect(current.coordinator.choices.any((c) => c.id == choice), true);
+          final applied = store.commitChoice(canonTrialId,
+            actionId: 'frog_original_' + revision.toString(),
+            choiceId: choice, expectedRevision: revision);
+          expect(applied.applied, true);
+          revision++;
+        }
+        expect(store.loadCampaign(canonTrialId).coordinator.isTerminal, true);
+        revision = 0;
+        for (final choice in [
+          'act_1_refuse_offer', 'act_1_explore',
+          'act_1_use_discovery', 'act_1_end_alternative',
+          'act_1_continue_alternative',
+        ]) {
+          final applied = store.commitChoice(alternateTrialId,
+            actionId: 'frog_alt_' + revision.toString(),
+            choiceId: choice, expectedRevision: revision);
+          expect(applied.applied, true);
+          revision++;
+        }
+        final next = store.loadCampaign(alternateTrialId).coordinator;
+        expect(next.choices.any((c) => c.id == 'act_2_accept_offer'), false);
+        expect(next.choices.any((c) => c.id == 'act_2_refuse_offer'), true);
+        for (final choice in [
+          'act_2_refuse_offer', 'act_2_explore',
+          'act_2_use_discovery', 'act_2_end_alternative',
+        ]) {
+          final applied = store.commitChoice(alternateTrialId,
+            actionId: 'frog_alt_' + revision.toString(),
+            choiceId: choice, expectedRevision: revision);
+          expect(applied.applied, true);
+          revision++;
+        }
+        expect(store.loadCampaign(alternateTrialId).coordinator.isTerminal,
+            true);
+        expect(store.loadCampaign(alternateTrialId).metadata.revision, 9);
+      } finally {
+        store.close();
+      }
+      store = BookworldCampaignStore.openPrivateDirectory(dir.path);
+      try {
+        expect(store.installedWorlds(), hasLength(1));
+        expect(store.campaigns(), hasLength(2));
+        expect(store.loadCampaign(canonTrialId).coordinator.isTerminal, true);
+        expect(store.loadCampaign(alternateTrialId).coordinator.isTerminal,
+            true);
+        expect(store.loadCampaign(canonTrialId).metadata.revision, 5);
+        expect(store.loadCampaign(alternateTrialId).metadata.revision, 9);
+      } finally {
+        store.close();
+      }
+    } finally {
+      await dir.delete(recursive: true);
+    }
+  });
+
 }
