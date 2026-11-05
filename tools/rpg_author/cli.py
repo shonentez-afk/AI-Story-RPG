@@ -41,6 +41,14 @@ def parser():
     bundle = commands.add_parser("verify-bundle", help="Check package and sidecar SHA binding")
     bundle.add_argument("--input", required=True, type=Path)
     bundle.add_argument("--attribution", required=True, type=Path)
+    richer = commands.add_parser("build-rich", help="Build source-checked rich private v3 game")
+    richer.add_argument("--project", required=True, type=Path)
+    richer.add_argument("--enrichment", required=True, type=Path)
+    richer.add_argument("--output", required=True, type=Path)
+    richer.add_argument("--model-id", choices=["gpt-6"], default=None)
+    richer_check = commands.add_parser("verify-rich", help="Verify v3 archive and attribution")
+    richer_check.add_argument("--input", required=True, type=Path)
+    richer_check.add_argument("--attribution", required=True, type=Path)
     verify = commands.add_parser("verify", help="Inspect an existing legacy v2 .bworld, read-only")
     verify.add_argument("--input", required=True, type=Path)
     return cli
@@ -76,6 +84,13 @@ def main(argv=None) -> int:
         elif name == "verify-bundle":
             from .legacy_package import verify_bundle
             result = verify_bundle(args.input, args.attribution)
+        elif name == "build-rich":
+            from .rich_package import build_rich
+            result = build_rich(args.project, args.enrichment, args.output,
+                                model_id=args.model_id)
+        elif name == "verify-rich":
+            from .rich_package import verify_rich_bundle
+            result = verify_rich_bundle(args.input, args.attribution)
         else:
             check_contract()
             from tools.bookworld import private_bookworld
