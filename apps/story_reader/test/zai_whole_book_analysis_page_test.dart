@@ -5,6 +5,10 @@ import 'package:ai_story_reader/source_semantic_provider.dart';
 import 'package:ai_story_reader/zai_auto_whole_book_analysis.dart';
 import 'package:ai_story_reader/zai_semantic_preview.dart';
 import 'package:ai_story_reader/zai_whole_book_analysis_page.dart';
+import 'package:ai_story_reader/narrative_book_model.dart';
+import 'package:ai_story_reader/zai_story_dilemma_proposal.dart';
+import 'package:ai_story_reader/story_plan_dilemma_generator.dart';
+import 'package:ai_story_reader/story_plan_draft_checkpoint.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -32,6 +36,55 @@ BookSourceIndex _book() => BookSourceIndexer.index(ImportedBook(
         'и встретили стража, который знал дорогу к тайной башне.',
   ],
 ));
+
+class _DilemmaStub extends ZaiStoryDilemmaProposalService {
+  _DilemmaStub({this.returnDraft = false});
+  final bool returnDraft;
+  int requests = 0;
+
+  @override
+  Future<ZaiStoryDilemmaPreview> propose({
+    required NarrativeBookModel book,
+    required bool consentForTheseSampledQuotes,
+    List<String>? approvedExactEventIds,
+    String? approvedExcerptDigest,
+    bool consentForBookTitle = false,
+    ZaiPreviewCancellation? cancellation,
+    void Function(int attempt, int total, String status)? onProgress,
+  }) async {
+    expect(consentForTheseSampledQuotes, true);
+    expect(consentForBookTitle, false);
+    expect(approvedExactEventIds, isNull);
+    expect(approvedExcerptDigest, isNull);
+    requests++;
+    if (returnDraft) {
+      final proposal = StoryDilemmaProposal(
+        sourceFingerprint: book.sourceFingerprint,
+        setupEventId: book.events.first.id,
+        outcomeEventId: book.events.last.id,
+        kind: StoryDilemmaKind.exchange,
+        dilemma: 'Принять условие обмена или искать другую дорогу?',
+        acceptIntent: 'Принять предложение и пообещать помочь',
+        refuseIntent: 'Отказаться от условия и продолжить поиск',
+        followupGoal: 'Разобраться с принятым обязательством',
+        finishOriginalIntent: 'Исполнить согласованное ранее условие',
+        originalEnding: 'Герой завершил предложенную линию истории',
+        alternativeSearchGoal: 'Найти новый путь без обязательства',
+        searchIntent: 'Осмотреть окрестности и спросить жителей',
+        alternativeDiscovery: 'Найден иной вариант разрешения конфликта',
+        useDiscoveryIntent: 'Воспользоваться возможностью без обещания',
+        alternativeEnding: 'Другой исход без исполнения чужого условия',
+      );
+      return ZaiStoryDilemmaPreview(
+        proposal: proposal,
+        plan: StoryPlanDilemmaGenerator.propose(book, proposal),
+        sampledEventCount: 2,
+      );
+    }
+    return const ZaiStoryDilemmaPreview(
+        proposal: null, plan: null, sampledEventCount: 2);
+  }
+}
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -101,6 +154,14 @@ void main() {
       scrollable: find.byType(Scrollable).first);
     expect(find.textContaining('не готовый сценарий'), findsWidgets);
     expect(find.byKey(const Key('whole-book-start')), findsNothing);
+    final sourceMap = find.byKey(const Key('whole-book-act-summary'));
+    await tester.scrollUntilVisible(
+        sourceMap, 120, scrollable: find.byType(Scrollable).first);
+    await tester.ensureVisible(sourceMap);
+    await tester.pumpAndSettle();
+    expect(find.textContaining('все 0 найденных событий'),
+        findsOneWidget);
+    expect(find.byKey(const Key('whole-book-act-map')), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
@@ -144,4 +205,283 @@ void main() {
     expect(requests, 0);
     expect(tester.takeException(), isNull);
   });
+  testWidgets('proposed routes show causal preflight while gameplay stays '
+      'disabled pending semantic and prose review', (tester) async {
+    final index = _book();
+    final fake = _DilemmaStub(returnDraft: true);
+    final analysis = ZaiAutoWholeBookAnalysis(
+      repository: _PrivateStore(),
+      preview: (source, window, token, includeTitle) async {
+        final chunk = window.chunks.first;
+        return ZaiSemanticPreviewResult(
+          batch: SemanticCandidateBatch(
+            providerId: ZaiSemanticPreviewService.providerId,
+            providerVersion: ZaiSemanticPreviewService.providerVersion,
+            sourceFingerprint: source.sourceFingerprint,
+            chunkIds: [for (final c in window.chunks) c.id],
+            candidates: [
+              SemanticCandidate.propose(
+                source, chunk, category: SemanticCategory.event,
+                startUtf16: chunk.startUtf16,
+                endUtf16: chunk.startUtf16 + 60,
+                label: 'Проверенная цитата для структурного черновика',
+                uncertainty: 'Литературные связи не подтверждены.',
+              ),
+            ],
+          ),
+          totalSuggestions: 1, rejectedCount: 0, rejectedNonRussian: 0,
+        );
+      },
+    );
+    await tester.pumpWidget(MaterialApp(
+      home: ZaiWholeBookAnalysisPage(
+          index: index, analysis: analysis, dilemmaService: fake,
+          dilemmaCheckpoint: StoryPlanDraftCheckpointStore(
+              repository: _PrivateStore())),
+    ));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('whole-book-start')));
+    await tester.pumpAndSettle();
+    final initial = find.byKey(const Key('whole-book-confirm-send'));
+    await tester.ensureVisible(initial);
+    await tester.pumpAndSettle();
+    await tester.tap(initial);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('whole-book-approve')));
+    await tester.pumpAndSettle();
+    final button = find.byKey(const Key('whole-book-propose-dilemma'));
+    await tester.scrollUntilVisible(
+      button, 120, scrollable: find.byType(Scrollable).first);
+    await tester.ensureVisible(button);
+    await tester.pumpAndSettle();
+    await tester.tap(button);
+    await tester.pumpAndSettle();
+    final consent = find.byKey(const Key('whole-book-dilemma-consent'));
+    await tester.ensureVisible(consent);
+    await tester.pumpAndSettle();
+    await tester.tap(consent);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('whole-book-dilemma-approve')));
+    await tester.pumpAndSettle();
+    expect(fake.requests, 1);
+    final preflight = find.byKey(const Key('whole-book-dilemma-preflight'));
+    await tester.scrollUntilVisible(
+      preflight, 100, scrollable: find.byType(Scrollable).first);
+    await tester.ensureVisible(preflight);
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Проверка игровых условий: пройдена'),
+        findsOneWidget);
+    expect(find.textContaining('Готовность к установке и игре: НЕТ'),
+        findsOneWidget);
+    expect(find.byKey(const Key('whole-book-dilemma-readiness')),
+        findsOneWidget);
+    final coverage = find.byKey(const Key('whole-book-act-coverage'));
+    await tester.scrollUntilVisible(
+        coverage, 120, scrollable: find.byType(Scrollable).first);
+    await tester.ensureVisible(coverage);
+    await tester.pumpAndSettle();
+    expect(find.textContaining('использует 2 из 2'), findsOneWidget);
+    expect(fake.requests, 1);
+    final play = find.byKey(const Key('whole-book-quick-play'));
+    // The CTA is ABOVE the report and was disposed by the lazy ListView.
+    // Scroll upwards until the button is built before ensureVisible.
+    await tester.scrollUntilVisible(
+      play, -120, scrollable: find.byType(Scrollable).first);
+    await tester.ensureVisible(play);
+    await tester.pumpAndSettle();
+    expect(find.text('Создать и играть в пробную RPG с развилкой'),
+        findsOneWidget);
+    await tester.tap(play);
+    await tester.pumpAndSettle();
+    expect(find.text('Пробная RPG по развилке'), findsOneWidget);
+    expect(find.byKey(const Key('story-trial-review')), findsOneWidget);
+    expect(find.byKey(const Key('story-trial-private-fiction')),
+        findsOneWidget);
+    expect(tester.widget<FilledButton>(
+        find.byKey(const Key('story-trial-start'))).onPressed, isNull);
+    expect(fake.requests, 1);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('draft dilemma preview requires separate quote consent '
+      'and never installs an invented game', (tester) async {
+    final index = _book();
+    final fake = _DilemmaStub();
+    final analysis = ZaiAutoWholeBookAnalysis(
+      repository: _PrivateStore(),
+      preview: (source, window, token, includeTitle) async {
+        final chunk = window.chunks.first;
+        final candidate = SemanticCandidate.propose(
+          source, chunk,
+          category: SemanticCategory.event,
+          startUtf16: chunk.startUtf16,
+          endUtf16: chunk.startUtf16 + 60,
+          label: 'Предложенное событие по точной цитате',
+          uncertainty: 'Смысл и причинность ещё не подтверждены.',
+        );
+        return ZaiSemanticPreviewResult(
+          batch: SemanticCandidateBatch(
+            providerId: ZaiSemanticPreviewService.providerId,
+            providerVersion: ZaiSemanticPreviewService.providerVersion,
+            sourceFingerprint: source.sourceFingerprint,
+            chunkIds: [for (final c in window.chunks) c.id],
+            candidates: [candidate],
+          ),
+          totalSuggestions: 1, rejectedCount: 0,
+          rejectedNonRussian: 0,
+        );
+      },
+    );
+    await tester.pumpWidget(MaterialApp(
+      home: ZaiWholeBookAnalysisPage(
+        index: index, analysis: analysis, dilemmaService: fake,
+        dilemmaCheckpoint: StoryPlanDraftCheckpointStore(
+            repository: _PrivateStore())),
+    ));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('whole-book-start')));
+    await tester.pumpAndSettle();
+    final wholeConsent = find.byKey(const Key('whole-book-confirm-send'));
+    await tester.ensureVisible(wholeConsent);
+    await tester.pumpAndSettle();
+    await tester.tap(wholeConsent);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('whole-book-approve')));
+    await tester.pumpAndSettle();
+    final trigger = find.byKey(const Key('whole-book-propose-dilemma'));
+    await tester.scrollUntilVisible(
+      trigger, 140, scrollable: find.byType(Scrollable).first);
+    await tester.ensureVisible(trigger);
+    await tester.pumpAndSettle();
+    expect(fake.requests, 0);
+    await tester.tap(trigger);
+    await tester.pumpAndSettle();
+    expect(find.byType(AlertDialog), findsOneWidget);
+    expect(find.byKey(const Key('whole-book-dilemma-consent')),
+        findsOneWidget);
+    expect(tester.widget<FilledButton>(
+        find.byKey(const Key('whole-book-dilemma-approve'))).onPressed,
+        isNull);
+    expect(fake.requests, 0);
+    await tester.tap(find.text('Отмена'));
+    await tester.pumpAndSettle();
+    expect(fake.requests, 0);
+
+    await tester.ensureVisible(trigger);
+    await tester.pumpAndSettle();
+    await tester.tap(trigger);
+    await tester.pumpAndSettle();
+    final consent = find.byKey(const Key('whole-book-dilemma-consent'));
+    await tester.ensureVisible(consent);
+    await tester.pumpAndSettle();
+    await tester.tap(consent);
+    await tester.pumpAndSettle();
+    expect(tester.widget<FilledButton>(
+        find.byKey(const Key('whole-book-dilemma-approve'))).onPressed,
+        isNotNull);
+    await tester.tap(find.byKey(const Key('whole-book-dilemma-approve')));
+    await tester.pumpAndSettle();
+    expect(fake.requests, 1);
+    await tester.scrollUntilVisible(
+      find.byKey(const Key('whole-book-notice')), 100,
+      scrollable: find.byType(Scrollable).first);
+    expect(find.textContaining('Подходящая причинная развилка'),
+        findsWidgets);
+    expect(find.byKey(const Key('whole-book-dilemma-preview')), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('saved GLM scenario survives reopening book with no repeat '
+      'provider request and retains disabled full-game status',
+      (tester) async {
+    final index = _book();
+    final sourceStore = _PrivateStore();
+    final checkpointStore = _PrivateStore();
+    final checkpoint = StoryPlanDraftCheckpointStore(
+        repository: checkpointStore);
+    final fake = _DilemmaStub(returnDraft: true);
+    final analysis = ZaiAutoWholeBookAnalysis(
+      repository: sourceStore,
+      preview: (source, window, token, includeTitle) async {
+        final chunk = window.chunks.first;
+        return ZaiSemanticPreviewResult(
+          batch: SemanticCandidateBatch(
+            providerId: ZaiSemanticPreviewService.providerId,
+            providerVersion: ZaiSemanticPreviewService.providerVersion,
+            sourceFingerprint: source.sourceFingerprint,
+            chunkIds: [for (final c in window.chunks) c.id],
+            candidates: [
+              SemanticCandidate.propose(
+                source, chunk, category: SemanticCategory.event,
+                startUtf16: chunk.startUtf16,
+                endUtf16: chunk.startUtf16 + 60,
+                label: 'Смысловое предложение с точной цитатой',
+                uncertainty: 'Смысл ещё должен быть отдельно проверен.',
+              ),
+            ],
+          ),
+          totalSuggestions: 1, rejectedCount: 0, rejectedNonRussian: 0,
+        );
+      },
+    );
+    Widget page() => MaterialApp(
+      home: ZaiWholeBookAnalysisPage(
+        index: index,
+        analysis: analysis,
+        dilemmaService: fake,
+        dilemmaCheckpoint: checkpoint,
+      ),
+    );
+    await tester.pumpWidget(page());
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('whole-book-start')));
+    await tester.pumpAndSettle();
+    final upload = find.byKey(const Key('whole-book-confirm-send'));
+    await tester.ensureVisible(upload);
+    await tester.pumpAndSettle();
+    await tester.tap(upload);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('whole-book-approve')));
+    await tester.pumpAndSettle();
+    final request = find.byKey(const Key('whole-book-propose-dilemma'));
+    await tester.scrollUntilVisible(
+      request, 120, scrollable: find.byType(Scrollable).first);
+    await tester.ensureVisible(request);
+    await tester.pumpAndSettle();
+    await tester.tap(request);
+    await tester.pumpAndSettle();
+    final approve = find.byKey(const Key('whole-book-dilemma-consent'));
+    await tester.ensureVisible(approve);
+    await tester.pumpAndSettle();
+    await tester.tap(approve);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('whole-book-dilemma-approve')));
+    await tester.pumpAndSettle();
+    expect(fake.requests, 1);
+    expect(checkpointStore.raw, isNotNull);
+    expect(checkpointStore.writes, 1);
+    // Mimic closing then reopening the page. The new page gets only the
+    // locally stored checkpoints; it MUST NOT make a new cloud request.
+    await tester.pumpWidget(const SizedBox());
+    await tester.pumpAndSettle();
+    await tester.pumpWidget(page());
+    await tester.pumpAndSettle();
+    expect(fake.requests, 1);
+    final restored = find.byKey(const Key('whole-book-notice'));
+    await tester.scrollUntilVisible(restored, 100,
+        scrollable: find.byType(Scrollable).first);
+    expect(find.textContaining('Повторная отправка книги в Z.ai не требуется'),
+        findsWidgets);
+    final readiness = find.byKey(const Key('whole-book-dilemma-preflight'));
+    await tester.scrollUntilVisible(readiness, -100,
+        scrollable: find.byType(Scrollable).first);
+    await tester.ensureVisible(readiness);
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Проверка игровых условий: пройдена'),
+        findsOneWidget);
+    expect(fake.requests, 1);
+    expect(tester.takeException(), isNull);
+  });
+
+
 }

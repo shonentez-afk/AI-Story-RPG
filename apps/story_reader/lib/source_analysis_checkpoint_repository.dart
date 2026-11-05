@@ -34,6 +34,9 @@ enum SourceCheckpointScope {
   zaiPrivateCompilation,
   zaiSourceAlignment,
   zaiAutoWholeBookReview,
+  zaiStoryPlanPreview,
+  zaiActDilemmaDrafts,
+  zaiProseSceneDrafts,
 }
 
 /// Private app-support storage shared by Android and Windows.
@@ -70,6 +73,9 @@ class FileSourceAnalysisCheckpointRepository
   static const _zaiCompileFolder = 'ai_story_zai_private_compile_inputs_m2f3f2_v1';
   static const _zaiAlignFolder = 'ai_story_zai_source_alignment_m2f3g_v1';
   static const _zaiAutoBookFolder = 'ai_story_zai_auto_book_review_m2g2_v1';
+  static const _zaiStoryPlanFolder = 'ai_story_zai_story_plan_preview_m2g3f_v1';
+  static const _zaiActDraftFolder = 'ai_story_zai_act_dilemma_m2h4_v1';
+  static const _zaiProseFolder = 'ai_story_zai_private_prose_scenes_m2h7c2_v1';
 
   static void _checkFingerprint(String fingerprint) {
     if (!_validFingerprint.hasMatch(fingerprint)) {
@@ -99,6 +105,9 @@ class FileSourceAnalysisCheckpointRepository
       SourceCheckpointScope.zaiPrivateCompilation => _zaiCompileFolder,
       SourceCheckpointScope.zaiSourceAlignment => _zaiAlignFolder,
       SourceCheckpointScope.zaiAutoWholeBookReview => _zaiAutoBookFolder,
+      SourceCheckpointScope.zaiStoryPlanPreview => _zaiStoryPlanFolder,
+      SourceCheckpointScope.zaiActDilemmaDrafts => _zaiActDraftFolder,
+      SourceCheckpointScope.zaiProseSceneDrafts => _zaiProseFolder,
     };
     final folder = Directory('${base.path}/$name');
     if (!await folder.exists()) await folder.create(recursive: true);
