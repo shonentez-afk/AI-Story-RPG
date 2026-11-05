@@ -15,6 +15,8 @@ import 'package:ai_story_reader/zai_semantic_preview.dart';
 import 'package:ai_story_reader/zai_source_locked_prose_preview.dart';
 import 'package:ai_story_reader/source_locked_prose_checkpoint_store.dart';
 import 'package:ai_story_reader/source_locked_prose_preview_page.dart';
+import 'package:ai_story_reader/zai_source_locked_prose_batch.dart';
+import 'package:ai_story_reader/source_locked_prose_batch_page.dart';
 import 'package:ai_story_reader/reviewed_prose_scene_overlay.dart';
 import 'package:ai_story_reader/zai_whole_book_event_outline.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -536,6 +538,256 @@ void main() {
     expect(accepted!.contextDigest, context.approvalDigest);
     expect(accepted!.canPublishAsCanon, false);
     expect(noNetwork.bodies, isEmpty);
+  });
+
+
+  test('a batch authorizes ONLY its exact edition, scenes and bounded count',
+      () async {
+    final (index, book, plan) = await _fixture();
+    final ids = [
+      plan.situations.first.id,
+      plan.situations[1].id,
+    ];
+    final manifest = SourceLockedProseBatchManifest.fromSelection(
+      index: index, book: book, plan: plan,
+      sceneIds: ids, maxNewScenesPerRun: 2,
+    );
+    expect(manifest.contexts, hasLength(2));
+    expect(manifest.maxModelAttempts, 6);
+    expect(manifest.sentContextUtf8Bytes, greaterThan(0));
+    expect(manifest.canClaimLiteraryCanon, false);
+    expect(manifest.canInstallDraftsAutomatically, false);
+    final differentCap = SourceLockedProseBatchManifest.fromSelection(
+      index: index, book: book, plan: plan,
+      sceneIds: ids, maxNewScenesPerRun: 1,
+    );
+    final differentOrder = SourceLockedProseBatchManifest.fromSelection(
+      index: index, book: book, plan: plan,
+      sceneIds: ids.reversed.toList(), maxNewScenesPerRun: 2,
+    );
+    expect(differentCap.approvalDigest, isNot(manifest.approvalDigest));
+    expect(differentOrder.approvalDigest, isNot(manifest.approvalDigest));
+    expect(() => SourceLockedProseBatchManifest.fromSelection(
+      index: index, book: book, plan: plan,
+      sceneIds: [ids.first, ids.first], maxNewScenesPerRun: 2,
+    ), throwsFormatException);
+    expect(() => SourceLockedProseBatchManifest.fromSelection(
+      index: index, book: book, plan: plan,
+      sceneIds: ids, maxNewScenesPerRun: 9,
+    ), throwsFormatException);
+    expect(() => SourceLockedProseBatchManifest.fromSelection(
+      index: index, book: book, plan: plan,
+      sceneIds: ['foreign_scene'], maxNewScenesPerRun: 1,
+    ), throwsFormatException);
+    final differentIndex = BookSourceIndexer.index(const ImportedBook(
+      title: 'Чужая книга',
+      author: 'Иной текст',
+      chapters: ['Эти слова не принадлежат исходной редакции.'],
+    ));
+    expect(() => SourceLockedProseBatchManifest.fromSelection(
+      index: differentIndex, book: book, plan: plan,
+      sceneIds: ids, maxNewScenesPerRun: 2,
+    ), throwsFormatException);
+  });
+
+  test('explicit batch consent sends only selected contexts; '
+      'reopening cached scenes never calls provider again', () async {
+    final (index, book, plan) = await _fixture();
+    final ids = [
+      plan.situations.first.id,
+      plan.situations[1].id,
+    ];
+    final manifest = SourceLockedProseBatchManifest.fromSelection(
+      index: index, book: book, plan: plan, sceneIds: ids,
+      maxNewScenesPerRun: 2,
+    );
+    final repository = MemorySourceAnalysisCheckpointRepository();
+    final store = SourceLockedProseCheckpointStore(repository: repository);
+    final net = _Network([
+      _answer(ids.first, _prose),
+      _answer(ids.last, _prose),
+    ]);
+    final service = SourceLockedProseBatchService(
+      store: store, service: _service(net));
+    final untouched = await service.inspect(manifest);
+    expect(untouched.completed, 0);
+    expect(net.bodies, isEmpty);
+    await expectLater(service.generate(
+      manifest: manifest,
+      approvedManifestDigest: manifest.approvalDigest,
+      explicitBatchConsent: false,
+    ), throwsFormatException);
+    await expectLater(service.generate(
+      manifest: manifest,
+      approvedManifestDigest: 'invalid',
+      explicitBatchConsent: true,
+    ), throwsFormatException);
+    expect(net.bodies, isEmpty);
+    final results = <SourceLockedProseBatchProgress>[];
+    final finalState = await service.generate(
+      manifest: manifest,
+      approvedManifestDigest: manifest.approvalDigest,
+      explicitBatchConsent: true,
+      onProgress: results.add,
+    );
+    expect(finalState.allReadyAsDrafts, true);
+    expect(finalState.completed, 2);
+    expect(finalState.newlyGenerated, 2);
+    expect(results.map((p) => p.completed), [0, 1, 2]);
+    expect(net.bodies, hasLength(2));
+    for (var i = 0; i < ids.length; i++) {
+      final body = net.bodies[i];
+      expect(body, isNot(contains(index.title)));
+      expect(body, isNot(contains(index.author)));
+      expect(body, isNot(contains(index.sourceFingerprint)));
+      expect(body, isNot(contains('SYNTHETIC-SECRET-KEY')));
+      final sent = jsonDecode(body) as Map<String, dynamic>;
+      final message = (sent['messages'] as List).last['content'];
+      expect(jsonDecode(message as String),
+          manifest.contexts[i].consentPreview);
+    }
+    final noNetwork = _Network([]);
+    final reopened = SourceLockedProseBatchService(
+      store: SourceLockedProseCheckpointStore(repository: repository),
+      service: _service(noNetwork),
+    );
+    expect((await reopened.inspect(manifest)).recovered, 2);
+    final skipped = await reopened.generate(
+      manifest: manifest,
+      approvedManifestDigest: manifest.approvalDigest,
+      explicitBatchConsent: true,
+    );
+    expect(skipped.completed, 2);
+    expect(skipped.newlyGenerated, 0);
+    expect(noNetwork.bodies, isEmpty);
+  });
+
+  test('a failed second scene checkpoints first; new explicit consent '
+      'resumes ONLY remaining request', () async {
+    final (index, book, plan) = await _fixture();
+    final ids = [plan.situations.first.id, plan.situations[1].id];
+    final manifest = SourceLockedProseBatchManifest.fromSelection(
+      index: index, book: book, plan: plan,
+      sceneIds: ids, maxNewScenesPerRun: 2,
+    );
+    final repo = MemorySourceAnalysisCheckpointRepository();
+    final store = SourceLockedProseCheckpointStore(repository: repo);
+    final wrong = _Network([
+      _answer(ids.first, _prose),
+      _answer('other_scene', _prose),
+    ]);
+    final firstRun = SourceLockedProseBatchService(
+      store: store, service: _service(wrong),
+    );
+    await expectLater(firstRun.generate(
+      manifest: manifest,
+      approvedManifestDigest: manifest.approvalDigest,
+      explicitBatchConsent: true,
+    ), throwsA(isA<AiSetupException>()));
+    expect(wrong.bodies, hasLength(2));
+    expect((await firstRun.inspect(manifest)).completed, 1);
+    final freshNetwork = _Network([_answer(ids.last, _prose)]);
+    final freshRun = SourceLockedProseBatchService(
+      store: SourceLockedProseCheckpointStore(repository: repo),
+      service: _service(freshNetwork),
+    );
+    final done = await freshRun.generate(
+      manifest: manifest,
+      approvedManifestDigest: manifest.approvalDigest,
+      explicitBatchConsent: true,
+    );
+    expect(done.completed, 2);
+    expect(done.recovered, 1);
+    expect(done.newlyGenerated, 1);
+    expect(freshNetwork.bodies, hasLength(1));
+    expect(jsonDecode((jsonDecode(freshNetwork.bodies.single)
+        as Map<String, dynamic>)['messages'].last['content'] as String)
+        ['scene_id'], ids.last);
+  });
+
+  test('cancellation after first persisted scene stops ALL later requests',
+      () async {
+    final (index, book, plan) = await _fixture();
+    final ids = [plan.situations.first.id, plan.situations[1].id];
+    final manifest = SourceLockedProseBatchManifest.fromSelection(
+      index: index, book: book, plan: plan,
+      sceneIds: ids, maxNewScenesPerRun: 2,
+    );
+    final store = SourceLockedProseCheckpointStore(
+      repository: MemorySourceAnalysisCheckpointRepository(),
+    );
+    final net = _Network([_answer(ids.first, _prose)]);
+    final service = SourceLockedProseBatchService(
+      store: store, service: _service(net));
+    final token = ZaiPreviewCancellation();
+    await expectLater(service.generate(
+      manifest: manifest,
+      approvedManifestDigest: manifest.approvalDigest,
+      explicitBatchConsent: true,
+      cancellation: token,
+      onProgress: (p) {
+        if (p.newlyGenerated == 1) token.cancel();
+      },
+    ), throwsA(isA<AiSetupException>()));
+    expect((await service.inspect(manifest)).completed, 1);
+    expect(net.bodies, hasLength(1));
+  });
+
+  testWidgets('batch UI never posts on open; one approval authorizes '
+      'at most the displayed new-scene cap', (tester) async {
+    final (index, book, plan) = await _fixture();
+    final firstId = plan.situations.first.id;
+    final net = _Network([_answer(firstId, _prose)]);
+    final batch = SourceLockedProseBatchService(
+      store: SourceLockedProseCheckpointStore(
+        repository: MemorySourceAnalysisCheckpointRepository()),
+      service: _service(net),
+    );
+    await tester.pumpWidget(MaterialApp(
+      home: SourceLockedProseBatchPage(
+        index: index, book: book, plan: plan,
+        batchService: batch, initialMaxNewScenes: 1,
+      ),
+    ));
+    await tester.pumpAndSettle();
+    expect(net.bodies, isEmpty);
+    final start = find.byKey(const Key('prose-batch-start'));
+    await tester.scrollUntilVisible(start, 180,
+        scrollable: find.byType(Scrollable).first);
+    expect(tester.widget<FilledButton>(start).onPressed, isNull);
+    final check = find.byKey(const Key('prose-batch-consent'));
+    await tester.scrollUntilVisible(check, 160,
+        scrollable: find.byType(Scrollable).first);
+    await tester.tap(check);
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(start, 160,
+        scrollable: find.byType(Scrollable).first);
+    expect(tester.widget<FilledButton>(start).onPressed, isNotNull);
+    await tester.tap(start);
+    await tester.pumpAndSettle();
+    expect(net.bodies, hasLength(1));
+    final ready = await batch.inspect(
+      SourceLockedProseBatchManifest.fromSelection(
+        index: index, book: book, plan: plan,
+        sceneIds: [
+          for (final s in plan.situations.take(
+              SourceLockedProseBatchManifest.maxScenesInBatch)) s.id,
+        ],
+        maxNewScenesPerRun: 1,
+      ),
+    );
+    expect(ready.completed, 1);
+    expect(ready.allReadyAsDrafts, false);
+    expect(tester.widget<FilledButton>(start).onPressed, isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pumpWidget(MaterialApp(
+      home: SourceLockedProseBatchPage(
+        index: index, book: book, plan: plan,
+        batchService: batch, initialMaxNewScenes: 1,
+      ),
+    ));
+    await tester.pumpAndSettle();
+    expect(net.bodies, hasLength(1));
   });
 
 }
