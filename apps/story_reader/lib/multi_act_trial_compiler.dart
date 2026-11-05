@@ -3,6 +3,7 @@ import 'package:bookworld_format/bookworld_format.dart';
 import 'book_source_index.dart';
 import 'bookwide_act_planner.dart';
 import 'bookwide_storyplan_composer.dart';
+import 'source_bound_bridge_auditor.dart';
 import 'cross_act_consequence_gate.dart';
 import 'intermediate_story_blueprint.dart';
 import 'native_private_bookworld_compiler.dart';
@@ -146,6 +147,34 @@ class MultiActTrialCompiler {
     for (final claim in claims) {
       editorial = editorial.decide(catalog, claim.id,
           SemanticEditorialVerdict.canonCandidate);
+    }
+
+    // M2h7a integration: each cross-act transition is checked against
+    // this edition and is explicitly labeled GAME_FICTION. Exact quotes
+    // must never be mistaken for a verified literary causal connection.
+    final bridgeAudit = SourceBoundBridgeAuditor.audit(
+      index: index,
+      evidence: evidence,
+      catalog: catalog,
+      editorial: editorial,
+      events: book.events,
+      bridges: [
+        for (var i = 1; i < draft.parts.length; i++)
+          SourceBoundBridge(
+            id: 'private_trial_bridge_' + i.toString(),
+            fromEventId: draft.parts[i - 1].outcomeEventId,
+            toEventId: draft.parts[i].setupEventId,
+            kind: SourceBridgeKind.explicitGameFiction,
+            rationale: 'Вымышленный переход между актами '
+                'частной пробной игры, а не факт оригинальной книги.',
+          ),
+      ],
+    );
+    if (bridgeAudit.rejectedCount != 0 ||
+        bridgeAudit.fictionalCount != draft.parts.length - 1 ||
+        bridgeAudit.canDeclareLiteraryCausality) {
+      throw const FormatException(
+          'Непроверенная связь между актами не может считаться каноном.');
     }
 
     final sourceSceneIds = <String>{
