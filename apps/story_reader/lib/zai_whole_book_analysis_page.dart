@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'ai_connection_settings_page.dart';
 import 'book_source_index.dart';
 import 'narrative_book_model.dart';
+import 'story_plan_quality_gate.dart';
 import 'quick_rpg_page.dart';
 import 'world_library_gateway.dart';
 import 'zai_auto_whole_book_analysis.dart';
@@ -47,6 +48,7 @@ class _ZaiWholeBookAnalysisPageState extends State<ZaiWholeBookAnalysisPage> {
   ZaiWholeBookProgress? _progress;
   ZaiPreviewCancellation? _cancellation;
   ZaiStoryDilemmaPreview? _dilemmaPreview;
+  StoryPlanQualityReport? _qualityReport;
   bool _dilemmaBusy = false;
   bool _loading = true;
   bool _working = false;
@@ -319,6 +321,7 @@ class _ZaiWholeBookAnalysisPageState extends State<ZaiWholeBookAnalysisPage> {
         _error = null;
         _notice = null;
         _dilemmaPreview = null;
+        _qualityReport = null;
       });
       final result = await _dilemmaService.propose(
         book: book,
@@ -332,11 +335,18 @@ class _ZaiWholeBookAnalysisPageState extends State<ZaiWholeBookAnalysisPage> {
         },
       );
       if (!mounted) return;
+      // Structural readiness is always checked locally. Never present an
+      // unvalidated model result as a game or accept it as source truth.
+      final quality = result.foundCandidate
+          ? StoryPlanQualityGate.assess(book: book, preview: result)
+          : null;
+      if (!mounted) return;
       setState(() {
         _dilemmaPreview = result;
-        _notice = result.foundCandidate
-            ? 'Построен только предварительный план. '
-              'Для игры ещё нужны смысловая проверка, сцены и компиляция.'
+        _qualityReport = quality;
+        _notice = quality != null
+            ? 'Черновой сценарий проверен по игровым правилам. '
+              'Смысл, полнота книги и литературные сцены ещё не приняты.'
             : 'Подходящая причинная развилка не предложена. '
               'Ничего не подставлено вместо ответа ИИ.';
       });
@@ -470,8 +480,35 @@ class _ZaiWholeBookAnalysisPageState extends State<ZaiWholeBookAnalysisPage> {
                     const SizedBox(height: 10),
                     Text('Черновой план: ' +
                         _dilemmaPreview!.plan!.situations.length.toString() +
-                        ' ситуаций. Причинность и литературный смысл '
+                        ' ситуаций. Литературный смысл и полнота книги '
                         'ещё должны пройти проверку.'),
+                    if (_qualityReport != null) ...[
+                      const SizedBox(height: 8),
+                      Text(_qualityReport!.passedFormalPreflight
+                          ? 'Проверка игровых условий: пройдена.'
+                          : 'Проверка игровых условий: есть проблемы.',
+                          key: const Key('whole-book-dilemma-preflight')),
+                      Text('Исправлено формальных нарушений: ' +
+                          _qualityReport!.repair.appliedChanges.length
+                              .toString() + '. '
+                          'Нерешённых противоречий: ' +
+                          _qualityReport!.repair.after.counterexamples.length
+                              .toString() + '.'),
+                      const Text('Готовность к установке и игре: НЕТ. '
+                          'Формальные правила не подтверждают '
+                          'причинность литературного оригинала.'),
+                      ExpansionTile(
+                        key: const Key('whole-book-dilemma-readiness'),
+                        title: const Text('Что ещё требуется для игры?'),
+                        children: [
+                          for (final message in _qualityReport!.blockers)
+                            ListTile(title: Text(message)),
+                          for (final message in
+                              _qualityReport!.reviewRequirements)
+                            ListTile(title: Text(message)),
+                        ],
+                      ),
+                    ],
                     ExpansionTile(
                       key: const Key('whole-book-dilemma-preview'),
                       title: const Text('Посмотреть предлагаемые события'),
