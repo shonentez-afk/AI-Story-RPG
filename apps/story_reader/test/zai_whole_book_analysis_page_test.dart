@@ -8,6 +8,7 @@ import 'package:ai_story_reader/zai_whole_book_analysis_page.dart';
 import 'package:ai_story_reader/narrative_book_model.dart';
 import 'package:ai_story_reader/zai_story_dilemma_proposal.dart';
 import 'package:ai_story_reader/story_plan_dilemma_generator.dart';
+import 'package:ai_story_reader/story_plan_draft_checkpoint.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -367,5 +368,98 @@ void main() {
     expect(find.byKey(const Key('whole-book-dilemma-preview')), findsNothing);
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets('saved GLM scenario survives reopening book with no repeat '
+      'provider request and retains disabled full-game status',
+      (tester) async {
+    final index = _book();
+    final sourceStore = _PrivateStore();
+    final checkpointStore = _PrivateStore();
+    final checkpoint = StoryPlanDraftCheckpointStore(
+        repository: checkpointStore);
+    final fake = _DilemmaStub(returnDraft: true);
+    final analysis = ZaiAutoWholeBookAnalysis(
+      repository: sourceStore,
+      preview: (source, window, token, includeTitle) async {
+        final chunk = window.chunks.first;
+        return ZaiSemanticPreviewResult(
+          batch: SemanticCandidateBatch(
+            providerId: ZaiSemanticPreviewService.providerId,
+            providerVersion: ZaiSemanticPreviewService.providerVersion,
+            sourceFingerprint: source.sourceFingerprint,
+            chunkIds: [for (final c in window.chunks) c.id],
+            candidates: [
+              SemanticCandidate.propose(
+                source, chunk, category: SemanticCategory.event,
+                startUtf16: chunk.startUtf16,
+                endUtf16: chunk.startUtf16 + 60,
+                label: 'Смысловое предложение с точной цитатой',
+                uncertainty: 'Смысл ещё должен быть отдельно проверен.',
+              ),
+            ],
+          ),
+          totalSuggestions: 1, rejectedCount: 0, rejectedNonRussian: 0,
+        );
+      },
+    );
+    Widget page() => MaterialApp(
+      home: ZaiWholeBookAnalysisPage(
+        index: index,
+        analysis: analysis,
+        dilemmaService: fake,
+        dilemmaCheckpoint: checkpoint,
+      ),
+    );
+    await tester.pumpWidget(page());
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('whole-book-start')));
+    await tester.pumpAndSettle();
+    final upload = find.byKey(const Key('whole-book-confirm-send'));
+    await tester.ensureVisible(upload);
+    await tester.pumpAndSettle();
+    await tester.tap(upload);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('whole-book-approve')));
+    await tester.pumpAndSettle();
+    final request = find.byKey(const Key('whole-book-propose-dilemma'));
+    await tester.scrollUntilVisible(
+      request, 120, scrollable: find.byType(Scrollable).first);
+    await tester.ensureVisible(request);
+    await tester.pumpAndSettle();
+    await tester.tap(request);
+    await tester.pumpAndSettle();
+    final approve = find.byKey(const Key('whole-book-dilemma-consent'));
+    await tester.ensureVisible(approve);
+    await tester.pumpAndSettle();
+    await tester.tap(approve);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('whole-book-dilemma-approve')));
+    await tester.pumpAndSettle();
+    expect(fake.requests, 1);
+    expect(checkpointStore.raw, isNotNull);
+    expect(checkpointStore.writes, 1);
+    // Mimic closing then reopening the page. The new page gets only the
+    // locally stored checkpoints; it MUST NOT make a new cloud request.
+    await tester.pumpWidget(const SizedBox());
+    await tester.pumpAndSettle();
+    await tester.pumpWidget(page());
+    await tester.pumpAndSettle();
+    expect(fake.requests, 1);
+    final restored = find.byKey(const Key('whole-book-notice'));
+    await tester.scrollUntilVisible(restored, 100,
+        scrollable: find.byType(Scrollable).first);
+    expect(find.textContaining('Повторная отправка книги в Z.ai не требуется'),
+        findsWidgets);
+    final readiness = find.byKey(const Key('whole-book-dilemma-preflight'));
+    await tester.scrollUntilVisible(readiness, -100,
+        scrollable: find.byType(Scrollable).first);
+    await tester.ensureVisible(readiness);
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Проверка игровых условий: пройдена'),
+        findsOneWidget);
+    expect(fake.requests, 1);
+    expect(tester.takeException(), isNull);
+  });
+
 
 }
