@@ -435,4 +435,88 @@ class RichPrivateBookworldWriter {
     }
     return package;
   }
+
+  /// Promote a source-reviewed, independently verified flag-only v2 draft
+  /// to the single rich v3 target without manual enrichment or a model call.
+  /// No invented items, stats, facts or literary source claims are added.
+  Uint8List upgradeReviewedV2({
+    required Uint8List verifiedPrivateV2Archive,
+    required Map<String, dynamic> sourceIndex,
+    String heroName = 'Игрок',
+    String heroDescription =
+        'Участник частной игровой адаптации. Поступки сохраняются в журнале.',
+    Map<String, String> sceneTitles = const {},
+  }) {
+    final original = const PrivateBookworldImporter()
+        .inspect(verifiedPrivateV2Archive);
+    if (heroName.trim().isEmpty || heroName.length > 120 ||
+        heroDescription.trim().isEmpty || heroDescription.length > 1200 ||
+        heroName.contains(RegExp(r'[\x00-\x1f\x7f]')) ||
+        heroDescription.contains(RegExp(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]'))) {
+      throw const FormatException('Некорректные сведения выбранного героя');
+    }
+
+    final entries = BworldZipV1.readPrivate(verifiedPrivateV2Archive);
+    final bp = Map<String, dynamic>.from(
+        jsonDecode(utf8.decode(entries['scenario/blueprint.json']!)) as Map);
+    final origin = Map<String, dynamic>.from(
+        jsonDecode(utf8.decode(entries['source/provenance.json']!)) as Map);
+    final state = Map<String, dynamic>.from(bp['initial_state'] as Map);
+    if ((bp['items'] as List).isNotEmpty ||
+        (bp['facts'] as List).isNotEmpty ||
+        (state['stats'] as Map).isNotEmpty ||
+        (bp['actors'] as List).length != 1 ||
+        (bp['actors'] as List).single != 'player') {
+      throw const FormatException(
+          'Нельзя переносить богатый v2-сценарий без реальных имён '
+          'предметов, знаний и характеристик');
+    }
+    final scenes = bp['scenes'] as List;
+    final ids = {for (final s in scenes) (s as Map)['id'] as String};
+    if (sceneTitles.keys.any((id) => !ids.contains(id))) {
+      throw const FormatException('Название относится к чужой сцене');
+    }
+    final names = <String, String>{};
+    for (var i = 0; i < scenes.length; i++) {
+      final sceneId = (scenes[i] as Map)['id'] as String;
+      final proposed = sceneTitles[sceneId]?.trim() ?? '';
+      // Fallback is neutral UI labeling, never a fabricated source fact.
+      final safe = proposed.isNotEmpty && proposed.length <= 120 &&
+          !proposed.contains(RegExp(r'[\x00-\x1f\x7f]'));
+      names[sceneId] = safe ? proposed : 'Сцена ' + (i + 1).toString();
+    }
+    final key = sha256.convert(utf8.encode(original.archiveSha256 +
+        '|' + heroName.trim() + '|' + canonicalJson(names))).toString();
+    final newId = 'rich_' + original.sourceFingerprint.substring(0, 12) +
+        '_' + key.substring(0, 12);
+    bp['book_id'] = newId;
+    origin['bookworld_id'] = newId;
+    origin['format'] = 'ai_story_private_provenance_v2';
+    // A reviewed checkpoint may already contain AI suggestions, but its v2
+    // archive does not attest the model. Never claim "no AI".
+    origin['model_provenance'] = {
+      'provider': 'unknown',
+      'model_id': null,
+      'model_id_status': 'not_attested',
+      'tool': 'AI Story RPG',
+      'method': 'reviewed_local_compilation',
+    };
+    origin['presentation'] = {
+      'hero': {
+        'name': heroName.trim(),
+        'description': heroDescription.trim(),
+      },
+      'item_names': <String, String>{},
+      'item_descriptions': <String, String>{},
+      'stat_names': <String, String>{},
+      'fact_names': <String, String>{},
+      'scene_names': names,
+    };
+    return build(
+      blueprint: bp,
+      provenance: origin,
+      sourceIndex: sourceIndex,
+    );
+  }
+
 }
