@@ -8,6 +8,8 @@ import 'bookwide_act_dilemma_gateway.dart';
 import 'bookwide_act_planner.dart';
 import 'bookwide_storyplan_composer.dart';
 import 'narrative_book_model.dart';
+import 'multi_act_trial_page.dart';
+import 'world_library_gateway.dart';
 import 'zai_semantic_preview.dart';
 
 /// Optional advanced path, not a new home-screen or required editor.
@@ -21,6 +23,7 @@ class BookActDraftPage extends StatefulWidget {
     required this.bookMap,
     this.gateway,
     this.checkpoint,
+    this.worldGateway,
   });
 
   final BookSourceIndex index;
@@ -28,6 +31,7 @@ class BookActDraftPage extends StatefulWidget {
   final BookwideActPlan bookMap;
   final ActDilemmaProposalGateway? gateway;
   final ActDilemmaCheckpointStore? checkpoint;
+  final WorldLibraryGateway? worldGateway;
 
   @override
   State<BookActDraftPage> createState() => _BookActDraftPageState();
@@ -397,6 +401,28 @@ class _BookActDraftPageState extends State<BookActDraftPage> {
                       ListTile(title: Text(blocker)),
                   ],
                 ),
+                if (widget.worldGateway != null)
+                  OutlinedButton.icon(
+                    key: const Key('act-draft-private-play'),
+                    onPressed: _working ? null : () async {
+                      final draft = _composed;
+                      if (draft == null || !mounted) return;
+                      await Navigator.of(context).push<void>(
+                        MaterialPageRoute(
+                          builder: (_) => MultiActTrialPage(
+                            index: widget.index,
+                            book: widget.book,
+                            bookMap: widget.bookMap,
+                            draft: draft,
+                            gateway: widget.worldGateway!,
+                          ),
+                        ),
+                      );
+                    },
+                    icon: const Icon(Icons.play_arrow),
+                    label: const Text('Попробовать частную '
+                        'многоактовую RPG'),
+                  ),
               ],
               const SizedBox(height: 8),
               if (_working) const LinearProgressIndicator(),
@@ -407,8 +433,9 @@ class _BookActDraftPageState extends State<BookActDraftPage> {
                     style: TextStyle(
                         color: Theme.of(context).colorScheme.error)),
               const Text('Подготовленные предложения хранятся локально. '
-                  'Создание BookWorld и автоматический запуск '
-                  'полной RPG пока недоступны на этом этапе.'),
+                  'С подтверждёнными цитатами доступна частная '
+                  'ПРОБНАЯ игра по нескольким актам. Полноценная '
+                  'литературная RPG по всей книге ещё не готова.'),
             ],
           ],
         ),

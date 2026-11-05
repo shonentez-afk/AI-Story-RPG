@@ -722,6 +722,7 @@ class _ZaiWholeBookAnalysisPageState extends State<ZaiWholeBookAnalysisPage> {
                             index: widget.index,
                             book: book,
                             bookMap: _bookActs!,
+                            worldGateway: widget.gateway,
                           ),
                         ),
                       );
