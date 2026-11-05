@@ -6,6 +6,8 @@ import 'package:ai_story_reader/bookwide_act_planner.dart';
 import 'package:ai_story_reader/bookwide_storyplan_composer.dart';
 import 'package:ai_story_reader/cross_act_consequence_gate.dart';
 import 'package:ai_story_reader/multi_act_trial_compiler.dart';
+import 'package:ai_story_reader/reviewed_prose_scene_overlay.dart';
+import 'package:ai_story_reader/zai_source_locked_prose_preview.dart';
 import 'package:ai_story_reader/narrative_book_model.dart';
 import 'package:ai_story_reader/source_analysis_checkpoint_repository.dart';
 import 'package:ai_story_reader/source_semantic_provider.dart';
@@ -267,4 +269,134 @@ void main() {
         ids: input.eventIds, source: _index(suffix: ' другой перевод')),
         throwsFormatException);
   });
+
+  test('reviewed Russian prose is embedded in PRIVATE BookWorld while '
+      'source quote, game decisions and provenance remain unchanged',
+      () async {
+    final index = _index();
+    final book = await _analyze(index);
+    final input = _draft(index, book);
+    final context = SourceLockedProseContext.forSituation(
+      index: index, book: book, plan: input.draft.plan,
+      situationId: 'act_1_turning_point',
+    );
+    const prose = 'Путник задержался возле тихого ручья и '
+        'посмотрел на следы у старой переправы. '
+        'Он слушал собеседника, но ещё не принимал никаких '
+        'обязательств. Перед ним оставались разные пути.';
+    final draft = SourceLockedProseDraft(
+      sourceFingerprint: index.sourceFingerprint,
+      situationId: context.situation.id,
+      approvalDigest: context.approvalDigest,
+      text: prose,
+      uncertainty: 'Художественная адаптация; знания и причины не доказаны.',
+      route: context.situation.route,
+    );
+    final approved = ReviewedProseSceneApproval.accept(
+      context: context, draft: draft,
+      fullTextReviewedByUser: true,
+      privateFictionAcknowledged: true,
+    );
+    expect(approved.establishesBookWorldTruth, false);
+    expect(approved.canPublishAsCanon, false);
+    expect(approved.changesGameRules, false);
+
+    final baseline = await MultiActTrialCompiler.compile(
+      index: index, book: book, bookMap: input.map,
+      draft: input.draft,
+      sourceEventIdsReviewedByUser: input.eventIds,
+      privateUseConfirmed: true, fictionalTrialAcknowledged: true,
+    );
+    final improved = await MultiActTrialCompiler.compile(
+      index: index, book: book, bookMap: input.map,
+      draft: input.draft, reviewedProse: [approved],
+      sourceEventIdsReviewedByUser: input.eventIds,
+      privateUseConfirmed: true, fictionalTrialAcknowledged: true,
+    );
+    final original = const PrivateBookworldImporter().inspect(
+        baseline.archive);
+    final changed = const PrivateBookworldImporter().inspect(
+        improved.archive);
+    final oldScene = original.blueprint.scenes['act_1_turning_point']!;
+    final newScene = changed.blueprint.scenes['act_1_turning_point']!;
+    expect(newScene.text, contains(prose));
+    expect(newScene.text, contains(context.sourceEvent!.source.quote));
+    expect(newScene.text, contains('НЕ КАНОН'));
+    expect(oldScene.text, isNot(contains(prose)));
+    expect(newScene.choices.map((e) => e.id).toList(),
+        oldScene.choices.map((e) => e.id).toList());
+    expect(changed.blueprint.scenes.length,
+        original.blueprint.scenes.length);
+    expect(changed.sourceFingerprint, index.sourceFingerprint);
+    expect(changed.requiresNetwork, false);
+    expect(changed.canDistributePublicly, false);
+  });
+
+  test('unapproved, stale and cross-plan prose are never installed',
+      () async {
+    final index = _index();
+    final book = await _analyze(index);
+    final input = _draft(index, book);
+    final context = SourceLockedProseContext.forSituation(
+      index: index, book: book, plan: input.draft.plan,
+      situationId: 'act_1_turning_point',
+    );
+    const prose = 'Дорога вилась между деревьями, когда путник '
+        'вспомнил о нерешённом предложении и остановился '
+        'у реки. Он прислушался к шагам вдали, не принимая '
+        'обещаний и не выдавая догадки за знание.';
+    SourceLockedProseDraft draftFor(String fingerprint, String digest) =>
+        SourceLockedProseDraft(
+          sourceFingerprint: fingerprint,
+          situationId: context.situation.id,
+          approvalDigest: digest,
+          text: prose,
+          uncertainty: 'События и факты не подтверждены исходной книгой.',
+          route: context.situation.route,
+        );
+    final draft = draftFor(index.sourceFingerprint, context.approvalDigest);
+    expect(() => ReviewedProseSceneApproval.accept(
+      context: context, draft: draft,
+      fullTextReviewedByUser: false,
+      privateFictionAcknowledged: true,
+    ), throwsFormatException);
+    expect(() => ReviewedProseSceneApproval.accept(
+      context: context, draft: draft,
+      fullTextReviewedByUser: true,
+      privateFictionAcknowledged: false,
+    ), throwsFormatException);
+    expect(() => ReviewedProseSceneApproval.accept(
+      context: context,
+      draft: draftFor('foreign-edition', context.approvalDigest),
+      fullTextReviewedByUser: true,
+      privateFictionAcknowledged: true,
+    ), throwsFormatException);
+    expect(() => ReviewedProseSceneApproval.accept(
+      context: context, draft: draftFor(index.sourceFingerprint, 'stale'),
+      fullTextReviewedByUser: true,
+      privateFictionAcknowledged: true,
+    ), throwsFormatException);
+
+    final approved = ReviewedProseSceneApproval.accept(
+      context: context, draft: draft,
+      fullTextReviewedByUser: true,
+      privateFictionAcknowledged: true,
+    );
+    await expectLater(MultiActTrialCompiler.compile(
+      index: index, book: book, bookMap: input.map,
+      draft: input.draft, continuity: input.continuity,
+      reviewedProse: [approved],
+      sourceEventIdsReviewedByUser: input.eventIds,
+      privateUseConfirmed: true,
+      fictionalTrialAcknowledged: true,
+    ), throwsFormatException);
+    await expectLater(MultiActTrialCompiler.compile(
+      index: index, book: book, bookMap: input.map,
+      draft: input.draft, reviewedProse: [approved, approved],
+      sourceEventIdsReviewedByUser: input.eventIds,
+      privateUseConfirmed: true,
+      fictionalTrialAcknowledged: true,
+    ), throwsFormatException);
+  });
+
 }

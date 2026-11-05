@@ -6,6 +6,7 @@ import 'bookwide_storyplan_composer.dart';
 import 'cross_act_consequence_gate.dart';
 import 'multi_act_trial_compiler.dart';
 import 'source_locked_prose_preview_page.dart';
+import 'reviewed_prose_scene_overlay.dart';
 import 'narrative_book_model.dart';
 import 'world_library_gateway.dart';
 import 'world_play_page.dart';
@@ -39,6 +40,7 @@ class _MultiActTrialPageState extends State<MultiActTrialPage> {
   bool _enforceEarlierOutcome = false;
   bool _working = false;
   String? _error;
+  final Map<String, ReviewedProseSceneApproval> _reviewedProse = {};
 
   List<NarrativeEvent> get _reviewEvents {
     final ids = <String>{
@@ -54,6 +56,13 @@ class _MultiActTrialPageState extends State<MultiActTrialPage> {
 
   Future<void> _start() async {
     if (!_reviewed || !_privateFiction || _working) return;
+    if (_enforceEarlierOutcome && _reviewedProse.isNotEmpty) {
+      setState(() => _error = 'Подтверждённые художественные сцены '
+          'относятся к прежней версии игрового плана. '
+          'Снимите дополнительное правило или удалите '
+          'выбранные художественные сцены из подготовки.');
+      return;
+    }
     setState(() { _working = true; _error = null; });
     try {
       CrossActContinuityDraft? continuity;
@@ -94,6 +103,7 @@ class _MultiActTrialPageState extends State<MultiActTrialPage> {
         },
         privateUseConfirmed: _privateFiction,
         fictionalTrialAcknowledged: _privateFiction,
+        reviewedProse: _reviewedProse.values.toList(growable: false),
       );
       if (!mounted || compiled.sourceFingerprint !=
           widget.index.sourceFingerprint) return;
@@ -188,7 +198,7 @@ class _MultiActTrialPageState extends State<MultiActTrialPage> {
               key: const Key('multiact-trial-consequence'),
               contentPadding: EdgeInsets.zero,
               value: _enforceEarlierOutcome,
-              onChanged: valid
+              onChanged: valid && _reviewedProse.isEmpty
                   ? (v) => setState(() =>
                       _enforceEarlierOutcome = v == true)
                   : null,
@@ -202,25 +212,60 @@ class _MultiActTrialPageState extends State<MultiActTrialPage> {
               key: const Key('multiact-trial-prose-preview-expansion'),
               title: const Text('Художественный черновик (дополнительно)'),
               subtitle: const Text('Одна сцена, отдельное согласие Z.ai. '
-                  'Черновик не включается в пробную игру.'),
+                  'Только явно одобренный текст включается в новую игру.'),
               children: [
                 ListTile(
                   key: const Key('multiact-trial-open-prose-preview'),
                   leading: const Icon(Icons.auto_stories_outlined),
                   title: const Text('Предпросмотр художественной сцены'),
-                  subtitle: const Text('Можно восстановить ранее '
-                      'сохранённый черновик без нового запроса'),
-                  onTap: _working ? null : () =>
-                      Navigator.of(context).push<void>(MaterialPageRoute(
+                  subtitle: Text(_enforceEarlierOutcome
+                      ? 'Сначала отключите дополнительное правило '
+                        'второго акта: оно меняет проверяемый план'
+                      : 'Можно восстановить ранее сохранённый '
+                        'черновик без нового запроса'),
+                  onTap: _working || _enforceEarlierOutcome ? null : () async {
+                    final accepted = await Navigator.of(context)
+                        .push<ReviewedProseSceneApproval>(
+                      MaterialPageRoute(
                         builder: (_) => SourceLockedProsePreviewPage(
                           index: widget.index,
                           book: widget.book,
                           plan: widget.draft.plan,
                         ),
-                      )),
+                      ),
+                    );
+                    if (!mounted || accepted == null) return;
+                    setState(() =>
+                        _reviewedProse[accepted.situationId] = accepted);
+                  },
                 ),
               ],
             ),
+            if (_reviewedProse.isNotEmpty) ...[
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Художественные сцены для следующей игры: ' +
+                          _reviewedProse.length.toString()),
+                      const Text('Каждая сцена подтверждена отдельно. '
+                          'Исходные цитаты и игровая логика не изменяются. '
+                          'Эта версия игрового плана должна оставаться '
+                          'неизменной до сборки.'),
+                      TextButton(
+                        key: const Key('multiact-trial-clear-prose'),
+                        onPressed: _working ? null : () => setState(() =>
+                            _reviewedProse.clear()),
+                        child: const Text('Убрать художественные сцены '
+                            'из следующей игры'),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
             const SizedBox(height: 10),
             FilledButton.icon(
               key: const Key('multiact-trial-start'),

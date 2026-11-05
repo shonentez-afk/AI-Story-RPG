@@ -6,6 +6,7 @@ import 'source_locked_prose_checkpoint_store.dart';
 import 'story_plan.dart';
 import 'zai_semantic_preview.dart';
 import 'zai_source_locked_prose_preview.dart';
+import 'reviewed_prose_scene_overlay.dart';
 
 /// Advanced, OPT-IN preview. Never generates in initState, never installs an
 /// AI scene into BookWorld, and never replaces an existing SQLite campaign.
@@ -39,6 +40,8 @@ class _SourceLockedProsePreviewPageState
   ZaiPreviewCancellation? _requestToken;
   bool _approved = false, _working = false, _loading = true;
   bool _storageBlocked = false;
+  bool _textReviewedForGame = false;
+  bool _gameFictionAcknowledged = false;
   String? _error, _progress;
 
   @override
@@ -76,6 +79,8 @@ class _SourceLockedProsePreviewPageState
       _error = null;
       _progress = null;
       _storageBlocked = false;
+      _textReviewedForGame = false;
+      _gameFictionAcknowledged = false;
     });
     try {
       final context = _context();
@@ -191,6 +196,8 @@ class _SourceLockedProsePreviewPageState
       setState(() {
         _draft = null;
         _approved = false;
+        _textReviewedForGame = false;
+        _gameFictionAcknowledged = false;
         _error = null;
         _progress = null;
       });
@@ -338,8 +345,44 @@ class _SourceLockedProsePreviewPageState
                 const SizedBox(height: 8),
                 Text('Что остаётся проверить: ' + _draft!.uncertainty),
                 const SizedBox(height: 8),
-                const Text('Текст не включён в BookWorld. '
-                    'Он не доказывает факты и не изменяет выборы.'),
+                const Text('Пока это только черновик. Для частной '
+                    'игры требуется отдельное подтверждение. '
+                    'Текст не доказывает факты и не изменяет выборы.'),
+                CheckboxListTile(
+                  key: const Key('prose-scene-text-reviewed-for-game'),
+                  value: _textReviewedForGame,
+                  onChanged: _working || _loading ? null : (value) =>
+                      setState(() => _textReviewedForGame = value == true),
+                  title: const Text('Я прочитал(а) весь текст этой сцены '
+                      'и согласен(на) включить его в частную игру'),
+                ),
+                CheckboxListTile(
+                  key: const Key('prose-scene-fiction-acknowledged'),
+                  value: _gameFictionAcknowledged,
+                  onChanged: _working || _loading ? null : (value) =>
+                      setState(() => _gameFictionAcknowledged = value == true),
+                  title: const Text('Понимаю: это вымышленная адаптация, '
+                      'не подтверждённый канон книги; знания NPC, '
+                      'предметы и причины моделью не доказаны'),
+                ),
+                FilledButton.icon(
+                  key: const Key('prose-scene-accept-for-private-game'),
+                  onPressed: _working || _loading ||
+                          !_textReviewedForGame || !_gameFictionAcknowledged
+                      ? null : () {
+                        final approval = ReviewedProseSceneApproval.accept(
+                          context: _context(),
+                          draft: _draft!,
+                          fullTextReviewedByUser: _textReviewedForGame,
+                          privateFictionAcknowledged:
+                              _gameFictionAcknowledged,
+                        );
+                        Navigator.of(context).pop(approval);
+                      },
+                  icon: const Icon(Icons.check_circle_outline),
+                  label: const Text('Добавить сцену в следующую '
+                      'частную пробную игру'),
+                ),
                 OutlinedButton.icon(
                   key: const Key('prose-scene-delete'),
                   onPressed: _working || _loading ? null : _delete,
