@@ -146,10 +146,10 @@ void main() {
   test('a cosmetic-only graph is rejected before M2c translation', () async {
     final book = await _book();
     final plan = _plan(book, noEffects: true);
-    final report = plan.validate(book);
-    // Disabled branches are unreachable, so this MUST fail structurally
-    // rather than be advertised as a different playable route.
-    expect(report.isReadyToPlay, false);
+    // Without the promised/refused flags the required follow-up actions
+    // cannot be taken. Reject the dead end instead of counting two endings.
+    expect(() => plan.validate(book), throwsFormatException);
+    expect(() => plan.toIntermediateDraft(book), throwsFormatException);
   });
 
   test('unknown source edition, forged status and missing targets fail',
