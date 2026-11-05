@@ -48,6 +48,7 @@ def main():
         ("utf16.fb2", numbered, "utf-16"),
         ("media.fb2", '<FictionBook><body><section><image href="#x"/></section><section><p>Текст.</p></section></body></FictionBook>', "utf-8"),
         ("inline.fb2", '<FictionBook><body><p>А<![CDATA[Б]]><strong>В</strong><!-- comment -->Г &#x1f600;.</p></body></FictionBook>', "utf-8"),
+        ("whitespace.fb2", '<FictionBook>\r\n<body><p>Один\rдва.</p><p><![CDATA[А\r\n<& Б]]></p><image href="#name\r\nwith\ttabs"/></body></FictionBook>', "utf-8"),
     ]
     checked = 0
     for filename, text, encoding in inputs:

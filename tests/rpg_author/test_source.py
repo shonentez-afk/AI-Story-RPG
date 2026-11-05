@@ -54,6 +54,24 @@ class SourceTests(unittest.TestCase):
         self.assertEqual(index["media_blocks_for_review"], 1)
         self.assertEqual(book["chapters"][1]["blocks"][0]["text"], "Примечания")
 
+    def test_fb2_preserves_crlf_cr_cdata_and_quoted_attribute_whitespace(self):
+        xml = ('<?xml version="1.0"?>\r\n<FictionBook>\r\n<body><section>\r\n'
+               '<p>Строка\r\nпродолжение.</p><p>Один\rдва.</p>'
+               '<p><![CDATA[А\r\n<& Б]]></p><!-- ignored\r\n -->'
+               '<image href="#name\r\nwith\ttabs"/>'
+               '</section></body></FictionBook>')
+        book = parse_book("book.fb2", xml.encode())
+        blocks = book["chapters"][0]["blocks"]
+        self.assertEqual([b["text"] for b in blocks[:3]],
+                         ["Строка\r\nпродолжение.", "Один\rдва.", "А\r\n<& Б"])
+        self.assertEqual(blocks[3]["resource_id"], "name\r\nwith\ttabs")
+        self.assertEqual(make_index(book)["chunks"][0]["end_utf16"], 20)
+
+    def test_invalid_cdata_comment_and_markup_remain_errors(self):
+        for content in ('<![CDATA[broken', '<!-- broken', '<?broken', '<p x="broken'):
+            with self.subTest(content=content), self.assertRaises(AuthoringError):
+                parse_book("book.fb2", ('<FictionBook><body>' + content).encode())
+
     def test_three_numbered_parts_split_but_two_do_not(self):
         for count, expected in ((2, 1), (3, 3)):
             parts = ["Рассказ первый", "Рассказ второй", "Рассказ третий"][:count]

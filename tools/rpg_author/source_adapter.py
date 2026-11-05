@@ -6,6 +6,7 @@ No images decoded, ZIP extraction, network, model calls or source execution.
 from __future__ import annotations
 
 import json
+from html import escape
 from pathlib import Path
 import re
 import xml.etree.ElementTree as ET
@@ -118,6 +119,62 @@ def _split_parts(blocks):
     return [blocks[a:b] for a, b in zip(starts, starts[1:])]
 
 
+def _preserve_xml_whitespace(source: str) -> str:
+    """Protect text/attribute whitespace from Expat's XML normalization.
+
+    Dart xml 6.6.1 preserves raw CR/CRLF in text. XML character references
+    preserve those characters through ElementTree as well. Markup whitespace
+    must stay markup; CDATA becomes equivalently escaped ordinary character
+    data. The real XML parser still validates the transformed document.
+    """
+    result = []
+    cursor = 0
+    depth = 0
+    while cursor < len(source):
+        if source.startswith("<![CDATA[", cursor):
+            require(depth > 0, "invalid_fb2", "CDATA must be inside the root element")
+            end = source.find("]]>", cursor + 9)
+            require(end >= 0, "invalid_fb2", "Unterminated CDATA")
+            result.append(escape(source[cursor + 9:end], quote=False).replace("\r", "&#13;"))
+            cursor = end + 3
+        elif source.startswith("<!--", cursor) or source.startswith("<?", cursor):
+            marker = "-->" if source.startswith("<!--", cursor) else "?>"
+            end = source.find(marker, cursor + len(marker))
+            require(end >= 0, "invalid_fb2", "Unterminated XML comment or processing instruction")
+            result.append(source[cursor:end + len(marker)])
+            cursor = end + len(marker)
+        elif source[cursor] == "<":
+            tag_start = cursor
+            quote = None
+            while cursor < len(source):
+                char = source[cursor]
+                if quote is not None:
+                    if char == quote:
+                        quote = None
+                    result.append({"\r": "&#13;", "\n": "&#10;", "\t": "&#9;"}.get(char, char))
+                else:
+                    result.append(char)
+                    if char in ("'", '"'):
+                        quote = char
+                    elif char == ">":
+                        cursor += 1
+                        break
+                cursor += 1
+            tag = source[tag_start:cursor]
+            if tag.startswith("</"):
+                depth -= 1
+            elif not tag.endswith("/>"):
+                depth += 1
+        else:
+            end = source.find("<", cursor)
+            if end < 0:
+                end = len(source)
+            text = source[cursor:end]
+            result.append(text.replace("\r", "&#13;") if depth > 0 else text)
+            cursor = end
+    return "".join(result)
+
+
 def parse_book(filename: str, raw: bytes) -> dict:
     filename = Path(filename).name
     extension = Path(filename).suffix.lower()
@@ -136,7 +193,7 @@ def parse_book(filename: str, raw: bytes) -> dict:
     require(not re.search(r"<!\s*(?:DOCTYPE|ENTITY)\b", source, re.IGNORECASE),
             "unsafe_xml", "FB2 with DTD/entity declarations is not accepted")
     try:
-        root = ET.fromstring(source)
+        root = ET.fromstring(_preserve_xml_whitespace(source))
     except (ET.ParseError, ValueError) as exc:
         raise AuthoringError("invalid_fb2", "Malformed FB2 XML") from exc
     require(_local(root) == "FictionBook", "invalid_fb2", "Expected FictionBook root")
