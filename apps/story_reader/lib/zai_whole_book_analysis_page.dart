@@ -7,6 +7,7 @@ import 'ai_connection_settings_page.dart';
 import 'book_source_index.dart';
 import 'narrative_book_model.dart';
 import 'story_plan_quality_gate.dart';
+import 'story_plan_draft_checkpoint.dart';
 import 'quick_rpg_page.dart';
 import 'story_plan_trial_page.dart';
 import 'world_library_gateway.dart';
@@ -24,12 +25,14 @@ class ZaiWholeBookAnalysisPage extends StatefulWidget {
     required this.index,
     this.analysis,
     this.dilemmaService,
+    this.dilemmaCheckpoint,
     this.gateway,
   });
 
   final BookSourceIndex index;
   final ZaiAutoWholeBookAnalysis? analysis;
   final ZaiStoryDilemmaProposalService? dilemmaService;
+  final StoryPlanDraftCheckpointStore? dilemmaCheckpoint;
   final WorldLibraryGateway? gateway;
 
   @override
@@ -42,6 +45,8 @@ class _ZaiWholeBookAnalysisPageState extends State<ZaiWholeBookAnalysisPage> {
       widget.analysis ?? ZaiAutoWholeBookAnalysis();
   late final ZaiStoryDilemmaProposalService _dilemmaService =
       widget.dilemmaService ?? ZaiStoryDilemmaProposalService();
+  late final StoryPlanDraftCheckpointStore _dilemmaCheckpoint =
+      widget.dilemmaCheckpoint ?? StoryPlanDraftCheckpointStore();
   late final ZaiWholeBookConsentManifest _manifest =
       ZaiWholeBookConsentManifest.fromIndex(widget.index);
 
@@ -74,10 +79,40 @@ class _ZaiWholeBookAnalysisPageState extends State<ZaiWholeBookAnalysisPage> {
   Future<void> _load() async {
     try {
       final review = await _analysis.read(widget.index);
+      ZaiStoryDilemmaPreview? restored;
+      StoryPlanQualityReport? restoredQuality;
+      String? recoveryNotice;
+      if (review.complete && review.progress.eventProposals >= 2) {
+        try {
+          final outline = ZaiWholeBookEventOutline.build(review);
+          final book = NarrativeBookModel.fromExisting(
+              index: widget.index, outline: outline);
+          // Private local read only. Never POST on opening a book.
+          restored = await _dilemmaCheckpoint.read(book);
+          if (restored != null && restored.foundCandidate) {
+            restoredQuality = StoryPlanQualityGate.assess(
+                book: book, preview: restored);
+          }
+          if (restored != null) {
+            recoveryNotice = restored.foundCandidate
+                ? 'Черновой план восстановлен локально. '
+                  'Повторная отправка книги в Z.ai не требуется.'
+                : 'Ранее ИИ не предложил подходящей развилки. '
+                  'Повторный запрос возможен только с новым согласием.';
+          }
+        } catch (error) {
+          recoveryNotice = 'Не удалось восстановить локальный черновик: ' +
+              error.toString() +
+              '. Автоматической повторной отправки в Z.ai не было.';
+        }
+      }
       if (!mounted) return;
       setState(() {
         _review = review;
         _progress = review.progress;
+        _dilemmaPreview = restored;
+        _qualityReport = restoredQuality;
+        _notice = recoveryNotice;
         _loading = false;
         _error = null;
       });
@@ -342,14 +377,28 @@ class _ZaiWholeBookAnalysisPageState extends State<ZaiWholeBookAnalysisPage> {
           ? StoryPlanQualityGate.assess(book: book, preview: result)
           : null;
       if (!mounted) return;
+      String? saveError;
+      try {
+        // Save atomically before confirming that the paid result can be
+        // restored after an app restart. Never retry the GLM POST here.
+        await _dilemmaCheckpoint.save(book, result);
+      } catch (error) {
+        saveError = 'Не удалось сохранить черновик локально: ' +
+            error.toString() +
+            '. Он доступен только до закрытия этого экрана.';
+      }
+      if (!mounted) return;
       setState(() {
         _dilemmaPreview = result;
         _qualityReport = quality;
-        _notice = quality != null
+        _notice = (quality != null
             ? 'Черновой сценарий проверен по игровым правилам. '
               'Смысл, полнота книги и литературные сцены ещё не приняты.'
             : 'Подходящая причинная развилка не предложена. '
-              'Ничего не подставлено вместо ответа ИИ.';
+              'Ничего не подставлено вместо ответа ИИ.') +
+            (saveError == null
+                ? ' Результат сохранён локально, без повторной оплаты.'
+                : ' ' + saveError);
       });
     } catch (error) {
       if (!mounted) return;
