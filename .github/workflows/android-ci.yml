@@ -177,6 +177,10 @@ jobs:
           mkdir -p artifacts/bookworld
           python3 tools/bookworld/bookworld.py build --blueprint shared_schemas/fixtures/manor_world_m17.json --output artifacts/bookworld/manor_m17_original_demo.bworld
           python3 tools/bookworld/bookworld.py verify --input artifacts/bookworld/manor_m17_original_demo.bworld
+      - name: Build and verify synthetic rich BookWorld for real SQLite/Flutter integration
+        run: |
+          python3 -m tests.rpg_author.build_rich_ci_example --output-dir artifacts/bookworld/rich_v3
+          python3 -c "from pathlib import Path; from tools.bookworld.private_rich_bookworld import verify; p=Path('artifacts/bookworld/rich_v3/River_Rich_Hero_v3.bworld'); assert verify(p.read_bytes())['format_version'] == 3"
       - name: Build real COMPLETE public-domain Grimm FB2 (62 tales)
         # Full original text is fetched only by CI and stays in the runner.
         # Never silently SKIP or replace a failed download with fake text.

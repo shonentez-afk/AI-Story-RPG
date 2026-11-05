@@ -1,0 +1,102 @@
+name: External RPG author tests
+
+on:
+  push:
+    branches: [main, 'feature/external-rpg-author-*']
+    paths:
+      - 'tools/rpg_author/**'
+      - 'tests/rpg_author/**'
+      - 'tests/__init__.py'
+      - 'schemas/rpg_author/**'
+      - '.github/workflows/rpg-author-ci.yml'
+      - 'tools/bookworld/**'
+      - 'apps/story_reader/lib/book_import.dart'
+      - 'apps/story_reader/lib/book_text_decoder.dart'
+      - 'apps/story_reader/lib/book_source_index.dart'
+      - 'packages/bookworld_format/lib/private_bookworld.dart'
+      - 'packages/story_core/lib/src/blueprint.dart'
+  pull_request:
+    paths:
+      - 'tools/rpg_author/**'
+      - 'tests/rpg_author/**'
+      - 'tests/__init__.py'
+      - 'schemas/rpg_author/**'
+      - '.github/workflows/rpg-author-ci.yml'
+      - 'tools/bookworld/**'
+      - 'apps/story_reader/lib/book_import.dart'
+      - 'apps/story_reader/lib/book_text_decoder.dart'
+      - 'apps/story_reader/lib/book_source_index.dart'
+      - 'packages/bookworld_format/lib/private_bookworld.dart'
+      - 'packages/story_core/lib/src/blueprint.dart'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: rpg-author-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  author-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Check pinned application compatibility
+        run: python3 -m tools.rpg_author doctor
+      - name: Test external authoring (synthetic books only)
+        run: python3 -m unittest discover -s tests/rpg_author -v
+      - name: Verify existing BookWorld compiler remains compatible
+        run: python3 -m unittest discover -s tools/bookworld/tests -v
+      - name: Ensure tests did not modify tracked sources
+        run: git diff --exit-code
+      - name: Build private synthetic BookWorld v2 and separate attribution
+        run: python3 -m tests.rpg_author.build_ci_example --output-dir "$RUNNER_TEMP/rpg-author-example"
+      - name: Upload labeled synthetic import example
+        uses: actions/upload-artifact@v4
+        with:
+          name: AI-Story-RPG-External-Author-Synthetic-v2
+          path: ${{ runner.temp }}/rpg-author-example/
+          if-no-files-found: error
+          retention-days: 7
+      - name: Build original-demo Hero/Items/Journal game
+        run: python3 -m tests.rpg_author.panel_state_demo --output-dir "$RUNNER_TEMP/rpg-author-panel-world"
+      - name: Publish original-demo panel gameplay test
+        uses: actions/upload-artifact@v4
+        with:
+          name: AI-Story-RPG-Hero-Items-Journal-Test-v1
+          path: ${{ runner.temp }}/rpg-author-panel-world/
+          if-no-files-found: error
+          retention-days: 7
+      - name: Build private v3 source-bound rich gameplay sample
+        run: python3 -m tests.rpg_author.build_rich_ci_example --output-dir "$RUNNER_TEMP/rpg-author-rich-v3"
+      - name: Upload private rich v3 prototype and AI attribution
+        uses: actions/upload-artifact@v4
+        with:
+          name: AI-Story-RPG-Rich-Hero-Items-Journal-v3
+          path: ${{ runner.temp }}/rpg-author-rich-v3/
+          if-no-files-found: error
+          retention-days: 7
+
+  dart-parity:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: dart-lang/setup-dart@v1
+        with:
+          sdk: stable
+      - name: Resolve the isolated read-only Dart probe
+        working-directory: tests/rpg_author/dart
+        run: dart pub get
+      - name: Compare source indices and verify candidate against the real Dart code
+        run: python3 tests/rpg_author/run_dart_parity.py
+      - name: Ensure application sources remain untouched
+        run: git diff --exit-code
