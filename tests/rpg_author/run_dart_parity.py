@@ -8,6 +8,7 @@ import json
 from pathlib import Path
 import subprocess
 import sys
+import tempfile
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
@@ -15,7 +16,10 @@ sys.path.insert(0, str(ROOT))
 from tools.rpg_author.source_adapter import make_index, parse_book
 from tools.rpg_author.common import AuthoringError
 from tools.rpg_author.validate import candidate_blueprint
-from tests.rpg_author.fixtures import source, story
+from tests.rpg_author.fixtures import source, story, TEXT, analysis
+from tools.rpg_author import project
+from tools.rpg_author.legacy_package import compile_from_project
+from tools.rpg_author.common import digest
 
 
 def dart(request):
@@ -76,9 +80,32 @@ def main():
         assert error.code == "unsupported_fb2_cdata"
     else:
         raise AssertionError("CDATA would silently lose content in the current app")
+    # A real, independently verified four-entry BookWorld v2, not only a JSON
+    # blueprint. Keep all synthetic book bytes/checkpoints outside checkout.
+    with tempfile.TemporaryDirectory() as temporary:
+        source_path = Path(temporary) / "synthetic.txt"
+        source_path.write_text(TEXT, encoding="utf-8")
+        project_path = Path(temporary) / "author-project"
+        project.init_project(project_path, source_path)
+        project.submit_analysis(project_path, analysis())
+        project.submit_story(project_path, story())
+        archive, attribution = compile_from_project(project_path, model_id="gpt-6")
+        imported = dart({"operation": "private_archive",
+                         "data": base64.b64encode(archive).decode("ascii")})
+        expected = candidate_blueprint(story(), source())
+        assert imported == {
+            "book_id": expected["book_id"],
+            "source_fingerprint": expected["source_fingerprint"],
+            "archive_sha256": digest(archive),
+            "scene_count": len(expected["scenes"]),
+            "can_distribute": False,
+            "requires_network": False,
+        }, imported
     print(json.dumps({"source_comparisons": checked, "candidate_accepted_by_dart_blueprint": True,
                       "known_lossy_source_forms_refused": 1,
-                      "application_modified": False, "external_ai_package_built": False}))
+                      "application_modified": False,
+                      "external_ai_package_built": True,
+                      "private_archive_accepted_by_dart_importer": True}))
 
 
 if __name__ == "__main__":
