@@ -191,6 +191,37 @@ def main():
         assert alternative["stats"]["insight"] == 2
         assert alternative["journal"] == ["leave_rope", "go_for_help"]
         assert alternative["restart_ok"] and alternative["save_import_ok"] and alternative["fork_ok"]
+        # Verify Python -> Dart -> SQLite on both real flag-only routes.
+        plain = enrichment()
+        plain["items"] = {}
+        plain["stats"] = {}
+        plain["facts"] = {}
+        plain["choices"] = {}
+        plain_bytes, _ = compile_rich_from_project(
+            checkpoint, plain, model_id="gpt-6")
+        plain_world = dart({
+            "operation": "rich_private",
+            "data": base64.b64encode(plain_bytes).decode("ascii"),
+            "paths": [["take_rope", "rescue"], ["leave_rope", "go_for_help"]],
+        })
+        assert plain_world["item_names"] == {}, plain_world
+        assert plain_world["stat_names"] == {}, plain_world
+        assert plain_world["fact_names"] == {}, plain_world
+        for route in plain_world["journeys"]:
+            assert route["terminal"] and route["replay_ok"], route
+            assert all(t["stats"] == {} and t["inventory"] == [] and
+                       t["facts"] == [] for t in route["turns"]), route
+        plain_campaign = dart({
+            "operation": "rich_campaign",
+            "data": base64.b64encode(plain_bytes).decode("ascii"),
+            "path": ["leave_rope", "go_for_help"],
+        })
+        assert plain_campaign["inventory"] == []
+        assert plain_campaign["stats"] == {}
+        assert plain_campaign["facts"] == []
+        assert plain_campaign["journal"] == ["leave_rope", "go_for_help"]
+        assert (plain_campaign["restart_ok"] and
+                plain_campaign["save_import_ok"] and plain_campaign["fork_ok"])
     print(json.dumps({"source_comparisons": checked, "candidate_accepted_by_dart_blueprint": True,
                       "known_lossy_source_forms_refused": 1,
                       "application_modified": False,
@@ -201,7 +232,8 @@ def main():
                       "rich_v3_python_compiled_dart_imported": True,
                       "rich_v3_state_replayed_in_two_routes": True,
                       "legacy_v2_rejects_v3": True,
-                      "rich_v3_sqlite_restart_fork_portable_save": True}))
+                      "rich_v3_sqlite_restart_fork_portable_save": True,
+                      "rich_v3_empty_catalogs_dart_sqlite": True}))
 
 
 if __name__ == "__main__":
