@@ -1,4 +1,5 @@
 import 'ai_connection.dart';
+import 'book_source_index.dart';
 import 'bookwide_act_planner.dart';
 import 'bookwide_storyplan_composer.dart';
 import 'narrative_book_model.dart';
@@ -167,14 +168,37 @@ class ActDilemmaProposalGateway {
   /// This is a NON-INSTALLABLE draft; arbitrary book text is never
   /// automatically considered the cause of the following game event.
   MultiActStoryPlanDraft composeLocal({
+    required BookSourceIndex index,
     required BookwideActPlan bookMap,
     required NarrativeBookModel book,
     required List<ActDilemmaCandidate> candidates,
-    required dynamic sourceIndex,
   }) {
-    throw UnimplementedError(
-        'Use BookwideStoryPlanComposer.compose after explicit '
-        'review of candidate source IDs. This gateway never '
-        'auto-chains or publishes model suggestions.');
+    if (candidates.length < 2 ||
+        candidates.length > BookwideStoryPlanComposer.maxDraftActs ||
+        candidates.any((c) =>
+            !c.foundCandidate || c.quality == null ||
+            !c.quality!.passedFormalPreflight ||
+            c.preview.proposal == null) ||
+        candidates.map((c) => c.actId).toSet().length !=
+            candidates.length) {
+      throw const FormatException(
+          'Для сборки нужно 2–6 подтверждённых формальной '
+          'проверкой предложений для разных актов.');
+    }
+    final draft = BookwideStoryPlanComposer.compose(
+      index: index,
+      book: book,
+      bookMap: bookMap,
+      actProposals: [
+        for (final c in candidates) c.preview.proposal!,
+      ],
+    );
+    for (var i = 0; i < candidates.length; i++) {
+      if (draft.parts[i].actId != candidates[i].actId) {
+        throw const FormatException(
+            'Предложение получено для другой части книги.');
+      }
+    }
+    return draft;
   }
 }
