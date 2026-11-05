@@ -700,9 +700,12 @@ void main() {
     expect(done.recovered, 1);
     expect(done.newlyGenerated, 1);
     expect(freshNetwork.bodies, hasLength(1));
-    expect(jsonDecode((jsonDecode(freshNetwork.bodies.single)
-        as Map<String, dynamic>)['messages'].last['content'] as String)
-        ['scene_id'], ids.last);
+    final sentPayload = jsonDecode(freshNetwork.bodies.single)
+        as Map<String, dynamic>;
+    final sentContext = jsonDecode(
+        (sentPayload['messages'] as List).last['content'] as String)
+        as Map<String, dynamic>;
+    expect(sentContext['scene_id'], ids.last);
   });
 
   test('cancellation after first persisted scene stops ALL later requests',

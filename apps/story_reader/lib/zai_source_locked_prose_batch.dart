@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:crypto/crypto.dart';
 
 import 'book_source_index.dart';
+import 'ai_connection.dart';
 import 'narrative_book_model.dart';
 import 'source_locked_prose_checkpoint_store.dart';
 import 'story_plan.dart';
@@ -80,7 +81,7 @@ class SourceLockedProseBatchManifest {
       'format': format,
       'source_fingerprint': index.sourceFingerprint,
       'plan_sha256': sha256.convert(utf8.encode(plan.encode())).toString(),
-      'model': 'glm-4.7-flash',
+      'model': ZaiModel.id,
       'max_new_scenes': maxNewScenesPerRun,
       'max_attempts_per_scene':
           ZaiSourceLockedProsePreviewService.maxAttempts,
