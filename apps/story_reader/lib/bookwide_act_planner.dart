@@ -160,14 +160,22 @@ class BookwideActPlanner {
       final cite = event.source;
       // Validate offsets, Unicode boundaries and actual source text again.
       cite.validate(index);
+      var outOfTextOrder = false;
+      if (last != null) {
+        if (cite.chapterIndex < last.chapterIndex) {
+          outOfTextOrder = true;
+        } else if (cite.chapterIndex == last.chapterIndex) {
+          if (cite.blockIndex < last.blockIndex) {
+            outOfTextOrder = true;
+          } else if (cite.blockIndex == last.blockIndex &&
+              cite.startUtf16 < last.startUtf16) {
+            outOfTextOrder = true;
+          }
+        }
+      }
       if (!ids.add(event.id) || event.narrativePosition != i ||
           cite.chapterIndex < 0 || cite.chapterIndex >= index.chapterCount ||
-          (last != null &&
-              (cite.chapterIndex < last.chapterIndex ||
-               (cite.chapterIndex == last.chapterIndex &&
-                (cite.blockIndex < last.blockIndex ||
-                 (cite.blockIndex == last.blockIndex &&
-                  cite.startUtf16 < last.startUtf16))))) {
+          outOfTextOrder) {
         throw const FormatException(
             'Неверный порядок или идентификаторы событий книги.');
       }
