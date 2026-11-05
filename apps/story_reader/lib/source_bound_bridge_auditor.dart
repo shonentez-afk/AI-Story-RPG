@@ -22,6 +22,7 @@ enum SourceBridgeDisposition {
 class SourceBoundBridge {
   const SourceBoundBridge({
     required this.id,
+    required this.sourceFingerprint,
     required this.fromEventId,
     required this.toEventId,
     required this.kind,
@@ -30,6 +31,7 @@ class SourceBoundBridge {
   });
 
   final String id;
+  final String sourceFingerprint;
   final String fromEventId;
   final String toEventId;
   final SourceBridgeKind kind;
@@ -180,6 +182,9 @@ class SourceBoundBridgeAuditor {
       final earlier = byEvent[bridge.fromEventId];
       final later = byEvent[bridge.toEventId];
       final issues = <String>[];
+      if (bridge.sourceFingerprint != index.sourceFingerprint) {
+        issues.add('Смысловой переход относится к другой редакции книги.');
+      }
       if (earlier == null || later == null ||
           bridge.fromEventId == bridge.toEventId) {
         issues.add('Неизвестные или совпадающие исходные события.');

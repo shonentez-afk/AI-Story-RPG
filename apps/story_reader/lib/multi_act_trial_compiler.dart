@@ -162,6 +162,7 @@ class MultiActTrialCompiler {
         for (var i = 1; i < draft.parts.length; i++)
           SourceBoundBridge(
             id: 'private_trial_bridge_' + i.toString(),
+            sourceFingerprint: index.sourceFingerprint,
             fromEventId: draft.parts[i - 1].outcomeEventId,
             toEventId: draft.parts[i].setupEventId,
             kind: SourceBridgeKind.explicitGameFiction,

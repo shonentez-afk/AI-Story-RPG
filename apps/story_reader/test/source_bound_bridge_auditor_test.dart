@@ -37,6 +37,7 @@ class _Fixture {
     SourceBridgeKind kind = SourceBridgeKind.causalCandidate,
   }) => SourceBoundBridge(
     id: id,
+    sourceFingerprint: index.sourceFingerprint,
     fromEventId: first,
     toEventId: second,
     sourceClaimIds: claimIds ?? [claimId],
@@ -153,6 +154,13 @@ void main() {
     final f = _fixture();
     expect(f.inspect(f.candidate(claimIds: ['invented'])).rejectedCount, 1);
     expect(f.inspect(f.candidate(second: 'unseen_event')).rejectedCount, 1);
+    expect(f.inspect(SourceBoundBridge(
+      id: 'alien_bridge', sourceFingerprint: 'foreign-edition',
+      fromEventId: 'first_event', toEventId: 'second_event',
+      kind: SourceBridgeKind.causalCandidate,
+      sourceClaimIds: [f.claimId],
+      rationale: 'Попытка перенести связь в другую редакцию книги.',
+    )).rejectedCount, 1);
 
     final alienIndex = BookSourceIndexer.index(const ImportedBook(
       title: 'Совсем другая книга',
@@ -212,7 +220,8 @@ void main() {
       editorial: f.editorial, events: f.events, bridges: [b, b],
     ), throwsFormatException);
     expect(() => f.inspect(SourceBoundBridge(
-      id: 'bad id', fromEventId: 'first_event', toEventId: 'second_event',
+      id: 'bad id', sourceFingerprint: f.index.sourceFingerprint,
+      fromEventId: 'first_event', toEventId: 'second_event',
       kind: SourceBridgeKind.causalCandidate, sourceClaimIds: [f.claimId],
       rationale: 'Нарушен формат идентификатора.',
     )), throwsFormatException);
