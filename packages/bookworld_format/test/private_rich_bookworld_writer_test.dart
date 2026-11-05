@@ -167,6 +167,69 @@ void main() {
     }
   });
 
+  test('reviewed v2 scenario promotes automatically to real rich v3 hero and journal', () {
+    final input = _asObject(jsonDecode(File(_fixture).readAsStringSync()));
+    final original = const PrivateBookworldWriter().build(
+      blueprint: _asObject(input['blueprint']),
+      provenance: _asObject(input['provenance']),
+      sourceIndex: _asObject(input['source_index']),
+    );
+    final upgraded = writer.upgradeReviewedV2(
+      verifiedPrivateV2Archive: original,
+      sourceIndex: _asObject(input['source_index']),
+      heroName: 'Путник',
+      sceneTitles: {'entry': 'Путник решает', 'canon_end': 'Помощь',
+                    'alternate_end': 'Отказ'},
+    );
+    final rich = importer.inspect(upgraded);
+    expect(rich.bookworldId, isNot('book_private_sample'));
+    expect(rich.presentation['hero'], containsPair('name', 'Путник'));
+    expect(rich.presentation['scene_names'],
+        containsPair('entry', 'Путник решает'));
+    expect(rich.presentation['item_names'], isEmpty);
+    expect(rich.blueprint.initial.stats, isEmpty);
+    expect(rich.blueprint.items, isEmpty);
+    expect(rich.blueprint.facts, isEmpty);
+    expect(rich.sourceFingerprint, 'a' * 64);
+    expect(rich.canDistributePublicly, false);
+    final again = writer.upgradeReviewedV2(
+      verifiedPrivateV2Archive: original,
+      sourceIndex: _asObject(input['source_index']),
+      heroName: 'Путник',
+      sceneTitles: {'entry': 'Путник решает', 'canon_end': 'Помощь',
+                    'alternate_end': 'Отказ'},
+    );
+    expect(again, orderedEquals(upgraded));
+    expect(() => const PrivateBookworldImporter().inspect(upgraded),
+        throwsFormatException);
+    for (final action in ['help', 'leave']) {
+      final world = StoryWorld(rich.blueprint);
+      expect(world.apply(actionId: 'rich_' + action, choiceId: action,
+          expectedRevision: 0).status, DecisionStatus.applied);
+      expect(world.isTerminal, true);
+      expect(world.events.single.choiceId, action);
+      expect(world.state.inventory, isEmpty);
+      expect(world.state.stats, isEmpty);
+    }
+
+    final corruptIndex = _asObject(input['source_index']);
+    corruptIndex['source_fingerprint'] = 'f' * 64;
+    expect(() => writer.upgradeReviewedV2(
+      verifiedPrivateV2Archive: original,
+      sourceIndex: corruptIndex,
+    ), throwsFormatException);
+    expect(() => writer.upgradeReviewedV2(
+      verifiedPrivateV2Archive: original,
+      sourceIndex: _asObject(input['source_index']),
+      heroName: '',
+    ), throwsFormatException);
+    expect(() => writer.upgradeReviewedV2(
+      verifiedPrivateV2Archive: original,
+      sourceIndex: _asObject(input['source_index']),
+      sceneTitles: {'another_book_scene': 'Подмена'},
+    ), throwsFormatException);
+  });
+
   test('rich v3 rejects damaged ZIP without adopting it as an older format', () {
     final input = _richSample();
     final data = writer.build(
