@@ -9,7 +9,6 @@ import 'package:ai_story_reader/source_relation_review.dart';
 import 'package:ai_story_reader/source_semantic_catalog.dart';
 import 'package:ai_story_reader/source_semantic_editorial_review.dart';
 import 'package:ai_story_reader/source_semantic_provider.dart';
-import 'package:ai_story_reader/source_semantic_window.dart';
 import 'package:ai_story_reader/zai_auto_whole_book_analysis.dart';
 import 'package:ai_story_reader/zai_semantic_preview.dart';
 import 'package:ai_story_reader/zai_whole_book_event_outline.dart';
@@ -208,7 +207,9 @@ void main() {
     expect(reported.establishesWorldTruth, false);
     expect(reported.establishesActorKnowledge, false);
     expect(reported.provesCausation, false);
-    expect(() => NarrativeBookModel.fromExisting(index: index,
-      outline: await _outline(index), catalog: catalog), throwsFormatException);
+    final sameOutline = await _outline(index);
+    expect(() => NarrativeBookModel.fromExisting(
+      index: index, outline: sameOutline, catalog: catalog,
+    ), throwsFormatException);
   });
 }
