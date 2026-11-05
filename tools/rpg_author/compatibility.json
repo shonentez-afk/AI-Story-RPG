@@ -1,0 +1,13 @@
+{
+  "format": "rpg_author_compatibility_v1",
+  "application_baseline": "e18924cd9cb8c65bd948d370c28d32c3ee429ab4",
+  "files": {
+    "tools/bookworld/bookworld.py": "68c5ebaac9b4c19176a476081f538fff639ef585020dfdea02b8bf861aec550f",
+    "tools/bookworld/private_bookworld.py": "b558193bbab223eeaaba4c0c343b44e76bf5b09d1c55a2e9bde52f6aba92f95c",
+    "apps/story_reader/lib/book_import.dart": "eefa829a3df3ba65e8b4e98fe5d5e24b670c8542f790af3389ee07661aa16dca",
+    "apps/story_reader/lib/book_text_decoder.dart": "cb97376fb007f019704830f66343e8a0ebf0fe78f0ca211f4d5ce737eac126b6",
+    "apps/story_reader/lib/book_source_index.dart": "f918386e306f608d1887e209a867430522f18dfddcf6c53596c0e744ad8f6251",
+    "packages/bookworld_format/lib/private_bookworld.dart": "d2b7880360d3af2255abf2577b5d8fd117a3b045532fd0ce8c5b0047d6d901b5",
+    "packages/story_core/lib/src/blueprint.dart": "d90ccbcb07ee6ef57ead57c9918068b39ab551060cd97b2153fdbeebd9449cbb"
+  }
+}
