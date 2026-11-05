@@ -150,6 +150,14 @@ void main() {
       scrollable: find.byType(Scrollable).first);
     expect(find.textContaining('не готовый сценарий'), findsWidgets);
     expect(find.byKey(const Key('whole-book-start')), findsNothing);
+    final sourceMap = find.byKey(const Key('whole-book-act-summary'));
+    await tester.scrollUntilVisible(
+        sourceMap, 120, scrollable: find.byType(Scrollable).first);
+    await tester.ensureVisible(sourceMap);
+    await tester.pumpAndSettle();
+    expect(find.textContaining('все 0 найденных событий'),
+        findsOneWidget);
+    expect(find.byKey(const Key('whole-book-act-map')), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
@@ -263,6 +271,12 @@ void main() {
         findsOneWidget);
     expect(find.byKey(const Key('whole-book-dilemma-readiness')),
         findsOneWidget);
+    final coverage = find.byKey(const Key('whole-book-act-coverage'));
+    await tester.scrollUntilVisible(
+        coverage, 120, scrollable: find.byType(Scrollable).first);
+    await tester.ensureVisible(coverage);
+    await tester.pumpAndSettle();
+    expect(find.textContaining('использует 2 из 2'), findsOneWidget);
     expect(fake.requests, 1);
     final play = find.byKey(const Key('whole-book-quick-play'));
     // The CTA is ABOVE the report and was disposed by the lazy ListView.
