@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+import zipfile
+import io
 
 from .common import AuthoringError, atomic_write, canonical, digest, outside_repository, require
 from .compatibility import check_contract
@@ -182,12 +184,20 @@ def verify_bundle(package: Path, sidecar: Path) -> dict:
         verified = private_bookworld.verify(archive)
     except (BookworldError, KeyError, ValueError) as exc:
         raise AuthoringError("package_invalid", str(exc)) from exc
+    with zipfile.ZipFile(io.BytesIO(archive), "r") as z:
+        blueprint_digest = digest(z.read("scenario/blueprint.json"))
     require(metadata.get("format") == FORMAT and
             metadata.get("bookworld_sha256") == digest(archive) and
-            metadata.get("source_fingerprint") == verified["source_fingerprint"],
-            "attribution_mismatch", "Attribution does not match this exact archive")
+            metadata.get("source_fingerprint") == verified["source_fingerprint"] and
+            metadata.get("blueprint_sha256") == blueprint_digest,
+            "attribution_mismatch", "Attribution does not match this exact archive and blueprint")
     require(metadata.get("publication_authorized") is False and
-            metadata.get("sidecar_is_verified_by_legacy_app") is False,
+            metadata.get("rights_status") == "private_use_only" and
+            metadata.get("sidecar_is_required_for_authorship_disclosure") is True and
+            metadata.get("sidecar_is_verified_by_legacy_app") is False and
+            metadata.get("bookworld_packaging", {}).get("legacy_model_provenance") == LEGACY_PROVENANCE and
+            metadata.get("scenario_generation", {}).get("provider") == "openai" and
+            metadata.get("scenario_generation", {}).get("tool") == "ChatGPT",
             "attribution_invalid", "Attribution safety declarations are missing")
     return {"status": "bundle_structurally_verified",
             "archive_sha256": verified["archive_sha256"],
