@@ -261,6 +261,20 @@ void main() {
     expect(find.byKey(const Key('whole-book-dilemma-readiness')),
         findsOneWidget);
     expect(fake.requests, 1);
+    final play = find.byKey(const Key('whole-book-quick-play'));
+    await tester.ensureVisible(play);
+    await tester.pumpAndSettle();
+    expect(find.text('Создать и играть в пробную RPG с развилкой'),
+        findsOneWidget);
+    await tester.tap(play);
+    await tester.pumpAndSettle();
+    expect(find.text('Пробная RPG по развилке'), findsOneWidget);
+    expect(find.byKey(const Key('story-trial-review')), findsOneWidget);
+    expect(find.byKey(const Key('story-trial-private-fiction')),
+        findsOneWidget);
+    expect(tester.widget<FilledButton>(
+        find.byKey(const Key('story-trial-start'))).onPressed, isNull);
+    expect(fake.requests, 1);
     expect(tester.takeException(), isNull);
   });
 
