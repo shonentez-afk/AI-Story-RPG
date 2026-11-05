@@ -1,5 +1,7 @@
 import 'dart:convert';
 
+import 'package:flutter/material.dart';
+
 import 'package:ai_story_reader/ai_connection.dart';
 import 'package:ai_story_reader/book_import.dart';
 import 'package:ai_story_reader/book_source_index.dart';
@@ -11,6 +13,8 @@ import 'package:ai_story_reader/story_plan_dilemma_generator.dart';
 import 'package:ai_story_reader/zai_auto_whole_book_analysis.dart';
 import 'package:ai_story_reader/zai_semantic_preview.dart';
 import 'package:ai_story_reader/zai_source_locked_prose_preview.dart';
+import 'package:ai_story_reader/source_locked_prose_checkpoint_store.dart';
+import 'package:ai_story_reader/source_locked_prose_preview_page.dart';
 import 'package:ai_story_reader/zai_whole_book_event_outline.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -308,4 +312,157 @@ void main() {
     ), throwsA(isA<AiSetupException>()));
     expect(net.bodies, isEmpty);
   });
+
+  test('exact-scene prose survives restart without source quotation or key',
+      () async {
+    final (index, book, plan) = await _fixture();
+    final context = SourceLockedProseContext.forSituation(
+      index: index, book: book, plan: plan, situationId: 'turning_point');
+    final model = _Network([_answer('turning_point', _prose)]);
+    final draft = await _service(model).preview(
+      context: context, approvedContextDigest: context.approvalDigest,
+      userReviewedExactContext: true,
+    );
+    final repository = MemorySourceAnalysisCheckpointRepository();
+    final store = SourceLockedProseCheckpointStore(repository: repository);
+    await store.save(context: context, draft: draft);
+    final raw = (await repository.read(index.sourceFingerprint))!;
+    expect(raw, contains(_prose));
+    expect(raw, contains('PROSE_DRAFT_REVIEW_REQUIRED'));
+    expect(raw, isNot(contains('SYNTHETIC-SECRET-KEY')));
+    expect(raw, isNot(contains(index.title)));
+    expect(raw, isNot(contains(book.events.first.source.quote)));
+    expect(await SourceLockedProseCheckpointStore(
+        repository: repository).read(context), isNotNull);
+    final replay = await store.read(context);
+    expect(replay!.text, _prose);
+    expect(replay.isHumanReviewed, false);
+    expect(replay.canInstallDirectly, false);
+    await store.save(context: context, draft: draft);
+    expect(await repository.read(index.sourceFingerprint), raw);
+    expect(model.bodies, hasLength(1));
+    await store.delete(context);
+    expect(await store.read(context), isNull);
+    expect(await repository.read(index.sourceFingerprint), isNull);
+  });
+
+  test('changed scene digest invalidates cache and forged status fails closed',
+      () async {
+    final (index, book, plan) = await _fixture();
+    final context = SourceLockedProseContext.forSituation(
+      index: index, book: book, plan: plan, situationId: 'turning_point');
+    final nextContext = SourceLockedProseContext.forSituation(
+      index: index, book: book, plan: plan, situationId: 'search_path');
+    final net = _Network([_answer('turning_point', _prose)]);
+    final draft = await _service(net).preview(
+      context: context, approvedContextDigest: context.approvalDigest,
+      userReviewedExactContext: true,
+    );
+    final repo = MemorySourceAnalysisCheckpointRepository();
+    final store = SourceLockedProseCheckpointStore(repository: repo);
+    await store.save(context: context, draft: draft);
+    expect(await store.read(nextContext), isNull);
+    final forgedDraft = SourceLockedProseDraft(
+      sourceFingerprint: draft.sourceFingerprint,
+      situationId: draft.situationId,
+      approvalDigest: List.filled(64, '0').join(),
+      text: draft.text,
+      uncertainty: draft.uncertainty,
+      route: draft.route,
+    );
+    await expectLater(
+      store.save(context: context, draft: forgedDraft),
+      throwsFormatException,
+    );
+    final record = jsonDecode((await repo.read(index.sourceFingerprint))!)
+        as Map<String, dynamic>;
+    final list = record['entries'] as List;
+    (list.first as Map)['status'] = 'CANON_APPROVED';
+    await repo.write(index.sourceFingerprint, jsonEncode(record));
+    await expectLater(store.read(context), throwsFormatException);
+    await expectLater(store.save(context: context, draft: draft),
+        throwsFormatException);
+  });
+
+  testWidgets('scene preview never posts until exact consent; cached '
+      'text returns on page reopen without a second GLM call',
+      (tester) async {
+    final (index, book, plan) = await _fixture();
+    final storage = SourceLockedProseCheckpointStore(
+      repository: MemorySourceAnalysisCheckpointRepository());
+    final net = _Network([_answer('turning_point', _prose)]);
+    await tester.pumpWidget(MaterialApp(home: SourceLockedProsePreviewPage(
+      index: index, book: book, plan: plan,
+      store: storage, previewService: _service(net),
+    )));
+    await tester.pumpAndSettle();
+    expect(net.bodies, isEmpty);
+    final action = find.byKey(const Key('prose-scene-generate'));
+    await tester.scrollUntilVisible(action, 190,
+        scrollable: find.byType(Scrollable).first);
+    expect(tester.widget<FilledButton>(action).onPressed, isNull);
+    final checkbox = find.byKey(const Key('prose-scene-approved'));
+    await tester.scrollUntilVisible(checkbox, -160,
+        scrollable: find.byType(Scrollable).first);
+    await tester.tap(checkbox);
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(action, 190,
+        scrollable: find.byType(Scrollable).first);
+    expect(tester.widget<FilledButton>(action).onPressed, isNotNull);
+    await tester.tap(action);
+    await tester.pumpAndSettle();
+    expect(net.bodies, hasLength(1));
+    await tester.scrollUntilVisible(
+        find.byKey(const Key('prose-scene-draft-text')), 160,
+        scrollable: find.byType(Scrollable).first);
+    expect(find.byKey(const Key('prose-scene-draft-text')), findsOneWidget);
+    final noPost = _Network([]);
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pumpWidget(MaterialApp(home: SourceLockedProsePreviewPage(
+      index: index, book: book, plan: plan,
+      store: storage, previewService: _service(noPost),
+    )));
+    await tester.pumpAndSettle();
+    expect(noPost.bodies, isEmpty);
+    await tester.scrollUntilVisible(
+        find.byKey(const Key('prose-scene-draft-text')), 180,
+        scrollable: find.byType(Scrollable).first);
+    expect(find.byKey(const Key('prose-scene-draft-text')), findsOneWidget);
+    await tester.scrollUntilVisible(action, -150,
+        scrollable: find.byType(Scrollable).first);
+    expect(tester.widget<FilledButton>(action).onPressed, isNull);
+  });
+
+  testWidgets('local deletion is deliberate and does not call provider',
+      (tester) async {
+    final (index, book, plan) = await _fixture();
+    final storage = SourceLockedProseCheckpointStore(
+      repository: MemorySourceAnalysisCheckpointRepository());
+    final context = SourceLockedProseContext.forSituation(
+      index: index, book: book, plan: plan, situationId: 'turning_point');
+    final initial = _Network([_answer('turning_point', _prose)]);
+    final draft = await _service(initial).preview(
+      context: context, approvedContextDigest: context.approvalDigest,
+      userReviewedExactContext: true,
+    );
+    await storage.save(context: context, draft: draft);
+    final noPost = _Network([]);
+    await tester.pumpWidget(MaterialApp(home: SourceLockedProsePreviewPage(
+      index: index, book: book, plan: plan,
+      store: storage, previewService: _service(noPost),
+    )));
+    await tester.pumpAndSettle();
+    final delete = find.byKey(const Key('prose-scene-delete'));
+    await tester.scrollUntilVisible(delete, 180,
+        scrollable: find.byType(Scrollable).first);
+    await tester.tap(delete);
+    await tester.pumpAndSettle();
+    final confirmation = find.byKey(const Key('prose-scene-confirm-delete'));
+    await tester.tap(confirmation);
+    await tester.pumpAndSettle();
+    expect(await storage.read(context), isNull);
+    expect(noPost.bodies, isEmpty);
+    expect(find.byKey(const Key('prose-scene-draft-text')), findsNothing);
+  });
+
 }
