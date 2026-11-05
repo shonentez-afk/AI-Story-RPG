@@ -182,6 +182,12 @@ void main() {
                     'alternate_end': 'Отказ'},
     );
     final rich = importer.inspect(upgraded);
+    // The separate CI Python verifier must accept the exact Dart-produced
+    // upgrade bytes, not a Python-generated approximation.
+    final output = File(
+        '../../artifacts/bookworld/book_private_rich_upgraded_dart.bworld');
+    output.parent.createSync(recursive: true);
+    output.writeAsBytesSync(upgraded, flush: true);
     expect(rich.bookworldId, isNot('book_private_sample'));
     expect(rich.presentation['hero'], containsPair('name', 'Путник'));
     expect(rich.presentation['scene_names'],
