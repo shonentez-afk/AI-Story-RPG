@@ -515,9 +515,14 @@ void main() {
     final delete = find.byKey(const Key('prose-scene-delete'));
     await tester.scrollUntilVisible(delete, 180,
         scrollable: find.byType(Scrollable).first);
+    // scrollUntilVisible only materializes the item; the extra AI-audit
+    // action pushes this button below the bottom of the small test viewport.
+    await tester.ensureVisible(delete);
+    await tester.pumpAndSettle();
     await tester.tap(delete);
     await tester.pumpAndSettle();
     final confirmation = find.byKey(const Key('prose-scene-confirm-delete'));
+    expect(confirmation, findsOneWidget);
     await tester.tap(confirmation);
     await tester.pumpAndSettle();
     expect(await storage.read(context), isNull);
