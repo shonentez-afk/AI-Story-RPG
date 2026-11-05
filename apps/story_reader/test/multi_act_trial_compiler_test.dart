@@ -158,6 +158,12 @@ void main() {
     expect(inspected.requiresNetwork, false);
     expect(inspected.canDistributePublicly, false);
     expect(inspected.blueprint.scenes.length, 14);
+    expect(inspected.presentation['hero'], containsPair('name', 'Игрок'));
+    expect(inspected.presentation['item_names'], isEmpty);
+    expect(inspected.presentation['fact_names'], isEmpty);
+    expect(inspected.blueprint.initial.stats, isEmpty);
+    expect(() => const PrivateBookworldImporter().inspect(compilation.archive),
+        throwsFormatException);
 
     final dir = await Directory.systemTemp.createTemp('multiact-private-');
     late String acceptedCampaign, refusedCampaign;
