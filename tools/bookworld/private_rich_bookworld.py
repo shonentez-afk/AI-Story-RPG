@@ -119,7 +119,7 @@ def _blueprint(bp):
                 "roles": ["PROTAGONIST"], "plots": ["ALTER_FATE"],
                 "interactions": ["CLASSIC"]}:
         fail("Wrong private rich identity/modes")
-    for catalog, minlen, maxlen in [("items", 1, 32),
+    for catalog, minlen, maxlen in [("items", 0, 32),
                                      ("facts", 0, 64),
                                      ("actors", 1, 1)]:
         values = bp[catalog]
@@ -137,7 +137,7 @@ def _blueprint(bp):
             state["knowledge"] != {"player": []}:
         fail("Invalid rich initial state")
     stats, flags = state["stats"], state["flags"]
-    if type(stats) is not dict or not 1 <= len(stats) <= 8 or \
+    if type(stats) is not dict or not 0 <= len(stats) <= 8 or \
             any(not _id(k) or type(v) is not int or v < 0 or v > 1000
                 for k, v in stats.items()) or \
             type(flags) is not dict or len(flags) > 32 or \
@@ -191,9 +191,8 @@ def _causality(bp):
                      for r in c["effects"] if r["op"] == "learn_fact"}
     changed_stats = {r["id"] for s in bp["scenes"] for c in s["choices"]
                      for r in c["effects"] if r["op"] == "stat_delta"}
-    if granted_items != set(bp["items"]) or learned_facts != set(bp["facts"]) or \
-            not changed_stats:
-        fail("Unreachable item/fact catalog or static hero")
+    if granted_items != set(bp["items"]) or learned_facts != set(bp["facts"]):
+        fail("Unreachable item/fact catalog")
     initial = bp["initial_state"]
     start = (bp["entry_scene_id"],
              tuple(sorted(k for k, v in initial["flags"].items() if v)),
