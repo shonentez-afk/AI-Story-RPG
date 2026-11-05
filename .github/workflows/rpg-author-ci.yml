@@ -54,6 +54,15 @@ jobs:
         run: python3 -m unittest discover -s tools/bookworld/tests -v
       - name: Ensure tests did not modify tracked sources
         run: git diff --exit-code
+      - name: Build private synthetic BookWorld v2 and separate attribution
+        run: python3 -m tests.rpg_author.build_ci_example --output-dir "$RUNNER_TEMP/rpg-author-example"
+      - name: Upload labeled synthetic import example
+        uses: actions/upload-artifact@v4
+        with:
+          name: AI-Story-RPG-External-Author-Synthetic-v2
+          path: ${{ runner.temp }}/rpg-author-example/
+          if-no-files-found: error
+          retention-days: 7
 
   dart-parity:
     runs-on: ubuntu-latest
