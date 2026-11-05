@@ -1,3 +1,7 @@
+> **АКТУАЛЬНЫЙ ПЛАН:** [Автоматическая RPG из книги — ROADMAP v2](docs/ROADMAP_AUTOMATIC_RPG_RU_V2_2026-11-05.md). **Текущий короткий статус:** [CURRENT_STATUS_RU.md](docs/CURRENT_STATUS_RU.md). Проверять текущий GitHub перед разработкой. Ниже сохранена историческая хроника: её прошлые CI/HEAD не имеют приоритета над текущим статусом.
+
+---
+
 # АКТУАЛЬНАЯ ПЕРЕДАЧА — 2026-11-05 08:14 (проверено через GitHub)
 
 **НЕ ЗАВИСЛО.** Последний точный HEAD `4aa10e54405c1f1d8280f986f5c71a5a2bfc22b6` в [PR #65](https://github.com/shonentez-afk/AI-Story-RPG/pull/65) (`feature/m2g2-whole-book-ai-event-pass-20261105`) прошёл **полный CI**: [AI Story RPG CI run #41902251084](https://github.com/shonentez-afk/AI-Story-RPG/actions/runs/41902251084) **completed/success**, все 6 исполняемых задач **success**: Python reference; Dart engine/scenario; M1.7 schema/BookWorld; Flutter analyze + 400+ widget tests; Android debug APK; Windows portable bundle. Публикация релиза в PR закономерно **skipped**. [M0 SDK run #41902250900](https://github.com/shonentez-afk/AI-Story-RPG/actions/runs/41902250900) **success**. Старые красные CI #41900617629/#41901531661 относились к тесту скролла согласия при узком экране — исправлены в `4aa10e54`; НЕ считать их актуальным блокером. PR #65 **draft/open/mergeable clean**, **не в main**.
