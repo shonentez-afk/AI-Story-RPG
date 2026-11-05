@@ -20,12 +20,13 @@ class StoryPlanTrialCompilation {
     required this.archive,
     required this.sourceFingerprint,
     required this.bookworldId,
+    required this.archiveSha256,
     required this.sceneCount,
     required this.sourceQuoteCount,
   });
 
   final Uint8List archive;
-  final String sourceFingerprint, bookworldId;
+  final String sourceFingerprint, bookworldId, archiveSha256;
   final int sceneCount, sourceQuoteCount;
   bool get isFullBookAdaptation => false;
   bool get sourceMeaningIsVerified => false;
@@ -192,6 +193,7 @@ class StoryPlanTrialCompiler {
       archive: archive,
       sourceFingerprint: index.sourceFingerprint,
       bookworldId: inspected.bookworldId,
+      archiveSha256: inspected.archiveSha256,
       sceneCount: inspected.blueprint.scenes.length,
       sourceQuoteCount: events.length,
     );
