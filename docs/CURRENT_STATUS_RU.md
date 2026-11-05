@@ -8,7 +8,7 @@
 
 - При проверке было **11 тестовых релизов** и **1 118 запусков GitHub Actions**.
 - Обновлён существующий одноразовый workflow `.github/workflows/storage-prune-once.yml`, запущен [run #41949428811](https://github.com/shonentez-afk/AI-Story-RPG/actions/runs/41949428811).
-- **10 старых тестовых релизов удалены**. Сохранён только последний опубликованный [test-build-500](https://github.com/shonentez-afk/AI-Story-RPG/releases/tag/test-build-500). Архив APK и Windows ZIP сохранён.
+- **10 старых тестовых релизов удалены** на первом проходе. После успешного post-merge CI опубликован [test-build-516](https://github.com/shonentez-afk/AI-Story-RPG/releases/tag/test-build-516). Предыдущий 500 на момент записи ещё виден и подлежит заключительному удалению; новый 516 сохранять.
 - GitHub Actions clean-up выполняется постепенно с защитой последних 25 запусков, последних успешных базовых CI, текущих запусков и рабочего cleanup run. После действия проверить итоговый счётчик/summary, **не считать очистку завершённой без результата workflow**.
 - CI workflow `android-ci.yml` и `m0-sdk-and-tests.yml` **не удалять**. Source и пользовательские сохранения не затронуты.
 
@@ -16,8 +16,8 @@
 
 - PR #65 **merged 2026-11-05**: `aae6fa8e1ef8514a0e5eb5cc7958cc5af8b68c7e`. Его оригинальный HEAD `4aa10e54405c1f1d8280f986f5c71a5a2bfc22b6` прошёл [полный CI #41902251084](https://github.com/shonentez-afk/AI-Story-RPG/actions/runs/41902251084), 6 исполняемых заданий success.
 - M2g2: с явным согласием GLM анализирует фрагменты всей книги, сохраняет результаты по мере обработки, допускает остановку/возобновление и может собрать **короткую частную** RPG по предложениям событий.
-- Post-merge [main CI #41949553496](https://github.com/shonentez-afk/AI-Story-RPG/actions/runs/41949553496) — на момент записи **в процессе**; не объявлять новый релиз до его success.
-- Последний опубликованный релиз на момент записи: `test-build-500`. Он **не включает** M2g2, пока не опубликована новая успешная сборка.
+- Post-merge [main CI #41949553496](https://github.com/shonentez-afk/AI-Story-RPG/actions/runs/41949553496) **completed/success**, включая Android и Windows, релиз успешно опубликован.
+- Последний опубликованный релиз: **test-build-516** от коммита `aae6fa8e1ef8514a0e5eb5cc7958cc5af8b68c7e`; он включает M2g2. Это пробная RPG по событиям, ещё не полноценный причинный сюжет.
 
 ## Новая разработка M2g3a
 
