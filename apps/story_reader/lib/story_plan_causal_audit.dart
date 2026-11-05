@@ -243,7 +243,7 @@ class StoryPlanCausalAuditor {
     }
 
     for (var cursor = 0; cursor < queue.length; cursor++) {
-      if (queue.length > StoryPlanMaxStateCount) {
+      if (queue.length > maxExploredStates) {
         throw const FormatException('Слишком много проверяемых состояний.');
       }
       final node = queue[cursor];
@@ -292,5 +292,5 @@ class StoryPlanCausalAuditor {
     );
   }
 
-  static const StoryPlanMaxStateCount = 2500;
+  static const maxExploredStates = 2500;
 }
