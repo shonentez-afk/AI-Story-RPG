@@ -43,6 +43,8 @@ class _BookActDraftPageState extends State<BookActDraftPage> {
   List<ActDilemmaCandidate> _candidates = const [];
   MultiActStoryPlanDraft? _composed;
   bool _loading = true, _working = false;
+  int _actPage = 0;
+  static const int _pageSize = 12;
   String? _notice, _error;
 
   List<BookActSegment> get _eligible => [
@@ -224,7 +226,9 @@ class _BookActDraftPageState extends State<BookActDraftPage> {
       });
     } catch (error) {
       if (mounted) {
-        setState(() => _error =
+        // A recoverable HTTP/model error does not disable all other acts.
+        // Retrying this act still requires NEW explicit consent.
+        setState(() => _notice =
             'Предложение для части не получено: ' + error.toString() +
             '. Другие части не отправлялись.');
       }
@@ -251,7 +255,8 @@ class _BookActDraftPageState extends State<BookActDraftPage> {
     } catch (error) {
       setState(() {
         _composed = null;
-        _error = 'Не удалось связать черновые акты: ' + error.toString();
+        _notice = 'Не удалось связать черновые акты: ' +
+            error.toString() + '. Можно изменить выбранные части.';
       });
     }
   }
@@ -263,6 +268,8 @@ class _BookActDraftPageState extends State<BookActDraftPage> {
         _candidates.where((c) => c.foundCandidate).length;
     final full = _candidates.length >=
         ActDilemmaCheckpointStore.maxStoredActs;
+    final firstVisible = _actPage * _pageSize;
+    final shown = eligible.skip(firstVisible).take(_pageSize).toList();
     return Scaffold(
       appBar: AppBar(title: const Text('План по частям книги')),
       body: SafeArea(
@@ -292,7 +299,7 @@ class _BookActDraftPageState extends State<BookActDraftPage> {
               const LinearProgressIndicator(),
               const Text('Восстанавливаем локальные предложения…'),
             ] else ...[
-              for (final act in eligible.take(32)) ...[
+              for (final act in shown) ...[
                 Builder(builder: (context) {
                   final saved = [
                     for (final c in _candidates)
@@ -333,11 +340,32 @@ class _BookActDraftPageState extends State<BookActDraftPage> {
                   );
                 }),
               ],
-              if (eligible.length > 32)
-                Text('Показаны первые 32 части из ' +
-                    eligible.length.toString() +
-                    '. Для длинной книги потребуется '
-                    'поэтапная подготовка без пропуска событий.'),
+              if (eligible.length > _pageSize) ...[
+                Text('Показаны части ' +
+                    (firstVisible + 1).toString() + '–' +
+                    (firstVisible + shown.length).toString() +
+                    ' из ' + eligible.length.toString() +
+                    '. Остальные доступны на следующих страницах.'),
+                Row(
+                  children: [
+                    TextButton(
+                      key: const Key('act-draft-prev'),
+                      onPressed: _actPage == 0 || _working
+                          ? null
+                          : () => setState(() => _actPage--),
+                      child: const Text('Предыдущие'),
+                    ),
+                    TextButton(
+                      key: const Key('act-draft-next'),
+                      onPressed: firstVisible + shown.length >=
+                              eligible.length || _working
+                          ? null
+                          : () => setState(() => _actPage++),
+                      child: const Text('Следующие'),
+                    ),
+                  ],
+                ),
+              ],
               const SizedBox(height: 10),
               FilledButton.icon(
                 key: const Key('act-draft-assemble'),
