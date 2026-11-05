@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 
 import 'ai_connection_settings_page.dart';
 import 'book_source_index.dart';
+import 'bookwide_act_planner.dart';
 import 'narrative_book_model.dart';
 import 'story_plan_quality_gate.dart';
 import 'story_plan_draft_checkpoint.dart';
@@ -55,6 +56,9 @@ class _ZaiWholeBookAnalysisPageState extends State<ZaiWholeBookAnalysisPage> {
   ZaiPreviewCancellation? _cancellation;
   ZaiStoryDilemmaPreview? _dilemmaPreview;
   StoryPlanQualityReport? _qualityReport;
+  BookwideActPlan? _bookActs;
+  BookwideStoryCoverage? _bookCoverage;
+  String? _bookActError;
   bool _dilemmaBusy = false;
   bool _loading = true;
   bool _working = false;
@@ -79,7 +83,22 @@ class _ZaiWholeBookAnalysisPageState extends State<ZaiWholeBookAnalysisPage> {
   Future<void> _load() async {
     try {
       final review = await _analysis.read(widget.index);
+      BookwideActPlan? localActs;
+      String? localActError;
+      if (review.complete) {
+        try {
+          final book = NarrativeBookModel.fromExisting(
+              index: widget.index,
+              outline: ZaiWholeBookEventOutline.build(review));
+          localActs = BookwideActPlanner.build(
+              index: widget.index, book: book);
+        } catch (error) {
+          localActError = 'Не удалось построить карту частей книги: ' +
+              error.toString();
+        }
+      }
       ZaiStoryDilemmaPreview? restored;
+      BookwideStoryCoverage? restoredCoverage;
       StoryPlanQualityReport? restoredQuality;
       String? recoveryNotice;
       if (review.complete && review.progress.eventProposals >= 2) {
@@ -92,6 +111,12 @@ class _ZaiWholeBookAnalysisPageState extends State<ZaiWholeBookAnalysisPage> {
           if (restored != null && restored.foundCandidate) {
             restoredQuality = StoryPlanQualityGate.assess(
                 book: book, preview: restored);
+            if (localActs != null) {
+              restoredCoverage = BookwideActPlanner.compareWithStoryPlan(
+                  bookMap: localActs,
+                  book: book,
+                  story: restoredQuality.plan);
+            }
           }
           if (restored != null) {
             recoveryNotice = restored.foundCandidate
@@ -112,6 +137,9 @@ class _ZaiWholeBookAnalysisPageState extends State<ZaiWholeBookAnalysisPage> {
         _progress = review.progress;
         _dilemmaPreview = restored;
         _qualityReport = restoredQuality;
+        _bookActs = localActs;
+        _bookCoverage = restoredCoverage;
+        _bookActError = localActError;
         _notice = recoveryNotice;
         _loading = false;
         _error = null;
@@ -229,9 +257,27 @@ class _ZaiWholeBookAnalysisPageState extends State<ZaiWholeBookAnalysisPage> {
         },
       );
       if (!mounted) return;
+      BookwideActPlan? updatedActs;
+      String? updatedActError;
+      if (next.complete) {
+        try {
+          final book = NarrativeBookModel.fromExisting(
+              index: widget.index,
+              outline: ZaiWholeBookEventOutline.build(next));
+          updatedActs = BookwideActPlanner.build(
+              index: widget.index, book: book);
+        } catch (error) {
+          updatedActError = 'Не удалось подготовить карту книги: ' +
+              error.toString();
+        }
+      }
+      if (!mounted) return;
       setState(() {
         _review = next;
         _progress = next.progress;
+        _bookActs = updatedActs;
+        _bookCoverage = null;
+        _bookActError = updatedActError;
         _notice = next.complete
             ? 'Все текстовые части отправлены и ответы проверены. '
               'Это ещё не готовый сценарий RPG.'
@@ -376,6 +422,10 @@ class _ZaiWholeBookAnalysisPageState extends State<ZaiWholeBookAnalysisPage> {
       final quality = result.foundCandidate
           ? StoryPlanQualityGate.assess(book: book, preview: result)
           : null;
+      final coverage = quality != null && _bookActs != null
+          ? BookwideActPlanner.compareWithStoryPlan(
+              bookMap: _bookActs!, book: book, story: quality.plan)
+          : null;
       if (!mounted) return;
       String? saveError;
       try {
@@ -391,6 +441,7 @@ class _ZaiWholeBookAnalysisPageState extends State<ZaiWholeBookAnalysisPage> {
       setState(() {
         _dilemmaPreview = result;
         _qualityReport = quality;
+        _bookCoverage = coverage;
         _notice = (quality != null
             ? 'Черновой сценарий проверен по игровым правилам. '
               'Смысл, полнота книги и литературные сцены ещё не приняты.'
@@ -608,6 +659,58 @@ class _ZaiWholeBookAnalysisPageState extends State<ZaiWholeBookAnalysisPage> {
                   'глав с предложениями: '
                   '${outline.chaptersWithEventProposals} '
                   'из ${outline.totalChapters}.'),
+              if (_bookActs != null) ...[
+                const SizedBox(height: 8),
+                Text('Карта книги: ' +
+                    _bookActs!.acts.length.toString() +
+                    ' частей; все ' + _bookActs!.sourceEvents.toString() +
+                    ' найденных событий распределены без потерь.',
+                    key: const Key('whole-book-act-summary')),
+                Text(_bookActs!.chaptersWithoutEvents.isEmpty
+                    ? 'Во всех главах есть предложения событий. '
+                      'Их смысл пока не проверен.'
+                    : 'Глав без предложений событий: ' +
+                      _bookActs!.chaptersWithoutEvents.length.toString() +
+                      '. Это пробел анализа, а не отсутствие сюжета.'),
+                if (_bookCoverage != null)
+                  Text('Текущий черновой сюжет использует ' +
+                      _bookCoverage!.referencedEvents.toString() +
+                      ' из ' + _bookCoverage!.allEvents.toString() +
+                      ' предложенных событий книги. '
+                      'Это не полная литературная RPG.',
+                      key: const Key('whole-book-act-coverage')),
+                ExpansionTile(
+                  key: const Key('whole-book-act-map'),
+                  title: const Text('Части книги и непокрытые эпизоды'),
+                  subtitle: const Text('Порядок частей — по тексту книги, '
+                      'не доказанная хронология игрового мира.'),
+                  children: [
+                    for (final act in _bookActs!.acts.take(12))
+                      ListTile(
+                        title: Text('Глава ' +
+                            (act.chapterIndex + 1).toString() +
+                            ' · часть ' + (act.partIndex + 1).toString()),
+                        subtitle: Text(act.isCoverageGap
+                            ? 'Нет предложенных событий: '
+                              'требуется проверка главы.'
+                            : 'Найдено событий: ' +
+                              act.events.length.toString() +
+                              '. Смысл и причинность не проверены.'),
+                      ),
+                    if (_bookActs!.acts.length > 12)
+                      ListTile(title: Text('Показаны первые 12 из ' +
+                          _bookActs!.acts.length.toString() +
+                          ' частей. Остальные сохранены в локальном '
+                          'анализе, ни одно событие не отброшено.')),
+                    const ListTile(title: Text('Для полной игры ещё '
+                        'нужны связи между актами, знания персонажей, '
+                        'проверенные решения и художественные сцены.')),
+                  ],
+                ),
+              ],
+              if (_bookActError != null)
+                Text(_bookActError!,
+                    key: const Key('whole-book-act-error')),
               ExpansionTile(
                 key: const Key('whole-book-event-report'),
                 title: const Text('Источники, пробелы и предупреждения'),
