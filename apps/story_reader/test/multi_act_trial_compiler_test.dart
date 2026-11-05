@@ -152,7 +152,7 @@ void main() {
     expect(compilation.canDistributePublicly, false);
     expect(compilation.sceneCount, 14);
     expect(compilation.sourceQuoteCount, 4);
-    final inspected = const PrivateBookworldImporter().inspect(
+    final inspected = const RichPrivateBookworldImporter().inspect(
         compilation.archive);
     expect(inspected.sourceFingerprint, index.sourceFingerprint);
     expect(inspected.requiresNetwork, false);
@@ -313,9 +313,9 @@ void main() {
       sourceEventIdsReviewedByUser: input.eventIds,
       privateUseConfirmed: true, fictionalTrialAcknowledged: true,
     );
-    final original = const PrivateBookworldImporter().inspect(
+    final original = const RichPrivateBookworldImporter().inspect(
         baseline.archive);
-    final changed = const PrivateBookworldImporter().inspect(
+    final changed = const RichPrivateBookworldImporter().inspect(
         improved.archive);
     final oldScene = original.blueprint.scenes['act_1_turning_point']!;
     final newScene = changed.blueprint.scenes['act_1_turning_point']!;
