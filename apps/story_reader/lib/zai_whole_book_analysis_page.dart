@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 
 import 'ai_connection_settings_page.dart';
 import 'book_source_index.dart';
+import 'book_act_draft_page.dart';
 import 'bookwide_act_planner.dart';
 import 'narrative_book_model.dart';
 import 'story_plan_quality_gate.dart';
@@ -707,6 +708,33 @@ class _ZaiWholeBookAnalysisPageState extends State<ZaiWholeBookAnalysisPage> {
                         'проверенные решения и художественные сцены.')),
                   ],
                 ),
+                if (_bookActs!.acts.where(
+                    (a) => a.events.length >= 2).length >= 2)
+                  OutlinedButton.icon(
+                    key: const Key('whole-book-act-draft-start'),
+                    onPressed: _working ? null : () async {
+                      final book = NarrativeBookModel.fromExisting(
+                        index: widget.index, outline: outline);
+                      if (!mounted) return;
+                      await Navigator.of(context).push<void>(
+                        MaterialPageRoute(
+                          builder: (_) => BookActDraftPage(
+                            index: widget.index,
+                            book: book,
+                            bookMap: _bookActs!,
+                          ),
+                        ),
+                      );
+                    },
+                    icon: const Icon(Icons.account_tree_outlined),
+                    label: const Text('Подготовить решения по частям книги'),
+                  ),
+                if (_bookActs!.acts.where(
+                    (a) => a.events.length >= 2).length >= 2)
+                  const Text('В расширенном режиме каждая часть '
+                      'отправляется в Z.ai отдельно и только с согласия. '
+                      'Пока создаётся многоактовый черновик, '
+                      'не полноценная литературная игра.'),
               ],
               if (_bookActError != null)
                 Text(_bookActError!,
