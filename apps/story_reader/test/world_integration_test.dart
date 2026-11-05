@@ -151,6 +151,111 @@ void main() {
     expect((await worker.campaigns()).length, 1);
   });
 
+
+  testWidgets('rich source-bound BookWorld has real Hero Items Journal '
+      'through SQLite, portable restore and alternative route',
+      (tester) async {
+    final bytes = Uint8List.fromList(File(
+      '../../artifacts/bookworld/rich_v3/River_Rich_Hero_v3.bworld',
+    ).readAsBytesSync());
+    final imported = await gateway.install(bytes);
+    final id = await gateway.start(imported.archiveHash);
+    final initial = await gateway.load(id);
+    expect(initial.heroName, 'Лена');
+    expect(initial.heroDescription, contains('Путешественница'));
+    expect(initial.stats['courage'], 1);
+    expect(initial.inventory, isEmpty);
+
+    await tester.pumpWidget(MaterialApp(
+      home: WorldPlayPage(gateway: gateway, campaignId: id),
+    ));
+    await settleWorker(tester);
+    await tester.tap(find.text('Герой'));
+    await settleWorker(tester);
+    expect(find.text('Герой: Лена'), findsOneWidget);
+    expect(find.text('Смелость: 1'), findsOneWidget);
+    await tester.tap(find.byTooltip('Закрыть'));
+    await settleWorker(tester);
+    await tapChoice(tester, 'take_rope');
+    final carried = await gateway.load(id);
+    expect(carried.inventory, contains('rope'));
+    expect(carried.stats['courage'], 2);
+    expect(carried.journal.single.changes, contains('Получено: Верёвка'));
+
+    await tester.tap(find.text('Предметы'));
+    await settleWorker(tester);
+    expect(find.textContaining('Прочная верёвка'), findsOneWidget);
+    await tester.tap(find.byTooltip('Закрыть'));
+    await settleWorker(tester);
+    await tester.tap(find.text('Журнал'));
+    await settleWorker(tester);
+    expect(find.textContaining('Получено: Верёвка'), findsOneWidget);
+    await tester.tap(find.byTooltip('Закрыть'));
+    await settleWorker(tester);
+
+    await tapChoice(tester, 'rescue');
+    final finalState = await gateway.load(id);
+    expect(finalState.isTerminal, true);
+    expect(finalState.revision, 2);
+    expect(finalState.inventory, isEmpty);
+    expect(finalState.stats['courage'], 4);
+    expect(finalState.knownFacts, contains('rescue_fact'));
+    expect(finalState.journal.last.changes,
+        contains('Использовано: Верёвка'));
+    expect(finalState.journal.last.changes,
+        contains('Узнано: Мальчик спасён у реки'));
+
+    await tester.tap(find.text('Предметы'));
+    await settleWorker(tester);
+    expect(find.text('Предметов пока нет'), findsOneWidget);
+    await tester.tap(find.byTooltip('Закрыть'));
+    await settleWorker(tester);
+    await tester.tap(find.text('Герой'));
+    await settleWorker(tester);
+    expect(find.text('Смелость: 4'), findsOneWidget);
+    expect(find.textContaining('Мальчик спасён у реки'), findsWidgets);
+    await tester.tap(find.byTooltip('Закрыть'));
+    await settleWorker(tester);
+    await tester.tap(find.text('Журнал'));
+    await settleWorker(tester);
+    expect(find.textContaining('Использовано: Верёвка'), findsOneWidget);
+
+    final saved = await gateway.exportSave(id);
+    final importedSave = await gateway.importSave(saved,
+      expectedWorldHash: imported.archiveHash);
+    final recovered = await gateway.load(importedSave);
+    expect(recovered.stats, finalState.stats);
+    expect(recovered.inventory, finalState.inventory);
+    expect(recovered.knownFacts, finalState.knownFacts);
+    expect(recovered.journal.map((e) => e.changes).toList(),
+        finalState.journal.map((e) => e.changes).toList());
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pumpWidget(MaterialApp(
+      home: WorldPlayPage(gateway: gateway, campaignId: importedSave),
+    ));
+    await settleWorker(tester);
+    await tester.tap(find.text('Журнал'));
+    await settleWorker(tester);
+    expect(find.textContaining('Использовано: Верёвка'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+
+    final other = await gateway.start(imported.archiveHash);
+    final firstB = await gateway.choose(other,
+      actionId: 'path_b_first', choiceId: 'leave_rope',
+      expectedRevision: 0);
+    expect(firstB.applied, true);
+    final stateB = await gateway.load(other);
+    expect(stateB.inventory, isEmpty);
+    expect(stateB.stats['insight'], 2);
+    expect(stateB.choices.singleWhere((c) => c.id == 'rescue').enabled, false);
+    final endB = await gateway.choose(other,
+      actionId: 'path_b_second', choiceId: 'go_for_help',
+      expectedRevision: 1);
+    expect(endB.applied, true);
+    expect((await gateway.load(other)).isTerminal, true);
+    expect((await gateway.load(other)).journal.length, 2);
+  });
+
   testWidgets('one library imports and displays verified worlds separately '
       'from legacy books and reading', (tester) async {
     final world = await install();

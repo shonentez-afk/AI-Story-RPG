@@ -4,6 +4,8 @@ import 'dart:isolate';
 import 'dart:typed_data';
 
 import 'package:campaign_manager/campaign_manager.dart';
+import 'package:bookworld_format/bookworld_format.dart';
+import 'package:story_core/story_core.dart';
 import 'package:path_provider/path_provider.dart';
 
 /// Transport-only view models; game rules, scene transitions, and writes
@@ -64,12 +66,15 @@ class WorldChoiceView {
 class WorldEventView {
   const WorldEventView({
     required this.sequence, required this.sceneId,
-    required this.choiceLabel,
+    required this.choiceLabel, this.sceneTitle, this.changes = const [],
   });
 
   final int sequence;
   final String sceneId;
   final String choiceLabel;
+  final String? sceneTitle;
+  /// Only state differences confirmed by replay, never model-invented actions.
+  final List<String> changes;
 }
 
 class WorldGameView {
@@ -80,6 +85,10 @@ class WorldGameView {
     required this.stats, required this.inventory,
     required this.flags, required this.knownFacts,
     required this.choices, required this.journal,
+    this.heroName, this.heroDescription,
+    this.itemNames = const {}, this.itemDescriptions = const {},
+    this.statNames = const {}, this.factNames = const {},
+    this.sceneNames = const {},
   });
 
   final String campaignId;
@@ -95,6 +104,13 @@ class WorldGameView {
   final List<String> knownFacts;
   final List<WorldChoiceView> choices;
   final List<WorldEventView> journal;
+  final String? heroName;
+  final String? heroDescription;
+  final Map<String, String> itemNames;
+  final Map<String, String> itemDescriptions;
+  final Map<String, String> statNames;
+  final Map<String, String> factNames;
+  final Map<String, String> sceneNames;
 }
 
 class WorldChoiceResult {
@@ -172,20 +188,93 @@ class DeviceWorldLibraryGateway implements WorldLibraryGateway {
         savedAt: entry.savedAt,
       );
 
-  static WorldGameView _view(CampaignRecord record) {
+  static Map<String, dynamic> _verifiedRichPresentation(
+      BookworldCampaignStore store, String worldHash) {
+    // The store first verifies exact saved ZIP/SQLite. Only the new v3
+    // importer can return rich presentation; legacy v1/v2 stay untouched.
+    final bytes = store.exportBookworld(worldHash);
+    try {
+      return const RichPrivateBookworldImporter().inspect(bytes).presentation;
+    } on FormatException {
+      return const {};
+    }
+  }
+
+  static WorldGameView _view(CampaignRecord record,
+      {Map<String, dynamic> presentation = const {}}) {
     final coordinator = record.coordinator;
     final blueprint = coordinator.blueprint;
     final state = coordinator.state;
     final current = blueprint.scenes[coordinator.sceneId]!;
-    final journal = [
-      for (final event in coordinator.events)
-        WorldEventView(
-          sequence: event.sequence,
-          sceneId: event.sceneId,
-          choiceLabel: blueprint.scenes[event.sceneId]!.choices
-              .firstWhere((choice) => choice.id == event.choiceId).label,
-        ),
-    ];
+    Map<String, String> names(String field) {
+      final value = presentation[field];
+      return value is Map<String, dynamic>
+          ? Map.unmodifiable(value.cast<String, String>())
+          : const {};
+    }
+    final items = names('item_names');
+    final itemDescriptions = names('item_descriptions');
+    final stats = names('stat_names');
+    final facts = names('fact_names');
+    final scenes = names('scene_names');
+    final hero = presentation['hero'];
+    final heroName = hero is Map<String, dynamic> ? hero['name'] as String? : null;
+    final heroDescription =
+        hero is Map<String, dynamic> ? hero['description'] as String? : null;
+
+    // Journal is reconstructed from the committed, replay-verified event log.
+    // Actual before/after deltas keep even idempotent effects from being
+    // misrepresented as newly acquired items or facts.
+    final playback = presentation.isNotEmpty ? StoryWorld(blueprint) : null;
+    final journal = <WorldEventView>[];
+    for (final event in coordinator.events) {
+      final scene = blueprint.scenes[event.sceneId]!;
+      final choice = scene.choices
+          .firstWhere((option) => option.id == event.choiceId);
+      final changes = <String>[];
+      if (playback != null) {
+        final before = playback.state;
+        final committed = playback.apply(
+          actionId: event.actionId,
+          choiceId: event.choiceId,
+          expectedRevision: before.revision,
+        );
+        if (!committed.applied || committed.event?.hash != event.hash) {
+          throw const FormatException('Журнал игры не совпадает с сохранением');
+        }
+        final after = playback.state;
+        for (final id in (after.inventory.difference(before.inventory).toList()..sort())) {
+          changes.add('Получено: ' + (items[id] ?? id));
+        }
+        for (final id in (before.inventory.difference(after.inventory).toList()..sort())) {
+          changes.add('Использовано: ' + (items[id] ?? id));
+        }
+        for (final id in (after.stats.keys.toList()..sort())) {
+          final amount = after.stats[id]! - before.stats[id]!;
+          if (amount != 0) {
+            changes.add((stats[id] ?? id) +
+                ': ' + (amount > 0 ? '+' : '') + amount.toString());
+          }
+        }
+        final learned = (after.knowledge['player'] ?? <String>{})
+            .difference(before.knowledge['player'] ?? <String>{})
+            .toList()..sort();
+        for (final id in learned) {
+          changes.add('Узнано: ' + (facts[id] ?? id));
+        }
+      }
+      journal.add(WorldEventView(
+        sequence: event.sequence,
+        sceneId: event.sceneId,
+        choiceLabel: choice.label,
+        sceneTitle: scenes[event.sceneId],
+        changes: List.unmodifiable(changes),
+      ));
+    }
+    if (playback != null && playback.state.stateHash != state.stateHash) {
+      throw const FormatException('История изменений не совпадает с героем');
+    }
+
     return WorldGameView(
       campaignId: record.metadata.id,
       worldTitle: blueprint.title,
@@ -207,6 +296,13 @@ class DeviceWorldLibraryGateway implements WorldLibraryGateway {
         ),
       )),
       journal: List.unmodifiable(journal),
+      heroName: heroName,
+      heroDescription: heroDescription,
+      itemNames: items,
+      itemDescriptions: itemDescriptions,
+      statNames: stats,
+      factNames: facts,
+      sceneNames: scenes,
     );
   }
 
@@ -235,7 +331,11 @@ class DeviceWorldLibraryGateway implements WorldLibraryGateway {
 
   @override
   Future<WorldGameView> load(String campaignId) =>
-      _execute((store) => _view(store.loadCampaign(campaignId)));
+      _execute((store) {
+        final record = store.loadCampaign(campaignId);
+        return _view(record, presentation: _verifiedRichPresentation(
+          store, record.metadata.worldHash));
+      });
 
   @override
   Future<WorldChoiceResult> choose(String campaignId, {
@@ -250,7 +350,9 @@ class DeviceWorldLibraryGateway implements WorldLibraryGateway {
       expectedRevision: expectedRevision,
     );
     // A complete view is read only after the SQLite transaction returned.
-    final view = _view(store.loadCampaign(campaignId));
+    final record = store.loadCampaign(campaignId);
+    final view = _view(record, presentation: _verifiedRichPresentation(
+      store, record.metadata.worldHash));
     return WorldChoiceResult(
       applied: result.applied,
       duplicate: result.status.name == 'duplicate',

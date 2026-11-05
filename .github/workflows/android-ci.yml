@@ -92,6 +92,9 @@ jobs:
       - uses: dart-lang/setup-dart@v1
         with:
           sdk: stable
+      - name: Prepare verified native SQLite source for Linux test workspaces
+        run: |
+          python3 tools/ci_prepare_verified_sqlite.py --project packages/bookworld_format --project packages/campaign_manager
       - name: Analyze pure Dart story_core
         working-directory: packages/story_core
         run: |
@@ -161,6 +164,8 @@ jobs:
         with:
           channel: stable
           cache: true
+      - name: Prepare verified native SQLite source for Flutter tests
+        run: python3 tools/ci_prepare_verified_sqlite.py --project apps/story_reader
       - name: Resolve dependencies
         run: flutter pub get
         working-directory: apps/story_reader
@@ -172,6 +177,12 @@ jobs:
           mkdir -p artifacts/bookworld
           python3 tools/bookworld/bookworld.py build --blueprint shared_schemas/fixtures/manor_world_m17.json --output artifacts/bookworld/manor_m17_original_demo.bworld
           python3 tools/bookworld/bookworld.py verify --input artifacts/bookworld/manor_m17_original_demo.bworld
+      - name: Build and verify synthetic rich BookWorld for real SQLite/Flutter integration
+        run: |
+          python3 -m tests.rpg_author.build_rich_ci_example --output-dir "$RUNNER_TEMP/rich-v3-fixture"
+          mkdir -p artifacts/bookworld/rich_v3
+          cp "$RUNNER_TEMP/rich-v3-fixture/River_Rich_Hero_v3.bworld" artifacts/bookworld/rich_v3/River_Rich_Hero_v3.bworld
+          python3 -c "from pathlib import Path; from tools.bookworld.private_rich_bookworld import verify; p=Path('artifacts/bookworld/rich_v3/River_Rich_Hero_v3.bworld'); assert verify(p.read_bytes())['format_version'] == 3"
       - name: Build real COMPLETE public-domain Grimm FB2 (62 tales)
         # Full original text is fetched only by CI and stays in the runner.
         # Never silently SKIP or replace a failed download with fake text.
@@ -196,11 +207,11 @@ jobs:
           AI_RPG_GRIMM_PUBLIC_MANIFEST_PATH: test/fixtures/grimm_ci.json
           AI_RPG_FROG_PRINCE_FB2_PATH: test/fixtures/frog_prince_ci.fb2
           AI_RPG_FROG_PRINCE_MANIFEST_PATH: test/fixtures/frog_prince_ci.json
-        timeout-minutes: 5
-        # A widget test blocked on a Future can ignore the Dart test-zone
-        # timeout. Stop the external test process rather than consuming a
-        # full CI runner for twenty minutes without diagnostic feedback.
-        run: timeout --signal=TERM --kill-after=10s 240s flutter test --reporter expanded --concurrency=1 --timeout 90s
+        timeout-minutes: 12
+        # Building a SHA3-verified SQLite amalgamation adds native compile
+        # time to the full widget suite. Keep a finite external watchdog
+        # for genuinely blocked Futures; do not silently skip any tests.
+        run: timeout --signal=TERM --kill-after=10s 660s flutter test --reporter expanded --concurrency=1 --timeout 90s
         working-directory: apps/story_reader
 
   android-apk:
@@ -232,6 +243,8 @@ jobs:
         with:
           channel: stable
           cache: true
+      - name: Prepare verified native SQLite source for Android APK
+        run: python3 tools/ci_prepare_verified_sqlite.py --project apps/story_reader
       - name: Generate Android host and build APK
         run: |
           flutter create --platforms=android --project-name ai_story_reader --org com.aistoryrpg .
