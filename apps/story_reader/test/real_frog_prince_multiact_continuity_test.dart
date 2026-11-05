@@ -276,8 +276,12 @@ void main() {
           revision++;
         }
         final next = store.loadCampaign(alternateTrialId).coordinator;
-        expect(next.choices.any((c) => c.id == 'act_2_accept_offer'), false);
-        expect(next.choices.any((c) => c.id == 'act_2_refuse_offer'), true);
+        expect(next.choices.any((c) =>
+            c.id == 'act_2_accept_offer' && c.enabled), false);
+        expect(next.choices.singleWhere((c) =>
+            c.id == 'act_2_accept_offer').lockReason, isNotNull);
+        expect(next.choices.any((c) =>
+            c.id == 'act_2_refuse_offer' && c.enabled), true);
         for (final choice in [
           'act_2_refuse_offer', 'act_2_explore',
           'act_2_use_discovery', 'act_2_end_alternative',
