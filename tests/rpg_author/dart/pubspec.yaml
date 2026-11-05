@@ -7,6 +7,8 @@ dependencies:
   xml: 6.6.1
   archive: 4.6.0
   crypto: 3.0.6
+  campaign_manager:
+    path: ../../../packages/campaign_manager
   bookworld_format:
     path: ../../../packages/bookworld_format
   story_core:
