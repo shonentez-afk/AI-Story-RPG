@@ -1,3 +1,5 @@
+# Final second pass after test-build-516 was published during the first cleanup.
+# Runs are serialized by concurrency; always preserve the newest release.
 name: One-time cleanup of obsolete RPG releases and Actions history
 
 on:
@@ -95,7 +97,7 @@ jobs:
                   keep.add(x["id"])
               if x.get("conclusion") == "success":
                   key = (x.get("head_branch"), x.get("name"))
-                  if key[0] in ("main", "feature/m2g2-whole-book-ai-event-pass-20261105"):
+                  if key[0] in ("main", "feature/m2g2-whole-book-ai-event-pass-20261105", "feature/m2g3a-source-locked-book-model-20261105"):
                       n = buckets.get(key, 0)
                       if n < 4:
                           keep.add(x["id"])
