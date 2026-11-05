@@ -16,9 +16,16 @@ def _fake_archive(source: bytes) -> bytes:
     return buffer.getvalue()
 
 
+def _noncompressible() -> bytes:
+    return b"/* sqlite3_open test */\n" + b"".join(
+        hashlib.sha256(i.to_bytes(4, "big")).digest()
+        for i in range(180)
+    )
+
+
 class VerifiedSqliteCiTests(unittest.TestCase):
     def test_source_requires_exact_pinned_hash(self):
-        source = b"/* test only */" + b"sqlite3_open " + b"x" * 3000
+        source = _noncompressible()
         archive = _fake_archive(source)
         digest = hashlib.sha3_256(archive).hexdigest()
         self.assertEqual(verified_source(archive, expected=digest), source)
@@ -31,7 +38,7 @@ class VerifiedSqliteCiTests(unittest.TestCase):
             verified_source(small, hashlib.sha3_256(small).hexdigest())
         buf = io.BytesIO()
         with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
-            z.writestr("other.c", b"/* sqlite3_open */" + b"x" * 3000)
+            z.writestr("other.c", _noncompressible())
         raw = buf.getvalue()
         with self.assertRaisesRegex(ValueError, "missing"):
             verified_source(raw, hashlib.sha3_256(raw).hexdigest())
