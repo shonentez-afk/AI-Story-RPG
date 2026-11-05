@@ -3,6 +3,7 @@ import 'package:ai_story_reader/book_source_index.dart';
 import 'package:ai_story_reader/intermediate_story_blueprint.dart';
 import 'package:ai_story_reader/narrative_book_model.dart';
 import 'package:ai_story_reader/source_analysis_checkpoint_repository.dart';
+import 'package:ai_story_reader/source_semantic_provider.dart';
 import 'package:ai_story_reader/story_plan.dart';
 import 'package:ai_story_reader/zai_auto_whole_book_analysis.dart';
 import 'package:ai_story_reader/zai_semantic_preview.dart';
