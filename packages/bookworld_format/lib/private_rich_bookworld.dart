@@ -455,12 +455,17 @@ class RichPrivateBookworldImporter {
       'model_id_status': 'requested',
       'tool': 'AI Story RPG', 'method': 'built_in',
     });
+    final unattested = _same(model, {
+      'provider': 'unknown', 'model_id': null,
+      'model_id_status': 'not_attested',
+      'tool': 'AI Story RPG', 'method': 'reviewed_local_compilation',
+    });
     final noAI = _same(model, {
       'provider': 'none', 'model_id': null,
       'model_id_status': 'not_applicable',
       'tool': 'none', 'method': 'local_fixture',
     });
-    if ((!isOpenAI && !isZai && !noAI) ||
+    if ((!isOpenAI && !isZai && !unattested && !noAI) ||
         !_same(manifest['model_provenance'], model)) {
       throw const FormatException('Некорректное происхождение v3');
     }
