@@ -5,6 +5,7 @@ import 'package:ai_story_reader/source_analysis_checkpoint_repository.dart';
 import 'package:ai_story_reader/source_semantic_provider.dart';
 import 'package:ai_story_reader/story_plan.dart';
 import 'package:ai_story_reader/story_plan_causal_audit.dart';
+import 'package:ai_story_reader/story_plan_bounded_repair.dart';
 import 'package:ai_story_reader/zai_auto_whole_book_analysis.dart';
 import 'package:ai_story_reader/zai_semantic_preview.dart';
 import 'package:ai_story_reader/zai_whole_book_event_outline.dart';
@@ -249,4 +250,113 @@ void main() {
       ]),
     ), throwsFormatException);
   });
+  test('bounded repair adds promise prerequisite while keeping both endings '
+      'and untouched book/choices', () async {
+    final book = await _book();
+    final original = _plan(book);
+    final originalJson = original.encode();
+    final contract = StoryCausalContract(decisionInvariants: [
+      StoryDecisionInvariant(
+        id: 'promise_gate', decisionId: 'honor',
+        requires: ['accepted'], forbids: ['declined'],
+      ),
+    ]);
+    final repair = StoryPlanBoundedRepair.attempt(
+      plan: original, book: book, contract: contract,
+    );
+    expect(repair.before.counterexamples, hasLength(1));
+    expect(repair.after.counterexamples, isEmpty);
+    expect(repair.passedFormalContracts, true);
+    expect(repair.appliedChanges, hasLength(1));
+    expect(repair.appliedChanges.single.decisionId, 'honor');
+    expect(repair.appliedChanges.single.addedRequires, ['accepted']);
+    expect(repair.appliedChanges.single.addedForbids, ['declined']);
+    expect(repair.draft.validate(book).terminalSituations, 2);
+    expect(repair.draft.isPlayable, false);
+    expect(repair.isSemanticallyAccepted, false);
+    expect(repair.readyToPlay, false);
+    // No original object, SQLite campaign, source title or other choice
+    // is mutated by the draft-only repair.
+    expect(original.encode(), originalJson);
+    expect(original.situations[1].decisions.first.requires, isEmpty);
+    expect(repair.draft.situations[1].decisions.last.id, 'explore');
+  });
+
+  test('two independent causal/knowledge errors need two bounded patches',
+      () async {
+    final book = await _book();
+    final plan = _plan(book);
+    final contract = StoryCausalContract(
+      decisionInvariants: [
+        StoryDecisionInvariant(id: 'promise_gate', decisionId: 'honor',
+          requires: ['accepted'], forbids: ['declined']),
+      ],
+      knowledgeGates: [
+        StoryEventKnowledgeGate(
+          id: 'secret_after_event',
+          revealEventId: book.events.last.id,
+          grantDecisionId: 'accept',
+          knowledgeFlag: 'secret_known',
+          protectedDecisionIds: ['mention_secret'],
+        ),
+      ],
+    );
+    final onlyOne = StoryPlanBoundedRepair.attempt(
+        plan: plan, book: book, contract: contract, maxPatches: 1);
+    expect(onlyOne.passedFormalContracts, false);
+    expect(onlyOne.blockers, isNotEmpty);
+    expect(onlyOne.after.counterexamples, hasLength(1));
+    expect(onlyOne.appliedChanges, hasLength(1));
+    final both = StoryPlanBoundedRepair.attempt(
+        plan: plan, book: book, contract: contract, maxPatches: 2);
+    expect(both.passedFormalContracts, true);
+    expect(both.appliedChanges, hasLength(2));
+    expect(both.after.counterexamples, isEmpty);
+    final safeAction = both.draft.situations[1].decisions
+        .firstWhere((choice) => choice.id == 'mention_secret');
+    expect(safeAction.requires, contains('secret_known'));
+    expect(() => StoryPlanBoundedRepair.attempt(
+        plan: plan, book: book, contract: contract, maxPatches: 0),
+        throwsFormatException);
+  });
+
+  test('item ownership conflicts remain an editorial blocker, no false repair',
+      () async {
+    final book = await _book();
+    final plan = _plan(book, duplicateOwnership: true);
+    final before = plan.encode();
+    final result = StoryPlanBoundedRepair.attempt(
+      plan: plan, book: book,
+      contract: StoryCausalContract(exclusiveGroups: [
+        StoryExclusiveFlags(
+          id: 'owner_collision', flags: ['owner_a', 'owner_b']),
+      ]),
+    );
+    expect(result.passedFormalContracts, false);
+    expect(result.appliedChanges, isEmpty);
+    expect(result.after.counterexamples.single.code,
+        'EXCLUSIVE_STATE_COLLISION');
+    expect(result.blockers.join(' '), contains('редактора'));
+    expect(result.draft.encode(), before);
+  });
+
+  test('cannot hide an invalid choice by making it permanently impossible',
+      () async {
+    final book = await _book();
+    final plan = _plan(book);
+    final result = StoryPlanBoundedRepair.attempt(
+      plan: plan, book: book,
+      contract: StoryCausalContract(decisionInvariants: [
+        StoryDecisionInvariant(
+          id: 'unreachable_decline', decisionId: 'decline',
+          requires: ['accepted'],
+        ),
+      ]),
+    );
+    expect(result.passedFormalContracts, false);
+    expect(result.appliedChanges, isEmpty);
+    expect(result.blockers.join(' '), contains('запрещает действие'));
+    expect(result.draft.encode(), plan.encode());
+  });
+
 }
