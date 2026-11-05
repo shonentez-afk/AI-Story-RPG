@@ -7,6 +7,7 @@ import 'package:sqlite3/sqlite3.dart';
 import 'package:story_core/story_core.dart';
 
 import 'private_bookworld.dart';
+import 'private_rich_bookworld.dart';
 import 'src/zip_v1.dart';
 
 /// Offline, native-Dart PRIVATE package compiler for Windows and Android.
@@ -358,5 +359,80 @@ CREATE TABLE templates(template_id TEXT PRIMARY KEY,
       throw const FormatException('Самопроверка игрового пакета не пройдена');
     }
     return packed;
+  }
+}
+
+
+/// Native v3 writer. Shares the exact source, SQLite and ZIP implementation
+/// with the accepted v2 writer; the independent *rich* importer is the final
+/// authority. No Python, network request or human-supplied manifest is needed.
+///
+/// The caller must provide validated, source-bound typed effects and honest
+/// model provenance. This writer never derives inventory from narrative prose.
+class RichPrivateBookworldWriter {
+  const RichPrivateBookworldWriter();
+
+  Uint8List build({
+    required Map<String, dynamic> blueprint,
+    required Map<String, dynamic> provenance,
+    required Map<String, dynamic> sourceIndex,
+  }) {
+    final checked = StoryBlueprint.fromJson(blueprint);
+    if (checked.rightsStatus != 'private_adaptation' ||
+        checked.sourceFingerprint == null) {
+      throw const FormatException('Разрешена только частная RPG по книге');
+    }
+    final base = const PrivateBookworldWriter();
+    // Verification uses the actual UTF-16 source chunks, not an AI claim.
+    base._checkOriginalSource(blueprint, provenance, sourceIndex);
+    final sceneBytes = PrivateBookworldWriter._jsonBytes(blueprint);
+    final originBytes = PrivateBookworldWriter._jsonBytes(provenance);
+    final sqliteBytes = base._writeSqlite(blueprint, checked.blueprintHash);
+    final payloads = <String, Uint8List>{
+      'scenario/blueprint.json': sceneBytes,
+      'source/provenance.json': originBytes,
+      'world.sqlite': sqliteBytes,
+    };
+    final hashes = <String, String>{};
+    final sizes = <String, int>{};
+    for (final entry in payloads.entries) {
+      hashes[entry.key] = PrivateBookworldWriter._hash(entry.value);
+      sizes[entry.key] = entry.value.length;
+    }
+    final manifest = <String, dynamic>{
+      'format': 'ai_story_bookworld',
+      'format_version': 3,
+      'bookworld_id': checked.bookId,
+      'source_fingerprint': checked.sourceFingerprint,
+      'title': checked.title,
+      'author': provenance['source_author'],
+      'languages': ['ru'],
+      'engine_min_version': '0.1.0',
+      'scenario_format': 'ai_story_blueprint_v1',
+      'scenario_format_version': 1,
+      'content_capabilities': blueprint['supported_modes'],
+      'build_status': 'private_rich_structural',
+      'rights_status': 'private_use_only',
+      'build_tool': {
+        'name': 'ai_story_private_rich_bookworld', 'version': '3.0',
+      },
+      'model_provenance': provenance['model_provenance'],
+      'hashes': hashes,
+      'sizes': sizes,
+      'blueprint_sha256': PrivateBookworldWriter._hash(sceneBytes),
+    };
+    final package = base._storedZip({
+      'manifest.json': PrivateBookworldWriter._jsonBytes(manifest),
+      ...payloads,
+    });
+    final verified = const RichPrivateBookworldImporter().inspect(package);
+    if (verified.bookworldId != checked.bookId ||
+        verified.sourceFingerprint != checked.sourceFingerprint ||
+        verified.blueprint.blueprintHash != checked.blueprintHash ||
+        verified.canDistributePublicly ||
+        verified.requiresNetwork) {
+      throw const FormatException('Нативная сборка v3 не прошла самопроверку');
+    }
+    return package;
   }
 }
