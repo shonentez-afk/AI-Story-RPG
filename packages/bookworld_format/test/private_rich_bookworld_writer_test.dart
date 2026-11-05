@@ -143,9 +143,9 @@ void main() {
 
   test('native v3 blocks wrong book, invented item, dishonest model and fake citation', () {
     for (final mutate in <void Function(Map<String, dynamic>)>[
-      (input) => _asObject(input['source_index'])['source_fingerprint'] = 'f' * 64,
-      (input) => _asObject(input['blueprint'])['items'] = ['ghost'],
-      (input) => _asObject(input['provenance'])['model_provenance'] = {
+      (input) => (input['source_index'] as Map)['source_fingerprint'] = 'f' * 64,
+      (input) => (input['blueprint'] as Map)['items'] = ['ghost'],
+      (input) => (input['provenance'] as Map)['model_provenance'] = {
         'provider': 'openai',
         'model_id': 'made_up_model',
         'model_id_status': 'user_declared',
