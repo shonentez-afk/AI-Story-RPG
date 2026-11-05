@@ -1,0 +1,15 @@
+name: external_rpg_author_parity
+description: Read-only differential probes against the existing application libraries.
+publish_to: none
+environment:
+  sdk: '>=3.11.0 <4.0.0'
+dependencies:
+  xml: 6.6.1
+  archive: 4.6.0
+  crypto: 3.0.6
+  campaign_manager:
+    path: ../../../packages/campaign_manager
+  bookworld_format:
+    path: ../../../packages/bookworld_format
+  story_core:
+    path: ../../../packages/story_core

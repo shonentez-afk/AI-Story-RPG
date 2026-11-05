@@ -495,19 +495,41 @@ class _WorldInfoSheet extends StatelessWidget {
     };
     final entries = switch (panel) {
       GamePanel.character => [
+        if (view.heroName != null) 'Герой: ' + view.heroName!,
+        if (view.heroDescription != null) view.heroDescription!,
+        if (view.stats.isEmpty) 'Характеристики не заданы',
         for (final stat in view.stats.entries)
-          _statLabel(stat.key) + ': ' + stat.value.toString(),
+          (view.statNames[stat.key] ?? _statLabel(stat.key)) +
+              ': ' + stat.value.toString(),
         'Игровое время: ' + view.tick.toString(),
-        'Открыто сведений: ' + view.knownFacts.length.toString(),
+        if (view.knownFacts.isNotEmpty)
+          'Открытые сведения: ' +
+              view.knownFacts
+                  .map((id) => view.factNames[id] ?? id).join(', '),
+        if (view.knownFacts.isEmpty) 'Открыто сведений: 0',
       ],
       GamePanel.inventory => view.inventory.isEmpty
           ? <String>['Предметов пока нет']
-          : view.inventory,
+          : [
+              for (final id in view.inventory)
+                (view.itemNames[id] ?? id) +
+                    (view.itemDescriptions[id] == null
+                        ? ''
+                        : ' — ' + view.itemDescriptions[id]!),
+            ],
       GamePanel.journal => view.journal.isEmpty
           ? <String>['Решений пока нет']
           : [
               for (final entry in view.journal)
-                entry.sequence.toString() + '. ' + entry.choiceLabel,
+                entry.sequence.toString() + '. ' +
+                    (entry.sceneTitle == null
+                        ? ''
+                        : entry.sceneTitle! + ': ') +
+                    entry.choiceLabel +
+                    (entry.changes.isEmpty
+                        ? ''
+                        : '\n' + entry.changes
+                            .map((change) => '• ' + change).join('\n')),
             ],
     };
     return SafeArea(

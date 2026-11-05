@@ -8,6 +8,7 @@ import 'src/sqlite_v1.dart';
 import 'src/zip_v1.dart';
 
 export 'private_bookworld.dart' show PrivateBookworldImporter, VerifiedPrivateBookworld;
+export 'private_rich_bookworld.dart' show RichPrivateBookworldImporter, VerifiedRichPrivateBookworld;
 export 'private_bookworld_writer.dart' show PrivateBookworldWriter;
 
 /// Validated compiled game rules (legacy demo or explicit private source v2),

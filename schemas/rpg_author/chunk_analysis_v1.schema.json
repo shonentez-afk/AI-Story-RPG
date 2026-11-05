@@ -1,0 +1,104 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "chunk_analysis_v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "format",
+    "source_fingerprint",
+    "chunk_id",
+    "source_sha256",
+    "summary",
+    "assertions",
+    "unresolved"
+  ],
+  "properties": {
+    "format": {
+      "const": "rpg_author_chunk_analysis_v1"
+    },
+    "source_fingerprint": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "chunk_id": {
+      "type": "string",
+      "pattern": "^c[0-9]+_b[0-9]+_p[0-9]+$"
+    },
+    "source_sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "summary": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 2400,
+      "pattern": "\\S",
+      "description": "Runtime additionally bounds UTF-16 code units."
+    },
+    "assertions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "statement",
+          "kind",
+          "start_utf16",
+          "end_utf16",
+          "quote"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_]{0,63}$"
+          },
+          "statement": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1200,
+            "pattern": "\\S",
+            "description": "Runtime additionally bounds UTF-16 code units."
+          },
+          "kind": {
+            "enum": [
+              "NARRATED",
+              "REPORTED",
+              "INFERRED"
+            ]
+          },
+          "start_utf16": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "end_utf16": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "quote": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 180,
+            "pattern": "\\S",
+            "description": "Runtime additionally bounds UTF-16 code units."
+          }
+        }
+      },
+      "minItems": 0,
+      "maxItems": 32
+    },
+    "unresolved": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 600,
+        "pattern": "\\S",
+        "description": "Runtime additionally bounds UTF-16 code units."
+      },
+      "minItems": 0,
+      "maxItems": 32,
+      "uniqueItems": true
+    }
+  }
+}
