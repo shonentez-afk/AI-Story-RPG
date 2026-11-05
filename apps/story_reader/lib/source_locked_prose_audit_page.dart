@@ -37,6 +37,32 @@ class SourceLockedProseAuditPage extends StatefulWidget {
 
 class _SourceLockedProseAuditPageState
     extends State<SourceLockedProseAuditPage> {
+  static String _verdictLabel(AiProseAuditVerdict value) => switch (value) {
+    AiProseAuditVerdict.possibleConsistency =>
+      'Не найдено явных противоречий (это не доказательство)',
+    AiProseAuditVerdict.needsRevision =>
+      'Есть возможные противоречия — требуется проверка',
+    AiProseAuditVerdict.insufficientEvidence =>
+      'Недостаточно исходных данных для вывода',
+  };
+
+  static String _kindLabel(AiProseFindingKind value) => switch (value) {
+    AiProseFindingKind.unsupportedFact => 'Неподтверждённый факт',
+    AiProseFindingKind.actorKnowledge => 'Знания персонажа',
+    AiProseFindingKind.itemOwnership => 'Принадлежность предмета',
+    AiProseFindingKind.promise => 'Обещание или обязательство',
+    AiProseFindingKind.worldTime => 'Хронология событий',
+    AiProseFindingKind.causalLink => 'Причина и следствие',
+    AiProseFindingKind.routeState => 'Выбранная ветка сюжета',
+    AiProseFindingKind.other => 'Другое замечание',
+  };
+
+  static String _severityLabel(AiProseFindingSeverity value) =>
+      switch (value) {
+    AiProseFindingSeverity.low => 'небольшое сомнение',
+    AiProseFindingSeverity.medium => 'требует внимания',
+    AiProseFindingSeverity.high => 'существенный риск',
+  };
   late final SourceLockedProseAuditCheckpointStore _store;
   late final ZaiSourceLockedProseAuditService _service;
   SourceLockedProseAuditContext? _auditContext;
@@ -242,7 +268,7 @@ class _SourceLockedProseAuditPageState
                       color: Theme.of(context).colorScheme.error)),
               if (report != null) ...[
                 const Divider(height: 30),
-                Text('Заключение ИИ: ' + report.verdict.name,
+                Text('Заключение ИИ: ' + _verdictLabel(report.verdict),
                     style: Theme.of(context).textTheme.titleMedium,
                     key: const Key('literary-audit-verdict')),
                 Text('Найдено замечаний: ' +
@@ -254,8 +280,8 @@ class _SourceLockedProseAuditPageState
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(finding.kind.name + ' — ' +
-                              finding.severity.name),
+                          Text(_kindLabel(finding.kind) + ' — ' +
+                              _severityLabel(finding.severity)),
                           const SizedBox(height: 4),
                           SelectableText(finding.problem),
                           if (finding.evidenceQuote != null) ...[
