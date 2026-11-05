@@ -248,10 +248,13 @@ class _SourceLockedProseBatchPageState
               Text('Объём пользовательского контекста примерно ' +
                   manifest.sentContextUtf8Bytes.toString() +
                   ' байт без системного запроса. '
-                  'Весь FB2, название, API-ключ и сохранения '
-                  'в запросы этих сцен не включаются.'),
+                  'Полный FB2, отдельные поля названия и автора, '
+                  'API-ключ и сохранения не добавляются. '
+                  'Названия и имена могут встретиться в показанных '
+                  'цитатах или описаниях сцен.'),
               const SizedBox(height: 8),
-              Text('Точное содержимое будущих запросов:',
+              Text('Пользовательский контекст (служебный запрос '
+                  'добавляется отдельно):',
                   style: Theme.of(context).textTheme.titleMedium),
               for (final sceneContext in manifest.contexts)
                 ExpansionTile(
