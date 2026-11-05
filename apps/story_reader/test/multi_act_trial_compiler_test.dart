@@ -198,8 +198,12 @@ void main() {
         }
         final turn = db.loadCampaign(refusedCampaign).coordinator;
         expect(turn.sceneId, 'act_2_turning_point');
-        expect(turn.choices.any((x) => x.id == 'act_2_accept_offer'), false);
-        expect(turn.choices.any((x) => x.id == 'act_2_refuse_offer'), true);
+        expect(turn.choices.any((x) =>
+            x.id == 'act_2_accept_offer' && x.enabled), false);
+        expect(turn.choices.singleWhere((x) =>
+            x.id == 'act_2_accept_offer').lockReason, isNotNull);
+        expect(turn.choices.any((x) =>
+            x.id == 'act_2_refuse_offer' && x.enabled), true);
         for (final choice in [
           'act_2_refuse_offer', 'act_2_explore',
           'act_2_use_discovery', 'act_2_end_alternative',
