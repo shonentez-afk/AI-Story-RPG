@@ -5,6 +5,7 @@ import 'bookwide_act_planner.dart';
 import 'bookwide_storyplan_composer.dart';
 import 'cross_act_consequence_gate.dart';
 import 'multi_act_trial_compiler.dart';
+import 'source_locked_prose_preview_page.dart';
 import 'narrative_book_model.dart';
 import 'world_library_gateway.dart';
 import 'world_play_page.dart';
@@ -196,6 +197,29 @@ class _MultiActTrialPageState extends State<MultiActTrialPage> {
                   'после соответствующего исхода первого акта'),
               subtitle: const Text('Реально меняет доступные действия. '
                   'Это игровая адаптация, не установленный факт книги.'),
+            ),
+            ExpansionTile(
+              key: const Key('multiact-trial-prose-preview-expansion'),
+              title: const Text('Художественный черновик (дополнительно)'),
+              subtitle: const Text('Одна сцена, отдельное согласие Z.ai. '
+                  'Черновик не включается в пробную игру.'),
+              children: [
+                ListTile(
+                  key: const Key('multiact-trial-open-prose-preview'),
+                  leading: const Icon(Icons.auto_stories_outlined),
+                  title: const Text('Предпросмотр художественной сцены'),
+                  subtitle: const Text('Можно восстановить ранее '
+                      'сохранённый черновик без нового запроса'),
+                  onTap: _working ? null : () =>
+                      Navigator.of(context).push<void>(MaterialPageRoute(
+                        builder: (_) => SourceLockedProsePreviewPage(
+                          index: widget.index,
+                          book: widget.book,
+                          plan: widget.draft.plan,
+                        ),
+                      )),
+                ),
+              ],
             ),
             const SizedBox(height: 10),
             FilledButton.icon(
