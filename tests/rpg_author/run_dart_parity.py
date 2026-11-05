@@ -101,11 +101,48 @@ def main():
             "can_distribute": False,
             "requires_network": False,
         }, imported
+    # Current main application already handles true item/stat/fact effects in
+    # its original-demo runtime. Exercise two different routes and deterministic
+    # journal replay via the actual, unchanged Dart StoryWorld.
+    from tests.rpg_author.panel_state_demo import build as build_panel_demo
+    panel_world = dart({
+        "operation": "panel_world",
+        "data": base64.b64encode(build_panel_demo()).decode("ascii"),
+        "paths": [
+            ["take_lantern", "use_lantern", "help_child", "show_medal"],
+            ["take_rope", "use_rope", "pass_child", "tell_crossing"],
+            ["take_nothing", "abandon_quest"],
+        ],
+    })
+    assert panel_world["world_id"] == "panel_state_demo_v1"
+    lantern, rope, empty = panel_world["routes"]
+    assert all(x["replayed"] and x["terminal"] for x in (lantern, rope, empty))
+    assert lantern["turns"][0]["inventory"] == ["lantern"]
+    assert lantern["turns"][0]["stats"]["insight"] == 2
+    assert lantern["turns"][2]["inventory"] == ["lantern", "medal"]
+    assert lantern["turns"][2]["stats"]["courage"] == 2
+    assert lantern["turns"][3]["inventory"] == ["lantern"]
+    assert lantern["turns"][3]["stats"]["insight"] == 4
+    assert set(lantern["turns"][3]["known_facts"]) == {"river_crossed", "child_thanks"}
+    assert lantern["turns"][3]["journal_choices"] == [
+        "take_lantern", "use_lantern", "help_child", "show_medal"
+    ]
+    assert rope["turns"][0]["inventory"] == ["rope"]
+    assert rope["turns"][1]["inventory"] == []
+    assert rope["turns"][1]["stats"]["courage"] == 3
+    assert rope["turns"][3]["inventory"] == []
+    assert rope["turns"][3]["journal_choices"] == [
+        "take_rope", "use_rope", "pass_child", "tell_crossing"
+    ]
+    assert empty["turns"][1]["inventory"] == []
+    assert empty["turns"][1]["journal_choices"] == ["take_nothing", "abandon_quest"]
     print(json.dumps({"source_comparisons": checked, "candidate_accepted_by_dart_blueprint": True,
                       "known_lossy_source_forms_refused": 1,
                       "application_modified": False,
                       "external_ai_package_built": True,
-                      "private_archive_accepted_by_dart_importer": True}))
+                      "private_archive_accepted_by_dart_importer": True,
+                      "panel_world_three_replay_verified_routes": True,
+                      "panel_world_dynamic_items_stats_facts_journal": True}))
 
 
 if __name__ == "__main__":
