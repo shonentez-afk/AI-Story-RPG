@@ -17,6 +17,8 @@ from tools.rpg_author.source_adapter import make_index, parse_book
 from tools.rpg_author.common import AuthoringError
 from tools.rpg_author.validate import candidate_blueprint
 from tests.rpg_author.fixtures import source, story, TEXT, analysis
+from tests.rpg_author.fixtures_rich import enrichment
+from tools.rpg_author.rich_package import compile_rich_from_project
 from tools.rpg_author import project
 from tools.rpg_author.legacy_package import compile_from_project
 from tools.rpg_author.common import digest
@@ -136,13 +138,50 @@ def main():
     ]
     assert empty["turns"][1]["inventory"] == []
     assert empty["turns"][1]["journal_choices"] == ["take_nothing", "abandon_quest"]
+    with tempfile.TemporaryDirectory() as private_temp:
+        root = Path(private_temp)
+        source_path = root / "test_story.txt"
+        source_path.write_text(TEXT, encoding="utf-8")
+        checkpoint = root / "project"
+        project.init_project(checkpoint, source_path)
+        project.submit_analysis(checkpoint, analysis())
+        project.submit_story(checkpoint, story())
+        rich_bytes, rich_sidecar = compile_rich_from_project(
+            checkpoint, enrichment(), model_id="gpt-6")
+        actual = dart({
+            "operation": "rich_private",
+            "data": base64.b64encode(rich_bytes).decode("ascii"),
+            "paths": [["take_rope", "rescue"], ["leave_rope", "go_for_help"]],
+        })
+        assert actual["v2_rejected_v3"] is True, actual
+        assert actual["private_only"] is True, actual
+        assert actual["source_fingerprint"] == source()["source_fingerprint"]
+        assert actual["archive_sha256"] == digest(rich_bytes)
+        assert actual["hero"]["name"] == "Лена"
+        assert actual["item_names"]["rope"] == "Верёвка"
+        assert actual["stat_names"]["courage"] == "Смелость"
+        rescue, help_route = actual["journeys"]
+        assert rescue["terminal"] and rescue["replay_ok"], rescue
+        assert rescue["turns"][0]["inventory"] == ["rope"]
+        assert rescue["turns"][0]["stats"]["courage"] == 2
+        assert rescue["turns"][1]["inventory"] == []
+        assert rescue["turns"][1]["stats"]["courage"] == 4
+        assert rescue["turns"][1]["facts"] == ["rescue_fact"]
+        assert rescue["turns"][1]["journal"] == ["take_rope", "rescue"]
+        assert help_route["terminal"] and help_route["replay_ok"], help_route
+        assert help_route["turns"][0]["inventory"] == []
+        assert help_route["turns"][0]["stats"]["insight"] == 2
+        assert help_route["turns"][1]["journal"] == ["leave_rope", "go_for_help"]
     print(json.dumps({"source_comparisons": checked, "candidate_accepted_by_dart_blueprint": True,
                       "known_lossy_source_forms_refused": 1,
                       "application_modified": False,
                       "external_ai_package_built": True,
                       "private_archive_accepted_by_dart_importer": True,
                       "panel_world_three_replay_verified_routes": True,
-                      "panel_world_dynamic_items_stats_facts_journal": True}))
+                      "panel_world_dynamic_items_stats_facts_journal": True,
+                      "rich_v3_python_compiled_dart_imported": True,
+                      "rich_v3_state_replayed_in_two_routes": True,
+                      "legacy_v2_rejects_v3": True}))
 
 
 if __name__ == "__main__":
