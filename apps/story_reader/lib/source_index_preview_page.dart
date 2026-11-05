@@ -11,6 +11,7 @@ import 'source_analysis_checkpoint_repository.dart';
 import 'source_narrative_review_panel.dart';
 import 'source_semantic_catalog.dart';
 import 'zai_semantic_preview_page.dart';
+import 'zai_whole_book_analysis_page.dart';
 import 'reviewed_story_editor_page.dart';
 import 'quick_rpg_page.dart';
 import 'multi_scene_editor_page.dart';
@@ -958,21 +959,43 @@ class _SourceIndexPreviewPageState extends State<SourceIndexPreviewPage> {
                             ExpansionTile(
                               key: const Key('prepare-advanced-ai'),
                               title: const Text(
-                                  '2. Помощь ИИ при разборе фрагментов'),
+                                  '2. Помощь ИИ при разборе книги'),
                               subtitle: const Text('Необязательно: '
-                                  'получить предложения по выбранному '
-                                  'отрывку и проверить их вручную.'),
+                                  'разобрать один отрывок или всю книгу '
+                                   'по частям с отдельным согласием.'),
                               children: [
                                 const Padding(
                                   padding: EdgeInsets.all(8),
                                   child: Text('Нужен настроенный Z.ai. '
-                                      'Вы увидите точный текст отправки '
-                                      'и отдельно разрешите каждый запрос. '
-                                      'Ответы ИИ — предположения, '
-                                      'а не подтверждённые события. '
-                                      'После проверки переходите к сценам.'),
+                                      'При проверке отрывка согласие даётся '
+                                       'на него; при анализе всей книги — '
+                                       'на группы фрагментов с возможностью '
+                                       'остановить и позже продолжить. '
+                                       'Ответы ИИ — только предположения, '
+                                       'не подтверждённые игровые факты.'),
                                 ),
 
+                        Card(
+                          child: ListTile(
+                            key: const Key('prepare-open-whole-book-ai'),
+                            leading: const Icon(Icons.menu_book_outlined),
+                            title: const Text('ИИ: анализ всей книги'),
+                            subtitle: const Text(
+                              'Обработать все главы через Z.ai, '
+                              'с возобновлением после обрыва. Передача '
+                              'текста только после явного согласия. '
+                              'Результат — предложения событий, '
+                              'не готовая игра.'),
+                            trailing: const Icon(Icons.chevron_right),
+                            enabled: !_offlineWorking && !_busy,
+                            onTap: () => unawaited(_openEditor(
+                              ZaiWholeBookAnalysisPage(
+                                index: index,
+                                gateway: widget.worldGateway,
+                              ),
+                            )),
+                          ),
+                        ),
                         Card(
                           child: ListTile(
                             key: const Key('prepare-open-zai-preview'),

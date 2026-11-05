@@ -5,6 +5,7 @@ import 'package:bookworld_format/bookworld_format.dart';
 import 'book_source_index.dart';
 import 'intermediate_story_blueprint.dart';
 import 'native_private_bookworld_compiler.dart';
+import 'zai_whole_book_event_outline.dart';
 import 'source_evidence_graph.dart';
 import 'source_semantic_catalog.dart';
 import 'source_semantic_editorial_review.dart';
@@ -152,6 +153,68 @@ class QuickRpgBuilder {
     }
     return QuickRpgPlan._(index, mode, chosen);
   }
+
+  /// After a COMPLETE Z.ai book scan, prefer the exact passages at which
+  /// the model suggested meaningful EVENTS rather than arbitrary text
+  /// samples. This is still an excerpt-based, short starter, NOT a claim
+  /// that the model understood all causality or verified world truth.
+  ///
+  /// Calling this does NOT mark AI candidate meanings as canon. The same
+  /// visible quote confirmation, M2c editorial passage-provenance checks,
+  /// private compiler and game state preflight remain mandatory.
+  static QuickRpgPlan proposeFromEventOutline(
+    BookSourceIndex index,
+    ZaiWholeBookEventOutline outline, {
+    QuickRpgMode mode = QuickRpgMode.changeFate,
+  }) {
+    if (outline.sourceFingerprint != index.sourceFingerprint ||
+        outline.totalChapters != index.chapterCount ||
+        !outline.analysisComplete ||
+        outline.events.length < 2) {
+      throw const FormatException(
+          'Нужен завершённый анализ именно этой книги с '
+          'как минимум двумя проверяемыми цитатами событий.');
+    }
+    final byId = {for (final chunk in index.chunks) chunk.id: chunk};
+    final candidates = <QuickRpgAnchor>[];
+    final seen = <String>{};
+    for (final item in outline.events) {
+      final chunk = byId[item.chunkId];
+      if (chunk == null || chunk.chapterIndex != item.chapterIndex ||
+          item.quote.length > 180 ||
+          item.startUtf16 < chunk.startUtf16 ||
+          item.startUtf16 + item.quote.length > chunk.endUtf16 ||
+          chunk.text.substring(item.startUtf16 - chunk.startUtf16,
+                  item.startUtf16 - chunk.startUtf16 + item.quote.length) !=
+              item.quote) {
+        throw const FormatException(
+            'Событие ИИ не соответствует точному месту исходной книги.');
+      }
+      final key = '${item.chunkId}|${item.startUtf16}';
+      if (!seen.add(key)) continue;
+      candidates.add(QuickRpgAnchor(
+        chunkId: chunk.id,
+        chapterIndex: chunk.chapterIndex,
+        startUtf16: item.startUtf16,
+        endUtf16: item.startUtf16 + item.quote.length,
+        quote: item.quote,
+      ));
+    }
+    if (candidates.length < 2) {
+      throw const FormatException(
+          'В анализе слишком мало разных событий для игровой истории.');
+    }
+    final count = mathMin(candidates.length, maxAnchors);
+    final selected = <QuickRpgAnchor>[];
+    for (var i = 0; i < count; i++) {
+      final at = ((candidates.length - 1) * i / (count - 1)).round();
+      selected.add(candidates[at]);
+    }
+    return QuickRpgPlan._(index, mode, selected);
+  }
+
+  static int mathMin(int first, int second) =>
+      first <= second ? first : second;
 
   static String _sceneText(QuickRpgAnchor anchor, int number) =>
       'Эпизод $number · глава ${anchor.chapterIndex + 1}\n\n'

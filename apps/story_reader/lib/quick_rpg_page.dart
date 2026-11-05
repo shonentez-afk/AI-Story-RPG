@@ -4,6 +4,7 @@ import 'book_source_index.dart';
 import 'book_import.dart';
 import 'book_isolate_workers.dart';
 import 'quick_rpg_builder.dart';
+import 'zai_whole_book_event_outline.dart';
 import 'world_library_gateway.dart';
 import 'world_play_page.dart';
 
@@ -70,10 +71,12 @@ class QuickRpgPage extends StatefulWidget {
     super.key,
     required this.index,
     required this.gateway,
+    this.eventOutline,
   });
 
   final BookSourceIndex index;
   final WorldLibraryGateway gateway;
+  final ZaiWholeBookEventOutline? eventOutline;
 
   @override
   State<QuickRpgPage> createState() => _QuickRpgPageState();
@@ -95,7 +98,10 @@ class _QuickRpgPageState extends State<QuickRpgPage> {
 
   void _prepare() {
     try {
-      final plan = QuickRpgBuilder.propose(widget.index, mode: _mode);
+      final plan = widget.eventOutline == null
+          ? QuickRpgBuilder.propose(widget.index, mode: _mode)
+          : QuickRpgBuilder.proposeFromEventOutline(
+              widget.index, widget.eventOutline!, mode: _mode);
       _plan = plan;
       _error = null;
     } on FormatException catch (error) {
@@ -168,10 +174,15 @@ class _QuickRpgPageState extends State<QuickRpgPage> {
             Text(widget.index.title,
                 style: Theme.of(context).textTheme.titleLarge),
             const SizedBox(height: 10),
-            const Text('Выберите режим. Приложение автоматически составит '
-                'короткую личную игру по настоящим отрывкам книги. '
-                'Позже её можно будет расширить в редакторе. '
-                'Это пока НЕ полноценная автоматическая адаптация всей книги.'),
+            Text(widget.eventOutline == null
+                ? 'Выберите режим. Приложение автоматически составит '
+                    'короткую личную игру по настоящим отрывкам книги. '
+                    'Это пока НЕ полноценная адаптация всей книги.'
+                : 'Анализ всей книги завершён. Для пробной RPG '
+                    'выбраны реальные цитаты из предложений событий ИИ. '
+                    'Проверьте их смысл перед игрой: источники точны, '
+                    'но толкование ИИ и причинные связи не подтверждены. '
+                    'Это пока короткая RPG, не готовый большой сюжет.'),
             const SizedBox(height: 18),
             Text('Как играть', style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: 8),
