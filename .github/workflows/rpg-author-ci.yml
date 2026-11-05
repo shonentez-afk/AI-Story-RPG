@@ -72,6 +72,15 @@ jobs:
           path: ${{ runner.temp }}/rpg-author-panel-world/
           if-no-files-found: error
           retention-days: 7
+      - name: Build private v3 source-bound rich gameplay sample
+        run: python3 -m tests.rpg_author.build_rich_ci_example --output-dir "$RUNNER_TEMP/rpg-author-rich-v3"
+      - name: Upload private rich v3 prototype and AI attribution
+        uses: actions/upload-artifact@v4
+        with:
+          name: AI-Story-RPG-Rich-Hero-Items-Journal-v3
+          path: ${{ runner.temp }}/rpg-author-rich-v3/
+          if-no-files-found: error
+          retention-days: 7
 
   dart-parity:
     runs-on: ubuntu-latest
