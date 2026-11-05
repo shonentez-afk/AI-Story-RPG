@@ -6,7 +6,6 @@ No images decoded, ZIP extraction, network, model calls or source execution.
 from __future__ import annotations
 
 import json
-from html import escape
 from pathlib import Path
 import re
 import xml.etree.ElementTree as ET
@@ -124,19 +123,18 @@ def _preserve_xml_whitespace(source: str) -> str:
 
     Dart xml 6.6.1 preserves raw CR/CRLF in text. XML character references
     preserve those characters through ElementTree as well. Markup whitespace
-    must stay markup; CDATA becomes equivalently escaped ordinary character
-    data. The real XML parser still validates the transformed document.
+    must stay markup. The pinned Dart importer can silently lose direct CDATA
+    in paragraphs, so those sources are explicitly refused, never truncated
+    to imitate that behavior. The real parser still validates the document.
     """
     result = []
     cursor = 0
     depth = 0
     while cursor < len(source):
         if source.startswith("<![CDATA[", cursor):
-            require(depth > 0, "invalid_fb2", "CDATA must be inside the root element")
-            end = source.find("]]>", cursor + 9)
-            require(end >= 0, "invalid_fb2", "Unterminated CDATA")
-            result.append(escape(source[cursor + 9:end], quote=False).replace("\r", "&#13;"))
-            cursor = end + 3
+            raise AuthoringError("unsupported_fb2_cdata",
+                                 "The current app does not preserve all FB2 CDATA text. "
+                                 "This source cannot be indexed compatibly without losing text.")
         elif source.startswith("<!--", cursor) or source.startswith("<?", cursor):
             marker = "-->" if source.startswith("<!--", cursor) else "?>"
             end = source.find(marker, cursor + len(marker))
@@ -192,8 +190,9 @@ def parse_book(filename: str, raw: bytes) -> dict:
     # entities are unsupported; ordinary &amp;/numeric XML references work.
     require(not re.search(r"<!\s*(?:DOCTYPE|ENTITY)\b", source, re.IGNORECASE),
             "unsafe_xml", "FB2 with DTD/entity declarations is not accepted")
+    prepared = _preserve_xml_whitespace(source)
     try:
-        root = ET.fromstring(_preserve_xml_whitespace(source))
+        root = ET.fromstring(prepared)
     except (ET.ParseError, ValueError) as exc:
         raise AuthoringError("invalid_fb2", "Malformed FB2 XML") from exc
     require(_local(root) == "FictionBook", "invalid_fb2", "Expected FictionBook root")

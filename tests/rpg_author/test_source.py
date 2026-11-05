@@ -54,10 +54,10 @@ class SourceTests(unittest.TestCase):
         self.assertEqual(index["media_blocks_for_review"], 1)
         self.assertEqual(book["chapters"][1]["blocks"][0]["text"], "Примечания")
 
-    def test_fb2_preserves_crlf_cr_cdata_and_quoted_attribute_whitespace(self):
+    def test_fb2_preserves_crlf_cr_and_quoted_attribute_whitespace(self):
         xml = ('<?xml version="1.0"?>\r\n<FictionBook>\r\n<body><section>\r\n'
                '<p>Строка\r\nпродолжение.</p><p>Один\rдва.</p>'
-               '<p><![CDATA[А\r\n<& Б]]></p><!-- ignored\r\n -->'
+               '<p>А\r\n&lt;&amp; Б</p><!-- ignored\r\n -->'
                '<image href="#name\r\nwith\ttabs"/>'
                '</section></body></FictionBook>')
         book = parse_book("book.fb2", xml.encode())
@@ -66,6 +66,12 @@ class SourceTests(unittest.TestCase):
                          ["Строка\r\nпродолжение.", "Один\rдва.", "А\r\n<& Б"])
         self.assertEqual(blocks[3]["resource_id"], "name\r\nwith\ttabs")
         self.assertEqual(make_index(book)["chunks"][0]["end_utf16"], 20)
+
+    def test_cdata_is_refused_instead_of_silently_losing_book_text(self):
+        for text in ('<p>А<![CDATA[Б]]>В</p>', '<p><![CDATA[Весь текст]]></p>'):
+            with self.subTest(text=text), self.assertRaises(AuthoringError) as caught:
+                parse_book("book.fb2", ('<FictionBook><body>' + text + '</body></FictionBook>').encode())
+            self.assertEqual(caught.exception.code, "unsupported_fb2_cdata")
 
     def test_invalid_cdata_comment_and_markup_remain_errors(self):
         for content in ('<![CDATA[broken', '<!-- broken', '<?broken', '<p x="broken'):

@@ -13,6 +13,7 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 
 from tools.rpg_author.source_adapter import make_index, parse_book
+from tools.rpg_author.common import AuthoringError
 from tools.rpg_author.validate import candidate_blueprint
 from tests.rpg_author.fixtures import source, story
 
@@ -47,8 +48,8 @@ def main():
         ("old.fb2", '<?xml version="1.0" encoding="windows-1251"?>' + numbered, "cp1251"),
         ("utf16.fb2", numbered, "utf-16"),
         ("media.fb2", '<FictionBook><body><section><image href="#x"/></section><section><p>Текст.</p></section></body></FictionBook>', "utf-8"),
-        ("inline.fb2", '<FictionBook><body><p>А<![CDATA[Б]]><strong>В</strong><!-- comment -->Г &#x1f600;.</p></body></FictionBook>', "utf-8"),
-        ("whitespace.fb2", '<FictionBook>\r\n<body><p>Один\rдва.</p><p><![CDATA[А\r\n<& Б]]></p><image href="#name\r\nwith\ttabs"/></body></FictionBook>', "utf-8"),
+        ("inline.fb2", '<FictionBook><body><p>А<strong>В</strong><!-- comment -->Г &#x1f600;.</p></body></FictionBook>', "utf-8"),
+        ("whitespace.fb2", '<FictionBook>\r\n<body><p>Один\rдва.</p><p>А\r\n&lt;&amp; Б</p><image href="#name\r\nwith\ttabs"/></body></FictionBook>', "utf-8"),
     ]
     checked = 0
     for filename, text, encoding in inputs:
@@ -66,7 +67,17 @@ def main():
     blueprint = candidate_blueprint(story(), source())
     result = dart({"operation": "blueprint", "blueprint": blueprint})
     assert result == {"book_id": blueprint["book_id"], "scene_count": len(blueprint["scenes"])}
+    # Regression from real Dart comparison: the native parser drops direct
+    # CDATA inside p. Do not delete it in Python just to make indices equal.
+    cdata = '<FictionBook><body><p>А<![CDATA[Б]]>В</p></body></FictionBook>'
+    try:
+        parse_book("cdata.fb2", cdata.encode())
+    except AuthoringError as error:
+        assert error.code == "unsupported_fb2_cdata"
+    else:
+        raise AssertionError("CDATA would silently lose content in the current app")
     print(json.dumps({"source_comparisons": checked, "candidate_accepted_by_dart_blueprint": True,
+                      "known_lossy_source_forms_refused": 1,
                       "application_modified": False, "external_ai_package_built": False}))
 
 
