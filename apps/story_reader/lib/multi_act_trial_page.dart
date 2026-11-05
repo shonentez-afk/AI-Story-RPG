@@ -6,6 +6,7 @@ import 'bookwide_storyplan_composer.dart';
 import 'cross_act_consequence_gate.dart';
 import 'multi_act_trial_compiler.dart';
 import 'source_locked_prose_preview_page.dart';
+import 'source_locked_prose_batch_page.dart';
 import 'reviewed_prose_scene_overlay.dart';
 import 'narrative_book_model.dart';
 import 'world_library_gateway.dart';
@@ -214,6 +215,27 @@ class _MultiActTrialPageState extends State<MultiActTrialPage> {
               subtitle: const Text('Одна сцена, отдельное согласие Z.ai. '
                   'Только явно одобренный текст включается в новую игру.'),
               children: [
+                ListTile(
+                  key: const Key('multiact-trial-open-prose-batch'),
+                  leading: const Icon(Icons.auto_awesome_motion_outlined),
+                  title: const Text('Подготовить несколько сцен'),
+                  subtitle: Text(_enforceEarlierOutcome
+                      ? 'Отключите дополнительное правило второго акта: '
+                        'оно меняет сценарий'
+                      : 'Одно согласие на список показанных сцен, '
+                        'ограничение запросов и возобновление'),
+                  onTap: _working || _enforceEarlierOutcome ? null : () async {
+                    await Navigator.of(context).push<void>(
+                      MaterialPageRoute(
+                        builder: (_) => SourceLockedProseBatchPage(
+                          index: widget.index,
+                          book: widget.book,
+                          plan: widget.draft.plan,
+                        ),
+                      ),
+                    );
+                  },
+                ),
                 ListTile(
                   key: const Key('multiact-trial-open-prose-preview'),
                   leading: const Icon(Icons.auto_stories_outlined),
