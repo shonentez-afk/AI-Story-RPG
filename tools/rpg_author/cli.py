@@ -31,6 +31,16 @@ def parser():
             command.add_argument("--replace", action="store_true")
         if name == "export":
             command.add_argument("--output", required=True, type=Path)
+    legacy = commands.add_parser("build-legacy", help="Explicitly package a private v2 world with an AI attribution sidecar")
+    legacy.add_argument("--project", required=True, type=Path)
+    legacy.add_argument("--output", required=True, type=Path)
+    legacy.add_argument("--model-id", choices=["gpt-6"], default=None,
+                        help="User-declared, not independently attested model ID")
+    legacy.add_argument("--ack-legacy-provenance", action="store_true",
+                        help="Acknowledge provider=none in v2 is only a legacy packaging constant")
+    bundle = commands.add_parser("verify-bundle", help="Check package and sidecar SHA binding")
+    bundle.add_argument("--input", required=True, type=Path)
+    bundle.add_argument("--attribution", required=True, type=Path)
     verify = commands.add_parser("verify", help="Inspect an existing legacy v2 .bworld, read-only")
     verify.add_argument("--input", required=True, type=Path)
     return cli
@@ -58,6 +68,14 @@ def main(argv=None) -> int:
             result = project.export_candidate(args.project, args.output)
         elif name == "build":
             result = project.build(args.project)
+        elif name == "build-legacy":
+            from .legacy_package import build_legacy
+            result = build_legacy(args.project, args.output,
+                                  acknowledgement=args.ack_legacy_provenance,
+                                  model_id=args.model_id)
+        elif name == "verify-bundle":
+            from .legacy_package import verify_bundle
+            result = verify_bundle(args.input, args.attribution)
         else:
             check_contract()
             from tools.bookworld import private_bookworld
