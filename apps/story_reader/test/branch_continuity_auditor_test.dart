@@ -247,6 +247,15 @@ void main() {
         x.pathChoiceIds.contains('transfer')), true);
   });
 
+  test('undeclared item loss cannot masquerade as a valid transfer', () async {
+    final index = _source();
+    final book = await _book(index);
+    expect(() => BranchContinuityAuditor.audit(
+      index: index, book: book, plan: _transfer(book),
+      rules: _items(index, book, revoke: false),
+    ), throwsFormatException);
+  });
+
   test('transfer source cannot be silently switched to another event', () async {
     final index = _source();
     final book = await _book(index);

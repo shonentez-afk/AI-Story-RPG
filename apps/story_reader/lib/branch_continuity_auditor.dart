@@ -196,6 +196,13 @@ class BranchContinuityAuditor {
           throw const FormatException('Отказ создаёт обязательство.');
         }
       }
+      // Any item loss or promise revocation must be declared explicitly.
+      if (decisions.values.any((d) =>
+          d.removes.contains(rule.stateFlag) &&
+          !rule.revokeDecisionIds.contains(d.id))) {
+        throw const FormatException('Ресурс теряется без проверенного '
+            'действия передачи или утраты.');
+      }
       for (final id in rule.revokeDecisionIds) {
         if (!decisions.containsKey(id) ||
             !decisions[id]!.removes.contains(rule.stateFlag)) {
