@@ -4,6 +4,7 @@ import 'book_source_index.dart';
 import 'bookwide_act_planner.dart';
 import 'bookwide_storyplan_composer.dart';
 import 'branch_continuity_auditor.dart';
+import 'source_world_time_auditor.dart';
 import 'source_bound_bridge_auditor.dart';
 import 'cross_act_consequence_gate.dart';
 import 'intermediate_story_blueprint.dart';
@@ -213,6 +214,27 @@ class MultiActTrialCompiler {
         continuityCheck.canPublishCanonicalRpg) {
       throw const FormatException('Игровое обязательство возникает '
           'без согласия, после отказа или без проверенного состояния.');
+    }
+
+    // Page order is not historical world time. Keep all inferred act-to-act
+    // timelines explicitly UNKNOWN until separately reviewed as fiction.
+    final timeReport = SourceWorldTimeAuditor.audit(
+      index: index, book: book,
+      links: [
+        for (var i = 1; i < draft.parts.length; i++)
+          SourceWorldTimeLink(
+            id: 'act_time_' + i.toString(),
+            sourceFingerprint: index.sourceFingerprint,
+            fromEventId: draft.parts[i - 1].outcomeEventId,
+            toEventId: draft.parts[i].setupEventId,
+            relation: GameWorldTimeRelation.unknown,
+          ),
+      ],
+    );
+    if (timeReport.unknownWorldOrderLinks != draft.parts.length - 1 ||
+        timeReport.establishesBookWorldChronology) {
+      throw const FormatException('Порядок текста нельзя выдавать '
+          'за проверенную хронологию мира книги.');
     }
 
     final sourceSceneIds = <String>{

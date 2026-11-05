@@ -5,6 +5,7 @@ import 'package:ai_story_reader/narrative_book_model.dart';
 import 'package:ai_story_reader/source_analysis_checkpoint_repository.dart';
 import 'package:ai_story_reader/source_semantic_provider.dart';
 import 'package:ai_story_reader/story_plan.dart';
+import 'package:ai_story_reader/source_world_time_auditor.dart';
 import 'package:ai_story_reader/story_plan_dilemma_generator.dart';
 import 'package:ai_story_reader/zai_auto_whole_book_analysis.dart';
 import 'package:ai_story_reader/zai_semantic_preview.dart';
@@ -282,4 +283,74 @@ void main() {
       rules: [_promise(index, book)],
     ), throwsFormatException);
   });
+  test('world time stays UNKNOWN even when source text order is known', () async {
+    final index = _source();
+    final book = await _book(index);
+    final report = SourceWorldTimeAuditor.audit(
+      index: index, book: book, links: [
+        SourceWorldTimeLink(
+          id: 'unknown_time',
+          sourceFingerprint: index.sourceFingerprint,
+          fromEventId: book.events.first.id,
+          toEventId: book.events.last.id,
+          relation: GameWorldTimeRelation.unknown,
+        ),
+      ],
+    );
+    expect(report.unknownWorldOrderLinks, 1);
+    expect(report.establishesBookWorldChronology, false);
+    expect(report.toDiagnosticJson()['canonical_rpg_ready'], false);
+  });
+
+  test('reviewed flashback may reverse book order WITHOUT proving canon', () async {
+    final index = _source();
+    final book = await _book(index);
+    final report = SourceWorldTimeAuditor.audit(
+      index: index, book: book, links: [
+        SourceWorldTimeLink(
+          id: 'reviewed_flashback',
+          sourceFingerprint: index.sourceFingerprint,
+          fromEventId: book.events.last.id,
+          toEventId: book.events.first.id,
+          relation: GameWorldTimeRelation.firstBeforeSecond,
+          reviewedAsGameFiction: true,
+        ),
+      ],
+    );
+    expect(report.reversedTextOrderLinks, 1);
+    expect(report.explicitFictionalOrderLinks, 1);
+    expect(report.establishesBookWorldChronology, false);
+  });
+
+  test('world-time claims without explicit review and temporal cycles fail', () async {
+    final index = _source();
+    final book = await _book(index);
+    SourceWorldTimeLink link(String id, GameWorldTimeRelation relation,
+        {bool reviewed = true, String? fingerprint}) =>
+        SourceWorldTimeLink(
+          id: id,
+          sourceFingerprint: fingerprint ?? index.sourceFingerprint,
+          fromEventId: book.events.first.id,
+          toEventId: book.events.last.id,
+          relation: relation, reviewedAsGameFiction: reviewed,
+        );
+    expect(() => SourceWorldTimeAuditor.audit(
+      index: index, book: book,
+      links: [link('unreviewed_order',
+          GameWorldTimeRelation.firstBeforeSecond, reviewed: false)],
+    ), throwsFormatException);
+    expect(() => SourceWorldTimeAuditor.audit(
+      index: index, book: book, links: [
+        link('before', GameWorldTimeRelation.firstBeforeSecond),
+        link('after', GameWorldTimeRelation.secondBeforeFirst),
+      ],
+    ), throwsFormatException);
+    expect(() => SourceWorldTimeAuditor.audit(
+      index: index, book: book, links: [
+        link('foreign', GameWorldTimeRelation.unknown,
+            fingerprint: 'another-edition'),
+      ],
+    ), throwsFormatException);
+  });
+
 }
