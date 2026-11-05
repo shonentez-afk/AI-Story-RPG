@@ -90,6 +90,11 @@ void main() {
         outline: outline);
     expect(model.analysisComplete, true);
     expect(model.events, hasLength(3));
+    expect(model.textAdjacency, hasLength(2));
+    expect(model.textAdjacency.first.fromEventId, model.events[0].id);
+    expect(model.textAdjacency.first.toEventId, model.events[1].id);
+    expect(model.textAdjacency.every((edge) =>
+        !edge.establishesWorldTime && !edge.establishesCausation), true);
     expect(model.sourceFingerprint, index.sourceFingerprint);
     expect(model.hasProvenChronology, false);
     expect(model.hasCausalGraph, false);
