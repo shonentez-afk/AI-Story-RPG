@@ -63,6 +63,14 @@ def _model(value):
                      "model_id_status": "requested",
                      "tool": "AI Story RPG", "method": "built_in"}:
             fail("Unverified built-in GLM attribution")
+    elif value["provider"] == "unknown":
+        # A locally reviewed draft can originate from a model or a human.
+        # Do not falsely claim non-AI authorship or an attested model.
+        if value != {"provider": "unknown", "model_id": None,
+                     "model_id_status": "not_attested",
+                     "tool": "AI Story RPG",
+                     "method": "reviewed_local_compilation"}:
+            fail("Invalid unattested model provenance")
     elif value != {"provider": "none", "model_id": None,
                    "model_id_status": "not_applicable", "tool": "none",
                    "method": "local_fixture"}:
