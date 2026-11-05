@@ -1,8 +1,10 @@
 import 'dart:io';
+import 'dart:convert';
 
 import 'package:ai_story_reader/book_import.dart';
 import 'package:ai_story_reader/book_source_index.dart';
 import 'package:ai_story_reader/bookwide_act_planner.dart';
+import 'package:ai_story_reader/cross_act_source_evidence_packet.dart';
 import 'package:ai_story_reader/bookwide_storyplan_composer.dart';
 import 'package:ai_story_reader/cross_act_consequence_gate.dart';
 import 'package:ai_story_reader/multi_act_trial_compiler.dart';
@@ -397,6 +399,109 @@ void main() {
       privateUseConfirmed: true,
       fictionalTrialAcknowledged: true,
     ), throwsFormatException);
+  });
+
+
+  test('M2h7c6a: TWO complete real branches expose exact source words '
+      'and BEFORE/AFTER gameplay states across two chapters', () async {
+    final index = _index();
+    final book = await _analyze(index);
+    final input = _draft(index, book);
+    final accepted = [
+      'act_1_accept_offer', 'act_1_honor_condition',
+      'act_1_continue_original',
+      'act_2_accept_offer', 'act_2_honor_condition',
+    ];
+    final refused = [
+      'act_1_refuse_offer', 'act_1_explore',
+      'act_1_use_discovery', 'act_1_end_alternative',
+      'act_1_continue_alternative',
+      'act_2_refuse_offer', 'act_2_explore',
+      'act_2_use_discovery', 'act_2_end_alternative',
+    ];
+    final packet = CrossActSourceEvidencePacket.fromCompletePaths(
+      index: index, book: book, plan: input.draft.plan,
+      choicePaths: [accepted, refused],
+    );
+    expect(packet.referencedSourceEvents, greaterThanOrEqualTo(2));
+    expect(packet.crossedChapters, 2);
+    expect(packet.inputBytes,
+        lessThanOrEqualTo(CrossActSourceEvidencePacket.maxUserBytes));
+    expect(packet.sourceQuotesVerified, true);
+    expect(packet.establishesWorldTime, false);
+    expect(packet.provesBookCausation, false);
+    expect(packet.provesActorKnowledge, false);
+    expect(packet.establishesLiteraryCanon, false);
+    expect(packet.mayAutomaticallyModifyGame, false);
+    final paths = packet.sentContext['complete_game_paths'] as List;
+    expect(paths, hasLength(2));
+    final yes = (paths.first as Map)['steps'] as List;
+    final no = (paths.last as Map)['steps'] as List;
+    final firstAccepted = yes.first as Map;
+    final firstRefused = no.first as Map;
+    expect(firstAccepted['choice_id'], 'act_1_accept_offer');
+    expect(firstAccepted['flags_before'], isNot(contains('act_1_accepted')));
+    expect(firstAccepted['flags_after'], contains('act_1_accepted'));
+    expect(firstRefused['choice_id'], 'act_1_refuse_offer');
+    expect(firstRefused['flags_after'], isNot(contains('act_1_accepted')));
+    expect((paths.first as Map)['terminal_scene_id'],
+        isNot((paths.last as Map)['terminal_scene_id']));
+    final evidence = packet.sentContext['source_evidence'] as List;
+    expect(evidence, isNotEmpty);
+    for (final item in evidence) {
+      final excerpt = item as Map;
+      final event = book.events.singleWhere(
+          (e) => e.id == excerpt['event_id']);
+      event.source.validate(index);
+      expect(excerpt['quote'], event.source.quote);
+      expect(excerpt['evidence_status'],
+          'EXACT_WORDS_ONLY_NOT_CAUSAL_PROOF');
+    }
+    final sent = jsonEncode(packet.sentContext);
+    expect(sent, isNot(contains(index.title)));
+    expect(sent, isNot(contains(index.author)));
+    expect(sent, isNot(contains(index.sourceFingerprint)));
+    expect(packet.approvalDigest, hasLength(64));
+  });
+
+  test('M2h7c6a: refuses invented, illegal or incomplete histories '
+      'and unrelated editions without sending anything', () async {
+    final index = _index();
+    final book = await _analyze(index);
+    final input = _draft(index, book);
+    final accepted = [
+      'act_1_accept_offer', 'act_1_honor_condition',
+      'act_1_continue_original',
+      'act_2_accept_offer', 'act_2_honor_condition',
+    ];
+    final refused = [
+      'act_1_refuse_offer', 'act_1_explore',
+      'act_1_use_discovery', 'act_1_end_alternative',
+      'act_1_continue_alternative',
+      'act_2_refuse_offer', 'act_2_explore',
+      'act_2_use_discovery', 'act_2_end_alternative',
+    ];
+    void build(List<List<String>> paths, {BookSourceIndex? from}) {
+      CrossActSourceEvidencePacket.fromCompletePaths(
+        index: from ?? index,
+        book: book,
+        plan: input.draft.plan,
+        choicePaths: paths,
+      );
+    }
+    expect(() => build([accepted, accepted]), throwsFormatException);
+    expect(() => build([accepted.sublist(0, 2), refused]),
+        throwsFormatException);
+    expect(() => build([
+      ['act_1_refuse_offer', 'act_1_honor_condition'], accepted,
+    ]), throwsFormatException);
+    expect(() => build([
+      ['act_1_accept_offer', 'foreign_model_choice'], refused,
+    ]), throwsFormatException);
+    expect(() => build([accepted, refused],
+        from: _index(suffix: ' другой перевод')),
+        throwsFormatException);
+    expect(() => build([accepted, []]), throwsFormatException);
   });
 
 }
