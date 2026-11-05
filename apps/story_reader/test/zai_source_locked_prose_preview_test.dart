@@ -424,7 +424,12 @@ void main() {
     )));
     await tester.pumpAndSettle();
     expect(noPost.bodies, isEmpty);
+    await tester.scrollUntilVisible(
+        find.byKey(const Key('prose-scene-draft-text')), 180,
+        scrollable: find.byType(Scrollable).first);
     expect(find.byKey(const Key('prose-scene-draft-text')), findsOneWidget);
+    await tester.scrollUntilVisible(action, -150,
+        scrollable: find.byType(Scrollable).first);
     expect(tester.widget<FilledButton>(action).onPressed, isNull);
   });
 
