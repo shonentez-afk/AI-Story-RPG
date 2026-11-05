@@ -313,9 +313,14 @@ class MultiActTrialCompiler {
     );
     // M2c preflight, independent compiler and actual ZIP/SQLite importer
     // are REQUIRED; no upload/publication or mutation of existing campaigns.
-    final archive = await compileReviewedPrivateBookworldInWorker(
-        index, evidence, catalog, editorial, intermediate);
-    final inspected = const PrivateBookworldImporter().inspect(archive);
+    // Same source-reviewed multi-act plan, now packaged in ONE rich v3
+    // format. No forced/fabricated items, stats, knowledge or cloud calls.
+    final archive = await compileReviewedRichPrivateBookworldInWorker(
+        index, evidence, catalog, editorial, intermediate,
+        sceneTitles: {
+          for (final scene in plan.situations) scene.id: scene.goal,
+        });
+    final inspected = const RichPrivateBookworldImporter().inspect(archive);
     if (inspected.sourceFingerprint != index.sourceFingerprint ||
         inspected.requiresNetwork ||
         inspected.canDistributePublicly ||
