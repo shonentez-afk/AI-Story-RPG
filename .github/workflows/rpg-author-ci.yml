@@ -63,6 +63,15 @@ jobs:
           path: ${{ runner.temp }}/rpg-author-example/
           if-no-files-found: error
           retention-days: 7
+      - name: Build original-demo Hero/Items/Journal game
+        run: python3 -m tests.rpg_author.panel_state_demo --output-dir "$RUNNER_TEMP/rpg-author-panel-world"
+      - name: Publish original-demo panel gameplay test
+        uses: actions/upload-artifact@v4
+        with:
+          name: AI-Story-RPG-Hero-Items-Journal-Test-v1
+          path: ${{ runner.temp }}/rpg-author-panel-world/
+          if-no-files-found: error
+          retention-days: 7
 
   dart-parity:
     runs-on: ubuntu-latest
