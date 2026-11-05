@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:crypto/crypto.dart';
+
 import 'ai_connection.dart';
 import 'narrative_book_model.dart';
 import 'story_plan.dart';
@@ -89,11 +91,34 @@ class ZaiStoryDilemmaProposalService {
 
   /// Deterministic, edition-bound sample for a consent preview. The
   /// application must present these exact excerpts before setting consent.
-  static List<NarrativeEvent> samples(NarrativeBookModel book) {
+  static List<NarrativeEvent> samples(NarrativeBookModel book,
+      {List<String>? exactEventIds}) {
     if (!book.analysisComplete || book.events.length < 2 ||
         book.sourceFingerprint.isEmpty) {
       throw const AiSetupException(
           'Сначала завершите анализ книги и найдите минимум два события.');
+    }
+    if (exactEventIds != null) {
+      if (exactEventIds.length < 2 ||
+          exactEventIds.length > maxEventsPerRequest ||
+          exactEventIds.length != exactEventIds.toSet().length) {
+        throw const AiSetupException(
+            'Для акта нужно 2–8 уникальных событий из этой книги.');
+      }
+      final byId = {for (final event in book.events) event.id: event};
+      final selected = <NarrativeEvent>[];
+      var previousPosition = -1;
+      for (final id in exactEventIds) {
+        final event = byId[id];
+        if (event == null ||
+            event.narrativePosition <= previousPosition) {
+          throw const AiSetupException(
+              'Выбранные цитаты отсутствуют или переставлены.');
+        }
+        selected.add(event);
+        previousPosition = event.narrativePosition;
+      }
+      return List<NarrativeEvent>.unmodifiable(selected);
     }
     final count = book.events.length < maxEventsPerRequest
         ? book.events.length : maxEventsPerRequest;
@@ -103,6 +128,35 @@ class ZaiStoryDilemmaProposalService {
       picked.add(book.events[index]);
     }
     return List.unmodifiable(picked);
+  }
+
+  /// Digest of exactly the snippets SHOWN to the user. This prevents a
+  /// stale consent from silently authorizing another act, chapter, source
+  /// edition or changed excerpt. Do not persist or log the raw excerpts.
+  static String excerptApprovalDigest(
+      NarrativeBookModel book, List<NarrativeEvent> selected) {
+    if (selected.length < 2 || selected.length > maxEventsPerRequest ||
+        selected.length != {for (final e in selected) e.id}.length ||
+        selected.any((e) => !book.events.any((b) =>
+            b.id == e.id && b.source.quote == e.source.quote))) {
+      throw const AiSetupException(
+          'Нельзя подтвердить чужие или неполные цитаты.');
+    }
+    final record = {
+      'format': 'ai_story_act_quote_consent_m2h3_v1',
+      'source_fingerprint': book.sourceFingerprint,
+      'model': ZaiModel.id,
+      'snippets': [
+        for (final e in selected)
+          {
+            'event_id': e.id,
+            'position': e.narrativePosition,
+            'chapter': e.source.chapterIndex,
+            'quote': e.source.quote,
+          },
+      ],
+    };
+    return sha256.convert(utf8.encode(jsonEncode(record))).toString();
   }
 
   static Map<String, dynamic> _parseResponse(String raw) {
@@ -194,6 +248,8 @@ class ZaiStoryDilemmaProposalService {
   Future<ZaiStoryDilemmaPreview> propose({
     required NarrativeBookModel book,
     required bool consentForTheseSampledQuotes,
+    List<String>? approvedExactEventIds,
+    String? approvedExcerptDigest,
     bool consentForBookTitle = false,
     ZaiPreviewCancellation? cancellation,
     void Function(int attempt, int total, String status)? onProgress,
@@ -204,7 +260,18 @@ class ZaiStoryDilemmaProposalService {
       throw const AiSetupException(
           'Отправка цитат не подтверждена. Данные остались локально.');
     }
-    final selected = samples(book);
+    final selected = samples(book, exactEventIds: approvedExactEventIds);
+    if (approvedExactEventIds != null) {
+      if (approvedExcerptDigest !=
+          excerptApprovalDigest(book, selected)) {
+        throw const AiSetupException(
+            'Согласие относится к другому набору цитат. '
+            'Ничего не отправлено в Z.ai.');
+      }
+    } else if (approvedExcerptDigest != null) {
+      throw const AiSetupException(
+          'Нет выбранного набора цитат для этого согласия.');
+    }
     if (!await preferences.isEnabled()) {
       throw const AiSetupException(
           'Разрешите облачный ИИ в настройках подключения.');
@@ -227,7 +294,10 @@ class ZaiStoryDilemmaProposalService {
           {
             'event_id': event.id,
             'source_order': event.narrativePosition,
-            'suggested_label': event.suggestedLabel,
+            // Act-scoped consent covers exact quotes, NOT model-generated
+            // labels; keep the original global-preview payload unchanged.
+            if (approvedExactEventIds == null)
+              'suggested_label': event.suggestedLabel,
             'quote': event.source.quote,
           },
       ],
