@@ -13,9 +13,9 @@
 
 ## Контрольная точка 5 ноября 2026
 
-В main приняты PR #65–#69: анализ книги через Z.ai, NarrativeBookModel, типизированный StoryPlan и генератор черновой развилки, аудитор причинности и правил знаний. Последний проверенный main-коммит на момент записи: a82bd658d875ae68912b4dc34e6a43781b316035 (PR #69). Полный статус заново проверять через [GitHub Actions](https://github.com/shonentez-afk/AI-Story-RPG/actions).
+В main приняты PR #65–#70: анализ книги через Z.ai, NarrativeBookModel, типизированный StoryPlan и генератор черновой развилки, аудитор причинности и правил знаний. Последний проверенный main-коммит на момент записи: 1da75b4c45938548e6a11fc9fd76694fb6d9b430 (PR #70). Полный статус заново проверять через [GitHub Actions](https://github.com/shonentez-afk/AI-Story-RPG/actions).
 
-- [PR #70](https://github.com/shonentez-afk/AI-Story-RPG/pull/70): ограниченное исправление нарушенных причинных правил; проверить последний CI, принять только после Android/Windows и точного HEAD.
+- [PR #70](https://github.com/shonentez-afk/AI-Story-RPG/pull/70) принят в main: bounded causal repair, exact-head CI #530 success.
 - [PR #71](https://github.com/shonentez-afk/AI-Story-RPG/pull/71): первое реальное подключение GLM к предложению чернового сценария с отдельным согласием на точные цитаты и предпросмотром в UI. Проверить все тесты и только затем принимать.
 - [Релизы](https://github.com/shonentez-afk/AI-Story-RPG/releases): источник APK сверять с фактическим SHA, не выдавать пробный сценарий за завершённую RPG.
 
@@ -27,6 +27,6 @@
 
 ## Следующие шаги
 
-Закончить и принять PR #70/#71, соединить GLM → StoryPlan → причинный аудит/ремонт → проверку прозы → существующий BookWorld/SQLite → полноценное Android/Windows E2E. Обновлять два основных документа после каждого подтверждённого этапа.
+Завершить и принять PR #71 только после зелёного CI, затем соединить GLM → StoryPlan → причинный аудит/ремонт → проверку прозы → существующий BookWorld/SQLite → полноценное Android/Windows E2E. Обновлять два основных документа после каждого подтверждённого этапа.
 
 **Полная предыдущая инструкция (архив, история, НЕ актуальный CI):** [ARCHIVE_START_NEW_CHAT_RU_2026-11-05_PRE_M2G3C.md](docs/ARCHIVE_START_NEW_CHAT_RU_2026-11-05_PRE_M2G3C.md).
