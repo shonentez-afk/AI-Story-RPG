@@ -201,11 +201,11 @@ jobs:
           AI_RPG_GRIMM_PUBLIC_MANIFEST_PATH: test/fixtures/grimm_ci.json
           AI_RPG_FROG_PRINCE_FB2_PATH: test/fixtures/frog_prince_ci.fb2
           AI_RPG_FROG_PRINCE_MANIFEST_PATH: test/fixtures/frog_prince_ci.json
-        timeout-minutes: 5
-        # A widget test blocked on a Future can ignore the Dart test-zone
-        # timeout. Stop the external test process rather than consuming a
-        # full CI runner for twenty minutes without diagnostic feedback.
-        run: timeout --signal=TERM --kill-after=10s 240s flutter test --reporter expanded --concurrency=1 --timeout 90s
+        timeout-minutes: 12
+        # Building a SHA3-verified SQLite amalgamation adds native compile
+        # time to the full widget suite. Keep a finite external watchdog
+        # for genuinely blocked Futures; do not silently skip any tests.
+        run: timeout --signal=TERM --kill-after=10s 660s flutter test --reporter expanded --concurrency=1 --timeout 90s
         working-directory: apps/story_reader
 
   android-apk:
