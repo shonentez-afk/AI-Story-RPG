@@ -244,9 +244,8 @@ class RichPrivateBookworldImporter {
   /// Time gates and silent runtime effects are forbidden in v3.
   void _causality(StoryBlueprint blueprint) {
     if (blueprint.scenes.length < 3 || blueprint.scenes.length > 192 ||
-        blueprint.items.isEmpty || blueprint.items.length > 32 ||
+        blueprint.items.length > 32 ||
         blueprint.facts.length > 64 ||
-        blueprint.initial.stats.isEmpty ||
         blueprint.initial.stats.length > 8 ||
         blueprint.initial.flags.length > 32 ||
         blueprint.actors.length != 1 ||
@@ -260,7 +259,6 @@ class RichPrivateBookworldImporter {
 
     final seenItemGrants = <String>{};
     final seenFactGrants = <String>{};
-    final seenStatChanges = <String>{};
     for (final scene in blueprint.scenes.values) {
       for (final choice in scene.choices) {
         if (choice.conditions.length > 32 || choice.effects.length > 32) {
@@ -310,7 +308,6 @@ class RichPrivateBookworldImporter {
                   effect.amount! < -20 || effect.amount! > 20) {
                 throw const FormatException('Недопустимое изменение героя');
               }
-              seenStatChanges.add(effect.id!);
             case 'learn_fact':
               if (!blueprint.facts.contains(effect.id) ||
                   effect.actor != 'player') {
@@ -324,8 +321,7 @@ class RichPrivateBookworldImporter {
       }
     }
     if (!seenItemGrants.containsAll(blueprint.items) ||
-        !seenFactGrants.containsAll(blueprint.facts) ||
-        seenStatChanges.isEmpty) {
+        !seenFactGrants.containsAll(blueprint.facts)) {
       throw const FormatException('Каталог не связан с игровыми действиями');
     }
 
