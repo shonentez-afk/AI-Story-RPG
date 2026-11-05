@@ -261,6 +261,7 @@ void main() {
     final responses = [
       _answer('another_scene', _prose),
       _answer('turning_point', _prose, extra: true),
+      _answer('turning_point', _prose, finishReason: 'length'),
       _answer('turning_point', 'Слишком коротко.'),
     ];
     for (final response in responses) {
