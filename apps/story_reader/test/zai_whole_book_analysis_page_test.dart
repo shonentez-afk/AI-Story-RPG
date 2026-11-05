@@ -262,6 +262,10 @@ void main() {
         findsOneWidget);
     expect(fake.requests, 1);
     final play = find.byKey(const Key('whole-book-quick-play'));
+    // The CTA is ABOVE the report and was disposed by the lazy ListView.
+    // Scroll upwards until the button is built before ensureVisible.
+    await tester.scrollUntilVisible(
+      play, -120, scrollable: find.byType(Scrollable).first);
     await tester.ensureVisible(play);
     await tester.pumpAndSettle();
     expect(find.text('Создать и играть в пробную RPG с развилкой'),
