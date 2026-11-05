@@ -84,6 +84,64 @@ Future<void> main() async {
       'world_id': checked.bookworldId,
       'routes': routes,
     }));
+  } else if (input['operation'] == 'rich_private') {
+    final bytes = Uint8List.fromList(base64Decode(input['data'] as String));
+    final verified = const RichPrivateBookworldImporter().inspect(bytes);
+    var olderRejected = false;
+    try {
+      const PrivateBookworldImporter().inspect(bytes);
+    } on FormatException {
+      olderRejected = true;
+    }
+    if (!olderRejected) {
+      throw const FormatException('Old v2 importer incorrectly accepted v3');
+    }
+    final journeys = <Map<String, dynamic>>[];
+    for (final path in input['paths'] as List<dynamic>) {
+      final world = StoryWorld(verified.blueprint);
+      final turns = <Map<String, dynamic>>[];
+      for (final choice in path as List<dynamic>) {
+        final result = world.apply(
+          actionId: 'rich_turn_' + (world.state.revision + 1).toString(),
+          choiceId: choice as String,
+          expectedRevision: world.state.revision,
+        );
+        if (!result.applied) {
+          throw FormatException('Denied rich game choice: ' +
+              choice.toString() + ' (' + result.reason.toString() + ')');
+        }
+        turns.add({
+          'choice': choice,
+          'stats': world.state.stats,
+          'inventory': world.state.inventory.toList()..sort(),
+          'facts': (world.state.knowledge['player'] ?? <String>{}).toList()..sort(),
+          'journal': world.events.map((e) => e.choiceId).toList(),
+        });
+      }
+      final restored = StoryWorld.replay(
+        verified.blueprint, world.events.map((e) => e.toJson()),
+        expectedSequence: world.state.revision,
+        expectedStateHash: world.state.stateHash,
+      );
+      journeys.add({
+        'turns': turns,
+        'terminal': world.isTerminal,
+        'replay_ok': restored.state.stateHash == world.state.stateHash &&
+            restored.events.length == world.events.length,
+      });
+    }
+    stdout.write(jsonEncode({
+      'book_id': verified.bookworldId,
+      'source_fingerprint': verified.sourceFingerprint,
+      'archive_sha256': verified.archiveSha256,
+      'hero': verified.presentation['hero'],
+      'item_names': verified.presentation['item_names'],
+      'stat_names': verified.presentation['stat_names'],
+      'fact_names': verified.presentation['fact_names'],
+      'journeys': journeys,
+      'v2_rejected_v3': olderRejected,
+      'private_only': !verified.canDistributePublicly,
+    }));
   } else {
     throw const FormatException('Unknown probe operation');
   }
