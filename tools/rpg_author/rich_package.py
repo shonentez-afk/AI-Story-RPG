@@ -45,8 +45,8 @@ def _enrich(blueprint, story, index, enrichment):
     stats = enrichment["stats"]
     items = enrichment["items"]
     facts = enrichment["facts"]
-    require(type(stats) is dict and 1 <= len(stats) <= 8 and
-            type(items) is dict and 1 <= len(items) <= 32 and
+    require(type(stats) is dict and len(stats) <= 8 and
+            type(items) is dict and len(items) <= 32 and
             type(facts) is dict and len(facts) <= 64,
             "invalid_catalog", "Expected bounded stats/items/facts catalogs")
     stats_value = {}
