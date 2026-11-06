@@ -68,7 +68,9 @@ class _WorldPlayPageState extends State<WorldPlayPage> {
   }
 
   Future<void> _loadPortraits(WorldGameView view) async {
-    final script = SceneDialogueScript.fromSceneText(view.sceneText);
+    final script = view.sceneDialogueTurns == null
+        ? SceneDialogueScript.fromSceneText(view.sceneText)
+        : SceneDialogueScript.fromSignedTurns(view.sceneDialogueTurns!);
     if (script == null) return;
     final speakers = script.turns.map((t) => t.speaker)
         .whereType<String>().toSet();
@@ -280,8 +282,13 @@ class _WorldPlayPageState extends State<WorldPlayPage> {
   @override
   Widget build(BuildContext context) {
     final view = _view;
+    // Prefer v3 importer-verified structured turns. Older v1/v2 worlds
+    // retain their original signed-scene-text parsing without migration.
     final dialogue = view == null ? null :
-        SceneDialogueScript.fromSceneText(view.sceneText);
+        (view.sceneDialogueTurns == null
+            ? SceneDialogueScript.fromSceneText(view.sceneText)
+            : SceneDialogueScript.fromSignedTurns(
+                view.sceneDialogueTurns!));
     final prefs = _reading;
     final chrome = view == null ? ReaderChromeMode.normal : _chrome;
     final ink = prefs.foreground;

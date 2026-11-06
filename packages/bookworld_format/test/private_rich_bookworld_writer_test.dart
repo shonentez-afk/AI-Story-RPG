@@ -83,6 +83,87 @@ void main() {
     output.writeAsBytesSync(bytes, flush: true);
   });
 
+  test('new private v3 carries exact signed two-speaker turns, '
+      'including narrator beats, without altering choices or source', () {
+    final fixture = _asObject(
+        jsonDecode(File(_fixture).readAsStringSync()));
+    final originalBp = _asObject(fixture['blueprint']);
+    final scenes = originalBp['scenes'] as List;
+    final first = scenes.first as Map;
+    final originalText = first['text'] as String;
+    first['text'] = originalText + '\n' +
+        'Мария: «Ты видел дверь?»\n' +
+        'Иван: «Да, но я ничего не обещал»\n' +
+        'Рассказчик ничего не утверждает о чужих мыслях.';
+    final original = const PrivateBookworldWriter().build(
+      blueprint: originalBp,
+      provenance: _asObject(fixture['provenance']),
+      sourceIndex: _asObject(fixture['source_index']),
+    );
+    final rich = writer.upgradeReviewedV2(
+      verifiedPrivateV2Archive: original,
+      sourceIndex: _asObject(fixture['source_index']),
+    );
+    // Used by the independent Python package verifier in the same CI run.
+    final output = File(
+        '../../artifacts/bookworld/book_private_rich_dialogue_dart.bworld');
+    output.parent.createSync(recursive: true);
+    output.writeAsBytesSync(rich, flush: true);
+    final inspected = importer.inspect(rich);
+    final transcripts = _asObject(
+        inspected.presentation['scene_dialogues']);
+    expect(transcripts.keys, contains('entry'));
+    expect(transcripts.length, 1);
+    final signed = _asObject(transcripts['entry']);
+    final turns = signed['turns'] as List;
+    expect(turns, hasLength(4));
+    expect(_asObject(turns[0])['speaker'], isNull);
+    expect(_asObject(turns[1])['speaker'], 'Мария');
+    expect(_asObject(turns[1])['text'], 'Ты видел дверь?');
+    expect(_asObject(turns[2])['speaker'], 'Иван');
+    expect(_asObject(turns[3])['speaker'], isNull);
+    final canonical = RichSceneDialogue.verify(
+        signed, inspected.blueprint.scenes['entry']!.text);
+    expect(canonical.map((line) => line.text).toList(), [
+      originalText, 'Ты видел дверь?',
+      'Да, но я ничего не обещал',
+      'Рассказчик ничего не утверждает о чужих мыслях.',
+    ]);
+    expect(inspected.blueprint.scenes['entry']!.choices.length,
+        ((scenes.first as Map)['choices'] as List).length);
+
+    // Even a separately recomputed ZIP SHA must not authorize a fabricated
+    // attribution or a partial transcript.
+    final corrupt = _richSample();
+    final corruptBp = _asObject(corrupt['blueprint']);
+    (corruptBp['scenes'] as List).first['text'] = first['text'];
+    final provenance = _asObject(corrupt['provenance']);
+    final presentation = _asObject(provenance['presentation']);
+    final altered = _asObject(
+        RichSceneDialogue.presentationFor(first['text'] as String));
+    final alteredTurns = (altered['turns'] as List)
+        .map((line) => Map<String, dynamic>.from(line as Map)).toList();
+    alteredTurns[1]['speaker'] = 'Чужой говорящий';
+    altered['turns'] = alteredTurns;
+    presentation['scene_dialogues'] = {'entry': altered};
+    provenance['presentation'] = presentation;
+    expect(() => writer.build(
+      blueprint: corruptBp, provenance: provenance,
+      sourceIndex: _asObject(corrupt['source_index']),
+    ), throwsFormatException);
+    final truncated = _richSample();
+    final truncatedBp = _asObject(truncated['blueprint']);
+    (truncatedBp['scenes'] as List).first['text'] = first['text'];
+    final tprovenance = _asObject(truncated['provenance']);
+    final tp = _asObject(tprovenance['presentation']);
+    tp['scene_dialogues'] = <String, Object?>{};
+    tprovenance['presentation'] = tp;
+    expect(() => writer.build(
+      blueprint: truncatedBp, provenance: tprovenance,
+      sourceIndex: _asObject(truncated['source_index']),
+    ), throwsFormatException);
+  });
+
   test('native v3 records configured Z.ai model request, without claiming literary truth', () {
     final input = _richSample();
     final provenance = _asObject(input['provenance']);

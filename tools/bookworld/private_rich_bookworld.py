@@ -13,6 +13,8 @@ from collections import deque
 import io
 import stat
 import zipfile
+import hashlib
+import re
 
 from tools.bookworld import bookworld as legacy
 from tools.bookworld import private_bookworld as v2
@@ -77,9 +79,57 @@ def _model(value):
         fail("Unknown model provenance")
 
 
+# Identical to RichSceneDialogue.parse in bookworld_format.
+# Only explicit speaker labels in already signed prose may become dialogue.
+_ATTRIBUTED = re.compile(
+    r'^([А-ЯЁA-Z][А-Яа-яЁёA-Za-z0-9 .-]{0,49}):[ \t]*(«[^»\n]{1,1200}»|"[^"\n]{1,1200}"|—[ \t]*[^\n]{1,1200})[.!?]?$'
+)
+
+
+def _exact_scene_dialogue(text):
+    if not isinstance(text, str) or not text.strip() or len(text) > 50000:
+        return None
+    turns, speakers, spoken = [], set(), 0
+    for source in text.replace("\r\n", "\n").split("\n"):
+        line = source.strip()
+        if not line:
+            continue
+        match = _ATTRIBUTED.fullmatch(line)
+        if match is None:
+            if len(line) > 5000:
+                return None
+            turns.append({"speaker": None, "text": line})
+        else:
+            speaker, speech = match.group(1).strip(), match.group(2).strip()
+            if not speaker:
+                return None
+            if (speech.startswith("«") and speech.endswith("»")) or \
+                    (speech.startswith('"') and speech.endswith('"')):
+                speech = speech[1:-1].strip()
+            elif speech.startswith("—"):
+                speech = speech[1:].strip()
+            if not speech:
+                return None
+            turns.append({"speaker": speaker, "text": speech})
+            speakers.add(speaker)
+            spoken += 1
+        if len(turns) > 64:
+            return None
+    if spoken < 2 or len(speakers) < 2:
+        return None
+    return {
+        "scene_text_sha256": hashlib.sha256(text.encode("utf-8")).hexdigest(),
+        "turns": turns,
+    }
+
+
 def _presentation(meta, bp):
-    _keys(meta, {"hero", "item_names", "item_descriptions",
-                 "stat_names", "fact_names", "scene_names"}, "presentation")
+    expected = {"hero", "item_names", "item_descriptions",
+                "stat_names", "fact_names", "scene_names"}
+    has_dialogues = type(meta) is dict and "scene_dialogues" in meta
+    if has_dialogues:
+        expected.add("scene_dialogues")
+    _keys(meta, expected, "presentation")
     _keys(meta["hero"], {"name", "description"}, "hero")
     if not _txt(meta["hero"]["name"], 120) or \
             not _txt(meta["hero"]["description"], 1200):
@@ -89,6 +139,17 @@ def _presentation(meta, bp):
     _names(meta["stat_names"], bp["initial_state"]["stats"], 100)
     _names(meta["fact_names"], bp["facts"], 180)
     _names(meta["scene_names"], (s["id"] for s in bp["scenes"]), 120)
+    if has_dialogues:
+        signed = meta["scene_dialogues"]
+        if type(signed) is not dict:
+            fail("Wrong v3 signed dialogue map")
+        expected_dialogues = {}
+        for scene in bp["scenes"]:
+            parsed = _exact_scene_dialogue(scene["text"])
+            if parsed is not None:
+                expected_dialogues[scene["id"]] = parsed
+        if signed != expected_dialogues:
+            fail("Signed v3 dialogue diverges from exact scene text")
 
 
 def _check_rule(rule, bp, effect):

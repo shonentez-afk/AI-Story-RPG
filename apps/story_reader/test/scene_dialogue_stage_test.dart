@@ -1,4 +1,5 @@
 import 'package:ai_story_reader/scene_dialogue_stage.dart';
+import 'package:bookworld_format/bookworld_format.dart';
 import 'package:ai_story_reader/world_library_gateway.dart';
 import 'package:ai_story_reader/world_play_page.dart';
 import 'package:flutter/material.dart';
@@ -84,6 +85,30 @@ void main() {
         'Лена: «Одна реплика»\nГлава: просто рассказ.'), isNull);
   });
 
+  test('rich v3 scene produces the same signed speaker turns as UI, '
+      'not an independent NPC truth claim', () {
+    final presentation = RichSceneDialogue.presentationFor(_sample)!;
+    final turns = RichSceneDialogue.verify(presentation, _sample);
+    final script = SceneDialogueScript.fromSignedTurns(turns);
+    final legacy = SceneDialogueScript.fromSceneText(_sample)!;
+    expect(script.turns, hasLength(legacy.turns.length));
+    for (var i = 0; i < script.turns.length; i++) {
+      expect(script.turns[i].speaker, legacy.turns[i].speaker);
+      expect(script.turns[i].text, legacy.turns[i].text);
+    }
+    expect(script.turns.first.isNarration, true);
+    expect(script.turns.last.isNarration, true);
+    expect(() => RichSceneDialogue.verify({
+      'scene_text_sha256': presentation['scene_text_sha256'],
+      'turns': [
+        {'speaker': null, 'text': 'Подменённые слова.'},
+        ...(presentation['turns'] as List).skip(1),
+      ],
+    }, _sample), throwsFormatException);
+    expect(RichSceneDialogue.presentationFor(
+        '— Кто говорит?\n— Никто не знает.'), isNull);
+  });
+
   testWidgets('named speakers, portrait slots, history and saved reading position',
       (tester) async {
     final script = SceneDialogueScript.fromSceneText(_spoken)!;
@@ -127,6 +152,52 @@ void main() {
     await tester.pumpAndSettle();
     expect(completed, true);
     expect(find.byKey(const ValueKey('dialogue-complete')), findsOneWidget);
+  });
+
+  testWidgets('verified rich v3 turns drive dialogue, portraits and '
+      'choice gate without extra game-state writes', (tester) async {
+    // UI-only resume positions are cached by campaign ID and revision.
+    // Never reuse the next test's campaign or it will restore a completed
+    // dialogue and incorrectly show its choices immediately.
+    final gateway = _DialogueGateway();
+    final signed = RichSceneDialogue.verify(
+        RichSceneDialogue.presentationFor(_spoken), _spoken);
+    gateway.current = WorldGameView(
+      campaignId: 'signed_v3_isolated_campaign', worldTitle: 'Тайна ворот',
+      sceneId: 'gate', sceneText: _spoken,
+      sceneDialogueTurns: signed,
+      revision: 0, tick: 0, isTerminal: false,
+      stats: const {}, inventory: const [], flags: const {},
+      knownFacts: const [],
+      choices: const [WorldChoiceView(
+          id: 'ask_guard', label: 'Ответить стражу')],
+      journal: const [],
+    );
+    await tester.pumpWidget(MaterialApp(
+      home: WorldPlayPage(gateway: gateway, campaignId: 'signed_v3_isolated_campaign'),
+    ));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 250));
+    await tester.pump();
+    expect(find.byKey(const ValueKey('dialogue-stage')), findsOneWidget);
+    expect(find.text('Лена'), findsOneWidget);
+    // The explanatory caption is below the lazy ListView viewport.
+    // Assert the real safety gate: no game action is built until the
+    // independently verified conversation is finished.
+    expect(find.byKey(const ValueKey('world-choice-ask_guard')), findsNothing);
+    expect(gateway.commits, 0);
+    await tester.tap(find.byKey(const ValueKey('dialogue-next')));
+    await tester.pumpAndSettle();
+    expect(find.text('Страж'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('dialogue-skip')));
+    await tester.pumpAndSettle();
+    // Scroll to the real action; offscreen completion captions are lazy.
+    final choice = find.byKey(const ValueKey('world-choice-ask_guard'));
+    await tester.scrollUntilVisible(choice, 100,
+        scrollable: find.byType(Scrollable).first);
+    expect(choice, findsOneWidget);
+    expect(gateway.commits, 0);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('choices remain hidden until conversation finishes',

@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'rich_scene_dialogue.dart';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -501,6 +502,17 @@ class RichPrivateBookworldWriter {
       'tool': 'AI Story RPG',
       'method': 'reviewed_local_compilation',
     };
+    // A dialogue is a deterministic projection of ALREADY approved scene
+    // text, not an independent LLM claim or new character. Store it inside
+    // the signed v3 provenance and verify again at import and playback.
+    final dialogues = <String, Map<String, Object?>>{};
+    for (final scene in scenes) {
+      final raw = scene as Map;
+      final id = raw['id'] as String;
+      final script = RichSceneDialogue.presentationFor(
+          raw['text'] as String);
+      if (script != null) dialogues[id] = script;
+    }
     origin['presentation'] = {
       'hero': {
         'name': heroName.trim(),
@@ -511,6 +523,7 @@ class RichPrivateBookworldWriter {
       'stat_names': <String, String>{},
       'fact_names': <String, String>{},
       'scene_names': names,
+      'scene_dialogues': dialogues,
     };
     return build(
       blueprint: bp,
