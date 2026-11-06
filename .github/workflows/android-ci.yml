@@ -196,7 +196,9 @@ jobs:
           python3 tools/bookworld/bookworld.py verify --input artifacts/bookworld/manor_m17_original_demo.bworld
       - name: Build and verify synthetic rich BookWorld for real SQLite/Flutter integration
         run: |
-          python3 -m tests.rpg_author.build_rich_ci_example --output-dir "$RUNNER_TEMP/rich-v3-fixture"
+          # Independent native rich-v3 runtime fixture. E6d's pinned contract
+          # stays enforced by its SEPARATE workflow; never silence that check.
+          python3 -m tools.bookworld.ci_rich_runtime_fixture --output-dir "$RUNNER_TEMP/rich-v3-fixture"
           mkdir -p artifacts/bookworld/rich_v3
           cp "$RUNNER_TEMP/rich-v3-fixture/River_Rich_Hero_v3.bworld" artifacts/bookworld/rich_v3/River_Rich_Hero_v3.bworld
           python3 -c "from pathlib import Path; from tools.bookworld.private_rich_bookworld import verify; p=Path('artifacts/bookworld/rich_v3/River_Rich_Hero_v3.bworld'); assert verify(p.read_bytes())['format_version'] == 3"
