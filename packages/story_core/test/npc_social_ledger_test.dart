@@ -247,6 +247,113 @@ void main() {
     expect(ledger.hasMemory(stable, 'remember_permanent'), isTrue);
   });
 
+  test('approved scene presence prevents teleporting NPC eyewitness', () {
+    final bp = _blueprint();
+    NpcSocialRulebook reviewed({
+      required List<NpcSceneWitness> witnesses,
+      NpcMemoryKind kind = NpcMemoryKind.witnessed,
+      int score = 8,
+    }) => NpcSocialRulebook(
+      blueprintHash: bp.blueprintHash,
+      requireReviewedWitnesses: true,
+      witnesses: witnesses,
+      rules: [
+        NpcSocialRule(
+          memoryId: 'guard_saw_this',
+          sceneId: 'gate', choiceId: 'inspect_gate',
+          observerId: 'guard', kind: kind,
+          relatedActorId: 'player', relationshipDelta: score,
+        ),
+      ],
+    );
+    const present = NpcSceneWitness(
+      sceneId: 'gate', actorId: 'guard', mode: NpcWitnessMode.present,
+    );
+    final approved = reviewed(witnesses: [present]);
+    final world = StoryWorld(bp);
+    expect(world.apply(actionId: 'x', choiceId: 'inspect_gate').applied, isTrue);
+    final actual = NpcSocialLedger.inspect(world, approved);
+    expect(actual.directedScore('guard', 'player'), 8);
+    expect(actual.memoriesFor('guard').single.witnessMode,
+        NpcWitnessMode.present);
+    final replay = StoryWorld.replay(bp, world.events.map((e) => e.toJson()),
+        expectedSequence: 1, expectedStateHash: world.state.stateHash);
+    expect(NpcSocialLedger.inspect(replay, approved).snapshotHash,
+        actual.snapshotHash);
+
+    // A guard marked present in another scene cannot see the gate.
+    final elsewhere = reviewed(witnesses: const [
+      NpcSceneWitness(
+        sceneId: 'market', actorId: 'guard',
+        mode: NpcWitnessMode.present,
+      ),
+    ]);
+    expect(() => NpcSocialLedger.inspect(world, elsewhere),
+        throwsFormatException);
+    expect(() => NpcSocialLedger.inspect(world, reviewed(witnesses: [])),
+        throwsFormatException);
+    expect(() => NpcSocialLedger.inspect(world, reviewed(
+      witnesses: const [
+        NpcSceneWitness(
+          sceneId: 'gate', actorId: 'guard', mode: NpcWitnessMode.reported,
+        ),
+      ],
+    )), throwsFormatException);
+    expect(() => NpcSocialLedger.inspect(world, reviewed(
+      witnesses: [present, present],
+    )), throwsFormatException);
+  });
+
+  test('rumor is second-hand information, not witnessed promise or trust',
+      () {
+    final bp = _blueprint();
+    final witness = const NpcSceneWitness(
+      sceneId: 'gate', actorId: 'guard', mode: NpcWitnessMode.reported,
+    );
+    final rumor = NpcSocialRulebook(
+      blueprintHash: bp.blueprintHash,
+      requireReviewedWitnesses: true, witnesses: [witness],
+      rules: const [
+        NpcSocialRule(
+          memoryId: 'guard_heard_gossip', sceneId: 'gate',
+          choiceId: 'inspect_gate', observerId: 'guard',
+          kind: NpcMemoryKind.rumorHeard,
+        ),
+      ],
+    );
+    final world = StoryWorld(bp);
+    expect(world.apply(actionId: 'a', choiceId: 'inspect_gate').applied, isTrue);
+    final snapshot = NpcSocialLedger.inspect(world, rumor);
+    expect(snapshot.memoriesFor('guard').single.witnessMode,
+        NpcWitnessMode.reported);
+    expect(snapshot.directedScore('guard', 'player'), 0);
+    final changed = NpcSocialRulebook(
+      blueprintHash: bp.blueprintHash,
+      requireReviewedWitnesses: true,
+      witnesses: const [
+        NpcSceneWitness(
+          sceneId: 'gate', actorId: 'guard', mode: NpcWitnessMode.present,
+        ),
+      ],
+      rules: rumor.rules,
+    );
+    expect(changed.digest, isNot(rumor.digest));
+    final falseTrust = NpcSocialRulebook(
+      blueprintHash: bp.blueprintHash,
+      requireReviewedWitnesses: true, witnesses: [witness],
+      rules: const [
+        NpcSocialRule(
+          memoryId: 'false_trust', sceneId: 'gate',
+          choiceId: 'inspect_gate', observerId: 'guard',
+          kind: NpcMemoryKind.rumorHeard,
+          relatedActorId: 'player', relationshipDelta: 5,
+        ),
+      ],
+    );
+    expect(() => NpcSocialLedger.inspect(world, falseTrust),
+        throwsFormatException);
+  });
+
   test('independent rulebook fingerprint makes changing authored rules visible',
       () {
     final bp = _blueprint();
