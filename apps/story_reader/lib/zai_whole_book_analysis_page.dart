@@ -91,7 +91,7 @@ class _ZaiWholeBookAnalysisPageState extends State<ZaiWholeBookAnalysisPage> {
           final book = NarrativeBookModel.fromExisting(
               index: widget.index,
               outline: ZaiWholeBookEventOutline.build(review));
-          localActs = BookwideActPlanner.build(
+          localActs = BookwideActPlanner.buildForMultiActDraft(
               index: widget.index, book: book);
         } catch (error) {
           localActError = 'Не удалось построить карту частей книги: ' +
@@ -265,7 +265,7 @@ class _ZaiWholeBookAnalysisPageState extends State<ZaiWholeBookAnalysisPage> {
           final book = NarrativeBookModel.fromExisting(
               index: widget.index,
               outline: ZaiWholeBookEventOutline.build(next));
-          updatedActs = BookwideActPlanner.build(
+          updatedActs = BookwideActPlanner.buildForMultiActDraft(
               index: widget.index, book: book);
         } catch (error) {
           updatedActError = 'Не удалось подготовить карту книги: ' +
