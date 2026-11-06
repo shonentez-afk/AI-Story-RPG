@@ -1,4 +1,4 @@
-import 'dart:math';
+import 'package:story_core/story_core.dart';
 
 /// The editable PRIVATE identity of a playable NPC. Created ONCE per
 /// authored character; never computed from a name, source SHA, citation,
@@ -20,7 +20,6 @@ class NpcCharacterCard {
     this.portraitAssetId = '',
   }) : aliases = List.unmodifiable(aliases);
 
-  static final RegExp _id = RegExp(r'^npc_[a-f0-9]{32}$');
   static final RegExp _portrait = RegExp(r'^[A-Za-z0-9_-]{0,64}$');
   static final RegExp _control =
       RegExp(r'[\x00-\x08\x0b\x0c\x0e-\x1f]');
@@ -28,14 +27,7 @@ class NpcCharacterCard {
   /// A cryptographically random opaque 128-bit identity, allocated only
   /// when the user FIRST creates the card. The value is serialized to the
   /// independent NPC checkpoint and reused after rename, restart, updates.
-  static String issueCharacterId() {
-    final random = Random.secure();
-    final buffer = StringBuffer('npc_');
-    for (var i = 0; i < 16; i++) {
-      buffer.write(random.nextInt(256).toRadixString(16).padLeft(2, '0'));
-    }
-    return buffer.toString();
-  }
+  static String issueCharacterId() => CharacterId.issueNpc();
 
   factory NpcCharacterCard.fresh() =>
       NpcCharacterCard(characterId: issueCharacterId());
@@ -89,7 +81,7 @@ class NpcCharacterCard {
   }
 
   void validate() {
-    if (!_id.hasMatch(characterId)) {
+    if (!CharacterId.isValidNpc(characterId)) {
       throw const FormatException('Недопустимый постоянный character_id NPC');
     }
     if (aliases.length > 20 ||
