@@ -8,7 +8,7 @@ class RichNpcDialogueKnowledge {
   const RichNpcDialogueKnowledge._();
 
   static const unavailableLine =
-      'Эта реплика пока недоступна: персонаж не знает нужных сведений.';
+      'Реплика пока недоступна: ещё не выполнены условия разговора.';
 
   /// A rich world with NPC actors cannot present unreviewed speaker turns.
   /// Every named turn has an explicit, exact actor ID and fact prerequisites.
@@ -16,8 +16,9 @@ class RichNpcDialogueKnowledge {
   static void validate(
     Map<String, dynamic>? review,
     StoryBlueprint blueprint,
-    Map<String, dynamic>? signedDialogues,
-  ) {
+    Map<String, dynamic>? signedDialogues, {
+    NpcSocialRulebook? socialRules,
+  }) {
     final hasNpcs = blueprint.actors.any((id) => id != 'player');
     final signed = signedDialogues ?? const <String, dynamic>{};
     if (!hasNpcs) {
@@ -65,8 +66,11 @@ class RichNpcDialogueKnowledge {
         if (raw is! Map<String, dynamic> ||
             raw.keys.toSet().difference({
               'turn_index', 'speaker', 'actor_id', 'required_fact_ids',
+              'required_social_memory_id', 'minimum_trust_to_player',
             }).isNotEmpty ||
-            raw.length != 4) {
+            !raw.keys.toSet().containsAll({
+              'turn_index', 'speaker', 'actor_id', 'required_fact_ids',
+            })) {
           throw const FormatException('Unknown NPC dialogue review fields');
         }
         final index = raw['turn_index'];
@@ -85,6 +89,26 @@ class RichNpcDialogueKnowledge {
           throw const FormatException(
               'NPC dialogue has wrong actor, facts or turn order');
         }
+        final memoryId = raw['required_social_memory_id'];
+        final minTrust = raw['minimum_trust_to_player'];
+        if (raw.containsKey('required_social_memory_id') &&
+            (actor == 'player' ||
+             memoryId is! String ||
+             socialRules == null ||
+             !socialRules.rules.any((r) =>
+                 r.observerId == actor && r.memoryId == memoryId))) {
+          throw const FormatException(
+              'Unreviewed NPC social memory prerequisite');
+        }
+        if (raw.containsKey('minimum_trust_to_player') &&
+            (actor == 'player' || socialRules == null ||
+             minTrust is! int || minTrust < 1 || minTrust > 100 ||
+             !socialRules.rules.any((r) => r.observerId == actor &&
+                 r.relatedActorId == 'player' &&
+                 r.relationshipDelta > 0))) {
+          throw const FormatException(
+              'Unreviewed NPC directed relationship prerequisite');
+        }
       }
       if (!seen.containsAll(expected)) {
         throw const FormatException('Incomplete NPC dialogue speaker review');
@@ -98,8 +122,9 @@ class RichNpcDialogueKnowledge {
   static List<RichDialogueTurn> redact(
     List<RichDialogueTurn> turns,
     List<dynamic> reviewedTurns,
-    Map<String, Set<String>> knowledge,
-  ) {
+    Map<String, Set<String>> knowledge, {
+    NpcSocialSnapshot? social,
+  }) {
     final byIndex = <int, Map<String, dynamic>>{};
     for (final item in reviewedTurns) {
       if (item is! Map<String, dynamic>) {
@@ -128,7 +153,15 @@ class RichNpcDialogueKnowledge {
             final actor = review['actor_id'] as String;
             final required = review['required_fact_ids'] as List;
             final known = knowledge[actor] ?? const <String>{};
-            final allowed = required.every((fact) => known.contains(fact));
+            final memoryId = review['required_social_memory_id'];
+            final threshold = review['minimum_trust_to_player'];
+            final allowed = required.every((fact) => known.contains(fact)) &&
+                (memoryId == null ||
+                 (memoryId is String && social != null &&
+                  social.hasMemory(actor, memoryId))) &&
+                (threshold == null ||
+                 (threshold is int && social != null &&
+                  social.directedScore(actor, 'player') >= threshold));
             return allowed ? turns[i] : RichDialogueTurn(
               speaker: turns[i].speaker, text: unavailableLine,
             );
