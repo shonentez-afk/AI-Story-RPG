@@ -98,6 +98,39 @@ StoryDilemmaProposal _dilemma(NarrativeBookModel book) =>
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  test('one-chapter fairy-tale-shaped source gets two source-only acts '
+      'without title-specific rules or invented coverage', () async {
+    final index = BookSourceIndexer.index(ImportedBook(
+      title: 'Произвольная история в одной главе',
+      author: 'Тестовый текст',
+      chapters: [
+        List.filled(8, 'Путешественник увидел старый мост, '
+            'встретил прохожего и услышал необычное предложение. '
+            'Никто не дал обещаний заранее. ').join(' '),
+      ],
+    ));
+    final book = await _book(index);
+    expect(book.analysisComplete, true);
+    expect(book.events, hasLength(4));
+    final defaultMap = BookwideActPlanner.build(
+        index: index, book: book);
+    expect(defaultMap.acts.where((a) => a.events.length >= 2).length, 1);
+
+    final adapted = BookwideActPlanner.buildForMultiActDraft(
+        index: index, book: book);
+    final useful = adapted.acts
+        .where((a) => a.events.length >= 2).toList();
+    expect(useful, hasLength(2));
+    expect(useful.map((a) => a.events.length).toList(), [2, 2]);
+    expect(adapted.sourceFingerprint, index.sourceFingerprint);
+    expect([for (final act in adapted.acts)
+      for (final event in act.events) event.id],
+      [for (final event in book.events) event.id]);
+    expect(adapted.playableGame, false);
+    expect(adapted.causalityVerified, false);
+    expect(adapted.literaryMeaningVerified, false);
+  });
+
   test('all exact source events survive per-chapter segmentation; gaps '
       'are explicit and textual adjacency proves no causality', () async {
     final index = _index();
