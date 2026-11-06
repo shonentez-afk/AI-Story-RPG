@@ -53,6 +53,7 @@ class _WholePlanGameplayBatchPageState
   WholePlanGameplayBatchManifest? _manifest;
   WholePlanGameplayBatchProgress? _progress;
   GameplayReachabilityReport? _audit;
+  String? _auditMessage;
   List<GameplayCandidateDraft> _drafts = const [];
   final Set<String> _selected = {};
   final Map<String, TextEditingController> _notes = {};
@@ -95,15 +96,26 @@ class _WholePlanGameplayBatchPageState
     try {
       final progress = await _service.inspect(manifest);
       final all = await _service.readUnreviewedProposals(manifest);
-      final report = progress.allProposalsCollected
-          ? const GameplayCandidateReachabilityAuditor().auditAcrossBatches(
-              plan: manifest.plan, manifest: manifest, drafts: all,
-            )
-          : null;
+      GameplayReachabilityReport? report;
+      String? auditMessage;
+      if (progress.allProposalsCollected) {
+        try {
+          report = const GameplayCandidateReachabilityAuditor()
+              .auditAcrossBatches(
+            plan: manifest.plan, manifest: manifest, drafts: all,
+          );
+        } on FormatException catch (error) {
+          // Per-packet integrity was independently checked on read.
+          // Conflicting MODEL proposals are not a corrupt checkpoint:
+          // the reader may reject those and select a safer subset.
+          auditMessage = error.message;
+        }
+      }
       if (!mounted) return;
       setState(() {
         _progress = progress;
         _audit = report;
+        _auditMessage = auditMessage;
         if (progress.allProposalsCollected) {
           _drafts = List.unmodifiable(all);
         }
@@ -141,15 +153,26 @@ class _WholePlanGameplayBatchPageState
         },
       );
       final all = await _service.readUnreviewedProposals(manifest);
-      final report = progress.allProposalsCollected
-          ? const GameplayCandidateReachabilityAuditor().auditAcrossBatches(
-              plan: manifest.plan, manifest: manifest, drafts: all,
-            )
-          : null;
+      GameplayReachabilityReport? report;
+      String? auditMessage;
+      if (progress.allProposalsCollected) {
+        try {
+          report = const GameplayCandidateReachabilityAuditor()
+              .auditAcrossBatches(
+            plan: manifest.plan, manifest: manifest, drafts: all,
+          );
+        } on FormatException catch (error) {
+          // Per-packet integrity was independently checked on read.
+          // Conflicting MODEL proposals are not a corrupt checkpoint:
+          // the reader may reject those and select a safer subset.
+          auditMessage = error.message;
+        }
+      }
       if (!mounted) return;
       setState(() {
         _progress = progress;
         _audit = report;
+        _auditMessage = auditMessage;
         if (progress.allProposalsCollected) {
           _drafts = List.unmodifiable(all);
         }
@@ -334,6 +357,16 @@ class _WholePlanGameplayBatchPageState
                     ),
                   ),
               ],
+              if (_auditMessage != null)
+                ListTile(
+                  key: const Key('whole-gameplay-batch-audit-warning'),
+                  leading: const Icon(Icons.report_problem_outlined),
+                  title: const Text('Противоречие между предложениями ИИ'),
+                  subtitle: Text(_auditMessage! +
+                      '. Исключите конфликтующий кандидат и '
+                      'проверьте выбранное подмножество. '
+                      'Оригинал и checkpoint не изменены.'),
+                ),
               if (status.allProposalsCollected &&
                   _drafts.length == manifest.totalBatches) ...[
                 const SizedBox(height: 16),
