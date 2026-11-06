@@ -465,19 +465,28 @@ void main() {
     await tester.pumpAndSettle();
     expect(calls, 0);
     final submit = find.byKey(const Key('whole-literary-submit'));
+    final reviewed = find.byKey(const Key('whole-literary-reviewed'));
+    final consent = find.byKey(const Key('whole-literary-consent'));
+    // ListView builds lazily. Scroll instead of querying an offscreen button
+    // before its render element exists.
+    await tester.scrollUntilVisible(submit, 160);
     expect(tester.widget<FilledButton>(submit).onPressed, isNull);
-    await tester.ensureVisible(find.byKey(const Key('whole-literary-reviewed')));
-    await tester.tap(find.byKey(const Key('whole-literary-reviewed')));
+    expect(calls, 0);
+    await tester.scrollUntilVisible(reviewed, -160);
+    await tester.tap(reviewed);
     await tester.pumpAndSettle();
     expect(calls, 0);
-    await tester.ensureVisible(find.byKey(const Key('whole-literary-consent')));
-    await tester.tap(find.byKey(const Key('whole-literary-consent')));
+    await tester.scrollUntilVisible(consent, 160);
+    await tester.tap(consent);
     await tester.pumpAndSettle();
-    await tester.ensureVisible(submit);
+    await tester.scrollUntilVisible(submit, 160);
+    expect(tester.widget<FilledButton>(submit).onPressed, isNotNull);
     await tester.tap(submit);
     await tester.pumpAndSettle();
     expect(calls, 1);
-    expect(find.byKey(const Key('whole-literary-complete')), findsOneWidget);
+    final complete = find.byKey(const Key('whole-literary-complete'));
+    await tester.scrollUntilVisible(complete, -160);
+    expect(complete, findsOneWidget);
   });
 
 
