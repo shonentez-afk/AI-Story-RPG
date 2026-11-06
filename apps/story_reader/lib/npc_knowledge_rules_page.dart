@@ -518,6 +518,43 @@ class _NpcKnowledgeRulesPageState extends State<NpcKnowledgeRulesPage> {
         }
         options[rule.id] = available.values.toList();
       }
+      // Only decisions from source-verified scenes can be restricted by an
+      // NPC social prerequisite. A quote for the target choice is confirmed
+      // separately; the witness quote of an earlier action is not reused.
+      final gateCandidates =
+          <String, ({String sceneId, String label,
+              List<({String digest, String caption})> quotes})>{};
+      for (final rawScene in blueprint['scenes'] as List) {
+        final scene = rawScene as Map<String, dynamic>;
+        final sceneId = scene['id'] as String;
+        final origin = origins[sceneId];
+        if (origin?['origin'] != 'SOURCE_PASSAGE' ||
+            origin?['source_refs'] is! List) continue;
+        final available = <String, ({String digest, String caption})>{};
+        for (final raw in origin!['source_refs'] as List) {
+          if (raw is! Map) continue;
+          final evidence = sourceEvidence[raw['id']];
+          if (evidence == null ||
+              evidence.status != EvidenceStatus.confirmed ||
+              raw['quote_sha256'] != evidence.evidenceSha256 ||
+              evidence.visibleAfterChapter >
+                  (origin['chapter_index'] as int)) continue;
+          available[evidence.evidenceSha256] = (
+            digest: evidence.evidenceSha256,
+            caption: 'Глава ' + (evidence.chapterIndex + 1).toString() +
+                ' · ' + evidence.label,
+          );
+        }
+        if (available.isEmpty) continue;
+        for (final rawChoice in scene['choices'] as List) {
+          final choice = rawChoice as Map<String, dynamic>;
+          gateCandidates[choice['id'] as String] = (
+            sceneId: sceneId,
+            label: choice['label'] as String,
+            quotes: available.values.toList(),
+          );
+        }
+      }
       final profiles = {
         for (final profile in widget.notebook.profiles)
           if (profile.characterId != null)
@@ -550,6 +587,8 @@ class _NpcKnowledgeRulesPageState extends State<NpcKnowledgeRulesPage> {
       final socialKind = <String, String>{};
       final socialMode = <String, String>{};
       final socialDelta = <String, int>{};
+      final choiceGateTarget = <String, String>{};
+      final choiceGateQuote = <String, String>{};
       final actorsForTurn = <String, String>{};
       final prerequisites = <String, String>{};
       final socialMemoryForTurn = <String, String>{};
@@ -558,8 +597,18 @@ class _NpcKnowledgeRulesPageState extends State<NpcKnowledgeRulesPage> {
       final accepted = await showDialog<bool>(
         context: context,
         builder: (dialog) => StatefulBuilder(builder: (ctx, update) {
+          final targets = choiceGateTarget.values
+              .where((target) => target != 'none_required').toList();
           final ready = consent &&
               quotes.length == grants.length &&
+              targets.length == targets.toSet().length &&
+              choiceGateTarget.entries.every((entry) =>
+                entry.value == 'none_required' ||
+                (socialKind[entry.key] != null &&
+                 socialKind[entry.key] != 'none' &&
+                 choiceGateQuote.containsKey(entry.key) &&
+                 gateCandidates[entry.value]?.quotes.any((quote) =>
+                     quote.digest == choiceGateQuote[entry.key]) == true)) &&
               socialKind.length == grants.length &&
               grants.every((rule) =>
                 socialKind[rule.id] == 'none' ||
@@ -656,6 +705,8 @@ class _NpcKnowledgeRulesPageState extends State<NpcKnowledgeRulesPage> {
                           socialDelta.remove(rule.id);
                           socialMemoryForTurn.clear();
                           socialTrustForTurn.clear();
+                          choiceGateTarget.remove(rule.id);
+                          choiceGateQuote.remove(rule.id);
                         });
                       },
                     ),
@@ -709,6 +760,65 @@ class _NpcKnowledgeRulesPageState extends State<NpcKnowledgeRulesPage> {
                               socialMemoryForTurn.clear();
                               socialTrustForTurn.clear();
                             });
+                          },
+                        ),
+                      ],
+                    ],
+                    if (socialKind[rule.id] != null &&
+                        socialKind[rule.id] != 'none' &&
+                        socialMode[rule.id] != null) ...[
+                      const SizedBox(height: 8),
+                      DropdownButtonFormField<String>(
+                        key: Key('npc-build-choice-gate-' + rule.id),
+                        isExpanded: true,
+                        initialValue: choiceGateTarget[rule.id],
+                        decoration: const InputDecoration(
+                          labelText: 'Какое решение зависит от памяти NPC?',
+                          border: OutlineInputBorder(),
+                        ),
+                        items: [
+                          const DropdownMenuItem(
+                            value: 'none_required',
+                            child: Text('Не ограничивать игровые решения')),
+                          for (final entry in gateCandidates.entries)
+                            if (entry.key != rule.choiceId)
+                              DropdownMenuItem(
+                                value: entry.key,
+                                child: Text(entry.value.label,
+                                    overflow: TextOverflow.ellipsis),
+                              ),
+                        ],
+                        onChanged: (target) {
+                          if (target != null) update(() {
+                            choiceGateTarget[rule.id] = target;
+                            choiceGateQuote.remove(rule.id);
+                          });
+                        },
+                      ),
+                      if (choiceGateTarget[rule.id] != null &&
+                          choiceGateTarget[rule.id] != 'none_required') ...[
+                        const SizedBox(height: 8),
+                        DropdownButtonFormField<String>(
+                          key: Key('npc-build-choice-quote-' + rule.id),
+                          isExpanded: true,
+                          initialValue: choiceGateQuote[rule.id],
+                          decoration: const InputDecoration(
+                            labelText: 'Цитата для ограничения решения',
+                            border: OutlineInputBorder(),
+                          ),
+                          items: [
+                            for (final candidate in
+                                gateCandidates[choiceGateTarget[rule.id]]!
+                                    .quotes)
+                              DropdownMenuItem(
+                                value: candidate.digest,
+                                child: Text(candidate.caption,
+                                    overflow: TextOverflow.ellipsis),
+                              ),
+                          ],
+                          onChanged: (digest) {
+                            if (digest != null) update(() =>
+                                choiceGateQuote[rule.id] = digest);
                           },
                         ),
                       ],
@@ -941,14 +1051,40 @@ class _NpcKnowledgeRulesPageState extends State<NpcKnowledgeRulesPage> {
           'source_quote_sha256': quote,
         });
       }
+      final reviewedChoiceGates = <Map<String, dynamic>>[];
+      for (final rule in grants) {
+        final target = choiceGateTarget[rule.id];
+        if (target == null || target == 'none_required') continue;
+        final profile = widget.notebook.profiles.singleWhere(
+            (profile) => profile.dossierId == rule.dossierId);
+        final candidate = gateCandidates[target];
+        final quote = choiceGateQuote[rule.id];
+        if (profile.characterId == null || candidate == null ||
+            quote == null || socialKind[rule.id] == 'none') {
+          throw const FormatException('Не подтверждён выбор NPC');
+        }
+        reviewedChoiceGates.add({
+          'scene_id': candidate.sceneId,
+          'choice_id': target,
+          'actor_id': profile.characterId!,
+          'required_memory_id': rule.id,
+          'minimum_trust_to_player':
+              (socialDelta[rule.id] ?? 0) > 0 ? socialDelta[rule.id] : null,
+          'source_quote_sha256': quote,
+        });
+      }
       final socialReview = socialRules.isEmpty ? null : <String, dynamic>{
-        'format': RichNpcSocialContract.format,
+        'format': reviewedChoiceGates.isEmpty
+            ? RichNpcSocialContract.format
+            : RichNpcSocialContract.choiceGateFormat,
         'review_scope': 'user_declared_private_game_fiction',
         'source_fingerprint': widget.index.sourceFingerprint,
         'user_confirmed': true,
         'literary_canon_verified': false,
         'witnesses': socialWitnesses,
         'rules': socialRules,
+        if (reviewedChoiceGates.isNotEmpty)
+          'choice_gates': reviewedChoiceGates,
       };
       final bytes = await compileReviewedNpcRichPrivateBookworldInWorker(
         widget.index, widget.graph, widget.catalog, widget.editorial,
