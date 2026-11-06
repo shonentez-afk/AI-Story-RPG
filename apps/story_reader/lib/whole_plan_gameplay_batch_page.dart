@@ -240,10 +240,21 @@ class _WholePlanGameplayBatchPageState
                 'подтверждения. Закрытие страницы остановит '
                 'дальнейшие запросы.'),
           ],
-          if (_error != null)
+          if (_error != null) ...[
             Text(_error!, key: const Key('whole-gameplay-batch-error'),
                 style: TextStyle(
                     color: Theme.of(context).colorScheme.error)),
+            if (status != null && !_working)
+              TextButton(
+                key: const Key('whole-gameplay-batch-recheck'),
+                onPressed: () => setState(() {
+                  _error = null;
+                  _reviewed = false;
+                  _consented = false;
+                }),
+                child: const Text('Перепроверить и подтвердить заново'),
+              ),
+          ],
           const SizedBox(height: 10),
           const Text('Этот экран ничего не записывает в BookWorld или '
               'кампанию. После сбора предложений потребуется '
