@@ -146,7 +146,7 @@ void main() {
     await tester.pumpAndSettle();
     final choice = find.byKey(const ValueKey('world-choice-ask_guard'));
     await tester.scrollUntilVisible(choice, 100,
-        scrollable: find.byKey(const ValueKey('world-scene-scroll')));
+        scrollable: find.byType(Scrollable).first);
     await tester.tap(choice);
     await tester.pumpAndSettle();
     expect(gateway.commits, 1);
@@ -174,7 +174,7 @@ void main() {
         findsOneWidget);
     final choice = find.byKey(const ValueKey('world-choice-ask_guard'));
     await tester.scrollUntilVisible(choice, 100,
-        scrollable: find.byKey(const ValueKey('world-scene-scroll')));
+        scrollable: find.byType(Scrollable).first);
     expect(tester.widget<FilledButton>(choice).onPressed, isNotNull);
   });
 }
