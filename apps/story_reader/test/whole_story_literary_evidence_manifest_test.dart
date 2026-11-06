@@ -352,6 +352,11 @@ void main() {
     expect(manifest.permitsGameMutation, false);
     expect(manifest.windows.every((w) =>
         w.sentContext['chapter_order_is_world_time'] == false), true);
+    expect(manifest.windows.every((w) => w.transitions.every((step) =>
+        step['scene_goal_game_draft'] is String &&
+        step['scene_conflict_game_draft'] is String &&
+        step['choice_intent_game_draft'] is String &&
+        step['prose_is_literary_canon'] == false)), true);
     manifest.verifyUnchanged();
     expect(() => WholeStoryLiteraryReviewManifest.fromEvidence(
         index: index, book: book, plan: plan, evidence: evidence,
