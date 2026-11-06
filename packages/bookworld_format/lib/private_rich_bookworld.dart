@@ -8,6 +8,7 @@ import 'src/sqlite_v1.dart';
 import 'private_gameplay_review.dart';
 import 'rich_scene_dialogue.dart';
 import 'npc_dialogue_knowledge.dart';
+import 'npc_social_contract.dart';
 import 'src/zip_v1.dart';
 
 /// A *private*, source-bound, offline CLASSIC package. It carries no original
@@ -19,6 +20,7 @@ class VerifiedRichPrivateBookworld {
     required this.archiveSha256,
     required this.provenanceSha256,
     required this.presentation,
+    this.npcSocialRulebook,
   });
 
   final StoryBlueprint blueprint;
@@ -26,6 +28,8 @@ class VerifiedRichPrivateBookworld {
   final String archiveSha256;
   final String provenanceSha256;
   final Map<String, dynamic> presentation;
+  /// Source-reviewed, read-only social events. Not implicit world state.
+  final NpcSocialRulebook? npcSocialRulebook;
   String get bookworldId => blueprint.bookId;
   bool get canDistributePublicly => false;
   bool get requiresNetwork => false;
@@ -688,7 +692,8 @@ class RichPrivateBookworldImporter {
     final hasNpcKnowledge = source.containsKey('npc_knowledge');
     final knownSource = Map<String, dynamic>.of(source)
       ..remove('gameplay_review')
-      ..remove('npc_knowledge');
+      ..remove('npc_knowledge')
+      ..remove('npc_social');
     _fields(knownSource, {'format', 'bookworld_id', 'source_fingerprint',
                      'source_title', 'source_author',
                      'source_chapters_total', 'source_chapters_indexed',
@@ -710,6 +715,8 @@ class RichPrivateBookworldImporter {
     _model(source, manifest);
     final presentation = _presentation(source, blueprint);
     _npcKnowledge(source, manifest, blueprint);
+    final socialRulebook =
+        RichNpcSocialContract.inspect(source, manifest, blueprint);
     if (hasNpcKnowledge && hasGameplayReview) {
       throw const FormatException(
           'NPC grants and separate gameplay review need unified review');
@@ -727,11 +734,13 @@ class RichPrivateBookworldImporter {
     originV2.remove('presentation');
     originV2.remove('gameplay_review');
     originV2.remove('npc_knowledge');
+    originV2.remove('npc_social');
     originV2['format'] = 'ai_story_private_provenance_v1';
     originV2['model_provenance'] = {'provider': 'none', 'model_id': null};
     _provenance(originV2, blueprint);
     final manifestV2 = Map<String, dynamic>.of(manifest);
     manifestV2.remove('npc_knowledge_format');
+    manifestV2.remove('npc_social_format');
     manifestV2['format_version'] = 2;
     manifestV2['build_status'] = 'private_classic_structural';
     manifestV2['build_tool'] = {
@@ -747,6 +756,7 @@ class RichPrivateBookworldImporter {
       provenanceSha256:
           sha256.convert(files['source/provenance.json']!).toString(),
       presentation: presentation,
+      npcSocialRulebook: socialRulebook,
     );
   }
 }

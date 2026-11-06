@@ -406,6 +406,8 @@ class RichPrivateBookworldWriter {
       if (provenance.containsKey('npc_knowledge'))
         'npc_knowledge_format':
             RichPrivateBookworldImporter.npcKnowledgeFormat,
+      if (provenance.containsKey('npc_social'))
+        'npc_social_format': RichNpcSocialContract.format,
       'bookworld_id': checked.bookId,
       'source_fingerprint': checked.sourceFingerprint,
       'title': checked.title,
