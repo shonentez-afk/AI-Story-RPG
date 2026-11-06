@@ -6,6 +6,7 @@ import 'package:ai_story_reader/zai_auto_whole_book_analysis.dart';
 import 'package:ai_story_reader/zai_semantic_preview.dart';
 import 'package:ai_story_reader/zai_whole_book_analysis_page.dart';
 import 'package:ai_story_reader/narrative_book_model.dart';
+import 'package:ai_story_reader/book_act_draft_page.dart';
 import 'package:ai_story_reader/zai_story_dilemma_proposal.dart';
 import 'package:ai_story_reader/story_plan_dilemma_generator.dart';
 import 'package:ai_story_reader/story_plan_draft_checkpoint.dart';
@@ -162,6 +163,83 @@ void main() {
     expect(find.textContaining('все 0 найденных событий'),
         findsOneWidget);
     expect(find.byKey(const Key('whole-book-act-map')), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('completed whole-book analysis opens the sequential plan '
+      'without another cloud request', (tester) async {
+    final index = BookSourceIndexer.index(ImportedBook(
+      title: 'Книга с двумя частями',
+      author: 'Тестовый автор',
+      chapters: [
+        List.filled(4, 'На поляне герои увидели мост, и незнакомец '
+            'предложил помощь за обещание. ').join(' '),
+        List.filled(4, 'После путешествия герои увидели замок, '
+            'и страж показал другую дорогу. ').join(' '),
+      ],
+    ));
+    var requests = 0;
+    final analysis = ZaiAutoWholeBookAnalysis(
+      repository: _PrivateStore(),
+      preview: (source, window, token, includeTitle) async {
+        requests++;
+        final chunk = window.chunks.first;
+        return ZaiSemanticPreviewResult(
+          batch: SemanticCandidateBatch(
+            providerId: ZaiSemanticPreviewService.providerId,
+            providerVersion: ZaiSemanticPreviewService.providerVersion,
+            sourceFingerprint: source.sourceFingerprint,
+            chunkIds: [for (final c in window.chunks) c.id],
+            candidates: [
+              for (var i = 0; i < 2; i++)
+                SemanticCandidate.propose(
+                  source, chunk,
+                  category: SemanticCategory.event,
+                  startUtf16: chunk.startUtf16 + i * 86,
+                  endUtf16: chunk.startUtf16 + i * 86 + 60,
+                  label: 'Гипотеза события, не канон',
+                  uncertainty: 'Смысл не подтверждён.',
+                ),
+            ],
+          ),
+          totalSuggestions: 2,
+          rejectedCount: 0,
+          rejectedNonRussian: 0,
+        );
+      },
+    );
+    await tester.pumpWidget(MaterialApp(
+      home: ZaiWholeBookAnalysisPage(index: index, analysis: analysis),
+    ));
+    await tester.pumpAndSettle();
+    expect(requests, 0);
+    await tester.tap(find.byKey(const Key('whole-book-start')));
+    await tester.pumpAndSettle();
+    final confirm = find.byKey(const Key('whole-book-confirm-send'));
+    await tester.ensureVisible(confirm);
+    await tester.pumpAndSettle();
+    await tester.tap(confirm);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('whole-book-approve')));
+    await tester.pumpAndSettle();
+    expect(requests, greaterThanOrEqualTo(2));
+
+    final continueButton = find.byKey(
+        const Key('whole-book-act-draft-start'));
+    await tester.scrollUntilVisible(continueButton, 120,
+        scrollable: find.byType(Scrollable).first);
+    await tester.pumpAndSettle();
+    expect(find.text('Продолжить подготовку сценария'), findsOneWidget);
+    final before = requests;
+    await tester.tap(continueButton);
+    // The next page restores a device-scoped checkpoint asynchronously.
+    // A widget test with no path-provider platform must not wait for that
+    // background storage operation via pumpAndSettle indefinitely.
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(find.byType(BookActDraftPage), findsOneWidget);
+    expect(find.text('План по частям книги'), findsOneWidget);
+    expect(requests, before);
     expect(tester.takeException(), isNull);
   });
 
