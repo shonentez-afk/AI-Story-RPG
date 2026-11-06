@@ -18,6 +18,30 @@ enum NpcMemoryKind {
   rumorHeard,
 }
 
+/// Witnessed in person and learned second-hand are NOT interchangeable.
+/// Reviewed source citations live in bookworld_format, not in story_core.
+enum NpcWitnessMode { present, reported }
+
+/// Presence in a precise scene, approved by the private author. This is
+/// NOT inferred from a character's name or from their appearance in prose.
+class NpcSceneWitness {
+  const NpcSceneWitness({
+    required this.sceneId,
+    required this.actorId,
+    required this.mode,
+  });
+
+  final String sceneId;
+  final String actorId;
+  final NpcWitnessMode mode;
+
+  Map<String, Object?> toJson() => {
+    'scene_id': sceneId,
+    'actor_id': actorId,
+    'mode': mode.name,
+  };
+}
+
 /// A declarative, source-reviewable event annotation. It has no runtime
 /// effect by itself; the optional relationship delta is a read-only
 /// projection, NOT a hidden world mutation or a new blueprint DSL operation.
@@ -62,16 +86,41 @@ class NpcSocialRulebook {
   NpcSocialRulebook({
     required this.blueprintHash,
     required List<NpcSocialRule> rules,
-  }) : rules = List.unmodifiable(rules);
+    List<NpcSceneWitness> witnesses = const [],
+    this.requireReviewedWitnesses = false,
+  }) : rules = List.unmodifiable(rules),
+       witnesses = List.unmodifiable(witnesses);
 
   final String blueprintHash;
   final List<NpcSocialRule> rules;
+  final List<NpcSceneWitness> witnesses;
+  /// Strict portable social rules must prove how each observer learned
+  /// about the event. Old local preview rulebooks keep legacy semantics.
+  final bool requireReviewedWitnesses;
 
   void validate(StoryBlueprint blueprint) {
     if (blueprintHash != blueprint.blueprintHash ||
         !RegExp(r'^[0-9a-f]{64}$').hasMatch(blueprintHash) ||
         rules.length > 512) {
       throw const FormatException('NPC social rules not bound to blueprint');
+    }
+    if (witnesses.length > 512 ||
+        (witnesses.isNotEmpty && !requireReviewedWitnesses)) {
+      throw const FormatException('NPC witness review must be explicit');
+    }
+    final presence = <String, NpcWitnessMode>{};
+    for (final witness in witnesses) {
+      jsonId(witness.sceneId, 'npc.presence.scene_id');
+      jsonId(witness.actorId, 'npc.presence.actor_id');
+      if (!blueprint.scenes.containsKey(witness.sceneId) ||
+          !blueprint.actors.contains(witness.actorId) ||
+          witness.actorId == 'player' ||
+          (blueprint.rightsStatus == 'private_adaptation' &&
+              !CharacterId.isValidNpc(witness.actorId)) ||
+          presence.containsKey('${witness.sceneId}|${witness.actorId}')) {
+        throw const FormatException('Invalid or duplicate NPC scene witness');
+      }
+      presence['${witness.sceneId}|${witness.actorId}'] = witness.mode;
     }
     final seen = <String>{};
     for (final rule in rules) {
@@ -108,6 +157,19 @@ class NpcSocialRulebook {
           (rule.relationshipDelta != 0 && rule.relatedActorId == null)) {
         throw const FormatException('Invalid NPC relationship change');
       }
+      if (requireReviewedWitnesses && rule.observerId != 'player') {
+        final witness = presence['${rule.sceneId}|${rule.observerId}'];
+        if (witness == null) {
+          throw const FormatException(
+              'NPC cannot remember an event without an approved witness');
+        }
+        if (witness == NpcWitnessMode.reported &&
+            (rule.kind != NpcMemoryKind.rumorHeard ||
+                rule.relationshipDelta != 0)) {
+          throw const FormatException(
+              'Second-hand rumor is not eyewitness proof or earned trust');
+        }
+      }
       final identity = '${rule.observerId}|${rule.memoryId}';
       if (!seen.add(identity)) {
         throw const FormatException('Duplicate NPC event memory identity');
@@ -122,10 +184,19 @@ class NpcSocialRulebook {
       ..sort((a, b) =>
           ('${a['observer_id']}|${a['memory_id']}')
               .compareTo('${b['observer_id']}|${b['memory_id']}'));
-    return sha256.convert(utf8.encode(canonicalJson({
+    final signed = <String, Object?>{
       'blueprint_sha256': blueprintHash,
       'rules': entries,
-    }))).toString();
+    };
+    if (requireReviewedWitnesses) {
+      final sortedWitnesses = witnesses.map((e) => e.toJson()).toList()
+        ..sort((a, b) =>
+            ('${a['scene_id']}|${a['actor_id']}')
+                .compareTo('${b['scene_id']}|${b['actor_id']}'));
+      signed['witnesses'] = sortedWitnesses;
+      signed['require_reviewed_witnesses'] = true;
+    }
+    return sha256.convert(utf8.encode(canonicalJson(signed))).toString();
   }
 }
 
@@ -137,6 +208,7 @@ class NpcEventMemory {
     required this.event,
     required this.relatedActorId,
     required this.relationshipDelta,
+    this.witnessMode,
   });
 
   final String observerId;
@@ -146,6 +218,9 @@ class NpcEventMemory {
   final WorldEvent event;
   final String? relatedActorId;
   final int relationshipDelta;
+  /// Null for the player (whose action is already committed), present or
+  /// reported for separately verified NPC observers.
+  final NpcWitnessMode? witnessMode;
 }
 
 /// Safe read-only projection of *actual* committed events onto authored
@@ -222,6 +297,10 @@ class NpcSocialLedger {
           () => <NpcSocialRule>[]).add(rule);
     }
     final memory = <String, List<NpcEventMemory>>{};
+    final witnessModes = {
+      for (final witness in rulebook.witnesses)
+        '${witness.sceneId}|${witness.actorId}': witness.mode,
+    };
     final triggersByRule = <String, int>{};
     final relations = <String, Map<String, int>>{};
     for (final event in world.events) {
@@ -240,6 +319,8 @@ class NpcSocialLedger {
             event: event,
             relatedActorId: rule.relatedActorId,
             relationshipDelta: rule.relationshipDelta,
+            witnessMode:
+                witnessModes['${rule.sceneId}|${rule.observerId}'],
           ),
         );
         if (rule.relatedActorId != null && rule.relationshipDelta != 0) {
