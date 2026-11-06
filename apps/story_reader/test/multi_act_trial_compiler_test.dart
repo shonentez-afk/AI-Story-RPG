@@ -9,6 +9,11 @@ import 'package:ai_story_reader/bookwide_storyplan_composer.dart';
 import 'package:ai_story_reader/cross_act_consequence_gate.dart';
 import 'package:ai_story_reader/cross_act_source_evidence_packet.dart';
 import 'package:ai_story_reader/multi_act_trial_compiler.dart';
+import 'package:ai_story_reader/story_plan_causal_audit.dart';
+import 'package:ai_story_reader/whole_story_literary_evidence_manifest.dart';
+import 'package:ai_story_reader/whole_story_literary_review.dart';
+import 'package:ai_story_reader/whole_story_literary_summary.dart';
+import 'package:ai_story_reader/whole_story_literary_bounded_repair.dart';
 import 'package:ai_story_reader/zai_source_locked_gameplay_candidates.dart';
 import 'package:ai_story_reader/whole_plan_gameplay_candidate_batch.dart';
 import 'package:ai_story_reader/gameplay_candidate_reachability.dart';
@@ -253,6 +258,140 @@ void main() {
     } finally {
       await dir.delete(recursive: true);
     }
+  });
+
+  test('g2b real integration: criticized cross-act decision is repaired, '
+      'independently re-reviewed, then built as offline v3 with two routes',
+      () async {
+    final index = _index();
+    final book = await _analyze(index);
+    final input = _draft(index, book);
+    final original = input.draft.plan;
+    final evidence = WholeStoryLiteraryEvidenceManifest.build(
+        index: index, book: book, plan: original);
+    final manifest = WholeStoryLiteraryReviewManifest.fromEvidence(
+        index: index, book: book, plan: original, evidence: evidence);
+    const target = 'act_2_accept_offer';
+    final firstReports = [
+      for (final window in manifest.windows)
+        WholeLiteraryReviewReport.fromJson(window, {
+          'window_digest': window.approvalDigest,
+          'verdict': window.transitions.any(
+                  (step) => step['choice_id'] == target)
+              ? 'needsRevision' : 'insufficientEvidence',
+          'uncertainty': 'Независимый тест: решение следующего акта '
+              'зависит от не подтверждённого игрового исхода.',
+          'findings': [
+            if (window.transitions.any(
+                (step) => step['choice_id'] == target))
+              {
+                'kind': 'causalLink', 'severity': 'high',
+                'scene_id': 'act_2_turning_point',
+                'choice_id': target, 'source_event_id': null,
+                'problem': 'Второе согласие не должно быть доступно '
+                    'после альтернативного окончания первого акта.',
+              },
+          ],
+          'status': 'UNVERIFIED_AI_REVIEW',
+        }),
+    ];
+    final digest = WholeStoryLiterarySummary.compile(
+        manifest: manifest, reports: firstReports).reportDigest;
+    final repair = WholeStoryLiteraryBoundedRepair.propose(
+      manifest: manifest, reports: firstReports,
+      expectedReportDigest: digest,
+      explicitRuleReview: true,
+      approvedRules: StoryCausalContract(decisionInvariants: [
+        StoryDecisionInvariant(id: 'cross_act_consented',
+          decisionId: target,
+          requires: ['act_1_original_outcome'],
+          forbids: ['act_1_alternate_outcome']),
+      ]),
+    );
+    expect(repair.changed, true);
+    expect(repair.formal.after.counterexamples, isEmpty);
+    expect(repair.draft.validate(book).terminalSituations, 2);
+    final fresh = repair.newReviewManifest!;
+    final cleanReports = [
+      for (final window in fresh.windows)
+        WholeLiteraryReviewReport.fromJson(window, {
+          'window_digest': window.approvalDigest,
+          'verdict': window.sourceQuotes.isEmpty
+              ? 'insufficientEvidence' : 'possibleConsistency',
+          'uncertainty': 'Неопределённость исходного текста сохраняется. '
+              'Проверены только игровые условия этой частной версии.',
+          'findings': <Map<String, Object?>>[],
+          'status': 'UNVERIFIED_AI_REVIEW',
+        }),
+    ];
+    final accepted = WholeStoryLiteraryRecheckApproval.accept(
+      repair: repair, newReports: cleanReports,
+      userReviewedNewResults: true, confirmedPrivateGameFiction: true,
+    );
+    expect(accepted.provesBookCanon, false);
+    accepted.verifyForCompiler(
+        index: index, book: book, originalPlan: original);
+    final archive = await MultiActTrialCompiler.compile(
+      index: index, book: book, bookMap: input.map,
+      draft: input.draft, recheckedRepair: accepted,
+      sourceEventIdsReviewedByUser: input.eventIds,
+      privateUseConfirmed: true,
+      fictionalTrialAcknowledged: true,
+    );
+    final inspected = const RichPrivateBookworldImporter()
+        .inspect(archive.archive);
+    expect(inspected.blueprint.scenes.length, 14);
+    expect(inspected.requiresNetwork, false);
+    expect(inspected.canDistributePublicly, false);
+    final dir = await Directory.systemTemp.createTemp('g2b-e2e-v3-');
+    try {
+      final db = BookworldCampaignStore.openPrivateDirectory(dir.path);
+      try {
+        final world = db.installBookworld(archive.archive);
+        final rejected = db.createCampaign(world.archiveHash);
+        final originalRoute = db.createCampaign(world.archiveHash);
+        var rev = 0;
+        for (final action in [
+          'act_1_refuse_offer', 'act_1_explore',
+          'act_1_use_discovery', 'act_1_end_alternative',
+          'act_1_continue_alternative',
+        ]) {
+          final result = db.commitChoice(rejected,
+            actionId: 'alt_' + rev.toString(), choiceId: action,
+            expectedRevision: rev);
+          expect(result.applied, true);
+          rev++;
+        }
+        expect(db.loadCampaign(rejected).coordinator.choices.any((c) =>
+            c.id == target && c.enabled), false);
+        expect(db.loadCampaign(rejected).coordinator.choices.any((c) =>
+            c.id == 'act_2_refuse_offer' && c.enabled), true);
+        rev = 0;
+        for (final action in [
+          'act_1_accept_offer', 'act_1_honor_condition',
+          'act_1_continue_original',
+        ]) {
+          final result = db.commitChoice(originalRoute,
+            actionId: 'original_' + rev.toString(),
+            choiceId: action, expectedRevision: rev);
+          expect(result.applied, true);
+          rev++;
+        }
+        expect(db.loadCampaign(originalRoute).coordinator.choices.any(
+            (c) => c.id == target && c.enabled), true);
+      } finally {
+        db.close();
+      }
+    } finally {
+      await dir.delete(recursive: true);
+    }
+    await expectLater(MultiActTrialCompiler.compile(
+      index: index, book: book, bookMap: input.map,
+      draft: input.draft, recheckedRepair: accepted,
+      continuity: input.continuity,
+      sourceEventIdsReviewedByUser: input.eventIds,
+      privateUseConfirmed: true, fictionalTrialAcknowledged: true,
+    ), throwsFormatException);
   });
 
   test('without explicit PRIVATE fiction consent or review of all quotes, '

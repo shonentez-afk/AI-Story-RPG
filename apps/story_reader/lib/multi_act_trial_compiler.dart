@@ -16,6 +16,7 @@ import 'source_semantic_editorial_review.dart';
 import 'story_plan.dart';
 import 'story_plan_trial_compiler.dart';
 import 'reviewed_prose_scene_overlay.dart';
+import 'whole_story_literary_bounded_repair.dart';
 
 /// A playable *PRIVATE* and *FICTIONAL* multi-act trial, never the full
 /// literary CANON. This uses the original M2c compiler, BookWorld importer
@@ -29,6 +30,7 @@ class MultiActTrialCompiler {
     required BookwideActPlan bookMap,
     required MultiActStoryPlanDraft draft,
     CrossActContinuityDraft? continuity,
+    WholeStoryLiteraryRecheckApproval? recheckedRepair,
     required Set<String> sourceEventIdsReviewedByUser,
     required bool privateUseConfirmed,
     required bool fictionalTrialAcknowledged,
@@ -52,7 +54,19 @@ class MultiActTrialCompiler {
       throw const FormatException(
           'Многоактовый черновик не прошёл проверку своей редакции.');
     }
-    final plan = continuity?.plan ?? draft.plan;
+    if (recheckedRepair != null && continuity != null) {
+      throw const FormatException(
+          'Не смешивайте разные редакции причинных правил без новой рецензии.');
+    }
+    if (recheckedRepair != null) {
+      recheckedRepair.verifyForCompiler(
+          index: index, book: book, originalPlan: draft.plan);
+      if (reviewedProse.isNotEmpty) {
+        throw const FormatException(
+            'Художественные правки для старого плана нужно подтвердить заново.');
+      }
+    }
+    final plan = recheckedRepair?.draft ?? continuity?.plan ?? draft.plan;
     if (continuity != null &&
         (!continuity.hasEnforcedContinuity ||
          continuity.audit.counterexamples.isNotEmpty ||

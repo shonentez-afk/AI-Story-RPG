@@ -1,4 +1,7 @@
 import 'dart:convert';
+
+import 'book_source_index.dart';
+import 'narrative_book_model.dart';
 import 'package:crypto/crypto.dart';
 
 import 'story_plan.dart';
@@ -155,5 +158,105 @@ class WholeStoryLiteraryBoundedRepair {
       findingKeys: List.unmodifiable(keys),
       newReviewManifest: newReview,
     );
+  }
+}
+
+
+/// One-shot proof that a *new* causal draft went through a complete,
+/// separately consented independent literary recheck AFTER a bounded repair.
+///
+/// The approval permits ONLY a private, source-locked trial via the already
+/// existing BookWorld v3 compiler. It does not prove the model understood
+/// the novel and never authorizes publishing as literary CANON.
+class WholeStoryLiteraryRecheckApproval {
+  WholeStoryLiteraryRecheckApproval._({
+    required this.repair,
+    required this.newReports,
+    required this.summaryDigest,
+    required this.unresolvedWindows,
+  });
+
+  final WholeStoryLiteraryRepairResult repair;
+  final List<WholeLiteraryReviewReport> newReports;
+  final String summaryDigest;
+  // The private game may remain uncertain about literary meaning; never CANON.
+  final int unresolvedWindows;
+
+  StoryPlan get draft => repair.draft;
+  bool get isApprovedForPrivateTrial => true;
+  bool get provesBookCanon => false;
+  bool get mayAlterExistingCampaign => false;
+
+  static WholeStoryLiteraryRecheckApproval accept({
+    required WholeStoryLiteraryRepairResult repair,
+    required List<WholeLiteraryReviewReport> newReports,
+    required bool userReviewedNewResults,
+    required bool confirmedPrivateGameFiction,
+  }) {
+    if (!repair.changed || !repair.formal.passedFormalContracts ||
+        repair.newReviewManifest == null ||
+        !userReviewedNewResults || !confirmedPrivateGameFiction) {
+      throw const FormatException(
+          'Исправленный план требует отдельной полной рецензии и согласия.');
+    }
+    final manifest = repair.newReviewManifest!;
+    if (manifest.evidence.planSha256 != repair.revisedPlanSha ||
+        manifest.plan.encode() != repair.draft.encode()) {
+      throw const FormatException('Повторная рецензия относится к другой версии.');
+    }
+    final summary = WholeStoryLiterarySummary.compile(
+        manifest: manifest, reports: newReports);
+    // Keep any unresolved criticism visible; do not silently mark a risky
+    // scenario ready merely because the first error was patched.
+    if (summary.totalFindings != 0 || summary.revisions != 0 ||
+        summary.crossWindowIssues.isNotEmpty) {
+      throw const FormatException(
+          'После исправления остались литературные сомнения. '
+          'Нужна ещё одна ревизия, выпуск этой версии запрещён.');
+    }
+    return WholeStoryLiteraryRecheckApproval._(
+      repair: repair,
+      newReports: List.unmodifiable(newReports),
+      summaryDigest: summary.reportDigest,
+      unresolvedWindows: summary.insufficient,
+    );
+  }
+
+  /// Re-evaluate all hashes against the CURRENT exact source and original
+  /// draft, then re-parse every post-repair window. No caller's bool
+  /// or cached "ready" field is trusted at the compiler boundary.
+  void verifyForCompiler({
+    required BookSourceIndex index,
+    required NarrativeBookModel book,
+    required StoryPlan originalPlan,
+  }) {
+    final manifest = repair.newReviewManifest;
+    if (!repair.changed || !repair.formal.passedFormalContracts ||
+        manifest == null ||
+        manifest.index.sourceFingerprint != index.sourceFingerprint ||
+        manifest.book.sourceFingerprint != book.sourceFingerprint ||
+        manifest.plan.sourceFingerprint != originalPlan.sourceFingerprint ||
+        manifest.plan.title != originalPlan.title ||
+        originalPlan.sourceFingerprint != index.sourceFingerprint ||
+        originalPlan.title != book.title ||
+        repair.originalPlanSha !=
+            sha256.convert(utf8.encode(originalPlan.encode())).toString() ||
+        repair.revisedPlanSha !=
+            sha256.convert(utf8.encode(repair.draft.encode())).toString() ||
+        manifest.evidence.planSha256 != repair.revisedPlanSha ||
+        manifest.plan.encode() != repair.draft.encode() ||
+        !repair.draft.validate(book).isStructurallySound) {
+      throw const FormatException(
+          'Итоги повторной проверки не относятся к данной редакции сценария.');
+    }
+    final summary = WholeStoryLiterarySummary.compile(
+        manifest: manifest, reports: newReports);
+    if (summary.reportDigest != summaryDigest ||
+        summary.totalFindings != 0 || summary.revisions != 0 ||
+        summary.insufficient != unresolvedWindows ||
+        summary.crossWindowIssues.isNotEmpty) {
+      throw const FormatException(
+          'Подтверждение повторной литературной рецензии недействительно.');
+    }
   }
 }

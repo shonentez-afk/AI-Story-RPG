@@ -47,6 +47,13 @@ class WholeStoryLiteraryBatchService {
   static final _active = <String>{};
   static final _sha = RegExp(r'^[a-f0-9]{64}$');
 
+  // Each revision keeps its OWN paid checkpoint and separate consent.
+  // Do not overwrite reports belonging to a previous story revision.
+  static String _checkpointKey(WholeStoryLiteraryReviewManifest manifest) =>
+      sha256.convert(utf8.encode('g1b/' +
+          manifest.index.sourceFingerprint + '/' +
+          manifest.approvalDigest)).toString();
+
   static WholeLiteraryReviewReport _validate(
       LiteraryReviewWindow window, WholeLiteraryReviewReport report) {
     return WholeLiteraryReviewReport.fromJson(
@@ -56,7 +63,23 @@ class WholeStoryLiteraryBatchService {
   Future<List<WholeLiteraryReviewReport>> _load(
       WholeStoryLiteraryReviewManifest manifest) async {
     manifest.verifyUnchanged();
-    final raw = await repository.read(manifest.index.sourceFingerprint);
+    String? raw = await repository.read(_checkpointKey(manifest));
+    if (raw == null) {
+      // Backward-compatible read-only fallback for old keyed-by-book saves.
+      // An older manifest must never be mistaken for a new one.
+      final legacy = await repository.read(manifest.index.sourceFingerprint);
+      if (legacy != null) {
+        Map<String, dynamic> container;
+        try {
+          container = Map<String, dynamic>.from(jsonDecode(legacy) as Map);
+        } catch (_) {
+          throw const FormatException('Повреждён старый литературный отчёт.');
+        }
+        if (container['manifest_digest'] == manifest.approvalDigest) {
+          raw = legacy;
+        }
+      }
+    }
     if (raw == null) return const [];
     if (utf8.encode(raw).length > maxCheckpointBytes) {
       throw const FormatException('Слишком большой checkpoint литературного аудита.');
@@ -119,7 +142,7 @@ class WholeStoryLiteraryBatchService {
     if (utf8.encode(encoded).length > maxCheckpointBytes) {
       throw const FormatException('Checkpoint литературного аудита переполнен.');
     }
-    await repository.write(manifest.index.sourceFingerprint, encoded);
+    await repository.write(_checkpointKey(manifest), encoded);
   }
 
   Future<WholeLiteraryReviewProgress> inspect(

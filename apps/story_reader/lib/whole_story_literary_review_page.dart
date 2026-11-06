@@ -5,6 +5,8 @@ import 'book_source_index.dart';
 import 'narrative_book_model.dart';
 import 'source_evidence_graph.dart';
 import 'story_plan.dart';
+import 'story_plan_causal_audit.dart';
+import 'whole_story_literary_bounded_repair.dart';
 import 'whole_story_literary_batch.dart';
 import 'whole_story_literary_evidence_manifest.dart';
 import 'whole_story_literary_review.dart';
@@ -16,7 +18,8 @@ import 'zai_semantic_preview.dart';
 class WholeStoryLiteraryReviewPage extends StatefulWidget {
   const WholeStoryLiteraryReviewPage({
     super.key, required this.index, required this.book, required this.plan,
-    this.claimEvidence, this.service,
+    this.claimEvidence, this.service, this.approvedRules,
+    this.postRepair,
   });
 
   final BookSourceIndex index;
@@ -24,6 +27,10 @@ class WholeStoryLiteraryReviewPage extends StatefulWidget {
   final StoryPlan plan;
   final SourceEvidenceGraph? claimEvidence;
   final WholeStoryLiteraryBatchService? service;
+  // Only separately confirmed existing, typed rules; never raw GLM hints.
+  final StoryCausalContract? approvedRules;
+  // Set for the re-review of a newly patched plan, never for the old plan.
+  final WholeStoryLiteraryRepairResult? postRepair;
 
   @override
   State<WholeStoryLiteraryReviewPage> createState() =>
@@ -41,6 +48,9 @@ class _WholeStoryLiteraryReviewPageState
   bool _working = false;
   bool _reviewed = false;
   bool _consented = false;
+  bool _causalRulesReviewed = false;
+  bool _newResultsReviewed = false;
+  bool _privateFictionConfirmed = false;
   bool _storageBlocked = false;
   String? _error;
 
@@ -118,6 +128,76 @@ class _WholeStoryLiteraryReviewPageState
         _consented = false;
         _cancellation = null;
       });
+    }
+  }
+
+  Future<void> _proposeRepair() async {
+    final manifest = _manifest;
+    if (manifest == null || _loading || _working ||
+        !_causalRulesReviewed || _progress?.complete != true ||
+        _reports.length != manifest.totalWindows ||
+        widget.approvedRules == null) return;
+    setState(() { _working = true; _error = null; });
+    try {
+      final summary = WholeStoryLiterarySummary.compile(
+          manifest: manifest, reports: _reports);
+      final proposal = WholeStoryLiteraryBoundedRepair.propose(
+        manifest: manifest, reports: _reports,
+        approvedRules: widget.approvedRules!,
+        expectedReportDigest: summary.reportDigest,
+        explicitRuleReview: true,
+      );
+      if (!proposal.changed) {
+        if (mounted) setState(() => _error =
+          'Для этой редакции не найдено безопасных автоматических правок. '
+          'Неизвестные мотивы, факты и знания нельзя исправить догадкой ИИ.');
+        return;
+      }
+      if (!mounted) return;
+      // Open the SAME existing review page for the revised plan; the key
+      // includes its new SHA. Never re-use the old paid consent or reports.
+      final verified = await Navigator.of(context)
+          .push<WholeStoryLiteraryRecheckApproval>(MaterialPageRoute(
+        builder: (_) => WholeStoryLiteraryReviewPage(
+          index: widget.index, book: widget.book,
+          plan: proposal.draft, claimEvidence: widget.claimEvidence,
+          service: _service, postRepair: proposal,
+        ),
+      ));
+      if (mounted && verified != null) {
+        Navigator.of(context).pop<WholeStoryLiteraryRecheckApproval>(verified);
+      }
+    } catch (error) {
+      if (mounted) setState(() => _error =
+          'Безопасное исправление не принято: ' + error.toString());
+    } finally {
+      if (mounted) setState(() => _working = false);
+    }
+  }
+
+  void _acceptRecheckedPlan() {
+    final repair = widget.postRepair;
+    final manifest = _manifest;
+    if (repair == null || manifest == null || _working || _loading ||
+        _progress?.complete != true ||
+        _reports.length != manifest.totalWindows ||
+        !_newResultsReviewed || !_privateFictionConfirmed) return;
+    try {
+      if (manifest.approvalDigest !=
+          repair.newReviewManifest?.approvalDigest) {
+        throw const FormatException('Версия исправленного плана изменилась.');
+      }
+      final approval = WholeStoryLiteraryRecheckApproval.accept(
+        repair: repair, newReports: _reports,
+        userReviewedNewResults: true,
+        confirmedPrivateGameFiction: true,
+      );
+      // The original plan is checked against its SHA again at compilation.
+      if (mounted) Navigator.of(context)
+          .pop<WholeStoryLiteraryRecheckApproval>(approval);
+    } catch (error) {
+      if (mounted) setState(() => _error =
+          'Нельзя завершить повторную проверку: ' + error.toString());
     }
   }
 
@@ -263,6 +343,69 @@ class _WholeStoryLiteraryReviewPageState
                   ),
                 ));
               }),
+              if (widget.approvedRules != null &&
+                  widget.postRepair == null) ...[
+                const SizedBox(height: 10),
+                const Text('Можно применить только безопасные условия '
+                    'существующих игровых флагов, подтверждённые отдельно. '
+                    'Ни одной новой книжной истины программа не придумывает.'),
+                for (final rule in widget.approvedRules!.decisionInvariants)
+                  Text('Игровое правило: ' + rule.decisionId +
+                      (rule.requires.isEmpty ? '' :
+                        '; требует: ' + rule.requires.join(', ')) +
+                      (rule.forbids.isEmpty ? '' :
+                        '; запрещено при: ' + rule.forbids.join(', '))),
+
+                CheckboxListTile(
+                  key: const Key('whole-literary-repair-rule-consent'),
+                  contentPadding: EdgeInsets.zero,
+                  value: _causalRulesReviewed,
+                  onChanged: _working ? null : (value) => setState(
+                      () => _causalRulesReviewed = value == true),
+                  title: const Text('Я проверил(а) причинные правила '
+                      'и разрешаю создать новый черновик'),
+                ),
+                OutlinedButton.icon(
+                  key: const Key('whole-literary-repair-propose'),
+                  onPressed: !_working && _causalRulesReviewed
+                      ? _proposeRepair : null,
+                  icon: const Icon(Icons.auto_fix_high_outlined),
+                  label: const Text('Исправить допустимые ошибки '
+                      'и повторно проверить сюжет'),
+                ),
+              ],
+              if (widget.postRepair != null) ...[
+                const SizedBox(height: 10),
+                const Text('Это НОВАЯ версия сюжета. Старое заключение '
+                    'и разрешение на платные запросы больше не действуют. '
+                    'Для продолжения нужна полная повторная проверка.'),
+                CheckboxListTile(
+                  key: const Key('whole-literary-recheck-reviewed'),
+                  contentPadding: EdgeInsets.zero,
+                  value: _newResultsReviewed,
+                  onChanged: _working ? null : (value) => setState(
+                      () => _newResultsReviewed = value == true),
+                  title: const Text('Я проверил(а) новые заключения '
+                      'по всей игре'),
+                ),
+                CheckboxListTile(
+                  key: const Key('whole-literary-recheck-private'),
+                  contentPadding: EdgeInsets.zero,
+                  value: _privateFictionConfirmed,
+                  onChanged: _working ? null : (value) => setState(
+                      () => _privateFictionConfirmed = value == true),
+                  title: const Text('Это только частная вымышленная '
+                      'игровая адаптация, не доказанный канон'),
+                ),
+                FilledButton.icon(
+                  key: const Key('whole-literary-recheck-accept'),
+                  onPressed: !_working && _newResultsReviewed &&
+                      _privateFictionConfirmed ? _acceptRecheckedPlan : null,
+                  icon: const Icon(Icons.task_alt),
+                  label: const Text('Передать проверенный черновик '
+                      'для частной RPG'),
+                ),
+              ],
             ],
             if (_reports.isNotEmpty) ...[
               const Divider(height: 30),

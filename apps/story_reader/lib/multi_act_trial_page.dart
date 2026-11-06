@@ -13,6 +13,8 @@ import 'reviewed_gameplay_compiler.dart';
 import 'source_locked_gameplay_review_page.dart';
 import 'whole_plan_gameplay_batch_page.dart';
 import 'whole_story_literary_review_page.dart';
+import 'whole_story_literary_bounded_repair.dart';
+import 'story_plan_causal_audit.dart';
 import 'narrative_book_model.dart';
 import 'world_library_gateway.dart';
 import 'world_play_page.dart';
@@ -49,6 +51,7 @@ class _MultiActTrialPageState extends State<MultiActTrialPage> {
   final Map<String, ReviewedProseSceneApproval> _reviewedProse = {};
   SelectedGameplayCandidates? _gameplaySelection;
   SelectedWholePlanGameplayCandidates? _wholeGameplaySelection;
+  WholeStoryLiteraryRecheckApproval? _recheckedRepair;
 
   List<NarrativeEvent> get _reviewEvents {
     final ids = <String>{
@@ -108,11 +111,19 @@ class _MultiActTrialPageState extends State<MultiActTrialPage> {
     if (!_reviewed || !_privateFiction || _working) return;
     if (_enforceEarlierOutcome &&
         (_reviewedProse.isNotEmpty || _gameplaySelection != null ||
-         _wholeGameplaySelection != null)) {
+         _wholeGameplaySelection != null || _recheckedRepair != null)) {
       setState(() => _error = 'Подтверждённые художественные сцены '
           'относятся к прежней версии игрового плана. '
           'Снимите дополнительное правило или удалите '
           'выбранные художественные сцены из подготовки.');
+      return;
+    }
+    if (_recheckedRepair != null &&
+        (_reviewedProse.isNotEmpty || _gameplaySelection != null ||
+         _wholeGameplaySelection != null)) {
+      setState(() => _error =
+          'Старые художественные и предметные предложения относятся '
+          'к предыдущей версии плана. Снимите их для повторной сборки.');
       return;
     }
     setState(() { _working = true; _error = null; });
@@ -150,6 +161,7 @@ class _MultiActTrialPageState extends State<MultiActTrialPage> {
         bookMap: widget.bookMap,
         draft: widget.draft,
         continuity: continuity,
+        recheckedRepair: _recheckedRepair,
         sourceEventIdsReviewedByUser: {
           for (final event in _reviewEvents) event.id,
         },
@@ -328,7 +340,8 @@ class _MultiActTrialPageState extends State<MultiActTrialPage> {
               value: _enforceEarlierOutcome,
               onChanged: valid && _reviewedProse.isEmpty &&
                   _gameplaySelection == null &&
-                  _wholeGameplaySelection == null
+                  _wholeGameplaySelection == null &&
+                  _recheckedRepair == null
                   ? (v) => setState(() =>
                       _enforceEarlierOutcome = v == true)
                   : null,
@@ -353,7 +366,8 @@ class _MultiActTrialPageState extends State<MultiActTrialPage> {
                         'оно меняет сценарий'
                       : 'Одно согласие на список показанных сцен, '
                         'ограничение запросов и возобновление'),
-                  onTap: _working || _enforceEarlierOutcome ? null : () async {
+                  onTap: _working || _enforceEarlierOutcome ||
+                      _recheckedRepair != null ? null : () async {
                     await Navigator.of(context).push<void>(
                       MaterialPageRoute(
                         builder: (_) => SourceLockedProseBatchPage(
@@ -374,7 +388,8 @@ class _MultiActTrialPageState extends State<MultiActTrialPage> {
                         'второго акта: оно меняет проверяемый план'
                       : 'Можно восстановить ранее сохранённый '
                         'черновик без нового запроса'),
-                  onTap: _working || _enforceEarlierOutcome ? null : () async {
+                  onTap: _working || _enforceEarlierOutcome ||
+                      _recheckedRepair != null ? null : () async {
                     final accepted = await Navigator.of(context)
                         .push<ReviewedProseSceneApproval>(
                       MaterialPageRoute(
@@ -421,7 +436,8 @@ class _MultiActTrialPageState extends State<MultiActTrialPage> {
             OutlinedButton.icon(
               key: const Key('multiact-trial-optional-gameplay'),
               onPressed: valid && _reviewed && _privateFiction &&
-                  !_enforceEarlierOutcome ? _chooseGameplay : null,
+                  !_enforceEarlierOutcome && _recheckedRepair == null
+                  ? _chooseGameplay : null,
               icon: const Icon(Icons.inventory_2_outlined),
               label: const Text('Добавить предметы и знания '
                   '(необязательный запрос ИИ)'),
@@ -433,7 +449,8 @@ class _MultiActTrialPageState extends State<MultiActTrialPage> {
             OutlinedButton.icon(
               key: const Key('multiact-trial-whole-gameplay-batch'),
               onPressed: valid && _reviewed && _privateFiction &&
-                  !_enforceEarlierOutcome ? () async {
+                  !_enforceEarlierOutcome && _recheckedRepair == null
+                  ? () async {
                 await _chooseWholeGameplay();
               } : null,
               icon: const Icon(Icons.menu_book_outlined),
@@ -448,14 +465,44 @@ class _MultiActTrialPageState extends State<MultiActTrialPage> {
             OutlinedButton.icon(
               key: const Key('multiact-trial-whole-literary-review'),
               onPressed: valid && !_working ? () async {
-                await Navigator.of(context).push<void>(
+                final result = await Navigator.of(context)
+                    .push<WholeStoryLiteraryRecheckApproval>(
                   MaterialPageRoute(
                     builder: (_) => WholeStoryLiteraryReviewPage(
                       index: widget.index, book: widget.book,
                       plan: widget.draft.plan,
+                      approvedRules: StoryCausalContract(
+                        decisionInvariants: [
+                          ...widget.draft.causalContract.decisionInvariants,
+                          if (_enforceEarlierOutcome)
+                            StoryDecisionInvariant(
+                              id: 'reviewed_cross_act_fictional_gate',
+                              decisionId: 'act_2_accept_offer',
+                              requires: const ['act_1_original_outcome'],
+                            ),
+                        ],
+                        knowledgeGates:
+                            widget.draft.causalContract.knowledgeGates,
+                        exclusiveGroups:
+                            widget.draft.causalContract.exclusiveGroups,
+                      ),
                     ),
                   ),
                 );
+                if (!mounted || result == null) return;
+                result.verifyForCompiler(
+                    index: widget.index, book: widget.book,
+                    originalPlan: widget.draft.plan);
+                setState(() {
+                  // All optional prose/effects are bound to an OLD plan
+                  // edition and must never silently transfer to the new one.
+                  _reviewedProse.clear();
+                  _gameplaySelection = null;
+                  _wholeGameplaySelection = null;
+                  _enforceEarlierOutcome = false;
+                  _recheckedRepair = result;
+                  _error = null;
+                });
               } : null,
               icon: const Icon(Icons.fact_check_outlined),
               label: const Text('Проверить всю логику сюжета через ИИ'),
@@ -463,7 +510,25 @@ class _MultiActTrialPageState extends State<MultiActTrialPage> {
             const Text('Необязательная независимая рецензия: полный '
                 'граф достижимых решений, два отдельных согласия, '
                 'сохранение результатов без повторной оплаты. '
-                'Не изменяет сюжет и не подтверждает литературный канон.'),
+                'Может предложить безопасную новую редакцию лишь для '
+                'заранее подтверждённых условий. Новая версия требует '
+                'отдельного аудита и согласия перед сборкой.'),
+            if (_recheckedRepair != null)
+              ListTile(
+                key: const Key('multiact-trial-literary-recheck-ready'),
+                leading: const Icon(Icons.fact_check_outlined),
+                title: const Text('Исправленный план повторно проверен'),
+                subtitle: const Text('Только частная RPG: это новая '
+                    'редакция сценария; литературный канон не доказан. '
+                    'После подтверждения будет собран новый .bworld.'),
+                trailing: IconButton(
+                  key: const Key('multiact-trial-clear-literary-recheck'),
+                  tooltip: 'Убрать повторно проверенную редакцию',
+                  onPressed: _working ? null : () => setState(
+                      () => _recheckedRepair = null),
+                  icon: const Icon(Icons.close),
+                ),
+              ),
             if (_wholeGameplaySelection != null)
               ListTile(
                 title: Text('Выбрано из всех пакетов: ' +
