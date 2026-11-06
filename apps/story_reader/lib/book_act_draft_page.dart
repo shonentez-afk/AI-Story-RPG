@@ -47,6 +47,7 @@ class _BookActDraftPageState extends State<BookActDraftPage> {
   List<ActDilemmaCandidate> _candidates = const [];
   MultiActStoryPlanDraft? _composed;
   bool _loading = true, _working = false;
+  bool _sequencePreparing = false, _stopAfterCurrent = false;
   int _actPage = 0;
   static const int _pageSize = 12;
   String? _notice, _error;
@@ -159,24 +160,30 @@ class _BookActDraftPageState extends State<BookActDraftPage> {
     );
   }
 
-  Future<void> _requestForAct(BookActSegment act) async {
-    if (_working || _loading || _error != null) return;
+  /// A single act is always authorized individually, with the exact quotes
+  /// visible before any POST. Returning false stops sequential preparation:
+  /// cancel, network error and failed checkpoint writes cannot authorize the
+  /// next act.
+  Future<bool> _requestAndSave(BookActSegment act) async {
     ActDilemmaConsentManifest manifest;
     try {
       manifest = ActDilemmaConsentManifest.fromAct(
-        book: widget.book, bookMap: widget.bookMap, actId: act.id);
+          book: widget.book, bookMap: widget.bookMap, actId: act.id);
     } catch (error) {
       if (mounted) setState(() => _error = error.toString());
-      return;
+      return false;
     }
     final includeTitle = await _askActConsent(manifest);
-    if (includeTitle == null || !mounted) return;
+    if (includeTitle == null || !mounted) {
+      if (mounted) setState(() => _notice =
+          'Следующая часть не отправлена. Можно возобновить позже.');
+      return false;
+    }
 
     setState(() {
-      _working = true;
       _error = null;
       _composed = null;
-      _notice = 'Запрашиваем одно предложение для выбранной части.';
+      _notice = 'Запрашиваем предложение только для подтверждённой части.';
     });
     try {
       final result = await _gateway.request(
@@ -193,19 +200,21 @@ class _BookActDraftPageState extends State<BookActDraftPage> {
               attempt.toString() + '/' + total.toString());
         },
       );
-      if (!mounted) return;
-      // Persist only AFTER independent source/causal checks succeeded.
-      // Failure leaves the previous checkpoint unchanged; no duplicate POST.
-      String? saveFailure;
+      if (!mounted) return false;
+
+      // Never advance a sequential run unless its independently checked
+      // candidate has been durably saved. A failed write is NOT a success.
       try {
         await _checkpoint.save(
             book: widget.book, bookMap: widget.bookMap,
             candidate: result);
       } catch (error) {
-        saveFailure = 'Не удалось сохранить ответ локально: ' +
-            error.toString() + '. Он доступен до закрытия экрана.';
+        if (mounted) setState(() => _notice =
+            'Ответ получен, но не сохранён: ' + error.toString() +
+            '. Последующие части не отправлялись; попробуйте снова.');
+        return false;
       }
-      if (!mounted) return;
+      if (!mounted) return false;
       final previous = [
         for (final c in _candidates)
           if (c.actId != result.actId) c,
@@ -220,24 +229,71 @@ class _BookActDraftPageState extends State<BookActDraftPage> {
       setState(() {
         _candidates = List.unmodifiable(previous);
         _notice = result.foundCandidate
-            ? 'Получено одно сценарное предложение. '
-              'Смысл оригинала ещё не подтверждён.'
-            : 'ИИ не предложил содержательной развилки для этой части. '
-              'Ничего не было выдумано автоматически.';
-        if (saveFailure != null) {
-          _notice = _notice! + ' ' + saveFailure;
-        }
+            ? 'Предложение сохранено. Литературный смысл ещё не проверен.'
+            : 'Модель не нашла подходящую развилку для этой части. '
+              'Пустой результат сохранён без выдумывания событий.';
       });
+      return true;
     } catch (error) {
-      if (mounted) {
-        // A recoverable HTTP/model error does not disable all other acts.
-        // Retrying this act still requires NEW explicit consent.
-        setState(() => _notice =
-            'Предложение для части не получено: ' + error.toString() +
-            '. Другие части не отправлялись.');
-      }
+      if (mounted) setState(() => _notice =
+          'Предложение не получено: ' + error.toString() +
+          '. Другие части не отправлялись.');
+      return false;
+    }
+  }
+
+  Future<void> _requestForAct(BookActSegment act) async {
+    if (_working || _loading || _error != null) return;
+    setState(() => _working = true);
+    try {
+      await _requestAndSave(act);
     } finally {
       if (mounted) setState(() => _working = false);
+    }
+  }
+
+  /// The foreground-only assisted path skips durable results, asks a fresh
+  /// consent for EACH remaining act, and stops on cancel/failure. There is no
+  /// whole-book blanket approval, silent POST or background work.
+  Future<void> _prepareRemaining() async {
+    if (_working || _loading || _error != null) return;
+    final pending = [
+      for (final act in _eligible)
+        if (!_candidates.any((c) => c.actId == act.id)) act,
+    ];
+    final capacity = ActDilemmaCheckpointStore.maxStoredActs -
+        _candidates.length;
+    if (pending.isEmpty || capacity <= 0) return;
+    setState(() {
+      _working = true;
+      _sequencePreparing = true;
+      _stopAfterCurrent = false;
+    });
+    try {
+      for (final act in pending.take(capacity)) {
+        if (!mounted || _stopAfterCurrent) break;
+        setState(() => _notice =
+            'Следующая часть: глава ' +
+            (act.chapterIndex + 1).toString() +
+            '. Прочтите цитаты и отдельно подтвердите запрос.');
+        final saved = await _requestAndSave(act);
+        if (!saved || !mounted || _stopAfterCurrent) break;
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _working = false;
+          _sequencePreparing = false;
+          _stopAfterCurrent = false;
+        });
+        // Compose only locally and only when enough formally valid drafts
+        // exist. This cannot promote the result to canonical/full RPG.
+        final ready = _candidates.where((c) => c.foundCandidate).length;
+        if (ready >= 2 && ready <=
+            ActDilemmaCheckpointStore.maxStoredActs) {
+          _assemble();
+        }
+      }
     }
   }
 
@@ -370,6 +426,40 @@ class _BookActDraftPageState extends State<BookActDraftPage> {
                   ],
                 ),
               ],
+              const SizedBox(height: 10),
+              Text('Сохранено частей: ' + _candidates.length.toString() +
+                  ' из ' + eligible.length.toString() +
+                  ' подходящих. Получено развилок: ' +
+                  candidateCount.toString() +
+                  '. Повторные обращения по сохранённым частям не нужны.',
+                  key: const Key('act-draft-batch-progress')),
+              const SizedBox(height: 8),
+              FilledButton.icon(
+                key: const Key('act-draft-prepare-remaining'),
+                onPressed: (!_working && !_loading && _error == null &&
+                        !full && eligible.any((act) =>
+                            !_candidates.any((c) => c.actId == act.id)))
+                    ? _prepareRemaining : null,
+                icon: const Icon(Icons.auto_awesome_outlined),
+                label: const Text('Продолжить подготовку по частям'),
+              ),
+              const Text('Приложение пропускает уже сохранённые результаты. '
+                  'Перед КАЖДЫМ новым запросом показывает точные цитаты '
+                  'этой части и отдельно спрашивает согласие. '
+                  'Отмена останавливает последующие запросы; '
+                  'не более 6 частей в одном черновике.'),
+              if (_sequencePreparing)
+                OutlinedButton.icon(
+                  key: const Key('act-draft-stop-after-current'),
+                  onPressed: _stopAfterCurrent ? null
+                      : () => setState(() {
+                          _stopAfterCurrent = true;
+                          _notice = 'Следующие части не будут отправлены. '
+                              'Уже подтверждённый запрос может завершиться.';
+                        }),
+                  icon: const Icon(Icons.stop_circle_outlined),
+                  label: const Text('Остановить после текущей части'),
+                ),
               const SizedBox(height: 10),
               FilledButton.icon(
                 key: const Key('act-draft-assemble'),
