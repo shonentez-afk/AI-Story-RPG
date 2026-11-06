@@ -752,6 +752,20 @@ def _npc_social(prov, bp):
                 fail("Invalid NPC social choice identity/condition")
             seen_gates.add((scene, choice))
             citation(scene, gate["source_quote_sha256"])
+            chapter = origin[scene]["chapter_index"]
+            if memory is not None and not any(
+                    rule["observer_id"] == actor and
+                    rule["memory_id"] == memory and
+                    origin[rule["scene_id"]]["chapter_index"] <= chapter
+                    for rule in rules):
+                fail("NPC choice requires future or unreviewed memory")
+            if trust is not None and not any(
+                    rule["observer_id"] == actor and
+                    rule["related_actor_id"] == "player" and
+                    rule["relationship_delta"] > 0 and
+                    origin[rule["scene_id"]]["chapter_index"] <= chapter
+                    for rule in rules):
+                fail("NPC choice trust precedes its source event")
             if memory is not None and not any(
                     rule["observer_id"] == actor and
                     rule["memory_id"] == memory and
@@ -765,6 +779,33 @@ def _npc_social(prov, bp):
                     (rule["scene_id"], rule["choice_id"]) != (scene, choice)
                     for rule in rules):
                 fail("NPC social choice cannot require unearned trust")
+
+        # Match story_core: cyclic required-memory chains have no playable
+        # starting choice, even if individual references look correct.
+        gates_by_key = {(g["scene_id"], g["choice_id"]): g
+                        for g in gates}
+        visited, visiting = set(), set()
+
+        def check_chain(key):
+            if key in visited:
+                return
+            if key in visiting:
+                fail("Circular NPC memory choice dependency")
+            visiting.add(key)
+            g = gates_by_key[key]
+            required = g["required_memory_id"]
+            if required is not None:
+                rule = next(rule for rule in rules
+                            if rule["observer_id"] == g["actor_id"] and
+                            rule["memory_id"] == required)
+                source = (rule["scene_id"], rule["choice_id"])
+                if source in gates_by_key:
+                    check_chain(source)
+            visiting.remove(key)
+            visited.add(key)
+
+        for key in gates_by_key:
+            check_chain(key)
 
 
 def _provenance(prov, bp):
