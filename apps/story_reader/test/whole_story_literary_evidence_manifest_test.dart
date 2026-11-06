@@ -181,6 +181,41 @@ Map<String, dynamic> _reviewRecord(LiteraryReviewWindow window, {
     'status': 'UNVERIFIED_AI_REVIEW',
   };
 }
+
+class _AllowAi extends AiCloudPreferences {
+  @override
+  Future<bool> isEnabled() async => true;
+}
+
+class _TestKey implements AiApiKeyVault {
+  @override
+  Future<String?> read() async => 'MOCK_KEY_ONLY';
+  @override
+  Future<bool> hasKey() async => true;
+  @override
+  Future<void> write(String value) async {}
+  @override
+  Future<void> delete() async {}
+}
+
+class _RetryTransport implements AiHttpTransport {
+  _RetryTransport(this.ok);
+  final String ok;
+  final List<String> requests = [];
+  @override
+  Future<AiHttpResponse> send({
+    required Uri uri, required Map<String, String> headers,
+    required String body,
+  }) async {
+    expect(uri, ZaiModel.endpoint);
+    expect(headers['Authorization'], 'Bearer MOCK_KEY_ONLY');
+    requests.add(body);
+    return requests.length == 1
+        ? const AiHttpResponse(429, '{}', retryAfter: '0')
+        : AiHttpResponse(200, ok);
+  }
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -443,6 +478,40 @@ void main() {
     await tester.pumpAndSettle();
     expect(calls, 1);
     expect(find.byKey(const Key('whole-literary-complete')), findsOneWidget);
+  });
+
+
+  test('real AI transport retries exact bytes after separate consent only',
+      () async {
+    final index = _index();
+    final book = await _book(index);
+    final plan = _plan(book);
+    final manifest = WholeStoryLiteraryReviewManifest.fromEvidence(
+        index: index, book: book, plan: plan,
+        evidence: WholeStoryLiteraryEvidenceManifest.build(
+            index: index, book: book, plan: plan));
+    final window = manifest.windows.single;
+    final envelope = jsonEncode({'choices': [
+      {'finish_reason': 'stop', 'message': {
+        'content': jsonEncode(_reviewRecord(window)),
+      }},
+    ]});
+    final transport = _RetryTransport(envelope);
+    final critic = ZaiWholeStoryLiteraryCritic(
+      preferences: _AllowAi(), vault: _TestKey(),
+      transport: transport, retryWait: (_) async {},
+    );
+    await expectLater(critic.review(
+      window: window, approvedDigest: window.approvalDigest,
+      explicitReviewConsent: false), throwsA(isA<AiSetupException>()));
+    expect(transport.requests, isEmpty);
+    final response = await critic.review(
+      window: window, approvedDigest: window.approvalDigest,
+      explicitReviewConsent: true);
+    expect(response.findings, hasLength(1));
+    expect(transport.requests, hasLength(2));
+    expect(transport.requests[0], transport.requests[1]);
+    expect(transport.requests[0].contains('MOCK_KEY_ONLY'), false);
   });
 
 }
