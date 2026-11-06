@@ -68,7 +68,9 @@ class _WorldPlayPageState extends State<WorldPlayPage> {
   }
 
   Future<void> _loadPortraits(WorldGameView view) async {
-    final script = SceneDialogueScript.fromSceneText(view.sceneText);
+    final script = view.sceneDialogueTurns == null
+        ? SceneDialogueScript.fromSceneText(view.sceneText)
+        : SceneDialogueScript.fromSignedTurns(view.sceneDialogueTurns!);
     if (script == null) return;
     final speakers = script.turns.map((t) => t.speaker)
         .whereType<String>().toSet();
