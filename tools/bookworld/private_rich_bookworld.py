@@ -85,7 +85,7 @@ _ATTRIBUTED = re.compile(
     r'^([А-ЯЁA-Z][А-Яа-яЁёA-Za-z0-9 .-]{0,49}):[ \t]*(«[^»\n]{1,1200}»|"[^"\n]{1,1200}"|—[ \t]*[^\n]{1,1200})[.!?]?
     expected = {"hero", "item_names", "item_descriptions",
                 "stat_names", "fact_names", "scene_names"}
-    has_dialogues = "scene_dialogues" in meta
+    has_dialogues = type(meta) is dict and "scene_dialogues" in meta
     if has_dialogues:
         expected.add("scene_dialogues")
     _keys(meta, expected, "presentation")
