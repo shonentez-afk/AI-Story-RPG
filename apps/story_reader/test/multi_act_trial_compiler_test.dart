@@ -555,6 +555,10 @@ void main() {
 
     await tester.scrollUntilVisible(crossAct, -110,
         scrollable: scrollable);
+    // The title bar may overlay the top few pixels of a lazily built
+    // checkbox after scrolling back. Move its tap target into the viewport.
+    await tester.drag(scrollable, const Offset(0, 155));
+    await tester.pumpAndSettle();
     await tester.tap(crossAct);
     await tester.pumpAndSettle();
     await tester.scrollUntilVisible(itemButton, 110,
