@@ -174,7 +174,7 @@ def validate_story(story, index: dict, analyses: list[dict]) -> dict:
                    "limitations": ["Exact quotes do not prove a model's interpretation",
                                    "Chapter citation gates do not prove event-level spoiler safety",
                                    "Literary quality and gameplay on a device are not certified",
-                                   "External AI provenance is unsupported by the current .bworld importer"]})
+                                   "Rich v3 enrichment must be checked before packaging"]})
     return report
 
 

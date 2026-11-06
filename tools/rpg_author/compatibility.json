@@ -1,6 +1,6 @@
 {
   "format": "rpg_author_compatibility_v1",
-  "application_baseline": "e18924cd9cb8c65bd948d370c28d32c3ee429ab4",
+  "application_baseline": "be5a87d0d155bbbe65aea55f8080a836584a9291",
   "files": {
     "tools/bookworld/bookworld.py": "68c5ebaac9b4c19176a476081f538fff639ef585020dfdea02b8bf861aec550f",
     "tools/bookworld/private_bookworld.py": "b558193bbab223eeaaba4c0c343b44e76bf5b09d1c55a2e9bde52f6aba92f95c",
@@ -8,6 +8,9 @@
     "apps/story_reader/lib/book_text_decoder.dart": "cb97376fb007f019704830f66343e8a0ebf0fe78f0ca211f4d5ce737eac126b6",
     "apps/story_reader/lib/book_source_index.dart": "f918386e306f608d1887e209a867430522f18dfddcf6c53596c0e744ad8f6251",
     "packages/bookworld_format/lib/private_bookworld.dart": "d2b7880360d3af2255abf2577b5d8fd117a3b045532fd0ce8c5b0047d6d901b5",
-    "packages/story_core/lib/src/blueprint.dart": "d90ccbcb07ee6ef57ead57c9918068b39ab551060cd97b2153fdbeebd9449cbb"
+    "packages/story_core/lib/src/blueprint.dart": "d90ccbcb07ee6ef57ead57c9918068b39ab551060cd97b2153fdbeebd9449cbb",
+    "tools/bookworld/private_rich_bookworld.py": "444e4ce7a42f064d3268a297dbe5efbed377173565ce909faed2e80961b0ef95",
+    "packages/bookworld_format/lib/private_rich_bookworld.dart": "92b7f8abea26a712b5b701106e3f4b8accff6da84f61ce76f4501cf742348176",
+    "packages/bookworld_format/lib/private_bookworld_writer.dart": "50f61cad4e47fda2c75dd4c73163f718909a8135eb1bf858910f0b2448f6a5cd"
   }
 }

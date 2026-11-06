@@ -21,7 +21,7 @@ def parser():
     init.add_argument("--book", required=True, type=Path)
     init.add_argument("--project", required=True, type=Path)
     init.add_argument("--chunk-size", type=int, default=4096)
-    for name in ("status", "next", "accept-analysis", "accept-story", "validate", "export", "build"):
+    for name in ("status", "next", "accept-analysis", "accept-story", "validate", "export"):
         command = commands.add_parser(name)
         command.add_argument("--project", required=True, type=Path)
         if name == "next":
@@ -41,15 +41,17 @@ def parser():
     bundle = commands.add_parser("verify-bundle", help="Check package and sidecar SHA binding")
     bundle.add_argument("--input", required=True, type=Path)
     bundle.add_argument("--attribution", required=True, type=Path)
-    richer = commands.add_parser("build-rich", help="Build source-checked rich private v3 game")
+    richer = commands.add_parser("build", aliases=["build-rich"],
+                                 help="Build source-checked rich private v3 game and attribution")
     richer.add_argument("--project", required=True, type=Path)
     richer.add_argument("--enrichment", required=True, type=Path)
     richer.add_argument("--output", required=True, type=Path)
     richer.add_argument("--model-id", choices=["gpt-6"], default=None)
-    richer_check = commands.add_parser("verify-rich", help="Verify v3 archive and attribution")
+    richer_check = commands.add_parser("verify", aliases=["verify-rich"],
+                                       help="Verify v3 archive and matching attribution")
     richer_check.add_argument("--input", required=True, type=Path)
     richer_check.add_argument("--attribution", required=True, type=Path)
-    verify = commands.add_parser("verify", help="Inspect an existing legacy v2 .bworld, read-only")
+    verify = commands.add_parser("verify-legacy", help="Inspect a historical v2 test package, read-only")
     verify.add_argument("--input", required=True, type=Path)
     return cli
 
@@ -74,8 +76,6 @@ def main(argv=None) -> int:
             result = project.validate_project(args.project)
         elif name == "export":
             result = project.export_candidate(args.project, args.output)
-        elif name == "build":
-            result = project.build(args.project)
         elif name == "build-legacy":
             from .legacy_package import build_legacy
             result = build_legacy(args.project, args.output,
@@ -84,11 +84,10 @@ def main(argv=None) -> int:
         elif name == "verify-bundle":
             from .legacy_package import verify_bundle
             result = verify_bundle(args.input, args.attribution)
-        elif name == "build-rich":
-            from .rich_package import build_rich
-            result = build_rich(args.project, args.enrichment, args.output,
-                                model_id=args.model_id)
-        elif name == "verify-rich":
+        elif name in ("build", "build-rich"):
+            result = project.build(args.project, args.enrichment, args.output,
+                                   model_id=args.model_id)
+        elif name in ("verify", "verify-rich"):
             from .rich_package import verify_rich_bundle
             result = verify_rich_bundle(args.input, args.attribution)
         else:

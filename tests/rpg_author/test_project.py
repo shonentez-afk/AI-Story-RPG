@@ -11,6 +11,7 @@ from tools.rpg_author.cli import main
 from tools.rpg_author.common import ROOT, AuthoringError, canonical, digest
 from tools.rpg_author.compatibility import check_contract
 from tests.rpg_author.fixtures import TEXT, analysis, story
+from tests.rpg_author.fixtures_rich import enrichment
 
 
 class ProjectTests(unittest.TestCase):
@@ -33,7 +34,7 @@ class ProjectTests(unittest.TestCase):
         project.submit_analysis(self.root, analysis())
         self.assertEqual(project.next_task(self.root)["task"], "write_story_plan")
         project.submit_story(self.root, story())
-        self.assertEqual(project.next_task(self.root)["task"], "export_and_review")
+        self.assertEqual(project.next_task(self.root)["task"], "prepare_enrichment_and_build")
         self.assertTrue(project.validate_project(self.root)["valid_candidate"])
 
     def test_identical_resubmission_is_idempotent(self):
@@ -144,12 +145,13 @@ class ProjectTests(unittest.TestCase):
         with self.assertRaises(AuthoringError):
             project.export_candidate(self.root, self.base / "fake.bworld")
 
-    def test_bworld_build_blocks_instead_of_erasing_ai_provenance(self):
-        self.ready()
+    def test_bworld_build_still_requires_a_complete_story(self):
+        overlay = self.base / "enrichment.json"
+        overlay.write_bytes(canonical(enrichment()))
         before = sorted(str(p.relative_to(self.base)) for p in self.base.rglob("*"))
         with self.assertRaises(AuthoringError) as error:
-            project.build(self.root)
-        self.assertEqual(error.exception.code, "external_ai_provenance_unsupported")
+            project.build(self.root, overlay, self.base / "game.bworld")
+        self.assertEqual(error.exception.code, "story_missing")
         self.assertEqual(before, sorted(str(p.relative_to(self.base)) for p in self.base.rglob("*")))
 
     def test_provenance_cannot_be_changed_to_none_in_manifest(self):
@@ -163,12 +165,29 @@ class ProjectTests(unittest.TestCase):
 
     def test_cli_returns_machine_readable_errors_and_nonzero_status(self):
         self.ready()
+        overlay = self.base / "enrichment.json"
+        overlay.write_bytes(canonical({}))
         out, err = io.StringIO(), io.StringIO()
         with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
-            code = main(["build", "--project", str(self.root)])
+            code = main(["build", "--project", str(self.root), "--enrichment", str(overlay),
+                         "--output", str(self.base / "game.bworld")])
         self.assertEqual(code, 2)
         self.assertEqual(out.getvalue(), "")
-        self.assertEqual(json.loads(err.getvalue())["code"], "external_ai_provenance_unsupported")
+        self.assertEqual(json.loads(err.getvalue())["code"], "invalid_fields")
+
+    def test_v3_dependency_changes_cannot_bypass_contract_lock(self):
+        from tools.rpg_author import compatibility
+        actual = check_contract()
+        for name in ("tools/bookworld/private_rich_bookworld.py",
+                     "packages/bookworld_format/lib/private_rich_bookworld.dart",
+                     "packages/bookworld_format/lib/private_bookworld_writer.dart"):
+            with self.subTest(dependency=name):
+                self.assertIn(name, actual["files"])
+                altered = {"files": {name: "0" * 64}}
+                with patch.object(compatibility, "read_json", return_value=altered):
+                    with self.assertRaises(AuthoringError) as error:
+                        check_contract()
+                self.assertEqual(error.exception.code, "contract_drift")
 
     def test_another_book_changes_identity_and_cannot_reuse_analysis(self):
         second = self.base / "different.txt"
