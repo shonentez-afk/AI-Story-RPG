@@ -284,6 +284,29 @@ class StoryWorld {
         }
       }
     }
+    if (socialRulebook != null && socialRulebook!.itemTransfers.isNotEmpty) {
+      final custody = NpcSocialLedger.inspect(this, socialRulebook!);
+      final matching = socialRulebook!.itemTransfers.where((transfer) =>
+          transfer.sceneId == _state.sceneId &&
+          transfer.choiceId == choiceId).toList();
+      for (final transfer in matching) {
+        if (custody.itemOwner(transfer.itemId) != transfer.fromActorId) {
+          return 'condition_not_met:npc_item_owner';
+        }
+      }
+      for (final effect in selected.effects) {
+        if (effect.op != 'grant_item') continue;
+        final isReviewedReturn = matching.any((transfer) =>
+            transfer.itemId == effect.id &&
+            transfer.toActorId == 'player');
+        if (!isReviewedReturn) {
+          final actualOwner = custody.itemOwner(effect.id!);
+          if (actualOwner != null && actualOwner != 'player') {
+            return 'condition_not_met:npc_item_custody';
+          }
+        }
+      }
+    }
     return null;
   }
 
@@ -371,6 +394,19 @@ class StoryWorld {
       beforeStateHash: _state.stateHash,
       afterStateHash: nextState.stateHash,
     );
+    if (socialRulebook != null && socialRulebook!.itemTransfers.isNotEmpty) {
+      // Pre-commit verification must never let a partial transfer reach the
+      // durable SQLite event chain. No world state is published on failure.
+      final draft = fork();
+      draft._state = nextState;
+      draft._events.add(event);
+      draft._byAction[actionId] = event;
+      try {
+        NpcSocialLedger.inspect(draft, socialRulebook!);
+      } on FormatException {
+        return _denied('npc_item_custody_conflict');
+      }
+    }
     _state = nextState;
     _events.add(event);
     _byAction[actionId] = event;
