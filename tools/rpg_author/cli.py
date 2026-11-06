@@ -49,6 +49,13 @@ def parser():
                          help="Write a private, immutable JSON report outside the repository")
     quality.add_argument("--strict", action="store_true",
                          help="Exit 3 when any mechanical quality warning remains")
+    dialogue = commands.add_parser("dialogue-audit", help="E6c: read-only NPC question and answer QA")
+    dialogue.add_argument("--bworld", required=True, type=Path)
+    dialogue.add_argument("--contract", required=True, type=Path,
+                          help="Private source-bound dialogue topics manifest")
+    dialogue.add_argument("--attribution", type=Path)
+    dialogue.add_argument("--output", type=Path)
+    dialogue.add_argument("--strict", action="store_true")
     bundle = commands.add_parser("verify-bundle", help="Check package and sidecar SHA binding")
     bundle.add_argument("--input", required=True, type=Path)
     bundle.add_argument("--attribution", required=True, type=Path)
@@ -104,6 +111,15 @@ def main(argv=None) -> int:
                 require(not out.exists(), "output_exists", "Report cannot overwrite an existing file")
                 atomic_write(out, canonical(result))
                 result["report_output"] = str(out)
+        elif name == "dialogue-audit":
+            from .dialogue_quality import audit_archive
+            from .common import atomic_write, canonical, outside_repository, require
+            result = audit_archive(args.bworld, args.contract, args.attribution)
+            if args.output is not None:
+                out = outside_repository(args.output)
+                require(not out.exists(), "output_exists", "Report cannot overwrite another file")
+                atomic_write(out, canonical(result))
+                result["report_output"] = str(out)
         elif name == "build-legacy":
             from .legacy_package import build_legacy
             result = build_legacy(args.project, args.output,
@@ -129,7 +145,7 @@ def main(argv=None) -> int:
             except (BookworldError, KeyError, TypeError, ValueError) as exc:
                 raise AuthoringError("invalid_package", str(exc)) from exc
         print(json.dumps(result, ensure_ascii=False, indent=2, allow_nan=False))
-        if name == "gameplay-audit" and args.strict and result["warning_count"]:
+        if name in ("gameplay-audit", "dialogue-audit") and args.strict and result["warning_count"]:
             return 3
         return 0
     except AuthoringError as exc:
