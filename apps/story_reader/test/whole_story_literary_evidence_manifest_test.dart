@@ -6,6 +6,8 @@ import 'package:ai_story_reader/source_evidence_graph.dart';
 import 'package:ai_story_reader/source_semantic_catalog.dart';
 import 'package:ai_story_reader/source_semantic_provider.dart';
 import 'package:ai_story_reader/story_plan.dart';
+import 'package:ai_story_reader/story_plan_causal_audit.dart';
+import 'package:ai_story_reader/whole_story_literary_bounded_repair.dart';
 import 'package:ai_story_reader/whole_story_literary_evidence_manifest.dart';
 import 'package:ai_story_reader/whole_story_literary_review.dart';
 import 'package:ai_story_reader/whole_story_literary_summary.dart';
@@ -157,6 +159,36 @@ StoryPlan _widePlan(NarrativeBookModel book) {
         ], event: b.id),
       scene('accepted_end', 2, const [], terminal: true, event: b.id),
       scene('free_end', 0, const [], terminal: true, event: a.id),
+    ],
+  );
+}
+
+StoryPlan _repairablePromisePlan(NarrativeBookModel book) {
+  StorySituation scene(String id, List<StoryDecision> decisions,
+      {bool terminal = false}) => StorySituation(
+    id: id, goal: 'Цель и последствия сюжетной ситуации',
+    conflict: 'Обещание имеет последствия лишь после согласия.',
+    chapterIndex: 0, terminal: terminal, decisions: decisions,
+  );
+  StoryDecision choice(String id, String next,
+      {List<String> adds = const []}) => StoryDecision(
+    id: id, intent: 'Решение: ' + id, nextSituationId: next,
+    adds: adds,
+  );
+  return StoryPlan(
+    sourceFingerprint: book.sourceFingerprint, title: book.title,
+    entrySituationId: 'start', flags: const ['accepted', 'declined', 'never'],
+    initialFlags: const [], situations: [
+      scene('start', [
+        choice('accept', 'crossroads', adds: ['accepted']),
+        choice('decline', 'crossroads', adds: ['declined']),
+      ]),
+      scene('crossroads', [
+        choice('honor', 'canon_end'),
+        choice('leave', 'alternate_end'),
+      ]),
+      scene('canon_end', const [], terminal: true),
+      scene('alternate_end', const [], terminal: true),
     ],
   );
 }
@@ -391,6 +423,90 @@ void main() {
     ]});
     expect(() => ZaiWholeStoryLiteraryCritic.parse(window, response),
         throwsA(isA<AiSetupException>()));
+  });
+
+  test('g2a auto-tightens only reviewed promise rule, replays all routes '
+      'and revokes old literary consent without editing the original', () async {
+    final index = _index();
+    final book = await _book(index);
+    final plan = _repairablePromisePlan(book);
+    final original = plan.encode();
+    final evidence = WholeStoryLiteraryEvidenceManifest.build(
+        index: index, book: book, plan: plan);
+    final manifest = WholeStoryLiteraryReviewManifest.fromEvidence(
+        index: index, book: book, plan: plan, evidence: evidence);
+    final reports = [
+      for (final window in manifest.windows)
+        WholeLiteraryReviewReport.fromJson(window, {
+          'window_digest': window.approvalDigest,
+          'verdict': 'needsRevision',
+          'uncertainty': 'Обещание в альтернативной ветке не подтверждено.',
+          'findings': [
+            if (window.transitions.any((t) => t['choice_id'] == 'honor'))
+              {
+                'kind': 'promise', 'severity': 'high',
+                'scene_id': 'crossroads',
+                'choice_id': 'honor',
+                'source_event_id': null,
+                'problem': 'Герой обязан исполнить обещание даже после отказа.',
+              },
+          ],
+          'status': 'UNVERIFIED_AI_REVIEW',
+        }),
+    ];
+    final digest = WholeStoryLiterarySummary.compile(
+        manifest: manifest, reports: reports).reportDigest;
+    final contract = StoryCausalContract(decisionInvariants: [
+      StoryDecisionInvariant(
+        id: 'promise_requires_consent', decisionId: 'honor',
+        requires: ['accepted'], forbids: ['declined'],
+      ),
+    ]);
+    final corrected = WholeStoryLiteraryBoundedRepair.propose(
+      manifest: manifest, reports: reports,
+      approvedRules: contract, expectedReportDigest: digest,
+      explicitRuleReview: true,
+    );
+    expect(corrected.changed, true);
+    expect(corrected.formal.appliedChanges, hasLength(1));
+    expect(corrected.formal.after.passedFormalContracts, true);
+    expect(corrected.draft.validate(book).terminalSituations, 2);
+    expect(corrected.draft.situations[1].decisions.first.requires,
+        ['accepted']);
+    expect(corrected.draft.situations[1].decisions.first.forbids,
+        ['declined']);
+    expect(plan.encode(), original);
+    expect(corrected.oldLiteraryApprovalRevoked, true);
+    expect(corrected.requiresFreshLiteraryConsent, true);
+    expect(corrected.newReviewManifest!.approvalDigest,
+        isNot(manifest.approvalDigest));
+    expect(corrected.newReviewManifest!.evidence.planSha256,
+        isNot(manifest.evidence.planSha256));
+    expect(() => WholeStoryLiterarySummary.compile(
+      manifest: corrected.newReviewManifest!, reports: reports,
+    ), throwsFormatException);
+    expect(corrected.findingKeys, hasLength(1));
+    expect(corrected.isReadyToPlay, false);
+    expect(corrected.canPublish, false);
+    expect(corrected.mayChangeGameOrSave, false);
+    expect(() => WholeStoryLiteraryBoundedRepair.propose(
+      manifest: manifest, reports: reports,
+      approvedRules: contract, expectedReportDigest: List.filled(64, '0').join(),
+      explicitRuleReview: true,
+    ), throwsFormatException);
+    expect(() => WholeStoryLiteraryBoundedRepair.propose(
+      manifest: manifest, reports: reports,
+      approvedRules: contract, expectedReportDigest: digest,
+      explicitRuleReview: false,
+    ), throwsFormatException);
+    expect(() => WholeStoryLiteraryBoundedRepair.propose(
+      manifest: manifest, reports: reports,
+      approvedRules: StoryCausalContract(decisionInvariants: [
+        StoryDecisionInvariant(id: 'foreign',
+          decisionId: 'leave', requires: ['accepted']),
+      ]),
+      expectedReportDigest: digest, explicitRuleReview: true,
+    ), throwsFormatException);
   });
 
   test('g1c rejects partial and foreign reports; complete report has stable SHA',
