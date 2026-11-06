@@ -8,6 +8,7 @@ import 'story_plan.dart';
 import 'whole_story_literary_batch.dart';
 import 'whole_story_literary_evidence_manifest.dart';
 import 'whole_story_literary_review.dart';
+import 'whole_story_literary_summary.dart';
 import 'zai_semantic_preview.dart';
 
 /// Opening the optional page only reads LOCAL state. Network calls require
@@ -229,6 +230,40 @@ class _WholeStoryLiteraryReviewPageState
                 label: const Text('Остановить отправку'),
               ),
             if (_loading || _working) const LinearProgressIndicator(),
+            if (progress?.complete == true &&
+                _reports.length == manifest.totalWindows) ...[
+              const Divider(height: 24),
+              Builder(builder: (context) {
+                final summary = WholeStoryLiterarySummary.compile(
+                  manifest: manifest, reports: _reports);
+                return Card(child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Итог всей проверки',
+                          key: const Key('whole-literary-summary-title'),
+                          style: Theme.of(context).textTheme.titleMedium),
+                      Text('Пакетов: ' + summary.totalWindows.toString() +
+                          '; переходов: ' + summary.totalTransitions.toString() +
+                          '; замечаний: ' + summary.totalFindings.toString() +
+                          '; недостаточно данных: ' +
+                          summary.insufficient.toString() + '.'),
+                      Text('Неохваченных событий: ' +
+                          summary.uncoveredEvents.toString() +
+                          '; межпакетных повторов для проверки: ' +
+                          summary.crossWindowIssues.length.toString() + '.'),
+                      const Text('Это неподтверждённая литературная '
+                          'диагностика, а не доказательство канона. '
+                          'Автоматическое исправление не разрешено.'),
+                      for (final issue in summary.crossWindowIssues)
+                        Text('Повтор в разных пакетах: ' +
+                            issue['scene_choice_kind'].toString()),
+                    ],
+                  ),
+                ));
+              }),
+            ],
             if (_reports.isNotEmpty) ...[
               const Divider(height: 30),
               Text('Сохранённые замечания',
