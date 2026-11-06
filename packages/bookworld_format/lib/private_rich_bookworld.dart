@@ -602,7 +602,8 @@ class RichPrivateBookworldImporter {
   }
 
   Map<String, dynamic> _presentation(
-      Map<String, dynamic> source, StoryBlueprint blueprint) {
+      Map<String, dynamic> source, StoryBlueprint blueprint,
+      {NpcSocialRulebook? socialRules}) {
     final data = source['presentation'];
     if (data is! Map<String, dynamic>) {
       throw const FormatException('Отсутствуют сведения героя и предметов');
@@ -669,6 +670,7 @@ class RichPrivateBookworldImporter {
       knowledgeReview is Map<String, dynamic> ? knowledgeReview : null,
       blueprint,
       allDialogues is Map<String, dynamic> ? allDialogues : null,
+      socialRules: socialRules,
     );
     if (hasKnowledgeReview && knowledgeReview is! Map<String, dynamic>) {
       throw const FormatException('Wrong NPC line review map');
@@ -713,10 +715,11 @@ class RichPrivateBookworldImporter {
       throw const FormatException('Неподдерживаемая версия RPG v3');
     }
     _model(source, manifest);
-    final presentation = _presentation(source, blueprint);
-    _npcKnowledge(source, manifest, blueprint);
     final socialRulebook =
         RichNpcSocialContract.inspect(source, manifest, blueprint);
+    final presentation = _presentation(
+        source, blueprint, socialRules: socialRulebook);
+    _npcKnowledge(source, manifest, blueprint);
     if (hasNpcKnowledge && hasGameplayReview) {
       throw const FormatException(
           'NPC grants and separate gameplay review need unified review');
