@@ -142,7 +142,20 @@ class NpcKnowledgeWorldBridge {
     // New rules imply a different private world identity. A campaign for the
     // old version cannot silently load the modified world or its fact catalog.
     final oldId = originalBlueprint['book_id'] as String;
-    final suffix = NpcKnowledgeRulebook.digest(rulebook.encode())
+    // A newly assigned permanent actor changes the ID namespace even if
+    // the exact same knowledge rules are reused. Otherwise an older
+    // campaign could load against a distinct actor under the same book ID.
+    // Preserve the existing identity for old profiles with NO card; they
+    // are not silently migrated into a new world.
+    final hasPermanentNpcIds =
+        notebook.profiles.any((profile) => profile.characterId != null);
+    final identityMaterial = hasPermanentNpcIds
+        ? jsonEncode({
+            'rules': rulebook.encode(),
+            'actor_ids': actorIds.values.toList()..sort(),
+          })
+        : rulebook.encode();
+    final suffix = NpcKnowledgeRulebook.digest(identityMaterial)
         .substring(0, 12);
     result['book_id'] = '${oldId}_$suffix';
 
