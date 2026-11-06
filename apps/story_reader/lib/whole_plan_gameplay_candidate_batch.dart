@@ -226,6 +226,10 @@ class WholePlanGameplayBatchService {
   final ZaiSourceLockedGameplayCandidateService service;
   final WholePlanGameplayPreview? previewOverride;
 
+  // Shared between instances in one process: a double tap or reopening a
+  // second page must never launch two billable sweeps of the same edition.
+  static final _activeSourceFingerprints = <String>{};
+
   static const _checkpointFormat = 'ai_story_gameplay_batch_checkpoint_m2h8f1_v1';
   static final _id = RegExp(r'^[a-z][a-z0-9_]{0,63}$');
   static final _controls =
@@ -427,39 +431,48 @@ class WholePlanGameplayBatchService {
       throw const FormatException(
           'Не подтверждены точные отрывки или лимит запросов.');
     }
-    final token = cancellation ?? ZaiPreviewCancellation();
-    token.check();
-    final saved = [...await _load(manifest)];
-    final recovered = saved.length;
-    var newRequests = 0;
-    WholePlanGameplayBatchProgress progress() =>
-        WholePlanGameplayBatchProgress(
-          total: manifest.totalBatches,
-          completed: saved.length,
-          recovered: recovered,
-          newRequests: newRequests,
-          unanchoredBookEvents: manifest.unanchoredBookEvents,
-        );
-    onProgress?.call(progress());
-    for (var n = saved.length; n < manifest.contexts.length; n++) {
-      token.check();
-      if (newRequests >= manifest.maxNewRequestsPerRun) break;
-      final ctx = manifest.contexts[n];
-      final result = await (previewOverride?.call(ctx, token) ??
-          service.propose(
-            context: ctx,
-            approvedDigest: ctx.approvalDigest,
-            explicitExcerptConsent: true,
-            cancellation: token,
-          ));
-      token.check();
-      _verifyDraft(ctx, result);
-      await _save(manifest, [...saved, result]);
-      token.check();
-      saved.add(result);
-      newRequests++;
-      onProgress?.call(progress());
+    final fingerprint = manifest.index.sourceFingerprint;
+    if (!_activeSourceFingerprints.add(fingerprint)) {
+      throw const FormatException(
+          'По этой книге уже выполняется проверка запросов ИИ.');
     }
-    return progress();
+    try {
+      final token = cancellation ?? ZaiPreviewCancellation();
+      token.check();
+      final saved = [...await _load(manifest)];
+      final recovered = saved.length;
+      var newRequests = 0;
+      WholePlanGameplayBatchProgress progress() =>
+          WholePlanGameplayBatchProgress(
+            total: manifest.totalBatches,
+            completed: saved.length,
+            recovered: recovered,
+            newRequests: newRequests,
+            unanchoredBookEvents: manifest.unanchoredBookEvents,
+          );
+      onProgress?.call(progress());
+      for (var n = saved.length; n < manifest.contexts.length; n++) {
+        token.check();
+        if (newRequests >= manifest.maxNewRequestsPerRun) break;
+        final ctx = manifest.contexts[n];
+        final result = await (previewOverride?.call(ctx, token) ??
+            service.propose(
+              context: ctx,
+              approvedDigest: ctx.approvalDigest,
+              explicitExcerptConsent: true,
+              cancellation: token,
+            ));
+        token.check();
+        _verifyDraft(ctx, result);
+        await _save(manifest, [...saved, result]);
+        token.check();
+        saved.add(result);
+        newRequests++;
+        onProgress?.call(progress());
+      }
+      return progress();
+    } finally {
+      _activeSourceFingerprints.remove(fingerprint);
+    }
   }
 }
