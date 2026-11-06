@@ -527,9 +527,9 @@ void main() {
       ),
     ));
 
-    // All controls are in a lazy ListView. Test a real phone viewport:
-    // never assume a button beyond the current viewport is already built.
-    final scrollable = find.byType(Scrollable).last;
+    // Scroll the PRIMARY page ListView, not an ExpansionTile or nested
+    // ListTile scrollable. Controls below the viewport are lazily built.
+    final scrollable = find.byType(Scrollable).first;
     final quotes = find.byKey(const Key('multiact-trial-source-reviewed'));
     await tester.scrollUntilVisible(quotes, 110, scrollable: scrollable);
     await tester.tap(quotes);
@@ -563,7 +563,7 @@ void main() {
     expect(find.text('Предметы и знания из книги'), findsOneWidget);
     final request = find.byKey(const Key('gameplay-source-request'));
     await tester.scrollUntilVisible(request, 110,
-        scrollable: find.byType(Scrollable).last);
+        scrollable: find.byType(Scrollable).first);
     await tester.pumpAndSettle();
     expect(tester.widget<FilledButton>(request).onPressed, isNull);
 
@@ -571,7 +571,7 @@ void main() {
     await tester.pumpAndSettle();
     final start = find.byKey(const Key('multiact-trial-start'));
     await tester.scrollUntilVisible(start, 110,
-        scrollable: find.byType(Scrollable).last);
+        scrollable: find.byType(Scrollable).first);
     await tester.pumpAndSettle();
     expect(start, findsOneWidget);
     expect(find.byKey(const Key('multiact-trial-clear-gameplay')),
