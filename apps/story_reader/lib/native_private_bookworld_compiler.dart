@@ -128,6 +128,8 @@ Future<Uint8List> compileReviewedNpcRichPrivateBookworldInWorker(
   required SourceCharacterDossierIndex npcDossiers,
   required Map<String, String> sourceQuoteByRuleId,
   required bool userConfirmed,
+  Map<String, List<Map<String, dynamic>>> reviewedDialogueTurns = const {},
+  Map<String, String> reviewedSpeakerBindings = const {},
   String heroName = 'Игрок',
 }) async {
   // Exactly the already accepted preflight/translator, no second engine.
@@ -146,6 +148,8 @@ Future<Uint8List> compileReviewedNpcRichPrivateBookworldInWorker(
     blueprint: blueprint, provenance: translation.provenanceJson,
     sourceQuoteByRuleId: sourceQuoteByRuleId,
     userConfirmed: userConfirmed, heroName: heroName,
+    reviewedDialogueTurns: reviewedDialogueTurns,
+    reviewedSpeakerBindings: reviewedSpeakerBindings,
   );
   final archive = await compute(_compilePrivateNpcRichWorld, {
     'blueprint': blueprint,
