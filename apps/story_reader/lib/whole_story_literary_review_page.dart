@@ -349,6 +349,13 @@ class _WholeStoryLiteraryReviewPageState
                 const Text('Можно применить только безопасные условия '
                     'существующих игровых флагов, подтверждённые отдельно. '
                     'Ни одной новой книжной истины программа не придумывает.'),
+                for (final rule in widget.approvedRules!.decisionInvariants)
+                  Text('Игровое правило: ' + rule.decisionId +
+                      (rule.requires.isEmpty ? '' :
+                        '; требует: ' + rule.requires.join(', ')) +
+                      (rule.forbids.isEmpty ? '' :
+                        '; запрещено при: ' + rule.forbids.join(', '))),
+
                 CheckboxListTile(
                   key: const Key('whole-literary-repair-rule-consent'),
                   contentPadding: EdgeInsets.zero,
