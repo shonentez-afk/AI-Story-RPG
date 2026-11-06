@@ -11,6 +11,7 @@ import 'source_locked_prose_batch_page.dart';
 import 'reviewed_prose_scene_overlay.dart';
 import 'reviewed_gameplay_compiler.dart';
 import 'source_locked_gameplay_review_page.dart';
+import 'whole_plan_gameplay_batch_page.dart';
 import 'narrative_book_model.dart';
 import 'world_library_gateway.dart';
 import 'world_play_page.dart';
@@ -391,6 +392,28 @@ class _MultiActTrialPageState extends State<MultiActTrialPage> {
             const Text('Для одного запроса используются максимум '
                 'шесть проверенных отрывков. '
                 'Это НЕ анализ всего произведения.'),
+            const SizedBox(height: 8),
+            OutlinedButton.icon(
+              key: const Key('multiact-trial-whole-gameplay-batch'),
+              onPressed: valid && _reviewed && _privateFiction &&
+                  !_enforceEarlierOutcome ? () async {
+                await Navigator.of(context).push<void>(
+                  MaterialPageRoute(
+                    builder: (_) => WholePlanGameplayBatchPage(
+                      index: widget.index, book: widget.book,
+                      plan: widget.draft.plan,
+                    ),
+                  ),
+                );
+              } : null,
+              icon: const Icon(Icons.menu_book_outlined),
+              label: const Text('Предложения по всему сюжету '
+                  '(пакетная обработка)'),
+            ),
+            const Text('Пакеты используют все привязанные к игровым '
+                'решениям цитаты, сохраняя прогресс на устройстве. '
+                'Это только неподтверждённые предложения: '
+                'они НЕ добавляются в игру автоматически.'),
             if (_gameplaySelection != null)
               ListTile(
                 title: Text('Выбрано игровых эффектов: ' +
