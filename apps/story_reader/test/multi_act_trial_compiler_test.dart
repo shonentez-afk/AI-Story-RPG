@@ -721,4 +721,69 @@ void main() {
     expect(calls, 1);
   });
 
+
+  test('four source-anchored acts create MORE THAN one six-citation GLM '
+      'window with no loss of late-book references', () async {
+    final index = BookSourceIndexer.index(ImportedBook(
+      title: 'Четыре части одной синтетической книги',
+      author: 'Сценарий для проверки охвата',
+      chapters: [
+        for (var n = 1; n <= 4; n++)
+          List.filled(5, 'Часть $n. Участник нашёл ключ около '
+              'известной дороги, а затем услышал новое условие. '
+              'Решение пока ещё не принято. ').join(' '),
+      ],
+    ));
+    final book = await _analyze(index);
+    final map = BookwideActPlanner.build(index: index, book: book);
+    expect(map.acts, hasLength(4));
+    final draft = BookwideStoryPlanComposer.compose(
+      index: index, book: book, bookMap: map,
+      actProposals: [
+        for (var i = 0; i < 4; i++) _proposal(book, i),
+      ],
+    );
+    final manifest = WholePlanGameplayBatchManifest.fromPlan(
+      index: index, book: book, plan: draft.plan,
+      maxNewRequestsPerRun: 2,
+    );
+    expect(manifest.totalReferencedSourceEvents, 8);
+    expect(manifest.totalBatches, greaterThan(1));
+    expect(manifest.maxHttpAttempts,
+        2 * ZaiSourceLockedGameplayCandidateService.maxAttempts);
+    final requested = <String>{};
+    for (final batch in manifest.contexts) {
+      expect(batch.excerpts.length, lessThanOrEqualTo(6));
+      expect(batch.choices.length, lessThanOrEqualTo(16));
+      expect(batch.payloadJson.length, lessThanOrEqualTo(8192));
+      requested.addAll(batch.excerpts.map((e) => e.id));
+    }
+    expect(requested, {for (final e in book.events) e.id});
+    expect(manifest.unanchoredBookEvents, 0);
+    // Manifest approval displays exact request payloads for BOTH windows.
+    expect(manifest.sentContexts, hasLength(manifest.totalBatches));
+    expect(manifest.sentContextBytes, greaterThan(0));
+    final memory = MemorySourceAnalysisCheckpointRepository();
+    var requests = 0;
+    final service = WholePlanGameplayBatchService(
+      repository: memory,
+      previewOverride: (ctx, token) async {
+        requests++;
+        return GameplayCandidateDraft(
+          sourceFingerprint: ctx.sourceFingerprint,
+          approvalDigest: ctx.approvalDigest, candidates: const [],
+        );
+      },
+    );
+    final progress = await service.generate(
+      manifest: manifest,
+      approvedManifestDigest: manifest.approvalDigest,
+      explicitBatchConsent: true,
+    );
+    expect(progress.newRequests, lessThanOrEqualTo(2));
+    expect(requests, progress.newRequests);
+    expect(requests, lessThanOrEqualTo(2));
+    expect((await service.inspect(manifest)).completed, progress.completed);
+  });
+
 }
