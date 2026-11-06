@@ -252,3 +252,87 @@ class RichPrivateTests(unittest.TestCase):
         with self.assertRaises(AuthoringError) as err:
             verify_rich_bundle(target, meta_path)
         self.assertEqual(err.exception.code, "attribution_mismatch")
+
+    def test_sidecar_changes_rejected_even_with_correct_archive_hash(self):
+        raw, disclosure = compile_rich_from_project(self.project_dir, self.overlay)
+        target = self.base / "game.bworld"
+        target.write_bytes(raw)
+        sidecar = target.with_suffix(".attribution.json")
+        original = json.loads(disclosure)
+        changes = [
+            (("blueprint_sha256",), "0" * 64),
+            (("source_fingerprint",), "0" * 64),
+            (("scenario_generation", "provider"), "zai"),
+            (("scenario_generation", "model_id"), "gpt-6"),
+            (("scenario_generation", "model_id_status"), "user_declared"),
+            (("scenario_generation", "tool"), "other"),
+            (("scenario_generation", "method"), "built_in"),
+            (("bookworld_packaging", "build_tool"), "other"),
+            (("bookworld_packaging", "version"), "2.0"),
+            (("bookworld_packaging", "method"), "other"),
+            (("bookworld_packaging", "authorship_also_in_package"), 1),
+            (("publication_authorized",), 0),
+            (("semantic_review_completed",), True),
+            (("device_playtest_completed",), True),
+            (("unexpected",), "extra field"),
+        ]
+        for path, value in changes:
+            with self.subTest(field=".".join(path)):
+                altered = deepcopy(original)
+                parent = altered
+                for key in path[:-1]:
+                    parent = parent[key]
+                parent[path[-1]] = value
+                self.assertEqual(altered["bookworld_sha256"], digest(raw))
+                sidecar.write_bytes(canonical(altered))
+                with self.assertRaises(AuthoringError) as err:
+                    verify_rich_bundle(target, sidecar)
+                self.assertEqual(err.exception.code, "attribution_mismatch")
+        # Valid metadata is order-independent and whitespace-independent.
+        sidecar.write_text(json.dumps(original, indent=4), encoding="utf-8")
+        self.assertTrue(verify_rich_bundle(target, sidecar)["attribution_matches_archive"])
+
+    def test_malformed_and_incomplete_sidecars_are_rejected(self):
+        raw, disclosure = compile_rich_from_project(self.project_dir, self.overlay)
+        target, sidecar = self.base / "game.bworld", self.base / "game.attribution.json"
+        target.write_bytes(raw)
+        metadata = json.loads(disclosure)
+        variants = [[], None, True, 5, "not an object"]
+        for key in metadata:
+            altered = deepcopy(metadata)
+            del altered[key]
+            variants.append(altered)
+        for altered in variants:
+            with self.subTest(value=altered):
+                sidecar.write_bytes(canonical(altered))
+                with self.assertRaises(AuthoringError) as err:
+                    verify_rich_bundle(target, sidecar)
+                self.assertEqual(err.exception.code, "attribution_mismatch")
+        # Duplicate keys must not hide conflicting declarations.
+        sidecar.write_bytes(b'{"format":"forged",' + disclosure[1:])
+        with self.assertRaises(AuthoringError) as err:
+            verify_rich_bundle(target, sidecar)
+        self.assertEqual(err.exception.code, "duplicate_json_key")
+
+    def test_declared_model_must_match_inside_archive_and_sidecar(self):
+        raw, disclosure = compile_rich_from_project(self.project_dir, self.overlay,
+                                                   model_id="gpt-6")
+        target, sidecar = self.base / "game.bworld", self.base / "game.attribution.json"
+        target.write_bytes(raw)
+        sidecar.write_bytes(disclosure)
+        self.assertTrue(verify_rich_bundle(target, sidecar)["attribution_matches_archive"])
+        metadata = json.loads(disclosure)
+        metadata["scenario_generation"]["model_id"] = None
+        metadata["scenario_generation"]["model_id_status"] = "not_attested"
+        sidecar.write_bytes(canonical(metadata))
+        with self.assertRaises(AuthoringError) as err:
+            verify_rich_bundle(target, sidecar)
+        self.assertEqual(err.exception.code, "attribution_mismatch")
+
+    def test_build_output_cannot_pollute_checkpoint_directory(self):
+        path = self.base / "overlay.json"
+        path.write_bytes(canonical(self.overlay))
+        with self.assertRaises(AuthoringError) as err:
+            build_rich(self.project_dir, path, self.project_dir / "game.bworld")
+        self.assertEqual(err.exception.code, "output_in_project")
+        self.assertFalse(list(self.project_dir.glob("*.bworld")))
