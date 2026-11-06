@@ -1,3 +1,11 @@
+## Подтверждённый CI для E6e (7 ноября 2026)
+
+**Последний проверенный коммит КОДА:** `bfa4190afec7c0f5e00c70e357898a9660c05450`, внешний генератор `0.3.0a3`. [GitHub Actions run #42297819582](https://github.com/shonentez-afk/AI-Story-RPG/actions/runs/42297819582): **SUCCESS**, оба задания **author-tests SUCCESS** и **dart-parity SUCCESS** на этом же SHA. В составе author-tests прошли новые E6e unit + synthetic end-to-end tests и старые E6d/regression. Проверка pin/application-contract выполнена без отключения. Здесь после зелёного CI добавлена только запись документации с `[skip ci]` — не выдавать её SHA за отдельный проверенный исполняемый код.
+
+**Вывод:** `contract_drift` для принятого `main`/PR #131 устранён. Новый [Draft PR #132](https://github.com/shonentez-afk/AI-Story-RPG/pull/132) **не принят** и его развивающийся social-контракт не является частью данного E6e gate. При его принятии потребуется новый кодовый parity-probe. Установленный у пользователя навык пока закреплён на прежнем E6d SHA `9849c22...` — не утверждать, что bootstrap уже переведён на E6e: обновление pin делать только отдельным проверенным действием. Реальная книга/Android/Windows E2E по-прежнему не объявлены готовыми.
+
+---
+
 ## E6e — синхронизация с принятым NPC rich-v3 (7 ноября 2026)\n\n**E6e closeout implemented on this branch:** `python3 -m tools.rpg_author finalize`, mandatory literary-review report, fail-closed gameplay quality and exact question-inventory versus dialogue-topic check, source/story/overlay hash binding, immutable JSON report, archive and sidecar verification. New synthetic regression tests: `tests/rpg_author/test_finalize.py`. Full usage and limitations: [E6E_FINALIZATION_RU_2026-11-07.md](E6E_FINALIZATION_RU_2026-11-07.md). **No claim of CI success until final HEAD author-tests and dart-parity are green.** This is not automatic generation of all NPCs or Android/Windows full-book E2E.\n\n
 
 **Новая активная внешняя ветка:** [feature/external-rpg-author-e6e-parity-20261107](https://github.com/shonentez-afk/AI-Story-RPG/tree/feature/external-rpg-author-e6e-parity-20261107), создана поверх `main` после принятого [PR #131](https://github.com/shonentez-afk/AI-Story-RPG/pull/131) (baseline `9c9bdc142495e536b5d11ca5e61680948e45f8fe`).
