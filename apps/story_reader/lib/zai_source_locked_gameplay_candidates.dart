@@ -39,7 +39,7 @@ class SourceLockedGameplayContext {
     required this.planSha256,
     required this.excerpts,
     required this.choices,
-    required this.consentPreview,
+    required this.payloadJson,
     required this.approvalDigest,
   });
 
@@ -52,7 +52,11 @@ class SourceLockedGameplayContext {
   final String sourceFingerprint, planSha256, approvalDigest;
   final List<NarrativeEvent> excerpts;
   final List<GameplayChoiceAnchor> choices;
-  final Map<String, Object> consentPreview;
+  // Keep the precise consented bytes immutable, even if the UI mutates a
+  // map returned by the public preview accessor.
+  final String payloadJson;
+  Map<String, Object> get consentPreview =>
+      Map<String, Object>.from(jsonDecode(payloadJson) as Map);
 
   static SourceLockedGameplayContext forPlan({
     required BookSourceIndex index,
@@ -127,7 +131,8 @@ class SourceLockedGameplayContext {
       'literary_meaning': 'NOT_ATTESTED',
       'item_ownership': 'NOT_PROVEN_BY_WORD_MATCH',
     };
-    if (utf8.encode(jsonEncode(payload)).length > maxSentBytes) {
+    final payloadJson = jsonEncode(payload);
+    if (utf8.encode(payloadJson).length > maxSentBytes) {
       throw const FormatException(
           'Фрагменты и решения превышают размер одного запроса.');
     }
@@ -144,7 +149,7 @@ class SourceLockedGameplayContext {
       planSha256: planSha,
       excerpts: List.unmodifiable(selected),
       choices: List.unmodifiable(anchors),
-      consentPreview: Map.unmodifiable(payload),
+      payloadJson: payloadJson,
       approvalDigest: digest,
     );
   }
@@ -291,7 +296,7 @@ class ZaiSourceLockedGameplayCandidateService {
         final item = Map<String, dynamic>.from(rawCandidate as Map);
         if (item.keys.toSet().length != keys.length ||
             !item.keys.toSet().containsAll(keys) ||
-            !_safeText(item['kind'], 4, 4) && item['kind'] != 'fact' ||
+            item['kind'] != 'item' && item['kind'] != 'fact' ||
             item['id'] is! String ||
             !_id.hasMatch(item['id'] as String) ||
             !_safeText(item['label'], 2, 120) ||
@@ -385,7 +390,7 @@ class ZaiSourceLockedGameplayCandidateService {
       'model': ZaiModel.id,
       'messages': [
         {'role': 'system', 'content': _systemPrompt},
-        {'role': 'user', 'content': jsonEncode(context.consentPreview)},
+        {'role': 'user', 'content': context.payloadJson},
       ],
       'thinking': {'type': 'disabled'},
       'max_tokens': 1400,
