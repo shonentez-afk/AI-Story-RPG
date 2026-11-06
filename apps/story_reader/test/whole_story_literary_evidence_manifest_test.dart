@@ -9,6 +9,8 @@ import 'package:ai_story_reader/story_plan.dart';
 import 'package:ai_story_reader/whole_story_literary_evidence_manifest.dart';
 import 'package:ai_story_reader/whole_story_literary_review.dart';
 import 'package:ai_story_reader/whole_story_literary_batch.dart';
+import 'package:ai_story_reader/whole_story_literary_review_page.dart';
+import 'package:flutter/material.dart';
 import 'package:ai_story_reader/ai_connection.dart';
 import 'dart:convert';
 import 'package:ai_story_reader/zai_auto_whole_book_analysis.dart';
@@ -403,6 +405,44 @@ void main() {
     await memory.write(index.sourceFingerprint,
         saved!.replaceFirst('UNVERIFIED_AI_REVIEW', 'CANON_APPROVED'));
     await expectLater(resumed.inspect(manifest), throwsFormatException);
+  });
+
+
+  testWidgets('M2h8g1b UI does not call model until both checks',
+      (tester) async {
+    final index = _index();
+    final book = await _book(index);
+    final plan = _plan(book);
+    var calls = 0;
+    final service = WholeStoryLiteraryBatchService(
+      repository: MemorySourceAnalysisCheckpointRepository(),
+      previewOverride: (window, token) async {
+        calls++;
+        return WholeLiteraryReviewReport.fromJson(
+            window, _reviewRecord(window));
+      },
+    );
+    await tester.pumpWidget(MaterialApp(
+      home: WholeStoryLiteraryReviewPage(
+        index: index, book: book, plan: plan, service: service,
+      ),
+    ));
+    await tester.pumpAndSettle();
+    expect(calls, 0);
+    final submit = find.byKey(const Key('whole-literary-submit'));
+    expect(tester.widget<FilledButton>(submit).onPressed, isNull);
+    await tester.ensureVisible(find.byKey(const Key('whole-literary-reviewed')));
+    await tester.tap(find.byKey(const Key('whole-literary-reviewed')));
+    await tester.pumpAndSettle();
+    expect(calls, 0);
+    await tester.ensureVisible(find.byKey(const Key('whole-literary-consent')));
+    await tester.tap(find.byKey(const Key('whole-literary-consent')));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(submit);
+    await tester.tap(submit);
+    await tester.pumpAndSettle();
+    expect(calls, 1);
+    expect(find.byKey(const Key('whole-literary-complete')), findsOneWidget);
   });
 
 }
