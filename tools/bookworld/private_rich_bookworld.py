@@ -26,6 +26,7 @@ MAX_SCENES = 192
 MAX_STATES = 2500
 NPC_GRANTS_FORMAT = "ai_story_npc_knowledge_grants_v1"
 NPC_SOCIAL_FORMAT = "ai_story_npc_social_witness_v1"
+NPC_SOCIAL_GATE_FORMAT = "ai_story_npc_social_witness_v2"
 
 
 def fail(message: str):
@@ -587,10 +588,13 @@ def _npc_social(prov, bp):
     reviewed = prov.get("npc_social")
     if reviewed is None:
         return
+    gate_format = (type(reviewed) is dict and
+                   reviewed.get("format") == NPC_SOCIAL_GATE_FORMAT)
     _keys(reviewed, {"format", "review_scope", "source_fingerprint",
                      "user_confirmed", "literary_canon_verified",
-                     "witnesses", "rules"}, "NPC social")
-    if reviewed["format"] != NPC_SOCIAL_FORMAT or \
+                     "witnesses", "rules"} |
+          ({"choice_gates"} if gate_format else set()), "NPC social")
+    if reviewed["format"] not in (NPC_SOCIAL_FORMAT, NPC_SOCIAL_GATE_FORMAT) or \
             reviewed["review_scope"] != "user_declared_private_game_fiction" or \
             reviewed["source_fingerprint"] != bp["source_fingerprint"] or \
             reviewed["user_confirmed"] is not True or \
@@ -677,6 +681,47 @@ def _npc_social(prov, bp):
     if set(present) != used:
         fail("Orphaned or unreviewed NPC witness")
 
+    if gate_format:
+        gates = reviewed["choice_gates"]
+        if type(gates) is not list or not 1 <= len(gates) <= 128:
+            fail("NPC game choices need bounded reviewed social gates")
+        seen_gates = set()
+        for gate in gates:
+            _keys(gate, {"scene_id", "choice_id", "actor_id",
+                         "required_memory_id", "minimum_trust_to_player",
+                         "source_quote_sha256"}, "NPC choice review")
+            scene, choice, actor = (
+                gate["scene_id"], gate["choice_id"], gate["actor_id"])
+            memory, trust = (gate["required_memory_id"],
+                             gate["minimum_trust_to_player"])
+            if not all(_id(v) for v in (scene, choice, actor)) or \
+                    scene not in scenes or actor not in actors or \
+                    actor == "player" or \
+                    not re.fullmatch(r"npc_[0-9a-f]{32}", actor) or \
+                    not any(c["id"] == choice for c in
+                            scenes[scene]["choices"]) or \
+                    (scene, choice) in seen_gates or \
+                    (memory is None and trust is None) or \
+                    (memory is not None and not _id(memory)) or \
+                    (trust is not None and
+                     (type(trust) is not int or not 1 <= trust <= 100)):
+                fail("Invalid NPC social choice identity/condition")
+            seen_gates.add((scene, choice))
+            citation(scene, gate["source_quote_sha256"])
+            if memory is not None and not any(
+                    rule["observer_id"] == actor and
+                    rule["memory_id"] == memory and
+                    (rule["scene_id"], rule["choice_id"]) != (scene, choice)
+                    for rule in rules):
+                fail("NPC social choice cannot require unearned memory")
+            if trust is not None and not any(
+                    rule["observer_id"] == actor and
+                    rule["related_actor_id"] == "player" and
+                    rule["relationship_delta"] > 0 and
+                    (rule["scene_id"], rule["choice_id"]) != (scene, choice)
+                    for rule in rules):
+                fail("NPC social choice cannot require unearned trust")
+
 
 def _provenance(prov, bp):
     keys = {"format", "bookworld_id", "source_fingerprint", "source_title",
@@ -713,7 +758,7 @@ def _manifest(bp, prov, payloads):
         "format": "ai_story_bookworld", "format_version": 3,
         **({"npc_knowledge_format": NPC_GRANTS_FORMAT}
            if "npc_knowledge" in prov else {}),
-        **({"npc_social_format": NPC_SOCIAL_FORMAT}
+        **({"npc_social_format": prov["npc_social"]["format"]}
            if "npc_social" in prov else {}),
         "bookworld_id": bp["book_id"],
         "source_fingerprint": bp["source_fingerprint"],
