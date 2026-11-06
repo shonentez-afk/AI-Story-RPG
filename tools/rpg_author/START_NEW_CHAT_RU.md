@@ -1,4 +1,4 @@
-## E6e — синхронизация с принятым NPC rich-v3 (7 ноября 2026)
+## E6e — синхронизация с принятым NPC rich-v3 (7 ноября 2026)\n\n**E6e closeout implemented on this branch:** `python3 -m tools.rpg_author finalize`, mandatory literary-review report, fail-closed gameplay quality and exact question-inventory versus dialogue-topic check, source/story/overlay hash binding, immutable JSON report, archive and sidecar verification. New synthetic regression tests: `tests/rpg_author/test_finalize.py`. Full usage and limitations: [E6E_FINALIZATION_RU_2026-11-07.md](E6E_FINALIZATION_RU_2026-11-07.md). **No claim of CI success until final HEAD author-tests and dart-parity are green.** This is not automatic generation of all NPCs or Android/Windows full-book E2E.\n\n
 
 **Новая активная внешняя ветка:** [feature/external-rpg-author-e6e-parity-20261107](https://github.com/shonentez-afk/AI-Story-RPG/tree/feature/external-rpg-author-e6e-parity-20261107), создана поверх `main` после принятого [PR #131](https://github.com/shonentez-afk/AI-Story-RPG/pull/131) (baseline `9c9bdc142495e536b5d11ca5e61680948e45f8fe`).
 
