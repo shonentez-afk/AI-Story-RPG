@@ -7,6 +7,7 @@ import 'package:story_core/story_core.dart';
 import 'src/sqlite_v1.dart';
 import 'private_gameplay_review.dart';
 import 'rich_scene_dialogue.dart';
+import 'npc_dialogue_knowledge.dart';
 import 'src/zip_v1.dart';
 
 /// A *private*, source-bound, offline CLASSIC package. It carries no original
@@ -605,10 +606,12 @@ class RichPrivateBookworldImporter {
     // Old rich-v3 worlds have six presentation fields. Newer ones may
     // include source-locked speaker turns; never require migration.
     final hasDialogues = data.containsKey('scene_dialogues');
+    final hasKnowledgeReview = data.containsKey('scene_dialogue_knowledge');
     _fields(data, {
       'hero', 'item_names', 'item_descriptions',
       'stat_names', 'fact_names', 'scene_names',
       if (hasDialogues) 'scene_dialogues',
+      if (hasKnowledgeReview) 'scene_dialogue_knowledge',
     }, 'rich presentation');
     final hero = data['hero'];
     if (hero is! Map<String, dynamic>) {
@@ -655,6 +658,16 @@ class RichPrivateBookworldImporter {
           throw const FormatException('Подписанные реплики сцены потеряны');
         }
       }
+    }
+    final allDialogues = data['scene_dialogues'];
+    final knowledgeReview = data['scene_dialogue_knowledge'];
+    RichNpcDialogueKnowledge.validate(
+      knowledgeReview is Map<String, dynamic> ? knowledgeReview : null,
+      blueprint,
+      allDialogues is Map<String, dynamic> ? allDialogues : null,
+    );
+    if (hasKnowledgeReview && knowledgeReview is! Map<String, dynamic>) {
+      throw const FormatException('Wrong NPC line review map');
     }
     return Map.unmodifiable(data);
   }
