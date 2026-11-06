@@ -124,5 +124,5 @@ class SourceLockedDialogueSpeakerAudit {
   }
 
   static String _normal(String raw) =>
-      raw.trim().toLowerCase().replaceAll(RegExp(r'\\s+'), ' ');
+      raw.trim().toLowerCase().replaceAll(RegExp(r'\s+'), ' ');
 }
