@@ -123,6 +123,7 @@ void main() {
       ],
     };
     provenance['presentation'] = presentation;
+    data['provenance'] = provenance;
     final archive = writer.build(
       blueprint: _asObject(data['blueprint']),
       provenance: _asObject(data['provenance']),
