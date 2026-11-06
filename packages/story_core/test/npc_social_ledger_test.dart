@@ -374,6 +374,96 @@ void main() {
         .choiceLockReason('walk_market'), 'condition_not_met:npc_trust');
   });
 
+  test('NPC item custody is authoritative and event-sourced, no phantom gifts',
+      () {
+    final raw = jsonDecode(
+      File('../../shared_schemas/fixtures/manor_world_m17.json')
+          .readAsStringSync()) as Map<String, dynamic>;
+    final market = (raw['scenes'] as List)
+        .cast<Map<String, dynamic>>()
+        .singleWhere((scene) => scene['id'] == 'market');
+    final choices = (market['choices'] as List)
+        .cast<Map<String, dynamic>>();
+    (choices.singleWhere((c) => c['id'] == 'ask_guard')['effects']
+        as List).add({'op': 'consume_item', 'id': 'map'});
+    (choices.singleWhere((c) => c['id'] == 'return_gate')['effects']
+        as List).add({'op': 'grant_item', 'id': 'map'});
+    final bp = StoryBlueprint.fromJson(raw);
+    final contract = NpcSocialRulebook(
+      blueprintHash: bp.blueprintHash,
+      requireReviewedWitnesses: true,
+      witnesses: const [
+        NpcSceneWitness(
+          sceneId: 'market', actorId: 'guard', mode: NpcWitnessMode.present),
+      ],
+      rules: const [],
+      itemTransfers: const [
+        NpcItemTransfer(
+          sceneId: 'market', choiceId: 'ask_guard', itemId: 'map',
+          fromActorId: 'player', toActorId: 'guard'),
+        NpcItemTransfer(
+          sceneId: 'market', choiceId: 'return_gate', itemId: 'map',
+          fromActorId: 'guard', toActorId: 'player'),
+      ],
+    );
+    final world = StoryWorld(bp, socialRulebook: contract);
+    expect(world.apply(actionId: 'trip1', choiceId: 'walk_market').applied,
+        isTrue);
+    expect(world.choiceLockReason('return_gate'),
+        'condition_not_met:npc_item_owner');
+    expect(world.choiceLockReason('ask_guard'),
+        'condition_not_met:npc_item_owner');
+    expect(world.apply(actionId: 'buy', choiceId: 'buy_map').applied, isTrue);
+    expect(NpcSocialLedger.inspect(world, contract).itemOwner('map'), 'player');
+    expect(world.apply(actionId: 'trip2', choiceId: 'walk_market').applied,
+        isTrue);
+    expect(world.apply(actionId: 'gift', choiceId: 'ask_guard').applied, isTrue);
+    final given = NpcSocialLedger.inspect(world, contract);
+    expect(given.itemOwner('map'), 'guard');
+    expect(given.itemsHeldBy('guard'), ['map']);
+    expect(world.state.inventory, isNot(contains('map')));
+    expect(() => given.itemOwner('missing'), throwsFormatException);
+
+    expect(world.apply(actionId: 'trip3', choiceId: 'walk_market').applied,
+        isTrue);
+    // New "grant_item" while the guard carries the same unique item must
+    // not duplicate ownership or produce a confirmed event.
+    final beforeRevision = world.state.revision;
+    final beforeHead = world.events.last.hash;
+    final forged = world.apply(actionId: 'counterfeit', choiceId: 'buy_map');
+    expect(forged.status, DecisionStatus.denied);
+    expect(forged.reason, 'condition_not_met:npc_item_custody');
+    expect(world.state.revision, beforeRevision);
+    expect(world.events.last.hash, beforeHead);
+    expect(world.apply(actionId: 'return', choiceId: 'return_gate').applied,
+        isTrue);
+    final returned = NpcSocialLedger.inspect(world, contract);
+    expect(returned.itemOwner('map'), 'player');
+    expect(returned.itemsHeldBy('guard'), isEmpty);
+    expect(world.state.inventory, contains('map'));
+    final replay = StoryWorld.replay(
+      bp, world.events.map((event) => event.toJson()),
+      socialRulebook: contract,
+      expectedSequence: world.state.revision,
+      expectedStateHash: world.state.stateHash,
+    );
+    final recovered = NpcSocialLedger.inspect(replay, contract);
+    expect(recovered.itemOwner('map'), 'player');
+    expect(recovered.snapshotHash, returned.snapshotHash);
+
+    final unreviewed = StoryWorld(bp);
+    expect(unreviewed.apply(actionId: 'trip', choiceId: 'walk_market')
+        .applied, isTrue);
+    expect(unreviewed.apply(actionId: 'phantom', choiceId: 'return_gate')
+        .applied, isTrue);
+    expect(() => StoryWorld.replay(
+      bp, unreviewed.events.map((event) => event.toJson()),
+      socialRulebook: contract,
+      expectedSequence: unreviewed.state.revision,
+      expectedStateHash: unreviewed.state.stateHash,
+    ), throwsFormatException);
+  });
+
   test('rumor is second-hand information, not witnessed promise or trust',
       () {
     final bp = _blueprint();
