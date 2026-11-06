@@ -618,15 +618,21 @@ class _WorldInfoSheet extends StatelessWidget {
                   .map((id) => view.factNames[id] ?? id).join(', '),
         if (view.knownFacts.isEmpty) 'Открыто сведений: 0',
       ],
-      GamePanel.inventory => view.inventory.isEmpty
-          ? <String>['Предметов пока нет']
-          : [
-              for (final id in view.inventory)
-                (view.itemNames[id] ?? id) +
-                    (view.itemDescriptions[id] == null
-                        ? ''
-                        : ' — ' + view.itemDescriptions[id]!),
-            ],
+      GamePanel.inventory => [
+        if (view.inventory.isEmpty) 'У героя сейчас нет предметов',
+        if (view.inventory.isNotEmpty) 'У героя:',
+        for (final id in view.inventory)
+          (view.itemNames[id] ?? id) +
+              (view.itemDescriptions[id] == null
+                  ? '' : ' — ' + view.itemDescriptions[id]!),
+        if (view.npcItemOwners.isNotEmpty)
+          'У других персонажей (подтверждено событиями):',
+        for (final entry in view.npcItemOwners.entries)
+          (view.itemNames[entry.key] ?? entry.key) + ' — у ' +
+              (view.npcDisplayNames[entry.value] ??
+                  ('NPC ' + (entry.value.length > 12
+                    ? entry.value.substring(4, 12) : entry.value))),
+      ],
       GamePanel.journal => view.journal.isEmpty
           ? <String>['Решений пока нет']
           : [
