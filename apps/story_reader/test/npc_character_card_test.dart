@@ -51,7 +51,7 @@ void main() {
       ...saved, 'extra': 'change',
     }), throwsFormatException);
     expect(() => NpcCharacterCard.fromJson({
-      ...saved, 'goals': 'x' * 700,
+      ...saved, 'goals': List.filled(700, 'x').join(),
     }), throwsFormatException);
     expect(card.toJson(), saved);
   });
