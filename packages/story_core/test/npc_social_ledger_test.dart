@@ -73,6 +73,13 @@ void main() {
         .status, DecisionStatus.duplicate);
     expect(NpcSocialLedger.inspect(world, rules).directedScore(
         'guard', 'player'), 10);
+    // A repeatable choice with a NEW action ID still cannot farm reputation.
+    expect(world.apply(actionId: 'inspect_again', choiceId: 'inspect_gate')
+        .applied, isTrue);
+    expect(NpcSocialLedger.inspect(world, rules).directedScore(
+        'guard', 'player'), 10);
+    expect(NpcSocialLedger.inspect(world, rules).memoriesFor('guard'),
+        hasLength(1));
 
     final second = world.apply(
       actionId: 'travel', choiceId: 'walk_market');
@@ -107,6 +114,32 @@ void main() {
     expect(ledger.directedScore('guard', 'player'), 0);
     expect(ledger.hasMemory('player', 'player_left_guard'), isTrue);
     expect(ledger.directedScore('player', 'guard'), -3);
+  });
+
+  test('explicit bounded repeats never create unlimited NPC favor', () {
+    final bp = _blueprint();
+    final world = StoryWorld(bp);
+    final rules = NpcSocialRulebook(
+        blueprintHash: bp.blueprintHash,
+        rules: const [
+          NpcSocialRule(
+            memoryId: 'guard_repeated_help', sceneId: 'gate',
+            choiceId: 'inspect_gate', observerId: 'guard',
+            kind: NpcMemoryKind.helped,
+            relatedActorId: 'player', relationshipDelta: 7,
+            maxTriggers: 2,
+          ),
+        ]);
+    for (var i = 0; i < 5; i++) {
+      expect(world.apply(
+          actionId: 'repeat_$i', choiceId: 'inspect_gate').applied,
+          isTrue);
+    }
+    final snapshot = NpcSocialLedger.inspect(world, rules);
+    expect(snapshot.memoriesFor('guard'), hasLength(2));
+    expect(snapshot.directedScore('guard', 'player'), 14);
+    expect(snapshot.memoriesFor('guard').last.event.sequence, 2);
+    expect(snapshot.directedScore('player', 'guard'), 0);
   });
 
   test('relations and witnesses are explicitly checked against the blueprint',
@@ -149,6 +182,14 @@ void main() {
         memoryId: 'too_many', sceneId: 'gate', choiceId: 'inspect_gate',
         observerId: 'guard', kind: NpcMemoryKind.witnessed,
         relatedActorId: 'player', relationshipDelta: 21,
+      ),
+    ]);
+    rejects([
+      const NpcSocialRule(
+        memoryId: 'bad_repeat', sceneId: 'gate',
+        choiceId: 'inspect_gate',
+        observerId: 'guard', kind: NpcMemoryKind.witnessed,
+        maxTriggers: 0,
       ),
     ]);
     rejects(List.filled(2, const NpcSocialRule(
