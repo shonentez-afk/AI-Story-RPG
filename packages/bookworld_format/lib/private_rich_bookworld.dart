@@ -445,6 +445,115 @@ class RichPrivateBookworldImporter {
     }
   }
 
+  // Explicit, versioned extension of private rich-v3. The existing player-
+  // only package remains byte-for-byte unchanged; NPC effects require this
+  // separately recorded user-reviewed SOURCE witness and manifest marker.
+  static const npcKnowledgeFormat = 'ai_story_npc_knowledge_grants_v1';
+
+  void _npcKnowledge(Map<String, dynamic> source,
+      Map<String, dynamic> manifest, StoryBlueprint blueprint) {
+    final npcs = blueprint.actors.difference({'player'});
+    final extension = source['npc_knowledge'];
+    if (npcs.isEmpty) {
+      if (extension != null || manifest.containsKey('npc_knowledge_format')) {
+        throw const FormatException('NPC marker without NPC actors');
+      }
+      return;
+    }
+    if (npcs.length > 15 ||
+        npcs.any((actor) => !CharacterId.isValidNpc(actor)) ||
+        manifest['npc_knowledge_format'] != npcKnowledgeFormat ||
+        extension is! Map<String, dynamic>) {
+      throw const FormatException('Missing versioned NPC knowledge review');
+    }
+    _fields(extension, {
+      'format', 'review_scope', 'source_fingerprint',
+      'user_confirmed', 'literary_canon_verified', 'grants',
+    }, 'NPC knowledge');
+    if (extension['format'] != npcKnowledgeFormat ||
+        extension['review_scope'] != 'user_declared_private_game_fiction' ||
+        extension['source_fingerprint'] != blueprint.sourceFingerprint ||
+        extension['user_confirmed'] != true ||
+        extension['literary_canon_verified'] != false) {
+      throw const FormatException('Unapproved or unrelated NPC grant review');
+    }
+    final grants = extension['grants'];
+    if (grants is! List || grants.isEmpty || grants.length > 128) {
+      throw const FormatException('No reviewed NPC grant evidence');
+    }
+    final scenes = blueprint.scenes;
+    final origins = <String, Map<String, dynamic>>{};
+    if (source['scene_origins'] is! List) {
+      throw const FormatException('Missing NPC scene provenance');
+    }
+    for (final value in source['scene_origins'] as List) {
+      if (value is! Map<String, dynamic>) {
+        throw const FormatException('Malformed source scene provenance');
+      }
+      final id = value['scene_id'];
+      if (id is! String || origins.containsKey(id)) {
+        throw const FormatException('Duplicate NPC source origin');
+      }
+      origins[id] = value;
+    }
+    final reviewed = <String>{};
+    for (final value in grants) {
+      if (value is! Map<String, dynamic>) {
+        throw const FormatException('Malformed reviewed NPC grant');
+      }
+      _fields(value, {
+        'scene_id', 'choice_id', 'actor_id', 'fact_id',
+        'source_quote_sha256',
+      }, 'NPC grant');
+      final sceneId = jsonId(value['scene_id'], 'npc.scene_id');
+      final choiceId = jsonId(value['choice_id'], 'npc.choice_id');
+      final actorId = jsonId(value['actor_id'], 'npc.actor_id');
+      final factId = jsonId(value['fact_id'], 'npc.fact_id');
+      final quote = value['source_quote_sha256'];
+      final key = '$sceneId|$choiceId|$actorId|$factId';
+      if (!npcs.contains(actorId) || !blueprint.facts.contains(factId) ||
+          quote is! String || !_sha.hasMatch(quote) ||
+          !reviewed.add(key)) {
+        throw const FormatException('Invalid or duplicate reviewed NPC grant');
+      }
+      final scene = scenes[sceneId];
+      final matches = scene?.choices.where((c) => c.id == choiceId).toList();
+      if (matches == null || matches.length != 1 ||
+          matches.single.effects.where((rule) =>
+              rule.op == 'learn_fact' && rule.actor == actorId &&
+              rule.id == factId).length != 1) {
+        throw const FormatException('NPC grant has no matching world action');
+      }
+      final origin = origins[sceneId];
+      final refs = origin?['source_refs'];
+      if (origin?['origin'] != 'SOURCE_PASSAGE' || refs is! List ||
+          !refs.any((raw) => raw is Map &&
+              raw['quote_sha256'] == quote &&
+              raw['visible_after_chapter'] is int &&
+              raw['chapter_index'] is int &&
+              (raw['visible_after_chapter'] as int) <=
+                  (origin?['chapter_index'] as int) &&
+              (raw['chapter_index'] as int) <=
+                  (origin?['chapter_index'] as int))) {
+        throw const FormatException('NPC grant lacks prior source witness');
+      }
+    }
+    final expected = <String>{};
+    for (final scene in scenes.values) {
+      for (final choice in scene.choices) {
+        for (final effect in choice.effects) {
+          if (effect.op == 'learn_fact' && effect.actor != 'player') {
+            expected.add('${scene.id}|${choice.id}|${effect.actor}|${effect.id}');
+          }
+        }
+      }
+    }
+    if (expected.length != reviewed.length ||
+        !expected.containsAll(reviewed)) {
+      throw const FormatException('Unreviewed or missing NPC knowledge action');
+    }
+  }
+
   void _model(Map<String, dynamic> source, Map<String, dynamic> manifest) {
     final model = source['model_provenance'];
     if (model is! Map<String, dynamic>) {
