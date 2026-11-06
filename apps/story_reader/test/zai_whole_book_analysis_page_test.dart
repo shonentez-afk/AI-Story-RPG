@@ -235,8 +235,10 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byType(BookActDraftPage), findsOneWidget);
     expect(requests, before);
-    expect(find.byKey(const Key('act-draft-prepare-remaining')),
-        findsOneWidget);
+    final next = find.byKey(const Key('act-draft-prepare-remaining'));
+    await tester.scrollUntilVisible(next, 120,
+        scrollable: find.byType(Scrollable).first);
+    expect(next, findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
