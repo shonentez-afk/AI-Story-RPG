@@ -64,6 +64,51 @@ def social_sample():
     return bp, prov, index
 
 
+def item_social_sample():
+    """Two explicitly reviewed transfers of the SAME item, no duplicate."""
+    bp, prov, index = social_sample()
+    bp["items"].append("map")
+    entry = bp["scenes"][0]
+    choices = entry["choices"]
+    next_scene = entry["id"]
+    for option in choices:
+        if option["id"] == "wait":
+            option["effects"].append({"op": "grant_item", "id": "map"})
+    choices.extend([
+        {
+            "id": "give_map", "label": "Передать карту NPC",
+            "next_scene_id": next_scene,
+            "conditions": [{"op": "has_item", "id": "map"}],
+            "effects": [{"op": "consume_item", "id": "map"}],
+        },
+        {
+            "id": "return_map", "label": "Получить карту обратно",
+            "next_scene_id": next_scene,
+            "conditions": [],
+            "effects": [{"op": "grant_item", "id": "map"}],
+        },
+    ])
+    prov["presentation"]["item_names"]["map"] = "Карта"
+    prov["presentation"]["item_descriptions"]["map"] = (
+        "Предмет, владелец которого проверяется игровым журналом")
+    source_sha = prov["scene_origins"][0]["source_refs"][0]["quote_sha256"]
+    social = prov["npc_social"]
+    social["format"] = rich.NPC_SOCIAL_ITEM_FORMAT
+    social["item_transfers"] = [
+        {
+            "scene_id": "entry", "choice_id": "give_map",
+            "item_id": "map", "from_actor_id": "player",
+            "to_actor_id": NPC, "source_quote_sha256": source_sha,
+        },
+        {
+            "scene_id": "entry", "choice_id": "return_map",
+            "item_id": "map", "from_actor_id": NPC,
+            "to_actor_id": "player", "source_quote_sha256": source_sha,
+        },
+    ]
+    return bp, prov, index
+
+
 class RichNpcSocialTests(unittest.TestCase):
     def test_bounded_source_review_writer_verifier_old_format_parity(self):
         bp, prov, source = social_sample()
@@ -170,6 +215,38 @@ class RichNpcSocialTests(unittest.TestCase):
                     prov["npc_social"]["user_confirmed"] = False
                 elif mutation == "empty_gates":
                     prov["npc_social"]["choice_gates"] = []
+                with self.assertRaises(legacy.BookworldError):
+                    rich.build(bp, prov, index)
+
+    def test_owned_npc_item_transfers_are_portable_and_source_locked(self):
+        bp, prov, index = item_social_sample()
+        archive = rich.build(bp, prov, index)
+        self.assertEqual(rich.verify(archive)["format_version"], 3)
+        self.assertEqual(archive, rich.build(bp, prov, index))
+        for mutation in ("forged_item", "absent_actor", "duplicate",
+                         "fake_quote", "missing_effect", "self_transfer",
+                         "unreviewed_witness", "missing_source_review"):
+            with self.subTest(mutation=mutation):
+                bp, prov, index = item_social_sample()
+                social = prov["npc_social"]
+                transfer = social["item_transfers"][0]
+                if mutation == "forged_item":
+                    transfer["item_id"] = "nonexistent"
+                elif mutation == "absent_actor":
+                    transfer["to_actor_id"] = "npc_" + "b" * 32
+                elif mutation == "duplicate":
+                    social["item_transfers"].append(deepcopy(transfer))
+                elif mutation == "fake_quote":
+                    transfer["source_quote_sha256"] = "f" * 64
+                elif mutation == "missing_effect":
+                    next(c for c in bp["scenes"][0]["choices"]
+                         if c["id"] == "give_map")["effects"].clear()
+                elif mutation == "self_transfer":
+                    transfer["from_actor_id"] = NPC
+                elif mutation == "unreviewed_witness":
+                    social["witnesses"][0]["mode"] = "reported"
+                elif mutation == "missing_source_review":
+                    del social["item_transfers"]
                 with self.assertRaises(legacy.BookworldError):
                     rich.build(bp, prov, index)
 
