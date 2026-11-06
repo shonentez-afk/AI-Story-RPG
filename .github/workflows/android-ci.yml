@@ -148,6 +148,11 @@ jobs:
           test -s artifacts/bookworld/book_private_rich_upgraded_dart.bworld
           python3 -c "from pathlib import Path; from tools.bookworld.private_rich_bookworld import verify; p=Path('artifacts/bookworld/book_private_rich_upgraded_dart.bworld'); assert verify(p.read_bytes())['format_version'] == 3"
           (cd artifacts/bookworld && sha256sum book_private_rich_upgraded_dart.bworld >> SHA256SUMS.txt)
+          # M2g3f.2b.2: verify source-locked, signed scene turns against exact
+          # scene text in a fresh Dart-produced rich v3 ZIP (not a Python fixture).
+          test -s artifacts/bookworld/book_private_rich_dialogue_dart.bworld
+          python3 -c "from pathlib import Path; from tools.bookworld.private_rich_bookworld import verify; p=Path('artifacts/bookworld/book_private_rich_dialogue_dart.bworld'); assert verify(p.read_bytes())['format_version'] == 3"
+          (cd artifacts/bookworld && sha256sum book_private_rich_dialogue_dart.bworld >> SHA256SUMS.txt)
           # Independently verify the SAME Dart bytes with Python v3 review checks.
           test -s artifacts/bookworld/book_private_reviewed_dart.bworld
           python3 -c "from pathlib import Path; from tools.bookworld.private_rich_bookworld import verify; p=Path('artifacts/bookworld/book_private_reviewed_dart.bworld'); assert verify(p.read_bytes())['format_version'] == 3"
