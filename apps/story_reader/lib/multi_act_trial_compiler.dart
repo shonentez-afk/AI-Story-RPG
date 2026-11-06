@@ -17,6 +17,7 @@ import 'story_plan.dart';
 import 'story_plan_trial_compiler.dart';
 import 'reviewed_prose_scene_overlay.dart';
 import 'whole_story_literary_bounded_repair.dart';
+import 'whole_story_literary_unchanged_approval.dart';
 
 /// A playable *PRIVATE* and *FICTIONAL* multi-act trial, never the full
 /// literary CANON. This uses the original M2c compiler, BookWorld importer
@@ -31,6 +32,7 @@ class MultiActTrialCompiler {
     required MultiActStoryPlanDraft draft,
     CrossActContinuityDraft? continuity,
     WholeStoryLiteraryRecheckApproval? recheckedRepair,
+    WholeStoryLiteraryUnchangedApproval? unchangedReview,
     required Set<String> sourceEventIdsReviewedByUser,
     required bool privateUseConfirmed,
     required bool fictionalTrialAcknowledged,
@@ -53,6 +55,19 @@ class MultiActTrialCompiler {
         draft.formalAudit.counterexamples.isNotEmpty) {
       throw const FormatException(
           'Многоактовый черновик не прошёл проверку своей редакции.');
+    }
+    // g2b repaired-plan evidence and a clean UNCHANGED review are mutually
+    // exclusive. The latter must not silently carry over to changed
+    // causal rules, artwork/prose or interactive effects.
+    if (unchangedReview != null) {
+      if (recheckedRepair != null || continuity != null ||
+          reviewedProse.isNotEmpty) {
+        throw const FormatException(
+            'Заключение для исходного плана устарело после изменения '
+            'сцен, текста или правил. Требуется новый литературный аудит.');
+      }
+      unchangedReview.verifyForCompiler(
+          index: index, book: book, plan: draft.plan);
     }
     if (recheckedRepair != null && continuity != null) {
       throw const FormatException(
