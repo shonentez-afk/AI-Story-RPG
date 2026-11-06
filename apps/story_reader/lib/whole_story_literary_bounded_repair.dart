@@ -173,11 +173,14 @@ class WholeStoryLiteraryRecheckApproval {
     required this.repair,
     required this.newReports,
     required this.summaryDigest,
+    required this.unresolvedWindows,
   });
 
   final WholeStoryLiteraryRepairResult repair;
   final List<WholeLiteraryReviewReport> newReports;
   final String summaryDigest;
+  // The private game may remain uncertain about literary meaning; never CANON.
+  final int unresolvedWindows;
 
   StoryPlan get draft => repair.draft;
   bool get isApprovedForPrivateTrial => true;
@@ -205,8 +208,8 @@ class WholeStoryLiteraryRecheckApproval {
         manifest: manifest, reports: newReports);
     // Keep any unresolved criticism visible; do not silently mark a risky
     // scenario ready merely because the first error was patched.
-    if (summary.totalFindings != 0 || summary.insufficient != 0 ||
-        summary.revisions != 0 || summary.crossWindowIssues.isNotEmpty) {
+    if (summary.totalFindings != 0 || summary.revisions != 0 ||
+        summary.crossWindowIssues.isNotEmpty) {
       throw const FormatException(
           'После исправления остались литературные сомнения. '
           'Нужна ещё одна ревизия, выпуск этой версии запрещён.');
@@ -215,6 +218,7 @@ class WholeStoryLiteraryRecheckApproval {
       repair: repair,
       newReports: List.unmodifiable(newReports),
       summaryDigest: summary.reportDigest,
+      unresolvedWindows: summary.insufficient,
     );
   }
 
@@ -249,7 +253,8 @@ class WholeStoryLiteraryRecheckApproval {
         manifest: manifest, reports: newReports);
     if (summary.reportDigest != summaryDigest ||
         summary.totalFindings != 0 || summary.revisions != 0 ||
-        summary.insufficient != 0 || summary.crossWindowIssues.isNotEmpty) {
+        summary.insufficient != unresolvedWindows ||
+        summary.crossWindowIssues.isNotEmpty) {
       throw const FormatException(
           'Подтверждение повторной литературной рецензии недействительно.');
     }
