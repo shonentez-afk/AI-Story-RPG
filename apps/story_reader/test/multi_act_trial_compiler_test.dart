@@ -600,7 +600,7 @@ void main() {
     expect(report.newRequests, 0);
     expect(report.recovered, manifest.totalBatches);
     expect(networkCalls, manifest.totalBatches);
-    final saved = await reloaded.readReviewedProposals(manifest);
+    final saved = await reloaded.readUnreviewedProposals(manifest);
     expect(saved, hasLength(manifest.totalBatches));
     for (var i = 0; i < saved.length; i++) {
       expect(saved[i].approvalDigest, manifest.contexts[i].approvalDigest);
