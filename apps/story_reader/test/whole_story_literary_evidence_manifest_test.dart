@@ -168,7 +168,8 @@ StoryPlan _repairablePromisePlan(NarrativeBookModel book) {
       {bool terminal = false}) => StorySituation(
     id: id, goal: 'Цель и последствия сюжетной ситуации',
     conflict: 'Обещание имеет последствия лишь после согласия.',
-    chapterIndex: 0, terminal: terminal, decisions: decisions,
+    chapterIndex: 0, sourceEventId: book.events.first.id,
+    terminal: terminal, decisions: decisions,
   );
   StoryDecision choice(String id, String next,
       {List<String> adds = const []}) => StoryDecision(
@@ -507,6 +508,167 @@ void main() {
       ]),
       expectedReportDigest: digest, explicitRuleReview: true,
     ), throwsFormatException);
+  });
+
+  test('g2b separately rechecks patched SHA, invalidates previous reports '
+      'and accepts only zero unresolved findings for a PRIVATE game', () async {
+    final index = _index();
+    final book = await _book(index);
+    final original = _repairablePromisePlan(book);
+    final oldManifest = WholeStoryLiteraryReviewManifest.fromEvidence(
+      index: index, book: book, plan: original,
+      evidence: WholeStoryLiteraryEvidenceManifest.build(
+          index: index, book: book, plan: original),
+    );
+    final firstReports = [
+      for (final window in oldManifest.windows)
+        WholeLiteraryReviewReport.fromJson(window, {
+          'window_digest': window.approvalDigest,
+          'verdict': 'needsRevision',
+          'uncertainty': 'Обещание после отказа не подтверждено книгой.',
+          'findings': [
+            if (window.transitions.any((s) => s['choice_id'] == 'honor'))
+              {
+                'kind': 'promise', 'severity': 'high',
+                'scene_id': 'crossroads', 'choice_id': 'honor',
+                'source_event_id': null,
+                'problem': 'Нельзя исполнять не принятое обещание.',
+              },
+          ],
+          'status': 'UNVERIFIED_AI_REVIEW',
+        }),
+    ];
+    final oldDigest = WholeStoryLiterarySummary.compile(
+        manifest: oldManifest, reports: firstReports).reportDigest;
+    final repair = WholeStoryLiteraryBoundedRepair.propose(
+      manifest: oldManifest, reports: firstReports,
+      expectedReportDigest: oldDigest, explicitRuleReview: true,
+      approvedRules: StoryCausalContract(decisionInvariants: [
+        StoryDecisionInvariant(id: 'accepted_before_honor',
+          decisionId: 'honor', requires: ['accepted'],
+          forbids: ['declined']),
+      ]),
+    );
+    expect(repair.changed, true);
+    final revisedManifest = repair.newReviewManifest!;
+    expect(revisedManifest.windows.every(
+        (window) => window.sourceQuotes.isNotEmpty), true);
+    final postReports = [
+      for (final window in revisedManifest.windows)
+        WholeLiteraryReviewReport.fromJson(window, {
+          'window_digest': window.approvalDigest,
+          'verdict': 'possibleConsistency',
+          'uncertainty': 'Проверен только этот игровой граф, не канон.',
+          'findings': <Map<String, Object?>>[],
+          'status': 'UNVERIFIED_AI_REVIEW',
+        }),
+    ];
+    final approval = WholeStoryLiteraryRecheckApproval.accept(
+      repair: repair, newReports: postReports,
+      userReviewedNewResults: true,
+      confirmedPrivateGameFiction: true,
+    );
+    approval.verifyForCompiler(
+      index: index, book: book, originalPlan: original);
+    expect(approval.isApprovedForPrivateTrial, true);
+    expect(approval.provesBookCanon, false);
+    expect(approval.mayAlterExistingCampaign, false);
+    expect(() => approval.verifyForCompiler(
+      index: index, book: book, originalPlan: _plan(book)),
+      throwsFormatException);
+    expect(() => WholeStoryLiteraryRecheckApproval.accept(
+      repair: repair, newReports: firstReports,
+      userReviewedNewResults: true,
+      confirmedPrivateGameFiction: true,
+    ), throwsFormatException);
+    expect(() => WholeStoryLiteraryRecheckApproval.accept(
+      repair: repair, newReports: postReports,
+      userReviewedNewResults: false,
+      confirmedPrivateGameFiction: true,
+    ), throwsFormatException);
+    expect(() => WholeStoryLiteraryRecheckApproval.accept(
+      repair: repair, newReports: postReports,
+      userReviewedNewResults: true,
+      confirmedPrivateGameFiction: false,
+    ), throwsFormatException);
+  });
+
+  test('g2b paid checkpoints are isolated by plan SHA and reused '
+      'on reopening either edition without extra requests', () async {
+    final index = _index();
+    final book = await _book(index);
+    final plan = _repairablePromisePlan(book);
+    final original = WholeStoryLiteraryReviewManifest.fromEvidence(
+      index: index, book: book, plan: plan,
+      evidence: WholeStoryLiteraryEvidenceManifest.build(
+          index: index, book: book, plan: plan),
+    );
+    final repairedScenes = [
+      for (final scene in plan.situations)
+        if (scene.id != 'crossroads') scene else
+          StorySituation(
+            id: scene.id, goal: scene.goal, conflict: scene.conflict,
+            chapterIndex: scene.chapterIndex,
+            sourceEventId: scene.sourceEventId,
+            terminal: scene.terminal, route: scene.route,
+            decisions: [
+              for (final choice in scene.decisions)
+                if (choice.id != 'honor') choice else
+                  StoryDecision(
+                    id: choice.id, intent: choice.intent,
+                    nextSituationId: choice.nextSituationId,
+                    route: choice.route,
+                    requires: const ['accepted'],
+                    forbids: const ['declined'],
+                  ),
+            ],
+          ),
+    ];
+    final revised = StoryPlan(
+      sourceFingerprint: plan.sourceFingerprint, title: plan.title,
+      entrySituationId: plan.entrySituationId,
+      flags: plan.flags, initialFlags: plan.initialFlags,
+      situations: repairedScenes,
+    );
+    final after = WholeStoryLiteraryReviewManifest.fromEvidence(
+      index: index, book: book, plan: revised,
+      evidence: WholeStoryLiteraryEvidenceManifest.build(
+          index: index, book: book, plan: revised),
+    );
+    expect(after.approvalDigest, isNot(original.approvalDigest));
+    final memory = MemorySourceAnalysisCheckpointRepository();
+    var sent = 0;
+    final service = WholeStoryLiteraryBatchService(
+      repository: memory,
+      previewOverride: (window, cancellation) async {
+        sent++;
+        return WholeLiteraryReviewReport.fromJson(window, {
+          'window_digest': window.approvalDigest,
+          'verdict': 'insufficientEvidence',
+          'uncertainty': 'Это недостаточный источник для проверки канона.',
+          'findings': <Map<String, Object?>>[],
+          'status': 'UNVERIFIED_AI_REVIEW',
+        });
+      },
+    );
+    final first = await service.generate(
+      manifest: original, approvedManifestDigest: original.approvalDigest,
+      explicitBatchConsent: true);
+    expect(first.complete, true);
+    expect(sent, original.totalWindows);
+    expect((await service.inspect(after)).completed, 0);
+    final second = await service.generate(
+      manifest: after, approvedManifestDigest: after.approvalDigest,
+      explicitBatchConsent: true);
+    expect(second.complete, true);
+    expect(sent, original.totalWindows + after.totalWindows);
+    expect((await service.inspect(original)).complete, true);
+    expect((await service.inspect(after)).complete, true);
+    final resume = await service.generate(
+      manifest: original, approvedManifestDigest: original.approvalDigest,
+      explicitBatchConsent: true);
+    expect(resume.newRequests, 0);
+    expect(sent, original.totalWindows + after.totalWindows);
   });
 
   test('g1c rejects partial and foreign reports; complete report has stable SHA',
