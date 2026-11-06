@@ -28,6 +28,7 @@ class WholeStoryLiteraryRepairResult {
   StoryPlan get draft => formal.draft;
   bool get changed => formal.appliedChanges.isNotEmpty;
   bool get requiresFreshLiteraryConsent => changed;
+  bool get oldLiteraryApprovalRevoked => changed;
   bool get provesBookCanon => false;
   bool get mayChangeGameOrSave => false;
   bool get canPublish => false;
