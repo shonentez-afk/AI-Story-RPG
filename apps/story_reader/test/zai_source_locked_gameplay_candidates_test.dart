@@ -1,5 +1,7 @@
 import 'dart:convert';
 
+import 'package:flutter/material.dart';
+import 'package:ai_story_reader/source_locked_gameplay_review_page.dart';
 import 'package:ai_story_reader/ai_connection.dart';
 import 'package:ai_story_reader/gameplay_candidate_reachability.dart';
 import 'package:ai_story_reader/book_import.dart';
@@ -447,5 +449,77 @@ void main() {
     expect(report.checkedCandidateOperations, 0);
     expect(report.mayAutomaticallyChangeBookworld, false);
   });
+
+
+  testWidgets('optional review screen requires shown excerpt opt-in; '
+      'selected item is returned without any automatic game mutation',
+      (tester) async {
+    final (index, book, plan) = await _fixture();
+    final ctx = _context(index, book, plan);
+    final http = _Http([_reply([_candidate(ctx)])]);
+    SelectedGameplayCandidates? saved;
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: Builder(builder: (buttonContext) => TextButton(
+          onPressed: () async {
+            saved = await Navigator.of(buttonContext)
+                .push<SelectedGameplayCandidates>(MaterialPageRoute(
+              builder: (_) => SourceLockedGameplayReviewPage(
+                index: index, book: book, plan: plan,
+                exactEventIds: [for (final e in book.events) e.id],
+                service: _service(http),
+              ),
+            ));
+          },
+          child: const Text('Перейти к предметам'),
+        )),
+      ),
+    ));
+    await tester.tap(find.text('Перейти к предметам'));
+    await tester.pumpAndSettle();
+    expect(http.bodies, isEmpty);
+    expect(find.byKey(const Key('gameplay-source-request')), findsOneWidget);
+    final before = tester.widget<FilledButton>(
+        find.byKey(const Key('gameplay-source-request')));
+    expect(before.onPressed, isNull);
+
+    final consent = find.byKey(const Key('gameplay-source-cloud-consent'));
+    await tester.ensureVisible(consent);
+    await tester.tap(consent);
+    await tester.pumpAndSettle();
+    final request = find.byKey(const Key('gameplay-source-request'));
+    await tester.ensureVisible(request);
+    await tester.tap(request);
+    await tester.pumpAndSettle();
+    expect(http.bodies, hasLength(1));
+    expect(find.byKey(const Key('gameplay-source-candidate-0')),
+        findsOneWidget);
+    final selected = find.byKey(const Key('gameplay-source-candidate-0'));
+    await tester.ensureVisible(selected);
+    await tester.tap(selected);
+    await tester.pumpAndSettle();
+    final note = find.byKey(const Key('gameplay-source-review-note-0'));
+    await tester.ensureVisible(note);
+    await tester.enterText(note,
+        'Читатель разрешил только частный игровой предмет, не канон.');
+    await tester.pumpAndSettle();
+    final privateFiction = find.byKey(
+        const Key('gameplay-source-private-fiction'));
+    await tester.ensureVisible(privateFiction);
+    await tester.tap(privateFiction);
+    await tester.pumpAndSettle();
+    final approve = find.byKey(
+        const Key('gameplay-source-accept-selection'));
+    await tester.ensureVisible(approve);
+    await tester.tap(approve);
+    await tester.pumpAndSettle();
+    expect(saved, isNotNull);
+    expect(saved!.draft.candidates, hasLength(1));
+    expect(saved!.selectedUserReviewNotes, hasLength(1));
+    expect(saved!.context.approvalDigest, ctx.approvalDigest);
+    expect(http.bodies, hasLength(1));
+    expect(find.text('Перейти к предметам'), findsOneWidget);
+  });
+
 
 }
