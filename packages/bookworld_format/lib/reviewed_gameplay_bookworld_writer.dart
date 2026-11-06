@@ -104,7 +104,7 @@ class ReviewedGameplayBookworldWriter {
         throw const FormatException('Неодобренный тип изменения RPG');
       }
       choice['effects'] = [
-        ...choice['effects'] as List,
+        ...(choice['effects'] as List),
         effect,
       ];
     }
