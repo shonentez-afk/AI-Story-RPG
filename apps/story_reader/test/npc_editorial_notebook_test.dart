@@ -209,6 +209,204 @@ void main() {
     expect(() => checked(broken), throwsFormatException);
   });
 
+  test('stable relationship target survives rename but rejects identity swap', () {
+    final owner = NpcEditorialNotebook.freshProfile(artem);
+    final target = NpcEditorialNotebook.freshProfile(maria);
+    final link = NpcDraftNote(
+      id: 'npc_note_1', field: NpcDraftField.relationship,
+      text: 'Доверяет Марии в частной адаптации',
+      targetDossierId: maria.id,
+      targetGroupDigest: NpcEditorialNotebook.groupDigest(maria),
+      targetCharacterId: target.characterId,
+    );
+    final original = checked(NpcEditorialNotebook.empty(index)
+        .putProfile(owner.copyWith(notes: [link]))
+        .putProfile(target));
+    final id = target.characterId;
+    expect(id, matches(RegExp(r'^npc_[a-f0-9]{32}
+      () {
+    final profile = NpcEditorialNotebook.freshProfile(artem);
+    final book = checked(NpcEditorialNotebook.empty(index).putProfile(
+      NpcDraftProfile(
+        dossierId: profile.dossierId, mentionIds: profile.mentionIds,
+        displayName: profile.displayName,
+        notes: [
+          NpcDraftNote(
+            id: 'npc_note_1', field: NpcDraftField.knowledge,
+            text: 'Артем встретил Марию',
+            sourceAssertionId: meeting.id,
+          ),
+        ],
+      ),
+    ));
+    final denied = SemanticEditorialReviewSession.create(index, catalog);
+    expect(() => book.validate(index, dossiers, graph, catalog, denied),
+        throwsFormatException);
+    final quote = meeting.evidenceIds.single;
+    final rejected = graph.review(index, quote, EvidenceStatus.rejected);
+    final freshRelations = SourceRelationReviewSession.create(index, rejected);
+    final newDossiers = SourceCharacterDossierIndex.build(
+        index, rejected, freshRelations, catalog, editorial);
+    expect(() => NpcEditorialNotebook.decode(
+        index, newDossiers, rejected, catalog, editorial, book.encode()),
+        throwsFormatException);
+  });
+
+  test('manual SAME can invalidate anchored profile instead of migrating it',
+      () {
+    final profile = NpcEditorialNotebook.freshProfile(artem);
+    final book = checked(NpcEditorialNotebook.empty(index).putProfile(profile));
+    final pair = relations.hints.firstWhere((hint) =>
+        hint.kind == IdentityHintKind.explicitAlias &&
+        (hint.firstId == artem.id || hint.secondId == artem.id));
+    final reviewed = relations.decide(
+        index, graph, pair.id, IdentityDecision.same);
+    final newDossiers = computeDossiers(reviewed);
+    expect(() => NpcEditorialNotebook.decode(
+        index, newDossiers, graph, catalog, editorial, book.encode()),
+        throwsFormatException);
+  });
+
+  test('source candidate is not allowed without real character association',
+      () {
+    final profile = NpcEditorialNotebook.freshProfile(maria);
+    final unrelated = catalog.assertions.firstWhere(
+        (a) => a.kind == SemanticAssertionKind.fact);
+    final adopted = editorial.decide(catalog, unrelated.id,
+        SemanticEditorialVerdict.canonCandidate);
+    final book = NpcEditorialNotebook.empty(index).putProfile(
+        NpcDraftProfile(
+          dossierId: profile.dossierId,
+          mentionIds: profile.mentionIds,
+          displayName: profile.displayName,
+          notes: [
+            NpcDraftNote(
+              id: 'npc_note_1', field: NpcDraftField.knowledge,
+              text: 'Необоснованный факт',
+              sourceAssertionId: unrelated.id,
+            ),
+          ],
+        ));
+    expect(() => book.validate(index, dossiers, graph, catalog, adopted),
+        throwsFormatException);
+  });
+
+  test('size limits, invalid targets and duplicate notes fail closed', () {
+    final profile = NpcEditorialNotebook.freshProfile(artem);
+    NpcEditorialNotebook build(List<NpcDraftNote> notes) =>
+        NpcEditorialNotebook.empty(index).putProfile(NpcDraftProfile(
+          dossierId: profile.dossierId, mentionIds: profile.mentionIds,
+          displayName: profile.displayName, notes: notes,
+        ));
+    expect(() => checked(build([
+      NpcDraftNote(
+        id: 'npc_note_1', field: NpcDraftField.role,
+        text: List.filled(801, 'a').join(),
+      ),
+    ])), throwsFormatException);
+    expect(() => checked(build([
+      const NpcDraftNote(
+          id: 'npc_note_1', field: NpcDraftField.role, text: 'Первая роль'),
+      const NpcDraftNote(
+          id: 'npc_note_1', field: NpcDraftField.secret, text: 'Секрет'),
+    ])), throwsFormatException);
+    expect(() => checked(build([
+      const NpcDraftNote(
+          id: 'npc_note_1', field: NpcDraftField.relationship,
+          text: 'Нет цели отношения'),
+    ])), throwsFormatException);
+    expect(() => checked(build([
+      const NpcDraftNote(
+          id: 'npc_note_1', field: NpcDraftField.role,
+          text: 'Не должна иметь цель', targetDossierId: 'x'),
+    ])), throwsFormatException);
+  });
+
+  test('corrupt, edited digest and other edition cannot be loaded', () {
+    final book = checked(NpcEditorialNotebook.empty(index).putProfile(
+        NpcEditorialNotebook.freshProfile(artem)));
+    final raw = book.encode();
+    final altered = raw.replaceFirst('Артем', 'Михаил');
+    expect(() => NpcEditorialNotebook.decode(
+        index, dossiers, graph, catalog, editorial, altered),
+        throwsFormatException);
+    final other = BookSourceIndexer.index(const ImportedBook(
+        title: 'Другой роман', author: 'Автор',
+        chapters: ['По имени Сергей.']));
+    expect(() => NpcEditorialNotebook.decode(
+        other, dossiers, graph, catalog, editorial, raw),
+        throwsFormatException);
+  });
+
+  test('separate disk scope preserves short and multi-scene drafts',
+      () async {
+    final root = await Directory.systemTemp.createTemp('story_npc_m2e5b2_');
+    addTearDown(() => root.delete(recursive: true));
+    FileSourceAnalysisCheckpointRepository storage(SourceCheckpointScope scope) =>
+        FileSourceAnalysisCheckpointRepository(
+          rootDirectory: () async => root, scope: scope);
+    final source = storage(SourceCheckpointScope.intermediateDraft);
+    final multi = storage(SourceCheckpointScope.multiSceneDraft);
+    final relation = storage(SourceCheckpointScope.identityRelations);
+    final npc = storage(SourceCheckpointScope.npcEditorial);
+    final fingerprint = index.sourceFingerprint;
+    await source.write(fingerprint, 'legacy short draft');
+    await multi.write(fingerprint, 'legacy multi draft');
+    await relation.write(fingerprint, relations.encode());
+    final current = checked(NpcEditorialNotebook.empty(index)
+        .putProfile(NpcEditorialNotebook.freshProfile(artem)));
+    await npc.write(fingerprint, current.encode());
+    expect(NpcEditorialNotebook.decode(index, dossiers, graph, catalog,
+        editorial, (await npc.read(fingerprint))!).profiles.length, 1);
+    expect(await source.read(fingerprint), 'legacy short draft');
+    expect(await multi.read(fingerprint), 'legacy multi draft');
+    expect(await relation.read(fingerprint), relations.encode());
+    await npc.delete(fingerprint);
+    expect(await npc.read(fingerprint), isNull);
+    expect(await multi.read(fingerprint), 'legacy multi draft');
+    expect(await source.read(fingerprint), 'legacy short draft');
+    expect(await relation.read(fingerprint), relations.encode());
+  });
+}
+)));
+    final restored = NpcEditorialNotebook.decode(
+        index, dossiers, graph, catalog, editorial, original.encode());
+    expect(restored.profiles.first.notes.single.targetCharacterId, id);
+    final renamed = checked(restored.putProfile(target.copyWith(
+        displayName: 'Другая кличка',
+        card: target.card!.copyWith(aliases: ['Лиса']))));
+    expect(renamed.profiles.first.notes.single.targetCharacterId, id);
+    expect(renamed.profiles.last.characterId, id);
+
+    final wrongId = NpcCharacterCard.fresh().characterId;
+    final swapped = NpcEditorialNotebook.empty(index)
+        .putProfile(owner.copyWith(notes: [
+          NpcDraftNote(
+            id: link.id, field: link.field, text: link.text,
+            targetDossierId: link.targetDossierId,
+            targetGroupDigest: link.targetGroupDigest,
+            targetCharacterId: wrongId,
+          ),
+        ]))
+        .putProfile(target);
+    expect(() => checked(swapped), throwsFormatException);
+    final missingTarget = NpcEditorialNotebook.empty(index)
+        .putProfile(owner.copyWith(notes: [link]));
+    expect(() => checked(missingTarget), throwsFormatException);
+  });
+
+  test('non-relationship note cannot smuggle a character target', () {
+    final owner = NpcEditorialNotebook.freshProfile(artem);
+    final bad = owner.copyWith(notes: [
+      NpcDraftNote(
+        id: 'npc_note_1', field: NpcDraftField.role,
+        text: 'Страж', targetCharacterId: owner.characterId,
+      ),
+    ]);
+    expect(() => checked(NpcEditorialNotebook.empty(index)
+        .putProfile(bad)), throwsFormatException);
+  });
+
   test('source citations are reviewed candidates, revoked verdict blocks',
       () {
     final profile = NpcEditorialNotebook.freshProfile(artem);
