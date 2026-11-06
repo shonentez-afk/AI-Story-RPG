@@ -142,6 +142,7 @@ class DialogueStage extends StatefulWidget {
     required this.lineHeight,
     required this.onFinished,
     this.portraitFor,
+    this.onAddPortrait,
     this.store = const DialoguePositionStore(),
   });
 
@@ -152,6 +153,7 @@ class DialogueStage extends StatefulWidget {
   final double fontSize, lineHeight;
   final ValueChanged<bool> onFinished;
   final ImageProvider? Function(String speaker)? portraitFor;
+  final ValueChanged<String>? onAddPortrait;
   final DialoguePositionStore store;
 
   @override
@@ -269,6 +271,13 @@ class _DialogueStageState extends State<DialogueStage> {
               child: Column(
                 children: [
                   _avatar(current, accent),
+                  if (current.speaker != null && widget.onAddPortrait != null)
+                    TextButton.icon(
+                      key: const ValueKey('dialogue-set-portrait'),
+                      onPressed: () => widget.onAddPortrait!(current.speaker!),
+                      icon: const Icon(Icons.add_photo_alternate_outlined),
+                      label: const Text('Выбрать портрет'),
+                    ),
                   const SizedBox(height: 12),
                   Text(name, key: const ValueKey('dialogue-speaker-name'),
                     textAlign: TextAlign.center,

@@ -1,11 +1,13 @@
 import 'dart:async';
 import 'dart:math';
+import 'package:file_picker/file_picker.dart';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'free_text_action_panel.dart';
 import 'game_panels.dart';
+import 'local_dialogue_portraits.dart';
 import 'reader_chrome.dart';
 import 'scene_dialogue_stage.dart';
 import 'reading_preferences.dart';
@@ -37,6 +39,9 @@ class _WorldPlayPageState extends State<WorldPlayPage> {
   ReaderChromeMode _chrome = ReaderChromeMode.normal;
   bool _peekControls = false;
   bool _dialogueFinished = false;
+  final LocalDialoguePortraitStore _portraitStore =
+      const LocalDialoguePortraitStore();
+  final Map<String, Uint8List> _portraitBytes = {};
   final ScrollController _sceneScroll = ScrollController();
 
   // Reader settings are UI-only. They never change the event log or SQLite.
@@ -60,6 +65,50 @@ class _WorldPlayPageState extends State<WorldPlayPage> {
   void _changeReading(ReadingPreferences settings) {
     setState(() => _reading = settings);
     unawaited(_saveReading(settings));
+  }
+
+  Future<void> _loadPortraits(WorldGameView view) async {
+    final script = SceneDialogueScript.fromSceneText(view.sceneText);
+    if (script == null) return;
+    final speakers = script.turns.map((t) => t.speaker)
+        .whereType<String>().toSet();
+    for (final speaker in speakers) {
+      final bytes = await _portraitStore.read(
+          campaignId: widget.campaignId, speaker: speaker);
+      if (!mounted || _view?.sceneId != view.sceneId ||
+          _view?.revision != view.revision) return;
+      if (bytes != null) {
+        setState(() => _portraitBytes[speaker] = bytes);
+      }
+    }
+  }
+
+  Future<void> _pickPortrait(String speaker) async {
+    final current = _view;
+    if (current == null || speaker.trim().isEmpty) return;
+    try {
+      final selected = await FilePicker.platform.pickFiles(
+        type: FileType.image, allowMultiple: false, withData: true,
+      );
+      if (!mounted || selected == null) return;
+      final bytes = selected.files.single.bytes;
+      if (bytes == null) {
+        throw const FormatException(
+            'Не удалось прочитать изображение. Выберите локальный PNG.');
+      }
+      await _portraitStore.save(
+        campaignId: widget.campaignId, speaker: speaker, png: bytes);
+      if (!mounted) return;
+      setState(() => _portraitBytes[speaker] = bytes);
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('Портрет для «' + speaker +
+            '» сохранён только на этом устройстве.'),
+      ));
+    } catch (error) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('Не удалось загрузить портрет: $error'),
+      ));
+    }
   }
 
   void _showReadingSettings() {
@@ -134,6 +183,7 @@ class _WorldPlayPageState extends State<WorldPlayPage> {
         }
         _errorText = null;
       });
+      if (mounted) unawaited(_loadPortraits(view));
     } catch (error) {
       if (mounted) setState(() {
         _view = null;
@@ -191,6 +241,7 @@ class _WorldPlayPageState extends State<WorldPlayPage> {
           _dialogueFinished = false;
         }
       });
+      if (result.applied) unawaited(_loadPortraits(result.view));
       if (!result.applied) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(_reason(result.reason))),
@@ -371,6 +422,13 @@ class _WorldPlayPageState extends State<WorldPlayPage> {
                                     pageColor: prefs.background,
                                     fontSize: prefs.fontSize,
                                     lineHeight: prefs.lineHeight,
+                                    portraitFor: (speaker) {
+                                      final bytes = _portraitBytes[speaker];
+                                      return bytes == null ? null :
+                                          MemoryImage(bytes);
+                                    },
+                                    onAddPortrait: (speaker) =>
+                                        unawaited(_pickPortrait(speaker)),
                                     onFinished: (finished) {
                                       if (!mounted || _view?.sceneId != view.sceneId ||
                                           _view?.revision != view.revision ||
@@ -490,6 +548,7 @@ class _WorldPlayPageState extends State<WorldPlayPage> {
                                               _choosing = false;
                                               _errorText = null;
                                             });
+                                            unawaited(_loadPortraits(result.view));
                                             if (_sceneScroll.hasClients) {
                                               _sceneScroll.jumpTo(0);
                                             }
