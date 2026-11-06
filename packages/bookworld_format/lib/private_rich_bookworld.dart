@@ -496,6 +496,246 @@ class RichPrivateBookworldImporter {
       }
       origins[id] = value;
     }
+    String checkedId(Object? value, String name) {
+      if (value is! String ||
+          !RegExp(r'^[a-z][a-z0-9_]{0,63}
+      if (value is! Map<String, dynamic>) {
+        throw const FormatException('Malformed reviewed NPC grant');
+      }
+      _fields(value, {
+        'scene_id', 'choice_id', 'actor_id', 'fact_id',
+        'source_quote_sha256',
+      }, 'NPC grant');
+      final sceneId = checkedId(value['scene_id'], 'scene_id');
+      final choiceId = checkedId(value['choice_id'], 'choice_id');
+      final actorId = checkedId(value['actor_id'], 'actor_id');
+      final factId = checkedId(value['fact_id'], 'fact_id');
+      final quote = value['source_quote_sha256'];
+      final key = '$sceneId|$choiceId|$actorId|$factId';
+      if (!npcs.contains(actorId) || !blueprint.facts.contains(factId) ||
+          quote is! String || !_sha.hasMatch(quote) ||
+          !reviewed.add(key)) {
+        throw const FormatException('Invalid or duplicate reviewed NPC grant');
+      }
+      final scene = scenes[sceneId];
+      final matches = scene?.choices.where((c) => c.id == choiceId).toList();
+      if (matches == null || matches.length != 1 ||
+          matches.single.effects.where((rule) =>
+              rule.op == 'learn_fact' && rule.actor == actorId &&
+              rule.id == factId).length != 1) {
+        throw const FormatException('NPC grant has no matching world action');
+      }
+      final origin = origins[sceneId];
+      final refs = origin?['source_refs'];
+      if (origin?['origin'] != 'SOURCE_PASSAGE' || refs is! List ||
+          !refs.any((raw) => raw is Map &&
+              raw['quote_sha256'] == quote &&
+              raw['visible_after_chapter'] is int &&
+              raw['chapter_index'] is int &&
+              (raw['visible_after_chapter'] as int) <=
+                  (origin?['chapter_index'] as int) &&
+              (raw['chapter_index'] as int) <=
+                  (origin?['chapter_index'] as int))) {
+        throw const FormatException('NPC grant lacks prior source witness');
+      }
+    }
+    final expected = <String>{};
+    for (final scene in scenes.values) {
+      for (final choice in scene.choices) {
+        for (final effect in choice.effects) {
+          if (effect.op == 'learn_fact' && effect.actor != 'player') {
+            expected.add('${scene.id}|${choice.id}|${effect.actor}|${effect.id}');
+          }
+        }
+      }
+    }
+    if (expected.length != reviewed.length ||
+        !expected.containsAll(reviewed)) {
+      throw const FormatException('Unreviewed or missing NPC knowledge action');
+    }
+  }
+
+  void _model(Map<String, dynamic> source, Map<String, dynamic> manifest) {
+    final model = source['model_provenance'];
+    if (model is! Map<String, dynamic>) {
+      throw const FormatException('Нет происхождения игрового текста');
+    }
+    _fields(model, {'provider', 'model_id', 'model_id_status',
+                    'tool', 'method'}, 'actual model');
+    final isOpenAI = model['provider'] == 'openai' &&
+        (model['model_id'] == null || model['model_id'] == 'gpt-6') &&
+        model['model_id_status'] ==
+            (model['model_id'] == null ? 'not_attested' : 'user_declared') &&
+        model['tool'] == 'ChatGPT' && model['method'] == 'external';
+    // Captures the configured REQUEST made by built-in Z.ai, not a claim
+    // that the remote response was independently authenticated as CANON.
+    final isZai = _same(model, {
+      'provider': 'zai', 'model_id': 'glm-4.7-flash',
+      'model_id_status': 'requested',
+      'tool': 'AI Story RPG', 'method': 'built_in',
+    });
+    final unattested = _same(model, {
+      'provider': 'unknown', 'model_id': null,
+      'model_id_status': 'not_attested',
+      'tool': 'AI Story RPG', 'method': 'reviewed_local_compilation',
+    });
+    final noAI = _same(model, {
+      'provider': 'none', 'model_id': null,
+      'model_id_status': 'not_applicable',
+      'tool': 'none', 'method': 'local_fixture',
+    });
+    if ((!isOpenAI && !isZai && !unattested && !noAI) ||
+        !_same(manifest['model_provenance'], model)) {
+      throw const FormatException('Некорректное происхождение v3');
+    }
+  }
+
+  Map<String, dynamic> _presentation(
+      Map<String, dynamic> source, StoryBlueprint blueprint) {
+    final data = source['presentation'];
+    if (data is! Map<String, dynamic>) {
+      throw const FormatException('Отсутствуют сведения героя и предметов');
+    }
+    // Old rich-v3 worlds have six presentation fields. Newer ones may
+    // include source-locked speaker turns; never require migration.
+    final hasDialogues = data.containsKey('scene_dialogues');
+    _fields(data, {
+      'hero', 'item_names', 'item_descriptions',
+      'stat_names', 'fact_names', 'scene_names',
+      if (hasDialogues) 'scene_dialogues',
+    }, 'rich presentation');
+    final hero = data['hero'];
+    if (hero is! Map<String, dynamic>) {
+      throw const FormatException('Не указан герой');
+    }
+    _fields(hero, {'name', 'description'}, 'hero');
+    bool label(Object? value, int max) =>
+        value is String && value.trim().isNotEmpty && value.length <= max;
+    if (!label(hero['name'], 120) || !label(hero['description'], 1200)) {
+      throw const FormatException('Имя или описание героя недопустимо');
+    }
+    void names(Object? value, Set<String> keys, int max) {
+      if (value is! Map<String, dynamic> ||
+          value.keys.toSet().difference(keys).isNotEmpty ||
+          keys.difference(value.keys.toSet()).isNotEmpty ||
+          value.values.any((v) => !label(v, max))) {
+        throw const FormatException('Неполные названия игровых сущностей');
+      }
+    }
+    names(data['item_names'], blueprint.items, 100);
+    names(data['item_descriptions'], blueprint.items, 400);
+    names(data['stat_names'], blueprint.initial.stats.keys.toSet(), 100);
+    names(data['fact_names'], blueprint.facts, 180);
+    names(data['scene_names'], blueprint.scenes.keys.toSet(), 120);
+    if (hasDialogues) {
+      final dialogs = data['scene_dialogues'];
+      if (dialogs is! Map<String, dynamic> ||
+          dialogs.length > blueprint.scenes.length ||
+          dialogs.keys.any((id) => !blueprint.scenes.containsKey(id))) {
+        throw const FormatException('Неизвестная сцена в диалогах .bworld');
+      }
+      for (final row in dialogs.entries) {
+        // Exact signed scene text is authoritative. Neither standalone
+        // narrator labels nor extra LLM speaker claims can be smuggled into
+        // the presentation payload even if an attacker rehashes the ZIP.
+        RichSceneDialogue.verify(
+            row.value, blueprint.scenes[row.key]!.text);
+      }
+      // The writer is required to include ALL conversations, not just
+      // a selective sample of named speakers or optional lines.
+      for (final scene in blueprint.scenes.values) {
+        final known = RichSceneDialogue.presentationFor(scene.text);
+        if ((known == null) != !dialogs.containsKey(scene.id)) {
+          throw const FormatException('Подписанные реплики сцены потеряны');
+        }
+      }
+    }
+    return Map.unmodifiable(data);
+  }
+
+  VerifiedRichPrivateBookworld inspect(Uint8List data) {
+    final files = BworldZipV1.readPrivate(data);
+    final bpRaw = _object(files['scenario/blueprint.json']!, 'blueprint');
+    final blueprint = StoryBlueprint.fromJson(bpRaw);
+    if (blueprint.rightsStatus != 'private_adaptation' ||
+        blueprint.sourceFingerprint == null) {
+      throw const FormatException('Не является приватной RPG по книге');
+    }
+    _causality(blueprint);
+    final source = _object(files['source/provenance.json']!, 'provenance');
+    // New v3 games may carry a separately recorded USER-DECLARED game
+    // adaptation. Old v3 games remain fully compatible and unchanged.
+    final hasGameplayReview = source.containsKey('gameplay_review');
+    final hasNpcKnowledge = source.containsKey('npc_knowledge');
+    final knownSource = Map<String, dynamic>.of(source)
+      ..remove('gameplay_review')
+      ..remove('npc_knowledge');
+    _fields(knownSource, {'format', 'bookworld_id', 'source_fingerprint',
+                     'source_title', 'source_author',
+                     'source_chapters_total', 'source_chapters_indexed',
+                     'semantic_catalog_sha256', 'intermediate_draft_sha256',
+                     'rights_status', 'publication_authorized',
+                     'model_provenance', 'scene_origins', 'presentation'},
+        'source provenance v3');
+    if (source['format'] != 'ai_story_private_provenance_v2') {
+      throw const FormatException('Неверная версия происхождения v3');
+    }
+    final manifest = _object(files['manifest.json']!, 'manifest');
+    if (manifest['format_version'] != 3 ||
+        manifest['build_status'] != 'private_rich_structural' ||
+        !_same(manifest['build_tool'], {
+          'name': 'ai_story_private_rich_bookworld', 'version': '3.0',
+        })) {
+      throw const FormatException('Неподдерживаемая версия RPG v3');
+    }
+    _model(source, manifest);
+    final presentation = _presentation(source, blueprint);
+    _npcKnowledge(source, manifest, blueprint);
+    if (hasNpcKnowledge && hasGameplayReview) {
+      throw const FormatException(
+          'NPC grants and separate gameplay review need unified review');
+    }
+    if (hasGameplayReview) {
+      final review = source['gameplay_review'];
+      if (review is! Map<String, dynamic>) {
+        throw const FormatException('Некорректная редакторская приёмка');
+      }
+      PrivateGameplayReview.verify(review, blueprint, source);
+    }
+    // Reuse the *strict* v2 evidence/manifest checks on a non-persisted
+    // normalized view. This never changes the actual signed ZIP payload.
+    final originV2 = Map<String, dynamic>.of(source);
+    originV2.remove('presentation');
+    originV2.remove('gameplay_review');
+    originV2.remove('npc_knowledge');
+    originV2['format'] = 'ai_story_private_provenance_v1';
+    originV2['model_provenance'] = {'provider': 'none', 'model_id': null};
+    _provenance(originV2, blueprint);
+    final manifestV2 = Map<String, dynamic>.of(manifest);
+    manifestV2.remove('npc_knowledge_format');
+    manifestV2['format_version'] = 2;
+    manifestV2['build_status'] = 'private_classic_structural';
+    manifestV2['build_tool'] = {
+      'name': 'ai_story_private_bookworld', 'version': '2.0',
+    };
+    manifestV2['model_provenance'] = {'provider': 'none', 'model_id': null};
+    _manifest(manifestV2, blueprint, originV2, files);
+    BworldSqliteV1.inspect(files['world.sqlite']!, blueprint, bpRaw);
+    return VerifiedRichPrivateBookworld(
+      blueprint: blueprint,
+      sourceFingerprint: blueprint.sourceFingerprint!,
+      archiveSha256: sha256.convert(data).toString(),
+      provenanceSha256:
+          sha256.convert(files['source/provenance.json']!).toString(),
+      presentation: presentation,
+    );
+  }
+}
+).hasMatch(value)) {
+        throw FormatException('Invalid NPC $name');
+      }
+      return value;
+    }
     final reviewed = <String>{};
     for (final value in grants) {
       if (value is! Map<String, dynamic>) {
