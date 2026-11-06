@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:crypto/crypto.dart';
+import 'package:bookworld_format/bookworld_format.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -23,48 +24,22 @@ class SceneDialogueScript {
 
   final List<SceneDialogueTurn> turns;
 
-  // Script is a UI projection of the actual signed scene text, not a new
-  // world-state, NPC identity, proof of CANON or executable mini-language.
-  static final RegExp _named = RegExp(
-    r'^([А-ЯЁA-Z][А-Яа-яЁёA-Za-z0-9 .-]{0,49}):[ \t]*(«[^»\n]{1,1200}»|"[^"\n]{1,1200}"|—[ \t]*[^\n]{1,1200})[.!?]?$',
-    unicode: true,
-  );
-  static const maxTurns = 64;
-
+  // One shared deterministic algorithm (and exact same speaker rules)
+  // powers the v3 writer, independent importer and this legacy Flutter UI.
+  // Older v1/v2 worlds still get the existing dialogue presentation.
   static SceneDialogueScript? fromSceneText(String text) {
-    if (text.trim().isEmpty || text.length > 50000) return null;
-    final lines = text.replaceAll('\r\n', '\n').split('\n');
-    final beats = <SceneDialogueTurn>[];
-    final speakers = <String>{};
-    var spoken = 0;
-    for (final source in lines) {
-      final line = source.trim();
-      if (line.isEmpty) continue;
-      final match = _named.firstMatch(line);
-      if (match == null) {
-        // Do not silently drop narrator prose between two dialogue turns.
-        if (line.length > 5000) return null;
-        beats.add(SceneDialogueTurn(text: line));
-      } else {
-        final speaker = match.group(1)!.trim();
-        var speech = match.group(2)!.trim();
-        if (speaker.isEmpty) return null;
-        if (speech.startsWith('«') && speech.endsWith('»') ||
-            speech.startsWith('"') && speech.endsWith('"')) {
-          speech = speech.substring(1, speech.length - 1).trim();
-        } else if (speech.startsWith('—')) {
-          speech = speech.substring(1).trim();
-        }
-        if (speech.isEmpty) return null;
-        speakers.add(speaker);
-        spoken++;
-        beats.add(SceneDialogueTurn(speaker: speaker, text: speech));
-      }
-      if (beats.length > maxTurns) return null;
+    final turns = RichSceneDialogue.parse(text);
+    return turns == null ? null : fromSignedTurns(turns);
+  }
+
+  static SceneDialogueScript fromSignedTurns(List<RichDialogueTurn> turns) {
+    if (turns.isEmpty) {
+      throw const FormatException('Пустой подписанный диалог .bworld');
     }
-    // One speaker, a quote or a paragraph heading is not a conversation.
-    if (spoken < 2 || speakers.length < 2) return null;
-    return SceneDialogueScript._(beats);
+    return SceneDialogueScript._([
+      for (final turn in turns)
+        SceneDialogueTurn(text: turn.text, speaker: turn.speaker),
+    ]);
   }
 }
 
