@@ -172,6 +172,20 @@ class NpcKnowledgeRulebook {
       String sourceFingerprint) =>
       'npc_${digest('$sourceFingerprint|${NpcEditorialNotebook.mentionIds(dossier).join("|")}').substring(0, 20)}';
 
+  /// Use the permanent authored character ID when one exists. The
+  /// citation-hash path remains only for older test/editorial profiles that
+  /// predate full NPC cards; no existing world IDs are silently migrated.
+  static String profileActorId(
+      NpcDraftProfile profile,
+      SourceCharacterDossier dossier,
+      String sourceFingerprint) {
+    if (profile.dossierId != dossier.id) {
+      throw const FormatException('Карточка NPC привязана к другой группе');
+    }
+    profile.card?.validate();
+    return profile.characterId ?? actorId(dossier, sourceFingerprint);
+  }
+
   static String factId(String sourceFingerprint, String groupDigest,
           NpcDraftNote note) =>
       'fact_${digest('$sourceFingerprint|$groupDigest|${note.id}|${noteDigest(note)}').substring(0, 24)}';
