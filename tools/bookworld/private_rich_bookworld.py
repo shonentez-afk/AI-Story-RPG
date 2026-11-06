@@ -24,6 +24,7 @@ PROVENANCE_FORMAT = "ai_story_private_provenance_v2"
 BUILD_TOOL = {"name": "ai_story_private_rich_bookworld", "version": "3.0"}
 MAX_SCENES = 192
 MAX_STATES = 2500
+NPC_GRANTS_FORMAT = "ai_story_npc_knowledge_grants_v1"
 
 
 def fail(message: str):
@@ -433,22 +434,98 @@ def _gameplay_review(review, bp, prov):
         fail("Unreviewed executable gameplay effect in a reviewed world")
 
 
+def _npc_knowledge(prov, bp):
+    """User-reviewed, source-linked NPC grants: no literary canon assertion.
+
+    This explicit v1 extension is mandatory for any non-player knowledge in
+    private rich v3. Old player-only archives remain byte-for-byte compatible.
+    """
+    npcs = set(bp["actors"]) - {"player"}
+    extension = prov.get("npc_knowledge")
+    if not npcs:
+        if "npc_knowledge" in prov:
+            fail("NPC review without NPC actors")
+        return
+    if not isinstance(extension, dict):
+        fail("Unreviewed NPC actor catalog")
+    _keys(extension, {"format", "review_scope", "source_fingerprint",
+                      "user_confirmed", "literary_canon_verified", "grants"},
+          "NPC knowledge review")
+    if extension["format"] != NPC_GRANTS_FORMAT or \
+            extension["review_scope"] != "user_declared_private_game_fiction" or \
+            extension["source_fingerprint"] != bp["source_fingerprint"] or \
+            extension["user_confirmed"] is not True or \
+            extension["literary_canon_verified"] is not False:
+        fail("Wrong NPC knowledge source/review")
+    grants = extension["grants"]
+    if type(grants) is not list or not 1 <= len(grants) <= 128:
+        fail("Missing or oversized NPC grant evidence")
+    scenes = {scene["id"]: scene for scene in bp["scenes"]}
+    origins = {origin["scene_id"]: origin
+               for origin in prov["scene_origins"]}
+    if len(origins) != len(prov["scene_origins"]):
+        fail("Duplicate NPC origin")
+    reviewed = set()
+    for grant in grants:
+        _keys(grant, {"scene_id", "choice_id", "actor_id", "fact_id",
+                      "source_quote_sha256"}, "NPC grant")
+        sid, cid, actor, fact, quote = (
+            grant["scene_id"], grant["choice_id"], grant["actor_id"],
+            grant["fact_id"], grant["source_quote_sha256"])
+        signature = (sid, cid, actor, fact)
+        if not all(_id(value) for value in signature) or \
+                actor not in npcs or fact not in bp["facts"] or \
+                not isinstance(quote, str) or \
+                not legacy.SHA_RE.fullmatch(quote) or \
+                signature in reviewed:
+            fail("Invalid or duplicate reviewed NPC grant")
+        reviewed.add(signature)
+        scene = scenes.get(sid)
+        choices = [choice for choice in scene["choices"]
+                   if choice["id"] == cid] if scene else []
+        if len(choices) != 1 or sum(
+                rule["op"] == "learn_fact" and
+                rule.get("actor") == actor and rule.get("id") == fact
+                for rule in choices[0]["effects"]) != 1:
+            fail("Reviewed NPC grant does not exist as an action")
+        origin = origins.get(sid)
+        if not origin or origin["origin"] != "SOURCE_PASSAGE" or \
+                not any(ref["quote_sha256"] == quote and
+                        ref["visible_after_chapter"] <= origin["chapter_index"] and
+                        ref["chapter_index"] <= origin["chapter_index"]
+                        for ref in origin["source_refs"]):
+            fail("NPC grant has no eligible source quotation")
+    expected = {
+        (scene["id"], choice["id"], effect["actor"], effect["id"])
+        for scene in bp["scenes"] for choice in scene["choices"]
+        for effect in choice["effects"]
+        if effect["op"] == "learn_fact" and effect["actor"] != "player"
+    }
+    if expected != reviewed:
+        fail("NPC knowledge actions do not match reviewed grant manifest")
+
+
 def _provenance(prov, bp):
     keys = {"format", "bookworld_id", "source_fingerprint", "source_title",
             "source_author", "source_chapters_total", "source_chapters_indexed",
             "semantic_catalog_sha256", "intermediate_draft_sha256",
             "rights_status", "publication_authorized", "model_provenance",
             "scene_origins", "presentation"}
-    _keys({k: v for k, v in prov.items() if k != "gameplay_review"},
+    _keys({k: v for k, v in prov.items()
+           if k not in {"gameplay_review", "npc_knowledge"}},
           keys, "rich provenance")
     if prov["format"] != PROVENANCE_FORMAT:
         fail("Wrong rich provenance format")
     _model(prov["model_provenance"])
     _presentation(prov["presentation"], bp)
+    _npc_knowledge(prov, bp)
+    if "npc_knowledge" in prov and "gameplay_review" in prov:
+        fail("NPC grant review and gameplay review must be unified")
     if "gameplay_review" in prov:
         _gameplay_review(prov["gameplay_review"], bp, prov)
     old = dict(prov)
     old.pop("gameplay_review", None)
+    old.pop("npc_knowledge", None)
     old.pop("presentation")
     old["format"] = "ai_story_private_provenance_v1"
     old["model_provenance"] = {"provider": "none", "model_id": None}
@@ -459,6 +536,8 @@ def _provenance(prov, bp):
 def _manifest(bp, prov, payloads):
     return {
         "format": "ai_story_bookworld", "format_version": 3,
+        **({"npc_knowledge_format": NPC_GRANTS_FORMAT}
+           if "npc_knowledge" in prov else {}),
         "bookworld_id": bp["book_id"],
         "source_fingerprint": bp["source_fingerprint"],
         "title": bp["title"], "author": prov["source_author"],
