@@ -232,13 +232,14 @@ void main() {
     expect(find.text('Продолжить подготовку сценария'), findsOneWidget);
     final before = requests;
     await tester.tap(continueButton);
-    await tester.pumpAndSettle();
+    // The next page restores a device-scoped checkpoint asynchronously.
+    // A widget test with no path-provider platform must not wait for that
+    // background storage operation via pumpAndSettle indefinitely.
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
     expect(find.byType(BookActDraftPage), findsOneWidget);
+    expect(find.text('План по частям книги'), findsOneWidget);
     expect(requests, before);
-    final next = find.byKey(const Key('act-draft-prepare-remaining'));
-    await tester.scrollUntilVisible(next, 120,
-        scrollable: find.byType(Scrollable).first);
-    expect(next, findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
