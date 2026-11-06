@@ -176,7 +176,7 @@ class _WholeStoryLiteraryReviewPageState
                   Padding(
                     padding: const EdgeInsets.all(12),
                     child: SelectableText(const JsonEncoder.withIndent('  ')
-                        .convert(window.sentContext)),
+                        .convert(jsonDecode(window.exactUserMessage))),
                   ),
                 ],
               )),
