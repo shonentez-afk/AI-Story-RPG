@@ -408,7 +408,7 @@ class WholePlanGameplayBatchService {
     );
   }
 
-  Future<List<GameplayCandidateDraft>> readReviewedProposals(
+  Future<List<GameplayCandidateDraft>> readUnreviewedProposals(
       WholePlanGameplayBatchManifest manifest) =>
       _load(manifest);
 
