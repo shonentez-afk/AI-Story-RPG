@@ -6,6 +6,7 @@ import 'package:story_core/story_core.dart';
 
 import 'src/sqlite_v1.dart';
 import 'private_gameplay_review.dart';
+import 'rich_scene_dialogue.dart';
 import 'src/zip_v1.dart';
 
 /// A *private*, source-bound, offline CLASSIC package. It carries no original
@@ -478,9 +479,14 @@ class RichPrivateBookworldImporter {
     if (data is! Map<String, dynamic>) {
       throw const FormatException('Отсутствуют сведения героя и предметов');
     }
-    _fields(data, {'hero', 'item_names', 'item_descriptions',
-                   'stat_names', 'fact_names', 'scene_names'},
-        'rich presentation');
+    // Old rich-v3 worlds have six presentation fields. Newer ones may
+    // include source-locked speaker turns; never require migration.
+    final hasDialogues = data.containsKey('scene_dialogues');
+    _fields(data, {
+      'hero', 'item_names', 'item_descriptions',
+      'stat_names', 'fact_names', 'scene_names',
+      if (hasDialogues) 'scene_dialogues',
+    }, 'rich presentation');
     final hero = data['hero'];
     if (hero is! Map<String, dynamic>) {
       throw const FormatException('Не указан герой');
@@ -504,6 +510,29 @@ class RichPrivateBookworldImporter {
     names(data['stat_names'], blueprint.initial.stats.keys.toSet(), 100);
     names(data['fact_names'], blueprint.facts, 180);
     names(data['scene_names'], blueprint.scenes.keys.toSet(), 120);
+    if (hasDialogues) {
+      final dialogs = data['scene_dialogues'];
+      if (dialogs is! Map<String, dynamic> ||
+          dialogs.length > blueprint.scenes.length ||
+          dialogs.keys.any((id) => !blueprint.scenes.containsKey(id))) {
+        throw const FormatException('Неизвестная сцена в диалогах .bworld');
+      }
+      for (final row in dialogs.entries) {
+        // Exact signed scene text is authoritative. Neither standalone
+        // narrator labels nor extra LLM speaker claims can be smuggled into
+        // the presentation payload even if an attacker rehashes the ZIP.
+        RichSceneDialogue.verify(
+            row.value, blueprint.scenes[row.key]!.text);
+      }
+      // The writer is required to include ALL conversations, not just
+      // a selective sample of named speakers or optional lines.
+      for (final scene in blueprint.scenes.values) {
+        final known = RichSceneDialogue.presentationFor(scene.text);
+        if ((known == null) != !dialogs.containsKey(scene.id)) {
+          throw const FormatException('Подписанные реплики сцены потеряны');
+        }
+      }
+    }
     return Map.unmodifiable(data);
   }
 
