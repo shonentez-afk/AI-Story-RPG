@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import 'free_text_action_panel.dart';
 import 'game_panels.dart';
 import 'reader_chrome.dart';
+import 'scene_dialogue_stage.dart';
 import 'reading_preferences.dart';
 import 'reading_settings_sheet.dart';
 import 'world_library_gateway.dart';
@@ -35,6 +36,7 @@ class _WorldPlayPageState extends State<WorldPlayPage> {
   ReadingPreferences _reading = const ReadingPreferences();
   ReaderChromeMode _chrome = ReaderChromeMode.normal;
   bool _peekControls = false;
+  bool _dialogueFinished = false;
   final ScrollController _sceneScroll = ScrollController();
 
   // Reader settings are UI-only. They never change the event log or SQLite.
@@ -124,7 +126,12 @@ class _WorldPlayPageState extends State<WorldPlayPage> {
     try {
       final view = await widget.gateway.load(widget.campaignId);
       if (mounted) setState(() {
+        final previous = _view;
         _view = view;
+        if (previous == null || previous.sceneId != view.sceneId ||
+            previous.revision != view.revision) {
+          _dialogueFinished = false;
+        }
         _errorText = null;
       });
     } catch (error) {
@@ -177,7 +184,13 @@ class _WorldPlayPageState extends State<WorldPlayPage> {
         expectedRevision: previous.revision,
       );
       if (!mounted) return;
-      setState(() => _view = result.view);
+      setState(() {
+        _view = result.view;
+        if (result.applied && (result.view.revision != previous.revision ||
+            result.view.sceneId != previous.sceneId)) {
+          _dialogueFinished = false;
+        }
+      });
       if (!result.applied) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(_reason(result.reason))),
@@ -216,6 +229,8 @@ class _WorldPlayPageState extends State<WorldPlayPage> {
   @override
   Widget build(BuildContext context) {
     final view = _view;
+    final dialogue = view == null ? null :
+        SceneDialogueScript.fromSceneText(view.sceneText);
     final prefs = _reading;
     final chrome = view == null ? ReaderChromeMode.normal : _chrome;
     final ink = prefs.foreground;
@@ -326,7 +341,7 @@ class _WorldPlayPageState extends State<WorldPlayPage> {
                                 ],
                                 Wrap(spacing: 8, runSpacing: 6, children: [
                                   Chip(
-                                    label: Text('Классический режим',
+                                    label: Text(dialogue == null ? 'Классический режим' : 'Диалог',
                                         style: TextStyle(color: ink)),
                                     backgroundColor: prefs.background,
                                     side: BorderSide(
@@ -341,9 +356,37 @@ class _WorldPlayPageState extends State<WorldPlayPage> {
                                   ),
                                 ]),
                                 const SizedBox(height: 18),
-                                Text(view.sceneText, style: readerText),
+                                if (dialogue == null)
+                                  Text(view.sceneText, style: readerText)
+                                else
+                                  DialogueStage(
+                                    key: ValueKey('world-dialogue-' +
+                                        view.campaignId + '-' + view.sceneId +
+                                        '-' + view.revision.toString()),
+                                    script: dialogue,
+                                    campaignId: view.campaignId,
+                                    sceneId: view.sceneId,
+                                    revision: view.revision,
+                                    textColor: ink,
+                                    pageColor: prefs.background,
+                                    fontSize: prefs.fontSize,
+                                    lineHeight: prefs.lineHeight,
+                                    onFinished: (finished) {
+                                      if (!mounted || _view?.sceneId != view.sceneId ||
+                                          _view?.revision != view.revision ||
+                                          _dialogueFinished == finished) return;
+                                      setState(() => _dialogueFinished = finished);
+                                    },
+                                  ),
                                 const SizedBox(height: 24),
-                                if (view.isTerminal) ...[
+                                if (dialogue != null && !_dialogueFinished) ...[
+                                  Text('Прочитайте диалог или выберите «Пропустить разговор», '
+                                      'чтобы открыть решения героя.',
+                                      key: const ValueKey('world-dialogue-choice-gate'),
+                                      style: readerText.copyWith(
+                                        fontSize: prefs.fontSize * 0.84,
+                                      )),
+                                ] else if (view.isTerminal) ...[
                                   Text('История завершена',
                                       style: readerText.copyWith(
                                         fontSize: prefs.fontSize + 4,
@@ -443,6 +486,7 @@ class _WorldPlayPageState extends State<WorldPlayPage> {
                                             if (!mounted) return;
                                             setState(() {
                                               _view = result.view;
+                                              _dialogueFinished = false;
                                               _choosing = false;
                                               _errorText = null;
                                             });
