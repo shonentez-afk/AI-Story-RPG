@@ -240,7 +240,7 @@ void main() {
     final fact = approved.factIds[artem.id + '|' + secret.id]!;
     expect(world.state.knowledge[card.characterId], isEmpty);
     final result = world.apply(
-      actionId: 'character-id-learn', choiceId: 'repeat',
+      actionId: 'character_id_learn_1', choiceId: 'repeat',
       expectedRevision: 0,
     );
     expect(result.applied, true);
