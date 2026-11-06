@@ -197,10 +197,17 @@ class NpcKnowledgeRichWorldBridge {
         }
       }
     }
+    final socialRules = reviewedNpcSocial == null ? null :
+        RichNpcSocialContract.inspect(
+          {...provenance, 'npc_social': reviewedNpcSocial},
+          {'npc_social_format': RichNpcSocialContract.format},
+          world,
+        );
     RichNpcDialogueKnowledge.validate(
       reviewedDialogueTurns.isEmpty ? null :
           <String, dynamic>{...reviewedDialogueTurns},
       world, <String, dynamic>{...dialogues},
+      socialRules: socialRules,
     );
     final facts = world.facts.toList()..sort();
     result['presentation'] = {
@@ -222,8 +229,8 @@ class NpcKnowledgeRichWorldBridge {
       // Never invent the author's presence, rumor or consent flags.
       result['npc_social'] =
           jsonDecode(jsonEncode(reviewedNpcSocial));
-      RichNpcSocialContract.inspect(result,
-          {'npc_social_format': RichNpcSocialContract.format}, world);
+      // All quotes, actions and actor identities were preflight checked.
+      // The strict ZIP writer and importer independently repeat this check.
     }
     result['npc_knowledge'] = {
       'format': RichPrivateBookworldImporter.npcKnowledgeFormat,
