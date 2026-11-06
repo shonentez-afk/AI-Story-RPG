@@ -94,6 +94,15 @@ class SourceLockedDialogueSpeakerAudit {
     }
     final bindings = <String, String>{};
     final ownersById = <String, String>{};
+    for (final profile in notebook.profiles) {
+      if (profile.card == null) continue;
+      profile.card!.validate();
+      final previous = ownersById.putIfAbsent(
+          profile.characterId!, () => profile.dossierId);
+      if (previous != profile.dossierId) {
+        throw const FormatException('Дубли постоянного character_id NPC');
+      }
+    }
     for (final evidence in speakers) {
       if (evidence.status !=
               DialogueSpeakerEvidenceStatus.sourceMentionGroupReviewed ||
