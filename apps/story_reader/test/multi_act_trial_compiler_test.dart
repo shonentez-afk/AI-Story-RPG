@@ -514,8 +514,8 @@ void main() {
   });
 
 
-  testWidgets('multi-act item proposal UI sends no request without consent; '
-      'extra cross-act rule disables incompatible choice preparation',
+  testWidgets('multi-act item proposal requires explicit approval; '
+      'extra cross-act rule blocks incompatible review',
       (tester) async {
     final index = _index();
     final book = await _analyze(index);
@@ -526,46 +526,56 @@ void main() {
         gateway: const DeviceWorldLibraryGateway(background: false),
       ),
     ));
-    final itemButton = find.byKey(
-        const Key('multiact-trial-optional-gameplay'));
-    expect(itemButton, findsOneWidget);
-    expect(tester.widget<OutlinedButton>(itemButton).onPressed, isNull);
 
-    final quotes = find.byKey(
-        const Key('multiact-trial-source-reviewed'));
-    await tester.ensureVisible(quotes);
+    // All controls are in a lazy ListView. Test a real phone viewport:
+    // never assume a button beyond the current viewport is already built.
+    final scrollable = find.byType(Scrollable).last;
+    final quotes = find.byKey(const Key('multiact-trial-source-reviewed'));
+    await tester.scrollUntilVisible(quotes, 110, scrollable: scrollable);
     await tester.tap(quotes);
     await tester.pumpAndSettle();
-    final fiction = find.byKey(
-        const Key('multiact-trial-private-fiction'));
-    await tester.ensureVisible(fiction);
+    final fiction = find.byKey(const Key('multiact-trial-private-fiction'));
+    await tester.scrollUntilVisible(fiction, 110, scrollable: scrollable);
     await tester.tap(fiction);
     await tester.pumpAndSettle();
 
-    final crossAct = find.byKey(
-        const Key('multiact-trial-consequence'));
-    await tester.ensureVisible(crossAct);
+    final crossAct = find.byKey(const Key('multiact-trial-consequence'));
+    await tester.scrollUntilVisible(crossAct, 110, scrollable: scrollable);
     await tester.tap(crossAct);
+    await tester.pumpAndSettle();
+    final itemButton = find.byKey(
+        const Key('multiact-trial-optional-gameplay'));
+    await tester.scrollUntilVisible(itemButton, 110, scrollable: scrollable);
     await tester.pumpAndSettle();
     expect(tester.widget<OutlinedButton>(itemButton).onPressed, isNull);
 
-    await tester.ensureVisible(crossAct);
+    await tester.scrollUntilVisible(crossAct, -110,
+        scrollable: scrollable);
     await tester.tap(crossAct);
     await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(itemButton, 110,
+        scrollable: scrollable);
+    await tester.pumpAndSettle();
     expect(tester.widget<OutlinedButton>(itemButton).onPressed, isNotNull);
-    await tester.ensureVisible(itemButton);
     await tester.tap(itemButton);
     await tester.pumpAndSettle();
+
     expect(find.text('Предметы и знания из книги'), findsOneWidget);
-    final request = find.byKey(
-        const Key('gameplay-source-request'));
-    expect(request, findsOneWidget);
+    final request = find.byKey(const Key('gameplay-source-request'));
+    await tester.scrollUntilVisible(request, 110,
+        scrollable: find.byType(Scrollable).last);
+    await tester.pumpAndSettle();
     expect(tester.widget<FilledButton>(request).onPressed, isNull);
 
     await tester.pageBack();
     await tester.pumpAndSettle();
-    expect(find.byKey(const Key('multiact-trial-start')), findsOneWidget);
-    expect(find.byKey(const Key('multiact-trial-clear-gameplay')), findsNothing);
+    final start = find.byKey(const Key('multiact-trial-start'));
+    await tester.scrollUntilVisible(start, 110,
+        scrollable: find.byType(Scrollable).last);
+    await tester.pumpAndSettle();
+    expect(start, findsOneWidget);
+    expect(find.byKey(const Key('multiact-trial-clear-gameplay')),
+        findsNothing);
   });
 
 }
