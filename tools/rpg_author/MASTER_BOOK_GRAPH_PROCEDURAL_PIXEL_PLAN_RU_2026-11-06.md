@@ -155,3 +155,16 @@ C. `procedural_visuals_v1.json` (после компиляции; пока от�
 - **Архитектурная ссылка:** `tools/rpg_author/PROCEDURAL_PIXEL_SCENES_RU.md` и `tools/rpg_author/E6F_VISUAL_RUNTIME_COMPATIBILITY_RU_2026-11-06.md`.
 
 Примечание: у `vyuh_node_flow`, `flame` и других пакетов могут появляться новые релизы; перед конкретным PR фиксировать версию и проверять на актуальном SDK/CI. Сведения о пакетах в этом документе — результаты исследования, не доказательство тестов внутри нашего приложения.
+
+
+## 9. Дополнение E6g: сторонние компоненты, встроенный редактор и свободный AI-диалог
+
+**Актуальное зафиксированное решение:** [E6G_THIRD_PARTY_AND_AI_FREE_INTERACTION_DECISIONS_RU_2026-11-06.md](E6G_THIRD_PARTY_AND_AI_FREE_INTERACTION_DECISIONS_RU_2026-11-06.md).
+
+- Редактор **встроен** в основное Flutter-приложение (полный Windows, адаптивный Android); единые source-locked book/game graphs, персонажи/знания/NPC persona, сценическая постановка и ограниченные анимации.
+- Сторонние решения не становятся новыми движками: Mermaid graph export; после spike выбрать **один** из `vyuh_node_flow`/`node_flow`; кодовый рендерер Canvas, Flame только по необходимости; PixelForge/Sprite Forge как **алгоритмические ориентиры**. Twine/Inky/Arcweave/Yarn Spinner/Dialogic — UX/схемы, не runtime.
+- AI Dungeon (Do/Say/Story + world cards), Convai Narrative Design (goals/triggers), AI Town (persona, memory/messages отдельно от world), Rasa CALM (LLM intent, deterministic flows), chasm (NPC perceived knowledge) используются как **сравнительные архитектурные модели**, без облачных SDK и второго gameplay engine.
+- В `main` **УЖЕ** есть `FreeTextActionGate/Panel/WorldGatewayPort`, `ZaiGameplayChoiceAdvisor`, opt-in Z.ai/BYOK, `npc_knowledge_rulebook`. Текущий API **сопоставляет с доступным choice ID**, но **не** ведёт свободные, основанные на знаниях NPC беседы. Дополнение: `SAY` с речевым стилем/памятью/знаниями, `LOOK` из доступных фактов, `DO`/`INTERACT` только через существующий gateway, `STORY` — лишь отдельный будущий экспериментальный режим.
+- Генератор готовит отдельные строгие `npc_profile_v1`, `npc_conversation_policy_v1`, `scene_interactions_v1`, `npc_memory_v1`, `ai_interaction_contract_v1` и visual recipe; версии/идентичность/приватность проверяются отдельно от `.bworld v3` (строго четыре ZIP entries).
+- **Не доверять модели эффекты:** никакая реплика/намерение/визуальная команда не меняет `story_core` или SQLite без уже разрешённого выбора, подтверждения игрока и успешного commit. NPC знание строго ограничено проверенными источниками и подтверждёнными событиями; memory claims — не канон. API off by default, показывать точный передаваемый контекст и отдельно просить согласие на новые поля; никаких скрытых глав/целиком книг.
+- Не откладывать P0 E6e, полную литературную проверку двух книг и Windows/Android E2E ради новых функций. Код `main/apps/packages/tools/bookworld` read-only до нового разрешения.
