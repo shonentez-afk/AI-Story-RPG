@@ -203,6 +203,50 @@ void main() {
         throwsFormatException);
   });
 
+  test('private NPC social rules demand a permanent actor identity', () {
+    final raw = jsonDecode(
+      File('../../shared_schemas/fixtures/manor_world_m17.json')
+          .readAsStringSync()) as Map<String, dynamic>;
+    raw['rights_status'] = 'private_adaptation';
+    raw['source_fingerprint'] = 'a' * 64;
+    (raw['supported_modes'] as Map)['plots'] = ['ALTER_FATE'];
+    final legacy = StoryBlueprint.fromJson(raw);
+    final oldId = NpcSocialRulebook(
+      blueprintHash: legacy.blueprintHash,
+      rules: const [
+        NpcSocialRule(
+          memoryId: 'remember_legacy', sceneId: 'gate',
+          choiceId: 'inspect_gate', observerId: 'guard',
+          kind: NpcMemoryKind.witnessed,
+        ),
+      ],
+    );
+    expect(() => NpcSocialLedger.inspect(StoryWorld(legacy), oldId),
+        throwsFormatException);
+
+    final stable = 'npc_${'b' * 32}';
+    final stableRaw = jsonDecode(
+        jsonEncode(raw).replaceAll('"guard"', '"$stable"'));
+    final blueprint = StoryBlueprint.fromJson(stableRaw);
+    final approved = NpcSocialRulebook(
+      blueprintHash: blueprint.blueprintHash,
+      rules: [
+        NpcSocialRule(
+          memoryId: 'remember_permanent', sceneId: 'gate',
+          choiceId: 'inspect_gate', observerId: stable,
+          kind: NpcMemoryKind.promiseReceived,
+          relatedActorId: 'player', relationshipDelta: 4,
+        ),
+      ],
+    );
+    final world = StoryWorld(blueprint);
+    expect(world.apply(actionId: 'agreed', choiceId: 'inspect_gate').applied,
+        isTrue);
+    final ledger = NpcSocialLedger.inspect(world, approved);
+    expect(ledger.directedScore(stable, 'player'), 4);
+    expect(ledger.hasMemory(stable, 'remember_permanent'), isTrue);
+  });
+
   test('independent rulebook fingerprint makes changing authored rules visible',
       () {
     final bp = _blueprint();
