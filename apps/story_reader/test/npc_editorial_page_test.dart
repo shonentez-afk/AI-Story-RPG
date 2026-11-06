@@ -253,7 +253,11 @@ void main() {
 
     final saved = NpcEditorialNotebook.decode(index, dossiers, graph, catalog,
         editorial, (await noteStore.read(index.sourceFingerprint))!);
-    final note = saved.profiles.first.notes.single;
+    // putProfile replaces an edited profile at the end of the list.
+    // Profile order is intentionally not a permanent identity.
+    final note = saved.profiles
+        .singleWhere((profile) => profile.dossierId == artem.id)
+        .notes.single;
     expect(note.targetDossierId, maria.id);
     expect(note.targetCharacterId, target.characterId);
     expect(note.targetGroupDigest, NpcEditorialNotebook.groupDigest(maria));
