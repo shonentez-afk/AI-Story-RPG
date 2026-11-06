@@ -328,6 +328,34 @@ class NpcSocialRulebook {
             'NPC choice requires unearned or self-granted trust');
       }
     }
+    // A->B->A "remember this first" cycles would make both game
+    // decisions impossible. Reject them at authoring/import time rather
+    // than presenting a dead-end to the player.
+    final gatedChoices = {
+      for (final gate in choiceGates)
+        '${gate.sceneId}|${gate.choiceId}': gate,
+    };
+    final visiting = <String>{};
+    final visited = <String>{};
+    void checkChain(String key) {
+      if (visited.contains(key)) return;
+      if (!visiting.add(key)) {
+        throw const FormatException('Circular NPC memory choice dependency');
+      }
+      final gate = gatedChoices[key]!;
+      if (gate.requiredMemoryId != null) {
+        final producer = rules.singleWhere((rule) =>
+            rule.observerId == gate.actorId &&
+            rule.memoryId == gate.requiredMemoryId);
+        final source = '${producer.sceneId}|${producer.choiceId}';
+        if (gatedChoices.containsKey(source)) checkChain(source);
+      }
+      visiting.remove(key);
+      visited.add(key);
+    }
+    for (final key in gatedChoices.keys) {
+      checkChain(key);
+    }
   }
 
   /// Digest is stable under rule order changes. The authoring client must
