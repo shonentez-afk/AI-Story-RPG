@@ -10,6 +10,9 @@ abstract class StoryRuntimeAdapter {
   bool actorKnowsFact(String actorId, String factId);
   /// Immutable committed events which granted the fact to this actor.
   List<WorldEvent> factLearningEvents(String actorId, String factId);
+  /// Exact missing fact IDs for a source-reviewed line (not proof of canon).
+  List<String> missingKnowledgeForActor(
+      String actorId, Iterable<String> requiredFactIds);
   bool get isTerminal;
   String get sceneId;
   /// The exact current scene's verified narrative text, without UI rendering.
@@ -88,6 +91,11 @@ class StoryEngineCoordinator implements StoryRuntimeAdapter {
   @override
   List<WorldEvent> factLearningEvents(String actorId, String factId) =>
       _world.factLearningEvents(actorId, factId);
+
+  @override
+  List<String> missingKnowledgeForActor(
+          String actorId, Iterable<String> requiredFactIds) =>
+      _world.missingKnowledgeForActor(actorId, requiredFactIds);
 
   @override
   String get sceneId => state.sceneId;
