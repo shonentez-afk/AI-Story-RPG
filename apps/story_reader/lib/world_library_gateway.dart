@@ -199,7 +199,17 @@ class DeviceWorldLibraryGateway implements WorldLibraryGateway {
     try {
       return const RichPrivateBookworldImporter().inspect(bytes).presentation;
     } on FormatException {
-      return const {};
+      // An invalid v3 NPC review must NEVER be downgraded to raw scene
+      // text; that would bypass actor/fact gates and leak sealed dialogue.
+      // Only an independently verified legacy v2 or v1 archive may render
+      // without a signed rich presentation.
+      try {
+        const PrivateBookworldImporter().inspect(bytes);
+        return const {};
+      } on FormatException {
+        const BookworldImporter().inspect(bytes);
+        return const {};
+      }
     }
   }
 
