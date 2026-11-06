@@ -183,6 +183,7 @@ CREATE TABLE events(
         return VerifiedBookworld(
           blueprint: rich.blueprint,
           archiveHash: rich.archiveSha256,
+          npcSocialRulebook: rich.npcSocialRulebook,
         );
       }
     }
@@ -278,7 +279,8 @@ CREATE TABLE events(
       // Fork from the exact verified parent head, not just a parent label.
       // All cloned events and the new campaign head are one transaction.
       final coordinator = parent == null
-          ? StoryEngineCoordinator.start(world.blueprint)
+          ? StoryEngineCoordinator.start(world.blueprint,
+              socialRulebook: world.npcSocialRulebook)
           : _restore(parentCampaignId!, parent);
       _db.execute(
         'INSERT INTO campaigns'
@@ -370,7 +372,7 @@ CREATE TABLE events(
       'state_sha256': snapshot.stateHash,
       'head_event_sha256': snapshot.headEventHash,
       'events': events,
-    });
+    }, socialRulebook: world.npcSocialRulebook);
   }
 
   CampaignRecord loadCampaign(String id) {
@@ -554,6 +556,7 @@ CREATE TABLE events(
     final world = _world(archiveHash);
     final restored = StoryEngineCoordinator.restore(
       world.blueprint, checkpoint,
+      socialRulebook: world.npcSocialRulebook,
     );
     if (restored.events.length > maxTurns) {
       throw const FormatException('Too many portable events');

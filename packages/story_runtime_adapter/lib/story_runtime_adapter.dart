@@ -67,7 +67,8 @@ class StoryEngineCoordinator implements StoryRuntimeAdapter {
   StoryEngine _engine;
   StoryWorld _world;
 
-  static StoryEngineCoordinator start(StoryBlueprint blueprint) {
+  static StoryEngineCoordinator start(StoryBlueprint blueprint,
+      {NpcSocialRulebook? socialRulebook}) {
     final project = _buildProject(blueprint);
     final report = StoryValidator.validate(project);
     if (report.hasErrors) {
@@ -75,7 +76,8 @@ class StoryEngineCoordinator implements StoryRuntimeAdapter {
     }
     final engine = StoryEngine(project: project)..start();
     return StoryEngineCoordinator._(
-      blueprint, project, engine, StoryWorld(blueprint),
+      blueprint, project, engine,
+      StoryWorld(blueprint, socialRulebook: socialRulebook),
     );
   }
 
@@ -186,8 +188,9 @@ class StoryEngineCoordinator implements StoryRuntimeAdapter {
   /// The old opaque story_engine snapshot is never trusted as world state.
   static StoryEngineCoordinator restore(
     StoryBlueprint blueprint,
-    Object? rawCheckpoint,
-  ) {
+    Object? rawCheckpoint, {
+    NpcSocialRulebook? socialRulebook,
+  }) {
     if (rawCheckpoint is! Map<String, dynamic>) {
       throw const FormatException('Checkpoint must be a JSON object');
     }
@@ -216,6 +219,7 @@ class StoryEngineCoordinator implements StoryRuntimeAdapter {
       events,
       expectedSequence: revision,
       expectedStateHash: stateHash,
+      socialRulebook: socialRulebook,
     );
     final expectedHead = checked.events.isEmpty
         ? null : checked.events.last.hash;
@@ -225,7 +229,8 @@ class StoryEngineCoordinator implements StoryRuntimeAdapter {
 
     // Verify that the selected runtime can navigate the *exact* same log.
     // Any failure throws before returning an instance to the caller.
-    final coordinator = StoryEngineCoordinator.start(blueprint);
+    final coordinator =
+        StoryEngineCoordinator.start(blueprint, socialRulebook: socialRulebook);
     for (final event in checked.events) {
       final result = coordinator.choose(
         actionId: event.actionId,

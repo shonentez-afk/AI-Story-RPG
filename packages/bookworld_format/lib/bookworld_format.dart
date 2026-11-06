@@ -21,9 +21,12 @@ class VerifiedBookworld {
   const VerifiedBookworld({
     required this.blueprint,
     required this.archiveHash,
+    this.npcSocialRulebook,
   });
   final StoryBlueprint blueprint;
   final String archiveHash;
+  /// Source-locked rulebook from a strictly verified rich-v3 archive only.
+  final NpcSocialRulebook? npcSocialRulebook;
   String get bookworldId => blueprint.bookId;
 }
 
