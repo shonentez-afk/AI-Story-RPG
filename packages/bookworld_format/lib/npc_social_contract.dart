@@ -7,6 +7,9 @@ class RichNpcSocialContract {
   const RichNpcSocialContract._();
 
   static const format = 'ai_story_npc_social_witness_v1';
+  /// V2 adds verifiable conditions on authoritative game decisions. V1
+  /// archives keep their exact meaning and continue to open unchanged.
+  static const choiceGateFormat = 'ai_story_npc_social_witness_v2';
   static final _sha = RegExp(r'^[0-9a-f]{64}$');
   static final _id = RegExp(r'^[a-z][a-z0-9_]{0,63}$');
 
@@ -57,15 +60,17 @@ class RichNpcSocialContract {
     final raw = source['npc_social'];
     final marker = manifest['npc_social_format'];
     if (raw == null && marker == null) return null;
-    if (marker != format || raw is! Map<String, dynamic> ||
+    if ((marker != format && marker != choiceGateFormat) ||
+        raw is! Map<String, dynamic> ||
         blueprint.rightsStatus != 'private_adaptation') {
       throw const FormatException('NPC social version/capability mismatch');
     }
     _fields(raw, {
       'format', 'review_scope', 'source_fingerprint',
       'user_confirmed', 'literary_canon_verified', 'witnesses', 'rules',
+      if (marker == choiceGateFormat) 'choice_gates',
     }, 'source review');
-    if (raw['format'] != format ||
+    if (raw['format'] != marker ||
         raw['review_scope'] != 'user_declared_private_game_fiction' ||
         raw['source_fingerprint'] != blueprint.sourceFingerprint ||
         raw['user_confirmed'] != true ||
@@ -161,10 +166,46 @@ class RichNpcSocialContract {
         maxTriggers: entry['max_triggers'] as int,
       ));
     }
+    final choiceGates = <NpcSocialChoiceGate>[];
+    if (marker == choiceGateFormat) {
+      final rawGates = raw['choice_gates'];
+      if (rawGates is! List || rawGates.isEmpty ||
+          rawGates.length > 128) {
+        throw const FormatException('Invalid NPC social decision gates');
+      }
+      for (final entry in rawGates) {
+        if (entry is! Map<String, dynamic>) {
+          throw const FormatException('Malformed NPC decision review');
+        }
+        _fields(entry, {
+          'scene_id', 'choice_id', 'actor_id', 'required_memory_id',
+          'minimum_trust_to_player', 'source_quote_sha256',
+        }, 'choice gate');
+        final sceneId = _checkedId(entry['scene_id'], 'choice scene');
+        final choiceId = _checkedId(entry['choice_id'], 'choice');
+        final actorId = _checkedId(entry['actor_id'], 'choice actor');
+        final memory = entry['required_memory_id'];
+        final trust = entry['minimum_trust_to_player'];
+        if (memory != null) _checkedId(memory, 'required memory');
+        if (trust != null && trust is! int) {
+          throw const FormatException('Invalid NPC trust condition');
+        }
+        final quote = _checkedQuote(entry['source_quote_sha256']);
+        if (!_cited(sceneId, quote, origins)) {
+          throw const FormatException('NPC choice gate lacks scene source');
+        }
+        choiceGates.add(NpcSocialChoiceGate(
+          sceneId: sceneId, choiceId: choiceId, actorId: actorId,
+          requiredMemoryId: memory as String?,
+          minimumTrustToPlayer: trust as int?,
+        ));
+      }
+    }
     final book = NpcSocialRulebook(
       blueprintHash: blueprint.blueprintHash,
       witnesses: witnesses,
       rules: rules,
+      choiceGates: choiceGates,
       requireReviewedWitnesses: true,
     );
     book.validate(blueprint);
