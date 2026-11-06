@@ -929,6 +929,12 @@ void main() {
         scrollable: find.byType(Scrollable).first);
     await tester.pumpAndSettle();
     expect(finished, findsOneWidget);
+    final auditResult = find.byKey(
+        const Key('whole-gameplay-batch-audit-ok'));
+    await tester.scrollUntilVisible(auditResult, 110,
+        scrollable: find.byType(Scrollable).first);
+    await tester.pumpAndSettle();
+    expect(auditResult, findsOneWidget);
   });
 
 
