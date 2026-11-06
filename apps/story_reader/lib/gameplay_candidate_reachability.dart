@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:crypto/crypto.dart';
 import 'story_plan.dart';
+import 'whole_plan_gameplay_candidate_batch.dart';
 import 'zai_source_locked_gameplay_candidates.dart';
 
 /// A reproducible contradiction on one reachable route (NOT book canon).
@@ -54,6 +55,65 @@ class GameplayCandidateReachabilityAuditor {
     required SourceLockedGameplayContext context,
     required GameplayCandidateDraft draft,
   }) {
+    final perChoice = <String, List<GameplayCandidate>>{};
+    final entityNames = <String, (String, String)>{};
+    final operationIds = <String>{};
+    final collected = <GameplayCandidate>[];
+    _collect(
+      plan, context, draft,
+      perChoice, entityNames, operationIds, collected,
+    );
+    return _auditRoutes(plan, perChoice, collected);
+  }
+
+  /// Evaluate effects TOGETHER across ALL consented source batches.
+  ///
+  /// One batch may spend an item legitimately acquired by a choice from an
+  /// earlier batch. A per-batch graph cannot prove or refute ownership;
+  /// only this joint route analysis has the complete state transitions.
+  ///
+  /// This stage does NOT verify source meaning or grant model authority.
+  GameplayReachabilityReport auditAcrossBatches({
+    required StoryPlan plan,
+    required WholePlanGameplayBatchManifest manifest,
+    required List<GameplayCandidateDraft> drafts,
+  }) {
+    manifest.verifyUnchanged();
+    if (manifest.plan.encode() != plan.encode() ||
+        manifest.index.sourceFingerprint != plan.sourceFingerprint ||
+        drafts.isEmpty ||
+        drafts.length != manifest.contexts.length) {
+      throw const FormatException(
+          'Нужны ВСЕ завершённые пакеты той же редакции и плана.');
+    }
+    final perChoice = <String, List<GameplayCandidate>>{};
+    final entityNames = <String, (String, String)>{};
+    final operationIds = <String>{};
+    final collected = <GameplayCandidate>[];
+    final usedEventIds = <String>{};
+    for (var n = 0; n < drafts.length; n++) {
+      final context = manifest.contexts[n];
+      for (final event in context.excerpts) {
+        if (!usedEventIds.add(event.id)) {
+          throw const FormatException(
+              'Один исходный фрагмент продублирован в нескольких пакетах.');
+        }
+      }
+      _collect(plan, context, drafts[n], perChoice,
+          entityNames, operationIds, collected);
+    }
+    return _auditRoutes(plan, perChoice, collected);
+  }
+
+  void _collect(
+    StoryPlan plan,
+    SourceLockedGameplayContext context,
+    GameplayCandidateDraft draft,
+    Map<String, List<GameplayCandidate>> perChoice,
+    Map<String, (String, String)> entityNames,
+    Set<String> operationIds,
+    List<GameplayCandidate> collected,
+  ) {
     final expectedPlanDigest =
         sha256.convert(utf8.encode(plan.encode())).toString();
     if (context.planSha256 != expectedPlanDigest ||
@@ -71,9 +131,6 @@ class GameplayCandidateReachabilityAuditor {
     final quotes = {
       for (final e in context.excerpts) e.id: e.source.quote.toLowerCase(),
     };
-    final perChoice = <String, List<GameplayCandidate>>{};
-    final entityNames = <String, (String, String)>{};
-    final operationIds = <String>{};
     for (final c in draft.candidates) {
       final anchor = anchors[c.sceneId + '/' + c.choiceId];
       if (anchor == null ||
@@ -105,9 +162,18 @@ class GameplayCandidateReachabilityAuditor {
       if (!operationIds.add(signature)) {
         throw const FormatException('Повтор одного и того же эффекта.');
       }
-      perChoice.putIfAbsent(c.choiceId, () => []).add(c);
+      perChoice.putIfAbsent(c.sceneId + '/' + c.choiceId, () => []).add(c);
     }
 
+    collected.addAll(draft.candidates);
+  }
+
+  GameplayReachabilityReport _auditRoutes(
+    StoryPlan plan,
+    Map<String, List<GameplayCandidate>> perChoice,
+    List<GameplayCandidate> candidates,
+  ) {
+    final scenes = {for (final s in plan.situations) s.id: s};
     final queue = <_Node>[
       _Node(plan.entrySituationId, {...plan.initialFlags},
           <String>{}, <String>{}, const <String>[]),
@@ -119,7 +185,7 @@ class GameplayCandidateReachabilityAuditor {
     final issueKeys = <String>{};
     void report(String code, _Node node, String choiceId,
         String itemId, List<String> path) {
-      final key = code + '/' + choiceId + '/' + itemId;
+      final key = code + '/' + node.sceneId + '/' + choiceId + '/' + itemId;
       if (!issueKeys.add(key) || issues.length == maxIssues) return;
       issues.add(GameplayRouteIssue(code, node.sceneId, choiceId,
           itemId, List.unmodifiable(path)));
@@ -146,7 +212,7 @@ class GameplayCandidateReachabilityAuditor {
             [...node.path, choice.id]);
         final items = {...node.items};
         final facts = {...node.facts};
-        final ops = perChoice[choice.id] ?? const <GameplayCandidate>[];
+        final ops = perChoice[node.sceneId + '/' + choice.id] ?? const <GameplayCandidate>[];
         final byItem = <String, Set<String>>{};
         for (final c in ops) {
           if (c.kind == 'item') {
@@ -187,7 +253,7 @@ class GameplayCandidateReachabilityAuditor {
             node, '', '', node.path);
       }
     }
-    for (final c in draft.candidates) {
+    for (final c in candidates) {
       final signature = c.sceneId + '/' + c.choiceId + '/' +
           c.op + '/' + c.id;
       if (!reachedOperations.contains(signature)) {
