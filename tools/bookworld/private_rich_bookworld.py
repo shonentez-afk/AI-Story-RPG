@@ -173,7 +173,7 @@ def _check_rule(rule, bp, effect):
             (-20 <= value <= 20 and value != 0) if effect else 0 <= value <= 1000000)
     elif op in (("learn_fact",) if effect else ("knows_fact",)):
         required = {"op", "id", "actor"}
-        valid = rule.get("id") in facts and rule.get("actor") == "player"
+        valid = rule.get("id") in facts and rule.get("actor") in bp["actors"]
     else:
         fail(f"Disallowed rich private rule {op}")
     if not valid or set(rule) != required:
@@ -197,20 +197,26 @@ def _blueprint(bp):
         fail("Wrong private rich identity/modes")
     for catalog, minlen, maxlen in [("items", 0, 32),
                                      ("facts", 0, 64),
-                                     ("actors", 1, 1)]:
+                                     ("actors", 1, 16)]:
         values = bp[catalog]
         if type(values) is not list or not minlen <= len(values) <= maxlen or \
                 any(not _id(v) for v in values) or len(set(values)) != len(values):
             fail(f"Invalid {catalog} catalog")
-    if bp["actors"] != ["player"]:
-        fail("Only private player knowledge is supported in v3")
+    if "player" not in bp["actors"]:
+        fail("Private world requires player actor")
+    if len(bp["actors"]) > 1 and any(
+            not re.fullmatch(r"npc_[0-9a-f]{32}", actor)
+            for actor in bp["actors"] if actor != "player"):
+        fail("NPC needs permanent character_id")
     state = bp["initial_state"]
     _keys(state, {"scene_id", "revision", "tick", "stats", "inventory",
                   "flags", "knowledge"}, "initial state")
     if state["scene_id"] != bp["entry_scene_id"] or \
             not _id(state["scene_id"]) or state["revision"] != 0 or \
             state["tick"] != 0 or state["inventory"] != [] or \
-            state["knowledge"] != {"player": []}:
+            (type(state["knowledge"]) is not dict or
+             set(state["knowledge"]) != set(bp["actors"]) or
+             any(facts != [] for facts in state["knowledge"].values())):
         fail("Invalid rich initial state")
     stats, flags = state["stats"], state["flags"]
     if type(stats) is not dict or not 0 <= len(stats) <= 8 or \
