@@ -57,7 +57,7 @@
     {"character_id": "frog", "archetype": "frog", "at": [220, 154], "pose": "idle"}
   ],
   "props": [
-    {"item_id": "golden_ball", "shape": "orb", "owner": "frog", "visible_when": {"has_item": "golden_ball"}}
+    {"item_id": "golden_ball", "shape": "orb", "owner": "player", "visible_when": {"has_item": "golden_ball"}}
   ],
   "cues": [
     {"on": "scene_enter", "actor_id": "frog", "animation": "appear"},
