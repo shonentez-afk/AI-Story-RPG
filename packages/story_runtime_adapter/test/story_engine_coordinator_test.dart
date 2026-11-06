@@ -91,6 +91,29 @@ void main() {
         'terminal_scene');
   });
 
+  test('Dart runtime adapter exposes event-scoped NPC facts after replay', () {
+    final raw = mutableFixture();
+    final gate = (raw['scenes'] as List).first as Map<String, dynamic>;
+    final inspect = (gate['choices'] as List).first as Map<String, dynamic>;
+    inspect['effects'] = [
+      {'op': 'learn_fact', 'id': 'family_secret', 'actor': 'guard'},
+    ];
+    final blueprint = StoryBlueprint.fromJson(raw);
+    final adapter = StoryEngineCoordinator.start(blueprint);
+    expect(adapter.actorKnowsFact('guard', 'family_secret'), isFalse);
+    expect(adapter.factLearningEvents('guard', 'family_secret'), isEmpty);
+    expect(take(adapter, 'teach_guard', 'inspect_gate').applied, isTrue);
+    expect(adapter.actorKnowsFact('guard', 'family_secret'), isTrue);
+    expect(adapter.actorKnowsFact('player', 'family_secret'), isFalse);
+    expect(adapter.factLearningEvents('guard', 'family_secret')
+        .single.actionId, 'teach_guard');
+    final restored = StoryEngineCoordinator.restore(
+        blueprint, jsonDecode(jsonEncode(adapter.checkpoint())));
+    expect(restored.actorKnowsFact('guard', 'family_secret'), isTrue);
+    expect(restored.factLearningEvents('guard', 'family_secret')
+        .single.hash, adapter.events.single.hash);
+  });
+
   test('blocked move leaves both engine scene and world hash unchanged', () {
     final coordinator = StoryEngineCoordinator.start(fixture());
     final before = coordinator.state.stateHash;
