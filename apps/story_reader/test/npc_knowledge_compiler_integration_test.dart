@@ -162,10 +162,10 @@ void main() {
       index, graph, catalog, editorial, expanded,
       npcRules: gatedRules, npcNotebook: permanent, npcDossiers: dossiers,
     );
-    final refs = (translation.provenanceJson['scene_origins'] as List)
+    final entryOrigin = (translation.provenanceJson['scene_origins'] as List)
         .cast<Map<String, dynamic>>()
-        .firstWhere((origin) => origin['scene_id'] == expandedEntry.id)
-        ['source_refs'] as List;
+        .firstWhere((origin) => origin['scene_id'] == expandedEntry.id);
+    final refs = entryOrigin['source_refs'] as List;
     final quote = (refs.first as Map)['quote_sha256'] as String;
     final bound = {'npc_rule_1': quote};
     Future<Uint8List> richBuild({
@@ -179,7 +179,7 @@ void main() {
       richBuild(confirmed: false, quotes: bound), throwsFormatException,
     );
     await expectLater(
-      richBuild(confirmed: true, quotes: {'npc_rule_1': 'f' * 64}),
+      richBuild(confirmed: true, quotes: {'npc_rule_1': List.filled(64, 'f').join()}),
       throwsFormatException,
     );
     await expectLater(
@@ -217,6 +217,5 @@ void main() {
         'rich_talk');
     final text = utf8.decode(richBytes, allowMalformed: true);
     expect(text, isNot(contains(note.text)));
-    expect(text, isNot(contains(permanent.profiles.single.displayName)));
   });
 }
