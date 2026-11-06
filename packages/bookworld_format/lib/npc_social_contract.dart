@@ -10,6 +10,9 @@ class RichNpcSocialContract {
   /// V2 adds verifiable conditions on authoritative game decisions. V1
   /// archives keep their exact meaning and continue to open unchanged.
   static const choiceGateFormat = 'ai_story_npc_social_witness_v2';
+  /// V3 additionally binds player/NPC item custody transfers to the EXACT
+  /// typed world effect, committed choice, active witness and source quote.
+  static const itemTransferFormat = 'ai_story_npc_social_witness_v3';
   static final _sha = RegExp(r'^[0-9a-f]{64}$');
   static final _id = RegExp(r'^[a-z][a-z0-9_]{0,63}$');
 
@@ -60,7 +63,8 @@ class RichNpcSocialContract {
     final raw = source['npc_social'];
     final marker = manifest['npc_social_format'];
     if (raw == null && marker == null) return null;
-    if ((marker != format && marker != choiceGateFormat) ||
+    if ((marker != format && marker != choiceGateFormat &&
+         marker != itemTransferFormat) ||
         raw is! Map<String, dynamic> ||
         blueprint.rightsStatus != 'private_adaptation') {
       throw const FormatException('NPC social version/capability mismatch');
@@ -68,7 +72,9 @@ class RichNpcSocialContract {
     _fields(raw, {
       'format', 'review_scope', 'source_fingerprint',
       'user_confirmed', 'literary_canon_verified', 'witnesses', 'rules',
-      if (marker == choiceGateFormat) 'choice_gates',
+      if (marker == choiceGateFormat ||
+          marker == itemTransferFormat) 'choice_gates',
+      if (marker == itemTransferFormat) 'item_transfers',
     }, 'source review');
     if (raw['format'] != marker ||
         raw['review_scope'] != 'user_declared_private_game_fiction' ||
@@ -167,9 +173,10 @@ class RichNpcSocialContract {
       ));
     }
     final choiceGates = <NpcSocialChoiceGate>[];
-    if (marker == choiceGateFormat) {
+    if (marker == choiceGateFormat || marker == itemTransferFormat) {
       final rawGates = raw['choice_gates'];
-      if (rawGates is! List || rawGates.isEmpty ||
+      if (rawGates is! List ||
+          (marker == choiceGateFormat && rawGates.isEmpty) ||
           rawGates.length > 128) {
         throw const FormatException('Invalid NPC social decision gates');
       }
@@ -201,11 +208,42 @@ class RichNpcSocialContract {
         ));
       }
     }
+    final itemTransfers = <NpcItemTransfer>[];
+    if (marker == itemTransferFormat) {
+      final rawTransfers = raw['item_transfers'];
+      if (rawTransfers is! List || rawTransfers.isEmpty ||
+          rawTransfers.length > 128) {
+        throw const FormatException('Invalid reviewed NPC item transfers');
+      }
+      for (final entry in rawTransfers) {
+        if (entry is! Map<String, dynamic>) {
+          throw const FormatException('Malformed NPC item transfer');
+        }
+        _fields(entry, {
+          'scene_id', 'choice_id', 'item_id', 'from_actor_id',
+          'to_actor_id', 'source_quote_sha256',
+        }, 'item custody');
+        final scene = _checkedId(entry['scene_id'], 'item scene');
+        final choice = _checkedId(entry['choice_id'], 'item choice');
+        final item = _checkedId(entry['item_id'], 'item');
+        final from = _checkedId(entry['from_actor_id'], 'item sender');
+        final to = _checkedId(entry['to_actor_id'], 'item recipient');
+        if (!_cited(scene,
+            _checkedQuote(entry['source_quote_sha256']), origins)) {
+          throw const FormatException('NPC item transfer lacks scene source');
+        }
+        itemTransfers.add(NpcItemTransfer(
+          sceneId: scene, choiceId: choice, itemId: item,
+          fromActorId: from, toActorId: to,
+        ));
+      }
+    }
     final book = NpcSocialRulebook(
       blueprintHash: blueprint.blueprintHash,
       witnesses: witnesses,
       rules: rules,
       choiceGates: choiceGates,
+      itemTransfers: itemTransfers,
       requireReviewedWitnesses: true,
     );
     book.validate(blueprint);
