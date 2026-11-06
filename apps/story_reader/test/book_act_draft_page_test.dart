@@ -168,6 +168,8 @@ void main() {
     await tester.pumpAndSettle();
     expect(gateway.calls, 1);
     final resume = find.byKey(const Key('act-draft-prepare-remaining'));
+    await tester.scrollUntilVisible(resume, 120,
+        scrollable: find.byType(Scrollable).first);
     await tester.ensureVisible(resume);
     await tester.pumpAndSettle();
     await tester.tap(resume);
