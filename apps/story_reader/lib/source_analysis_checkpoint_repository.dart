@@ -38,6 +38,7 @@ enum SourceCheckpointScope {
   zaiActDilemmaDrafts,
   zaiProseSceneDrafts,
   zaiProseAuditDrafts,
+  zaiGameplayBatchDrafts,
 }
 
 /// Private app-support storage shared by Android and Windows.
@@ -78,6 +79,7 @@ class FileSourceAnalysisCheckpointRepository
   static const _zaiActDraftFolder = 'ai_story_zai_act_dilemma_m2h4_v1';
   static const _zaiProseFolder = 'ai_story_zai_private_prose_scenes_m2h7c2_v1';
   static const _zaiProseAuditFolder = 'ai_story_zai_private_prose_audits_m2h7c5_v1';
+  static const _zaiGameplayBatchFolder = 'ai_story_zai_gameplay_batch_m2h8f1_v1';
 
   static void _checkFingerprint(String fingerprint) {
     if (!_validFingerprint.hasMatch(fingerprint)) {
@@ -111,6 +113,7 @@ class FileSourceAnalysisCheckpointRepository
       SourceCheckpointScope.zaiActDilemmaDrafts => _zaiActDraftFolder,
       SourceCheckpointScope.zaiProseSceneDrafts => _zaiProseFolder,
       SourceCheckpointScope.zaiProseAuditDrafts => _zaiProseAuditFolder,
+      SourceCheckpointScope.zaiGameplayBatchDrafts => _zaiGameplayBatchFolder,
     };
     final folder = Directory('${base.path}/$name');
     if (!await folder.exists()) await folder.create(recursive: true);
