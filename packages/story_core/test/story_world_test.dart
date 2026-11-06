@@ -293,6 +293,44 @@ void main() {
         throwsFormatException);
   });
 
+  test('NPC reviewed-line fact prerequisites fail closed and survive replay', () {
+    final raw = mutableFixture();
+    final gate = (raw['scenes'] as List).first as Map<String, dynamic>;
+    final inspect = (gate['choices'] as List).first as Map<String, dynamic>;
+    inspect['effects'] = [
+      {'op': 'learn_fact', 'id': 'family_secret', 'actor': 'guard'},
+    ];
+    final blueprint = StoryBlueprint.fromJson(raw);
+    final world = StoryWorld(blueprint);
+    const required = ['family_secret', 'archive_origin', 'family_secret'];
+    expect(world.missingKnowledgeForActor('guard', required),
+        ['archive_origin', 'family_secret']);
+    expect(world.missingKnowledgeForActor('guard', const []), isEmpty);
+    expect(() => world.missingKnowledgeForActor('unknown_guard', required),
+        throwsFormatException);
+    expect(() => world.missingKnowledgeForActor('guard', ['unknown_fact']),
+        throwsFormatException);
+    final pre = world.missingKnowledgeForActor('guard', required);
+    expect(() => pre.clear(), throwsUnsupportedError);
+
+    final alternative = StoryWorld(blueprint);
+    expect(step(alternative, 'skip_secret', 'walk_market').applied, isTrue);
+    expect(alternative.missingKnowledgeForActor('guard', required),
+        ['archive_origin', 'family_secret']);
+
+    expect(step(world, 'learn_secret', 'inspect_gate').applied, isTrue);
+    expect(world.missingKnowledgeForActor('guard', required), ['archive_origin']);
+    expect(world.missingKnowledgeForActor('player', ['family_secret']),
+        ['family_secret']);
+    final replay = StoryWorld.replay(blueprint,
+        world.events.map((event) => event.toJson()),
+        expectedSequence: 1, expectedStateHash: world.state.stateHash);
+    expect(replay.missingKnowledgeForActor('guard', required),
+        ['archive_origin']);
+    expect(replay.factLearningEvents('guard', 'family_secret')
+        .single.hash, world.events.single.hash);
+  });
+
   test('authoritative WorldState cannot be modified by UI callers', () {
     final world = StoryWorld(originalBlueprint());
     expect(() => world.state.inventory.add('key'), throwsUnsupportedError);
