@@ -125,7 +125,7 @@ def _exact_scene_dialogue(text):
     }
 
 
-def _presentation(meta, bp):
+def _presentation(meta, bp, social=None):
     expected = {"hero", "item_names", "item_descriptions",
                 "stat_names", "fact_names", "scene_names"}
     has_dialogues = type(meta) is dict and "scene_dialogues" in meta
@@ -183,8 +183,13 @@ def _presentation(meta, bp):
                 fail("NPC spoken lines are missing review")
             seen = set()
             for entry in entries:
-                _keys(entry, {"turn_index", "speaker", "actor_id",
-                              "required_fact_ids"}, "NPC spoken line")
+                required = {"turn_index", "speaker", "actor_id",
+                            "required_fact_ids"}
+                extra = {"required_social_memory_id",
+                         "minimum_trust_to_player"}
+                if type(entry) is not dict or not required.issubset(entry) or \
+                        set(entry).difference(required | extra):
+                    fail("NPC spoken line has unreviewed social fields")
                 index, actor, facts = (entry["turn_index"],
                                        entry["actor_id"],
                                        entry["required_fact_ids"])
@@ -197,6 +202,24 @@ def _presentation(meta, bp):
                             for fact in facts) or \
                         facts != sorted(set(facts)):
                     fail("Tampered NPC dialogue identity or secret gate")
+                if "required_social_memory_id" in entry:
+                    memory_id = entry["required_social_memory_id"]
+                    if actor == "player" or type(social) is not dict or \
+                            not isinstance(memory_id, str) or \
+                            not any(rule["observer_id"] == actor and
+                                    rule["memory_id"] == memory_id
+                                    for rule in social["rules"]):
+                        fail("Unreviewed NPC memory dialogue prerequisite")
+                if "minimum_trust_to_player" in entry:
+                    threshold = entry["minimum_trust_to_player"]
+                    if actor == "player" or type(social) is not dict or \
+                            type(threshold) is not int or \
+                            not 1 <= threshold <= 100 or \
+                            not any(rule["observer_id"] == actor and
+                                    rule["related_actor_id"] == "player" and
+                                    rule["relationship_delta"] > 0
+                                    for rule in social["rules"]):
+                        fail("Unreviewed NPC trust dialogue prerequisite")
                 seen.add(index)
             if seen != set(spoken):
                 fail("Incomplete reviewed NPC dialogue turns")
@@ -667,9 +690,9 @@ def _provenance(prov, bp):
     if prov["format"] != PROVENANCE_FORMAT:
         fail("Wrong rich provenance format")
     _model(prov["model_provenance"])
-    _presentation(prov["presentation"], bp)
-    _npc_knowledge(prov, bp)
     _npc_social(prov, bp)
+    _presentation(prov["presentation"], bp, prov.get("npc_social"))
+    _npc_knowledge(prov, bp)
     if "npc_knowledge" in prov and "gameplay_review" in prov:
         fail("NPC grant review and gameplay review must be unified")
     if "gameplay_review" in prov:
