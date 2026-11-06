@@ -23,7 +23,7 @@
 - `apps/story_reader/test/multi_act_trial_compiler_test.dart`: полный независимый отчёт → принятие с двумя согласиями → настоящий v3 ZIP/SQLite importer; старый SHA, неполная рецензия, `needsRevision`, новые правила и отсутствие подтверждений отвергаются
 - `apps/story_reader/test/whole_story_literary_evidence_manifest_test.dart`: UI-восстановление локально сохранённой рецензии, отсутствие повторного POST, два подтверждения и возврат typed-подтверждения
 
-**Статус при создании документа: PR/CI ещё не приняты.** GitHub Actions exact-head Flutter/Dart/Python/schema, Windows+Android обязателен до merge.
+**Статус принят:** PR #123 merged в main `31ade599605fa55adffb5cdb3e5c55db44a5bcfd`, exact-head CI #759/M0 #844 SUCCESS (Flutter, Dart, Python, schema/SQLite, Windows, Android). Post-merge выпуск проверять отдельно.
 
 ## Что остаётся до версии 1.0
 
