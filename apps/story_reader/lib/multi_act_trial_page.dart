@@ -14,6 +14,7 @@ import 'source_locked_gameplay_review_page.dart';
 import 'whole_plan_gameplay_batch_page.dart';
 import 'whole_story_literary_review_page.dart';
 import 'whole_story_literary_bounded_repair.dart';
+import 'whole_story_literary_unchanged_approval.dart';
 import 'story_plan_causal_audit.dart';
 import 'narrative_book_model.dart';
 import 'world_library_gateway.dart';
@@ -52,6 +53,7 @@ class _MultiActTrialPageState extends State<MultiActTrialPage> {
   SelectedGameplayCandidates? _gameplaySelection;
   SelectedWholePlanGameplayCandidates? _wholeGameplaySelection;
   WholeStoryLiteraryRecheckApproval? _recheckedRepair;
+  WholeStoryLiteraryUnchangedApproval? _unchangedReview;
 
   List<NarrativeEvent> get _reviewEvents {
     final ids = <String>{
@@ -67,7 +69,8 @@ class _MultiActTrialPageState extends State<MultiActTrialPage> {
 
   Future<void> _chooseGameplay() async {
     if (_working || !_reviewed || !_privateFiction ||
-        _enforceEarlierOutcome || !widget.draft.formalRulesPassed) return;
+        _enforceEarlierOutcome || _unchangedReview != null ||
+        !widget.draft.formalRulesPassed) return;
     // M2h8d1 is deliberately bounded to SIX short, exact source excerpts.
     // Larger multi-act source sets require a separate consented batch.
     final sample = _reviewEvents.take(6).toList(growable: false);
@@ -91,7 +94,8 @@ class _MultiActTrialPageState extends State<MultiActTrialPage> {
 
   Future<void> _chooseWholeGameplay() async {
     if (_working || !_reviewed || !_privateFiction ||
-        _enforceEarlierOutcome || !widget.draft.formalRulesPassed) return;
+        _enforceEarlierOutcome || _unchangedReview != null ||
+        !widget.draft.formalRulesPassed) return;
     final selection = await Navigator.of(context)
         .push<SelectedWholePlanGameplayCandidates>(MaterialPageRoute(
       builder: (_) => WholePlanGameplayBatchPage(
@@ -116,6 +120,15 @@ class _MultiActTrialPageState extends State<MultiActTrialPage> {
           'относятся к прежней версии игрового плана. '
           'Снимите дополнительное правило или удалите '
           'выбранные художественные сцены из подготовки.');
+      return;
+    }
+    if (_unchangedReview != null &&
+        (_recheckedRepair != null || _enforceEarlierOutcome ||
+         _reviewedProse.isNotEmpty || _gameplaySelection != null ||
+         _wholeGameplaySelection != null)) {
+      setState(() => _error =
+          'Независимая проверка исходного сценария устарела: '
+          'нельзя добавлять правила, предметы или сцены после неё.');
       return;
     }
     if (_recheckedRepair != null &&
@@ -162,6 +175,7 @@ class _MultiActTrialPageState extends State<MultiActTrialPage> {
         draft: widget.draft,
         continuity: continuity,
         recheckedRepair: _recheckedRepair,
+        unchangedReview: _unchangedReview,
         sourceEventIdsReviewedByUser: {
           for (final event in _reviewEvents) event.id,
         },
@@ -341,7 +355,8 @@ class _MultiActTrialPageState extends State<MultiActTrialPage> {
               onChanged: valid && _reviewedProse.isEmpty &&
                   _gameplaySelection == null &&
                   _wholeGameplaySelection == null &&
-                  _recheckedRepair == null
+                  _recheckedRepair == null &&
+                  _unchangedReview == null
                   ? (v) => setState(() =>
                       _enforceEarlierOutcome = v == true)
                   : null,
@@ -367,7 +382,8 @@ class _MultiActTrialPageState extends State<MultiActTrialPage> {
                       : 'Одно согласие на список показанных сцен, '
                         'ограничение запросов и возобновление'),
                   onTap: _working || _enforceEarlierOutcome ||
-                      _recheckedRepair != null ? null : () async {
+                      _recheckedRepair != null ||
+                      _unchangedReview != null ? null : () async {
                     await Navigator.of(context).push<void>(
                       MaterialPageRoute(
                         builder: (_) => SourceLockedProseBatchPage(
@@ -389,7 +405,8 @@ class _MultiActTrialPageState extends State<MultiActTrialPage> {
                       : 'Можно восстановить ранее сохранённый '
                         'черновик без нового запроса'),
                   onTap: _working || _enforceEarlierOutcome ||
-                      _recheckedRepair != null ? null : () async {
+                      _recheckedRepair != null ||
+                      _unchangedReview != null ? null : () async {
                     final accepted = await Navigator.of(context)
                         .push<ReviewedProseSceneApproval>(
                       MaterialPageRoute(
@@ -436,7 +453,8 @@ class _MultiActTrialPageState extends State<MultiActTrialPage> {
             OutlinedButton.icon(
               key: const Key('multiact-trial-optional-gameplay'),
               onPressed: valid && _reviewed && _privateFiction &&
-                  !_enforceEarlierOutcome && _recheckedRepair == null
+                  !_enforceEarlierOutcome && _recheckedRepair == null &&
+                  _unchangedReview == null
                   ? _chooseGameplay : null,
               icon: const Icon(Icons.inventory_2_outlined),
               label: const Text('Добавить предметы и знания '
@@ -449,7 +467,8 @@ class _MultiActTrialPageState extends State<MultiActTrialPage> {
             OutlinedButton.icon(
               key: const Key('multiact-trial-whole-gameplay-batch'),
               onPressed: valid && _reviewed && _privateFiction &&
-                  !_enforceEarlierOutcome && _recheckedRepair == null
+                  !_enforceEarlierOutcome && _recheckedRepair == null &&
+                  _unchangedReview == null
                   ? () async {
                 await _chooseWholeGameplay();
               } : null,
@@ -466,7 +485,7 @@ class _MultiActTrialPageState extends State<MultiActTrialPage> {
               key: const Key('multiact-trial-whole-literary-review'),
               onPressed: valid && !_working ? () async {
                 final result = await Navigator.of(context)
-                    .push<WholeStoryLiteraryRecheckApproval>(
+                    .push<Object>(
                   MaterialPageRoute(
                     builder: (_) => WholeStoryLiteraryReviewPage(
                       index: widget.index, book: widget.book,
@@ -490,29 +509,62 @@ class _MultiActTrialPageState extends State<MultiActTrialPage> {
                   ),
                 );
                 if (!mounted || result == null) return;
-                result.verifyForCompiler(
-                    index: widget.index, book: widget.book,
-                    originalPlan: widget.draft.plan);
-                setState(() {
-                  // All optional prose/effects are bound to an OLD plan
-                  // edition and must never silently transfer to the new one.
-                  _reviewedProse.clear();
-                  _gameplaySelection = null;
-                  _wholeGameplaySelection = null;
-                  _enforceEarlierOutcome = false;
-                  _recheckedRepair = result;
-                  _error = null;
-                });
+                if (result is WholeStoryLiteraryUnchangedApproval) {
+                  result.verifyForCompiler(
+                      index: widget.index, book: widget.book,
+                      plan: widget.draft.plan);
+                  setState(() {
+                    _reviewedProse.clear();
+                    _gameplaySelection = null;
+                    _wholeGameplaySelection = null;
+                    _enforceEarlierOutcome = false;
+                    _recheckedRepair = null;
+                    _unchangedReview = result;
+                    _error = null;
+                  });
+                } else if (result is WholeStoryLiteraryRecheckApproval) {
+                  result.verifyForCompiler(
+                      index: widget.index, book: widget.book,
+                      originalPlan: widget.draft.plan);
+                  setState(() {
+                    _reviewedProse.clear();
+                    _gameplaySelection = null;
+                    _wholeGameplaySelection = null;
+                    _enforceEarlierOutcome = false;
+                    _unchangedReview = null;
+                    _recheckedRepair = result;
+                    _error = null;
+                  });
+                }
               } : null,
               icon: const Icon(Icons.fact_check_outlined),
               label: const Text('Проверить всю логику сюжета через ИИ'),
             ),
-            const Text('Необязательная независимая рецензия: полный '
-                'граф достижимых решений, два отдельных согласия, '
-                'сохранение результатов без повторной оплаты. '
-                'Может предложить безопасную новую редакцию лишь для '
-                'заранее подтверждённых условий. Новая версия требует '
-                'отдельного аудита и согласия перед сборкой.'),
+            const Text('Независимо проверяются все достижимые решения. '
+                'Если ошибок не найдено, можно отдельно принять '
+                'исходный частный черновик; если ошибки исправимы — '
+                'только повторно проверенную новую редакцию. '
+                'Ни один результат не доказывает книжный канон. '
+                'Каждый новый ИИ-запрос требует согласия.'),
+            if (_unchangedReview != null)
+              ListTile(
+                key: const Key('multiact-trial-unchanged-review-ready'),
+                leading: const Icon(Icons.fact_check_outlined),
+                title: const Text('Исходный план проверен без замечаний'),
+                subtitle: Text('Частная пробная RPG; '
+                    'окон с неопределённостью: ' +
+                    _unchangedReview!.unresolvedWindows.toString() +
+                    ', неохваченных событий книги: ' +
+                    _unchangedReview!.uncoveredSourceEvents.toString() +
+                    '. Канон не доказан. Дополнения требуют нового аудита.'),
+                trailing: IconButton(
+                  key: const Key('multiact-trial-clear-unchanged-review'),
+                  tooltip: 'Убрать заключение исходного сценария',
+                  onPressed: _working ? null : () => setState(
+                      () => _unchangedReview = null),
+                  icon: const Icon(Icons.close),
+                ),
+              ),
             if (_recheckedRepair != null)
               ListTile(
                 key: const Key('multiact-trial-literary-recheck-ready'),

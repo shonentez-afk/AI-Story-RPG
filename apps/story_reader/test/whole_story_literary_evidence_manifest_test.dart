@@ -8,6 +8,7 @@ import 'package:ai_story_reader/source_semantic_provider.dart';
 import 'package:ai_story_reader/story_plan.dart';
 import 'package:ai_story_reader/story_plan_causal_audit.dart';
 import 'package:ai_story_reader/whole_story_literary_bounded_repair.dart';
+import 'package:ai_story_reader/whole_story_literary_unchanged_approval.dart';
 import 'package:ai_story_reader/whole_story_literary_evidence_manifest.dart';
 import 'package:ai_story_reader/whole_story_literary_review.dart';
 import 'package:ai_story_reader/whole_story_literary_summary.dart';
@@ -816,6 +817,102 @@ void main() {
     expect(complete, findsOneWidget);
   });
 
+
+  testWidgets('g2f2b independent full review with no findings returns '
+      'an unchanged private-trial receipt only after TWO confirmations',
+      (tester) async {
+    final index = _index();
+    final book = await _book(index);
+    final plan = _plan(book);
+    final manifest = WholeStoryLiteraryReviewManifest.fromEvidence(
+      index: index, book: book, plan: plan,
+      evidence: WholeStoryLiteraryEvidenceManifest.build(
+          index: index, book: book, plan: plan),
+    );
+    var modelCalls = 0;
+    final service = WholeStoryLiteraryBatchService(
+      repository: MemorySourceAnalysisCheckpointRepository(),
+      previewOverride: (window, token) async {
+        modelCalls++;
+        return WholeLiteraryReviewReport.fromJson(window, {
+          'window_digest': window.approvalDigest,
+          'verdict': window.sourceQuotes.isEmpty
+              ? 'insufficientEvidence' : 'possibleConsistency',
+          'uncertainty': 'Формальных замечаний к этой игровой гипотезе '
+              'нет, но литературная причинность не доказана.',
+          'findings': <Map<String, Object?>>[],
+          'status': 'UNVERIFIED_AI_REVIEW',
+        });
+      },
+    );
+    // Prepare a COMPLETE, private, validated checkpoint before opening the
+    // page. Reopening that page must NEVER repeat any paid model request.
+    while (!(await service.inspect(manifest)).complete) {
+      await service.generate(
+        manifest: manifest,
+        approvedManifestDigest: manifest.approvalDigest,
+        explicitBatchConsent: true,
+      );
+    }
+    final beforeOpen = modelCalls;
+    Object? returned;
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: Builder(builder: (context) => FilledButton(
+          key: const Key('open-literary-review'),
+          onPressed: () async {
+            returned = await Navigator.of(context).push<Object>(
+              MaterialPageRoute(builder: (_) => WholeStoryLiteraryReviewPage(
+                index: index, book: book, plan: plan, service: service,
+              )),
+            );
+          },
+          child: const Text('Открыть проверку'),
+        )),
+      ),
+    ));
+    await tester.tap(find.byKey(const Key('open-literary-review')));
+    await tester.pumpAndSettle();
+    expect(modelCalls, beforeOpen);
+    final complete = find.byKey(const Key('whole-literary-complete'));
+    await tester.scrollUntilVisible(complete, 150,
+        scrollable: find.byType(Scrollable).first);
+    await tester.pumpAndSettle();
+    expect(complete, findsOneWidget);
+    final accept = find.byKey(
+        const Key('whole-literary-unchanged-accept'));
+    await tester.scrollUntilVisible(accept, 150,
+        scrollable: find.byType(Scrollable).first);
+    await tester.pumpAndSettle();
+    expect(tester.widget<FilledButton>(accept).onPressed, isNull);
+
+    final reviewed = find.byKey(
+        const Key('whole-literary-unchanged-reviewed'));
+    await tester.scrollUntilVisible(reviewed, -150,
+        scrollable: find.byType(Scrollable).first);
+    await tester.pumpAndSettle();
+    await tester.tap(reviewed);
+    await tester.pumpAndSettle();
+    final private = find.byKey(
+        const Key('whole-literary-unchanged-private'));
+    await tester.scrollUntilVisible(private, 150,
+        scrollable: find.byType(Scrollable).first);
+    await tester.pumpAndSettle();
+    await tester.tap(private);
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(accept, 150,
+        scrollable: find.byType(Scrollable).first);
+    await tester.pumpAndSettle();
+    expect(tester.widget<FilledButton>(accept).onPressed, isNotNull);
+    await tester.tap(accept);
+    await tester.pumpAndSettle();
+    expect(returned, isA<WholeStoryLiteraryUnchangedApproval>());
+    final receipt = returned as WholeStoryLiteraryUnchangedApproval;
+    receipt.verifyForCompiler(index: index, book: book, plan: plan);
+    expect(receipt.provesBookCanon, false);
+    expect(modelCalls, beforeOpen);
+    expect(tester.takeException(), isNull);
+  });
 
   test('real AI transport retries exact bytes after separate consent only',
       () async {

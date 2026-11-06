@@ -11,6 +11,7 @@ import 'whole_story_literary_batch.dart';
 import 'whole_story_literary_evidence_manifest.dart';
 import 'whole_story_literary_review.dart';
 import 'whole_story_literary_summary.dart';
+import 'whole_story_literary_unchanged_approval.dart';
 import 'zai_semantic_preview.dart';
 
 /// Opening the optional page only reads LOCAL state. Network calls require
@@ -51,6 +52,8 @@ class _WholeStoryLiteraryReviewPageState
   bool _causalRulesReviewed = false;
   bool _newResultsReviewed = false;
   bool _privateFictionConfirmed = false;
+  bool _unchangedReportsReviewed = false;
+  bool _unchangedPrivateAcknowledged = false;
   bool _storageBlocked = false;
   String? _error;
 
@@ -201,6 +204,32 @@ class _WholeStoryLiteraryReviewPageState
     }
   }
 
+  /// The unchanged plan needs a positive completion route too: previously
+  /// only a REPAIRED plan could return a typed verification receipt.
+  /// No new cloud request is sent here; all windows have already been
+  /// independently reviewed under their own exact consent.
+  void _acceptUnchangedPlan() {
+    final manifest = _manifest;
+    if (widget.postRepair != null || manifest == null ||
+        _loading || _working || _storageBlocked ||
+        _progress?.complete != true ||
+        _reports.length != manifest.totalWindows ||
+        !_unchangedReportsReviewed || !_unchangedPrivateAcknowledged) return;
+    try {
+      final approved = WholeStoryLiteraryUnchangedApproval.accept(
+        manifest: manifest,
+        reports: _reports,
+        userReviewedAllReports: true,
+        explicitlyAcceptedPrivateFiction: true,
+      );
+      if (mounted) Navigator.of(context)
+          .pop<WholeStoryLiteraryUnchangedApproval>(approved);
+    } catch (error) {
+      if (mounted) setState(() => _error =
+          'Нельзя принять исходную редакцию: ' + error.toString());
+    }
+  }
+
   @override
   void dispose() {
     _cancellation?.cancel();
@@ -343,6 +372,47 @@ class _WholeStoryLiteraryReviewPageState
                   ),
                 ));
               }),
+              // A COMPLETE critique with no findings may confirm the
+              // UNCHANGED draft for a private trial. Missing literary
+              // evidence is shown as uncertainty, never converted to CANON.
+              if (widget.postRepair == null &&
+                  _reports.every((report) =>
+                      report.findings.isEmpty &&
+                      report.verdict != WholeLiteraryVerdict.needsRevision)) ...[
+                const SizedBox(height: 12),
+                Text('Независимая проверка не нашла конкретных ошибок. '
+                    'Однако текст книги может быть охвачен не полностью, '
+                    'а модель могла указать недостаточность сведений. '
+                    'Это не литературный канон.',
+                    key: const Key('whole-literary-unchanged-warning')),
+                CheckboxListTile(
+                  key: const Key('whole-literary-unchanged-reviewed'),
+                  contentPadding: EdgeInsets.zero,
+                  value: _unchangedReportsReviewed,
+                  onChanged: _working ? null : (value) => setState(
+                      () => _unchangedReportsReviewed = value == true),
+                  title: const Text('Я прочитал(а) все заключения, '
+                      'включая неопределённости и непокрытые события'),
+                ),
+                CheckboxListTile(
+                  key: const Key('whole-literary-unchanged-private'),
+                  contentPadding: EdgeInsets.zero,
+                  value: _unchangedPrivateAcknowledged,
+                  onChanged: _working ? null : (value) => setState(
+                      () => _unchangedPrivateAcknowledged = value == true),
+                  title: const Text('Разрешаю продолжить только частную '
+                      'ПРОБНУЮ адаптацию, не выдавая её за сюжетный канон'),
+                ),
+                FilledButton.icon(
+                  key: const Key('whole-literary-unchanged-accept'),
+                  onPressed: !_working && _unchangedReportsReviewed &&
+                      _unchangedPrivateAcknowledged
+                      ? _acceptUnchangedPlan : null,
+                  icon: const Icon(Icons.check_circle_outline),
+                  label: const Text('Вернуться к сборке частной RPG '
+                      'без изменения плана'),
+                ),
+              ],
               if (widget.approvedRules != null &&
                   widget.postRepair == null) ...[
                 const SizedBox(height: 10),
