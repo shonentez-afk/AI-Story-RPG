@@ -208,6 +208,31 @@ class StoryWorld {
   }
 
 
+  /// Missing prerequisites for a *reviewed* dialogue turn or action.
+  ///
+  /// The caller must supply exact fact IDs from a validated source/review
+  /// contract. Free-form dialogue text is never searched or trusted here.
+  /// Unknown actors/facts fail closed, even if their display names match.
+  /// This method does not prove that the words were spoken in the book.
+  List<String> missingKnowledgeForActor(
+      String actorId, Iterable<String> requiredFactIds) {
+    jsonId(actorId, 'actor_id');
+    if (!blueprint.actors.contains(actorId)) {
+      throw const FormatException('Unknown knowledge actor');
+    }
+    final missing = <String>{};
+    for (final factId in requiredFactIds) {
+      jsonId(factId, 'fact_id');
+      if (!blueprint.facts.contains(factId)) {
+        throw const FormatException('Unknown required fact');
+      }
+      if (!(_state.knowledge[actorId]?.contains(factId) ?? false)) {
+        missing.add(factId);
+      }
+    }
+    return List<String>.unmodifiable(missing.toList()..sort());
+  }
+
   /// An isolated tentative world for coordinating with the scenario runtime.
   /// No I/O occurs here; a rejected proposal never mutates the live world.
   StoryWorld fork() {
