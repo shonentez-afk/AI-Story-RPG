@@ -556,6 +556,10 @@ void main() {
 
     await tester.scrollUntilVisible(crossAct, -110,
         scrollable: scrollable);
+    // When returning from the lower controls, keep the checkbox clear
+    // of the fixed AppBar before the second interaction.
+    await tester.drag(scrollable, const Offset(0, 155));
+    await tester.pumpAndSettle();
     await tester.tap(crossAct);
     await tester.pumpAndSettle();
     await tester.scrollUntilVisible(itemButton, 110,
