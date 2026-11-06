@@ -200,6 +200,15 @@ void main() {
   test('permanent character_id is runtime actor for learned facts and '
       'survives private card edits without leaking persona text', () {
     final initial = notebook.profiles.single;
+    final rules = NpcKnowledgeRulebook.empty(index).withRule(makeRule());
+    final legacy = NpcKnowledgeWorldBridge.preview(
+      index: index, dossiers: dossiers, graph: graph,
+      catalog: catalog, editorial: editorial,
+      notebook: notebook, scenario: draft,
+      rulebook: rules, originalBlueprint: base(),
+    );
+    expect(legacy.actorIds[artem.id],
+        NpcKnowledgeRulebook.actorId(artem, index.sourceFingerprint));
     final card = NpcCharacterCard.fresh().copyWith(
       role: 'Хранитель ворот', appearance: 'Темный плащ',
       personality: 'Осторожный',
@@ -209,7 +218,6 @@ void main() {
     notebook = notebook.putProfile(initial.copyWith(
       card: card, displayName: 'Волк',
     ));
-    final rules = NpcKnowledgeRulebook.empty(index).withRule(makeRule());
     check(rules);
     final approved = NpcKnowledgeWorldBridge.preview(
       index: index, dossiers: dossiers, graph: graph,
@@ -218,6 +226,9 @@ void main() {
       rulebook: rules, originalBlueprint: base(),
     );
     expect(approved.actorIds[artem.id], card.characterId);
+    // A new permanent actor namespace must not share the same campaign ID
+    // with a legacy world created from the citation-hash actor ID.
+    expect(approved.story.bookId, isNot(legacy.story.bookId));
     expect(approved.story.actors, contains(card.characterId));
     expect(jsonEncode(approved.blueprint),
         isNot(contains(card.personality)));
