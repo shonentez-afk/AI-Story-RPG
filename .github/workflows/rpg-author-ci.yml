@@ -58,6 +58,27 @@ jobs:
         run: python3 -m unittest discover -s tools/bookworld/tests -v
       - name: Ensure tests did not modify tracked sources
         run: git diff --exit-code
+      - name: Prepare read-only E5 external compiler source bundle
+        run: |
+          mkdir -p "$RUNNER_TEMP/e5-toolchain"
+          printf '%s\\n' "$GITHUB_SHA" > "$RUNNER_TEMP/e5-toolchain/commit.txt"
+          tar -czf "$RUNNER_TEMP/e5-toolchain/source.tar.gz" \\
+            tools/rpg_author tools/bookworld schemas/rpg_author tests/rpg_author \\
+            tests/__init__.py shared_schemas \\
+            apps/story_reader/lib/book_import.dart \\
+            apps/story_reader/lib/book_text_decoder.dart \\
+            apps/story_reader/lib/book_source_index.dart \\
+            packages/bookworld_format/lib/private_bookworld.dart \\
+            packages/bookworld_format/lib/private_rich_bookworld.dart \\
+            packages/bookworld_format/lib/private_bookworld_writer.dart \\
+            packages/story_core/lib/src/blueprint.dart
+      - name: Export read-only toolchain source for private offline authoring
+        uses: actions/upload-artifact@v4
+        with:
+          name: AI-Story-RPG-E5-ReadOnly-Toolchain
+          path: ${{ runner.temp }}/e5-toolchain/
+          if-no-files-found: error
+          retention-days: 1
       - name: Build private synthetic BookWorld v2 and separate attribution
         run: python3 -m tests.rpg_author.build_ci_example --output-dir "$RUNNER_TEMP/rpg-author-example"
       - name: Upload labeled synthetic import example
