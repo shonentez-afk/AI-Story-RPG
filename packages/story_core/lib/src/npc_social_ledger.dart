@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:crypto/crypto.dart';
 
 import 'blueprint.dart';
+import 'character_id.dart';
 import 'codec.dart';
 import 'engine.dart';
 
@@ -81,6 +82,12 @@ class NpcSocialRulebook {
       if (!blueprint.actors.contains(rule.observerId)) {
         throw const FormatException('Unknown NPC memory observer');
       }
+      if (blueprint.rightsStatus == 'private_adaptation' &&
+          rule.observerId != 'player' &&
+          !CharacterId.isValidNpc(rule.observerId)) {
+        throw const FormatException(
+            'Private NPC memory requires permanent character_id');
+      }
       final scene = blueprint.scenes[rule.sceneId];
       if (scene == null ||
           !scene.choices.any((choice) => choice.id == rule.choiceId)) {
@@ -89,7 +96,10 @@ class NpcSocialRulebook {
       if (rule.relatedActorId != null) {
         jsonId(rule.relatedActorId!, 'npc.related_actor_id');
         if (!blueprint.actors.contains(rule.relatedActorId) ||
-            rule.relatedActorId == rule.observerId) {
+            rule.relatedActorId == rule.observerId ||
+            (blueprint.rightsStatus == 'private_adaptation' &&
+                rule.relatedActorId != 'player' &&
+                !CharacterId.isValidNpc(rule.relatedActorId!))) {
           throw const FormatException('Invalid directed NPC relationship');
         }
       }
