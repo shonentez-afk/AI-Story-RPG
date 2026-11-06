@@ -1,4 +1,8 @@
 import 'package:ai_story_reader/narrative_book_model.dart';
+import 'package:ai_story_reader/book_import.dart';
+import 'package:ai_story_reader/book_source_index.dart';
+import 'package:ai_story_reader/npc_character_card.dart';
+import 'package:ai_story_reader/npc_editorial_notebook.dart';
 import 'package:ai_story_reader/source_locked_dialogue_speaker_audit.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -68,6 +72,101 @@ void main() {
         s.speaker == 'Страж').firstSourceChapter, 4);
     expect(audit.speakers.singleWhere((s) =>
         s.speaker == 'Иван').dossierIds, ['source_ivan_1', 'source_ivan_2']);
+  });
+
+
+  test('reviewed names bind to saved IDs, but later, ambiguous and '
+      'unreviewed speakers cannot acquire an NPC identity', () {
+    final bookIndex = BookSourceIndexer.index(const ImportedBook(
+      title: 'Источник NPC', author: 'Автор',
+      chapters: ['Лена и Страж у ворот.', 'Продолжение у ворот.'],
+    ));
+    final id = 'npc_' + List.filled(32, 'a').join();
+    final profile = NpcDraftProfile(
+      dossierId: 'source_lena_1',
+      mentionIds: const ['q_lena'],
+      displayName: 'Лена в авторской версии',
+      notes: const [],
+      card: NpcCharacterCard(characterId: id),
+    );
+    final notebook = NpcEditorialNotebook.empty(bookIndex)
+        .putProfile(profile);
+    final audit = SourceLockedDialogueSpeakerAudit.inspect(
+      approvedSceneText: _scene,
+      sceneChapterIndex: 1,
+      sourceCharacters: _characters,
+    );
+    final bound = audit.bindReviewedCharacterIds(
+      sourceFingerprint: bookIndex.sourceFingerprint,
+      sourceCharacters: _characters,
+      notebook: notebook,
+    );
+    expect(bound, {'Лена': id});
+    expect(bound.containsKey('Страж'), false); // future spoiler
+    expect(bound.containsKey('Иван'), false); // ambiguous name
+    expect(bound.containsKey('Тень'), false); // unreviewed identity
+    expect(bound.containsKey('Незнакомец'), false); // no source
+
+    // Names and prose may change while identity stays the same.
+    final renamed = notebook.putProfile(profile.copyWith(
+        displayName: 'Новая кличка',
+        card: profile.card!.copyWith(aliases: ['Тихая'])));
+    expect(audit.bindReviewedCharacterIds(
+      sourceFingerprint: bookIndex.sourceFingerprint,
+      sourceCharacters: _characters,
+      notebook: renamed,
+    )['Лена'], id);
+
+    // A changed mention group never rebinds an actor by matching its name.
+    final stale = NpcEditorialNotebook.empty(bookIndex).putProfile(
+      NpcDraftProfile(
+        dossierId: profile.dossierId, mentionIds: const ['other_quote'],
+        displayName: profile.displayName, notes: const [],
+        card: profile.card,
+      ),
+    );
+    expect(audit.bindReviewedCharacterIds(
+      sourceFingerprint: bookIndex.sourceFingerprint,
+      sourceCharacters: _characters, notebook: stale,
+    ), isEmpty);
+
+    expect(() => audit.bindReviewedCharacterIds(
+      sourceFingerprint: 'another_book_revision',
+      sourceCharacters: _characters,
+      notebook: notebook,
+    ), throwsFormatException);
+  });
+
+  test('duplicate character IDs across source groups are rejected', () {
+    final bookIndex = BookSourceIndexer.index(const ImportedBook(
+      title: 'Два героя', author: 'Автор',
+      chapters: ['Лена встретила Стража.'],
+    ));
+    final id = 'npc_' + List.filled(32, 'c').join();
+    final first = NpcDraftProfile(
+      dossierId: 'source_lena_1',
+      mentionIds: const ['q_lena'],
+      displayName: 'Лена', notes: const [],
+      card: NpcCharacterCard(characterId: id),
+    );
+    final second = NpcDraftProfile(
+      dossierId: 'source_guard_1',
+      mentionIds: const ['q_guard'],
+      displayName: 'Страж', notes: const [],
+      card: NpcCharacterCard(characterId: id),
+    );
+    final notebook = NpcEditorialNotebook.empty(bookIndex)
+        .putProfile(first).putProfile(second);
+    final audit = SourceLockedDialogueSpeakerAudit.inspect(
+      approvedSceneText: _scene,
+      sceneChapterIndex: 1,
+      sourceCharacters: _characters,
+    );
+    expect(() => audit.bindReviewedCharacterIds(
+      sourceFingerprint: bookIndex.sourceFingerprint,
+      sourceCharacters: _characters,
+      notebook: notebook,
+    ), throwsFormatException);
   });
 
   test('no dossiers or no attribution stay unverifiable without '
