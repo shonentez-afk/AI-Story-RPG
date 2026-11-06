@@ -1,6 +1,7 @@
 import 'package:bookworld_format/bookworld_format.dart';
 
 import 'narrative_book_model.dart';
+import 'npc_editorial_notebook.dart';
 
 /// Source occurrence is NOT a statement that an NPC said the words or knew
 /// the fact. Keep these categories separate from the game-world truth layer.
@@ -64,6 +65,75 @@ class SourceLockedDialogueSpeakerAudit {
   bool get knowsSourceFacts => false;
   bool get changesGameRules => false;
   bool get requiresNetwork => false;
+
+  /// Resolve already-reviewed source-only names to persisted private NPC IDs.
+  /// No line of dialogue, book claim, or NPC knowledge is thereby approved.
+  /// All inputs must belong to one EXACT book revision. Ambiguous names,
+  /// unresolved identity and future-only source appearances stay unbound.
+  Map<String, String> bindReviewedCharacterIds({
+    required String sourceFingerprint,
+    required List<NarrativeCharacter> sourceCharacters,
+    required NpcEditorialNotebook notebook,
+  }) {
+    if (notebook.sourceFingerprint != sourceFingerprint) {
+      throw const FormatException(
+          'Нельзя привязать диалог к карточкам другой редакции книги');
+    }
+    final groups = {
+      for (final character in sourceCharacters)
+        character.mentionGroupId: character,
+    };
+    if (groups.length != sourceCharacters.length) {
+      throw const FormatException('Повторные группы персонажей книги');
+    }
+    final profiles = {
+      for (final profile in notebook.profiles) profile.dossierId: profile,
+    };
+    if (profiles.length != notebook.profiles.length) {
+      throw const FormatException('Дубли карточек редактора NPC');
+    }
+    final bindings = <String, String>{};
+    final ownersById = <String, String>{};
+    for (final profile in notebook.profiles) {
+      if (profile.card == null) continue;
+      profile.card!.validate();
+      final previous = ownersById.putIfAbsent(
+          profile.characterId!, () => profile.dossierId);
+      if (previous != profile.dossierId) {
+        throw const FormatException('Дубли постоянного character_id NPC');
+      }
+    }
+    for (final evidence in speakers) {
+      if (evidence.status !=
+              DialogueSpeakerEvidenceStatus.sourceMentionGroupReviewed ||
+          evidence.dossierIds.length != 1) continue;
+      final dossierId = evidence.dossierIds.single;
+      final source = groups[dossierId];
+      final profile = profiles[dossierId];
+      if (source == null || profile?.card == null ||
+          !source.identityHintsResolved ||
+          source.firstChapter > (evidence.firstSourceChapter ?? -1)) {
+        continue;
+      }
+      final mentions = profile!.mentionIds;
+      // Changing SAME/DIFFERENT group decisions must invalidate this binding.
+      if (mentions.length != source.citationIds.length ||
+          mentions.toSet().length != mentions.length ||
+          mentions.toSet().difference(source.citationIds.toSet()).isNotEmpty) {
+        continue;
+      }
+      profile.card!.validate();
+      final characterId = profile.characterId!;
+      final previousOwner = ownersById.putIfAbsent(
+          characterId, () => dossierId);
+      if (previousOwner != dossierId) {
+        throw const FormatException(
+            'Один character_id принадлежит разным персонажам');
+      }
+      bindings[evidence.speaker] = characterId;
+    }
+    return Map.unmodifiable(bindings);
+  }
 
   /// Exact book character groups are optional: most full-book drafts still
   /// have zero reviewed characters. NEVER guess identity from prose or

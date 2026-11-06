@@ -209,6 +209,62 @@ void main() {
     expect(() => checked(broken), throwsFormatException);
   });
 
+  test('permanent relationship target survives renaming but rejects mismatched ID', () {
+    final source = NpcEditorialNotebook.freshProfile(artem);
+    final target = NpcEditorialNotebook.freshProfile(maria);
+    final link = NpcDraftNote(
+      id: 'npc_note_1',
+      field: NpcDraftField.relationship,
+      text: 'Доверяет Марии в частной адаптации',
+      targetDossierId: maria.id,
+      targetGroupDigest: NpcEditorialNotebook.groupDigest(maria),
+      targetCharacterId: target.characterId,
+    );
+    final notebook = checked(NpcEditorialNotebook.empty(index)
+        .putProfile(source.copyWith(notes: [link]))
+        .putProfile(target));
+    final targetId = target.characterId;
+    expect(targetId, isNotNull);
+    expect(targetId!.startsWith('npc_'), true);
+    final reopened = NpcEditorialNotebook.decode(
+        index, dossiers, graph, catalog, editorial, notebook.encode());
+    expect(reopened.profiles.first.notes.single.targetCharacterId, targetId);
+
+    final renamed = checked(reopened.putProfile(target.copyWith(
+      displayName: 'Новая кличка',
+      card: target.card!.copyWith(aliases: ['Лиса']),
+    )));
+    expect(renamed.profiles.first.notes.single.targetCharacterId, targetId);
+    expect(renamed.profiles.last.characterId, targetId);
+
+    final wrongId = NpcCharacterCard.fresh().characterId;
+    final tampered = NpcEditorialNotebook.empty(index)
+        .putProfile(source.copyWith(notes: [
+          NpcDraftNote(
+            id: link.id, field: link.field, text: link.text,
+            targetDossierId: link.targetDossierId,
+            targetGroupDigest: link.targetGroupDigest,
+            targetCharacterId: wrongId,
+          ),
+        ]))
+        .putProfile(target);
+    expect(() => checked(tampered), throwsFormatException);
+    expect(() => checked(NpcEditorialNotebook.empty(index)
+        .putProfile(source.copyWith(notes: [link]))), throwsFormatException);
+  });
+
+  test('target character ID is forbidden on a non-relationship note', () {
+    final source = NpcEditorialNotebook.freshProfile(artem);
+    final wrong = source.copyWith(notes: [
+      NpcDraftNote(
+        id: 'npc_note_1', field: NpcDraftField.role,
+        text: 'Страж', targetCharacterId: source.characterId,
+      ),
+    ]);
+    expect(() => checked(NpcEditorialNotebook.empty(index)
+        .putProfile(wrong)), throwsFormatException);
+  });
+
   test('source citations are reviewed candidates, revoked verdict blocks',
       () {
     final profile = NpcEditorialNotebook.freshProfile(artem);

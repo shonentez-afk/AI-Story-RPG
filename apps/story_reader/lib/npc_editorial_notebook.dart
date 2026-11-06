@@ -21,6 +21,7 @@ class NpcDraftNote {
     this.sourceAssertionId,
     this.targetDossierId,
     this.targetGroupDigest,
+    this.targetCharacterId,
   });
 
   final String id;
@@ -36,6 +37,10 @@ class NpcDraftNote {
   /// Exact snapshot of the other name group's source spans, so SAME/DIFFERENT
   /// edits cannot silently redirect an authored relationship.
   final String? targetGroupDigest;
+  /// Stable, opaque identity of the reviewed target NPC. A group/name is
+  /// only a source witness, never a substitute for a permanent actor ID.
+  /// Null is accepted for old editorial notes, but new UI links pin the ID.
+  final String? targetCharacterId;
 
   bool get isAuthorial => sourceAssertionId == null;
   bool get isWorldCanon => false;
@@ -47,6 +52,7 @@ class NpcDraftNote {
     'source_assertion_id': sourceAssertionId,
     'target_dossier_id': targetDossierId,
     'target_group_sha256': targetGroupDigest,
+    if (targetCharacterId != null) 'target_character_id': targetCharacterId,
   };
 
   static NpcDraftNote fromJson(Map<String, dynamic> item) {
@@ -54,8 +60,12 @@ class NpcDraftNote {
       'id', 'field', 'text',
       'source_assertion_id', 'target_dossier_id', 'target_group_sha256',
     };
-    if (item.length != fields.length ||
-        !item.keys.toSet().containsAll(fields)) {
+    final expected = {
+      ...fields,
+      if (item.containsKey('target_character_id')) 'target_character_id',
+    };
+    if (item.length != expected.length ||
+        !item.keys.toSet().containsAll(expected)) {
       throw const FormatException('Неизвестные поля заметки NPC');
     }
     try {
@@ -68,6 +78,7 @@ class NpcDraftNote {
         sourceAssertionId: item['source_assertion_id'] as String?,
         targetDossierId: item['target_dossier_id'] as String?,
         targetGroupDigest: item['target_group_sha256'] as String?,
+        targetCharacterId: item['target_character_id'] as String?,
       );
     } on FormatException {
       rethrow;
@@ -255,6 +266,7 @@ class NpcEditorialNotebook {
       throw const FormatException('Чужая редакция или слишком много NPC');
     }
     final groupById = {for (final d in dossiers.dossiers) d.id: d};
+    final profileByDossier = {for (final p in profiles) p.dossierId: p};
     final usedProfiles = <String>{};
     final usedCharacterIds = <String>{};
     final usedNotes = <String>{};
@@ -292,7 +304,9 @@ class NpcEditorialNotebook {
               'Отозвана цитата или редакторское решение по NPC');
         }
         if (note.field != NpcDraftField.relationship) {
-          if (note.targetDossierId != null || note.targetGroupDigest != null) {
+          if (note.targetDossierId != null ||
+              note.targetGroupDigest != null ||
+              note.targetCharacterId != null) {
             throw const FormatException('Цель есть у нереляционной заметки');
           }
         } else {
@@ -303,6 +317,18 @@ class NpcEditorialNotebook {
               note.targetGroupDigest != groupDigest(target)) {
             throw const FormatException(
                 'Связь указывает на неподтверждённого персонажа');
+          }
+          // Only source-anchored OLD notes may omit the stable target ID.
+          // Never silently resolve a stored ID by matching names/aliases:
+          // a deleted, replaced or regrouped target must fail closed.
+          if (note.targetCharacterId != null) {
+            final pinnedTarget = profileByDossier[note.targetDossierId];
+            if (profile.characterId == null ||
+                pinnedTarget?.characterId != note.targetCharacterId ||
+                profile.characterId == note.targetCharacterId) {
+              throw const FormatException(
+                  'Связь NPC потеряла подтверждённый character_id адресата');
+            }
           }
         }
       }

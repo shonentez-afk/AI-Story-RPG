@@ -452,11 +452,17 @@ class _NpcEditorialPageState extends State<NpcEditorialPage> {
     if (profile == null) return;
     final choices = NpcEditorialNotebook.eligibleClaims(
         dossier, widget.catalog, widget.editorial, widget.graph);
+    // A new relation must refer to a saved permanent identity.
     final targets = _dossiers!.dossiers.where((d) =>
-        d.id != dossier.id && NpcEditorialNotebook.isConfirmedDossier(d)).toList();
+        d.id != dossier.id &&
+        NpcEditorialNotebook.isConfirmedDossier(d) &&
+        _profileFor(d.id)?.characterId != null).toList();
     var field = existing?.field ?? NpcDraftField.role;
     var sourceId = existing?.sourceAssertionId;
-    var targetId = existing?.targetDossierId;
+    // A legacy unpinned relationship can be viewed but editing it requires
+    // an explicit new, permanently identified target. No name-only rebinding.
+    var targetId = targets.any((d) => d.id == existing?.targetDossierId)
+        ? existing?.targetDossierId : null;
     var enteredText = existing?.text ?? '';
     final proposal = await showDialog<({NpcDraftField field,
           String text, String? sourceId, String? targetId})>(
@@ -498,12 +504,15 @@ class _NpcEditorialPageState extends State<NpcEditorialPage> {
                 if (field == NpcDraftField.relationship) ...[
                   const SizedBox(height: 8),
                   if (targets.isEmpty)
-                    const Text('Нет другого подтверждённого персонажа. '
-                        'Сначала проверьте цитаты и имена.')
+                    const Text('Нет другого NPC с постоянной карточкой. '
+                        'Сначала подтвердите цитаты и создайте его карточку.')
                   else
                     DropdownButtonFormField<String>(
                       key: const Key('npc-note-target'),
-                      initialValue: targetId,
+                      // Legacy source-only target may lack a permanent card;
+                      // never crash the picker or silently reassign it.
+                      initialValue: targets.any((d) => d.id == targetId)
+                          ? targetId : null,
                       isExpanded: true,
                       decoration: const InputDecoration(
                           labelText: 'Кому относится связь',
@@ -513,7 +522,8 @@ class _NpcEditorialPageState extends State<NpcEditorialPage> {
                           DropdownMenuItem(
                             value: target.id,
                             child: Text(
-                              target.labels.join(' / '),
+                              '${_profileFor(target.id)!.displayName} '
+                              '(${_profileFor(target.id)!.characterId})',
                               overflow: TextOverflow.ellipsis,
                             ),
                           ),
@@ -575,7 +585,8 @@ class _NpcEditorialPageState extends State<NpcEditorialPage> {
             ),
             FilledButton(
               key: const Key('npc-note-confirm'),
-              onPressed: () => Navigator.pop(dialog, (
+              onPressed: field == NpcDraftField.relationship && targetId == null
+                  ? null : () => Navigator.pop(dialog, (
                 field: field, text: enteredText.trim(),
                 sourceId: sourceId, targetId: targetId,
               )),
@@ -595,6 +606,8 @@ class _NpcEditorialPageState extends State<NpcEditorialPage> {
       targetGroupDigest: proposal.targetId == null ? null :
           NpcEditorialNotebook.groupDigest(_dossiers!.dossiers.firstWhere(
               (group) => group.id == proposal.targetId)),
+      targetCharacterId: proposal.targetId == null ? null :
+          _profileFor(proposal.targetId!)?.characterId,
     );
     final updated = profile.copyWith(notes: [
       for (final old in profile.notes) if (old.id != note.id) old,
@@ -633,7 +646,10 @@ class _NpcEditorialPageState extends State<NpcEditorialPage> {
               style: Theme.of(context).textTheme.titleSmall),
           Text(note.text),
           if (target != null)
-            Text('Связан с: ${target.labels.join(" / ")}'),
+            Text('Связан с: ${target.labels.join(" / ")}' +
+                (note.targetCharacterId == null
+                    ? ' (старая связь: ID не закреплён)'
+                    : ' · character_id: ${note.targetCharacterId}')),
           Text(source == null
               ? 'Источник: явно авторская версия (не канон)'
               : 'Источник: утверждение-кандидат с проверенными цитатами'),

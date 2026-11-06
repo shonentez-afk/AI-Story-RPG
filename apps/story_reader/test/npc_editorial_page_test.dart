@@ -213,6 +213,57 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('relationship editor stores the saved target character ID',
+      (tester) async {
+    final maria = dossiers.dossiers.firstWhere(
+        (d) => d.labels.contains('Мария'));
+    final owner = NpcEditorialNotebook.freshProfile(artem);
+    final target = NpcEditorialNotebook.freshProfile(maria);
+    final notebook = NpcEditorialNotebook.empty(index)
+        .putProfile(owner).putProfile(target);
+    notebook.validate(index, dossiers, graph, catalog, editorial);
+    await noteStore.write(index.sourceFingerprint, notebook.encode());
+
+    await tester.pumpWidget(screen());
+    await tester.pumpAndSettle();
+    final ownerTile = find.byKey(Key('npc-select-' + artem.id));
+    await tester.ensureVisible(ownerTile);
+    await tester.tap(ownerTile);
+    await tester.pumpAndSettle();
+
+    final add = find.byKey(const Key('npc-add-note'));
+    await tester.ensureVisible(add);
+    await tester.tap(add);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('npc-note-category')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Отношение к другому персонажу').last);
+    await tester.pumpAndSettle();
+
+    final picker = find.byKey(const Key('npc-note-target'));
+    await tester.ensureVisible(picker);
+    await tester.tap(picker);
+    await tester.pumpAndSettle();
+    await tester.tap(find.textContaining(target.characterId!).last);
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(const Key('npc-note-text')),
+        'Доверяет Марии в личной версии');
+    await tester.tap(find.byKey(const Key('npc-note-confirm')));
+    await tester.pumpAndSettle();
+
+    final saved = NpcEditorialNotebook.decode(index, dossiers, graph, catalog,
+        editorial, (await noteStore.read(index.sourceFingerprint))!);
+    // putProfile replaces an edited profile at the end of the list.
+    // Profile order is intentionally not a permanent identity.
+    final note = saved.profiles
+        .singleWhere((profile) => profile.dossierId == artem.id)
+        .notes.single;
+    expect(note.targetDossierId, maria.id);
+    expect(note.targetCharacterId, target.characterId);
+    expect(note.targetGroupDigest, NpcEditorialNotebook.groupDigest(maria));
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('failed write does not publish optimistic NPC profile',
       (tester) async {
     await tester.pumpWidget(screen());

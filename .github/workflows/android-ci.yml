@@ -95,6 +95,8 @@ jobs:
       - name: Prepare verified native SQLite source for Linux test workspaces
         run: |
           python3 tools/ci_prepare_verified_sqlite.py --project packages/bookworld_format --project packages/campaign_manager
+      - name: Verify reusable Dart engine dependency direction
+        run: python3 tools/ci_check_engine_boundaries.py
       - name: Analyze pure Dart story_core
         working-directory: packages/story_core
         run: |
@@ -163,6 +165,9 @@ jobs:
           dart pub get
           dart analyze
           dart test --reporter expanded
+      - name: Standalone RPG engine smoke without Flutter or AI
+        working-directory: packages/campaign_manager
+        run: dart run example/standalone_rpg.dart ../../artifacts/bookworld/manor_m17_original_demo.bworld
       - name: Upload test BookWorld artifact
         uses: actions/upload-artifact@v4
         with:
