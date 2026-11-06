@@ -57,3 +57,46 @@ Future<Uint8List> compileReviewedPrivateBookworldInWorker(
   }
   return archive;
 }
+
+
+/// The app-side native bridge: vetted v2 output -> single rich v3 format.
+/// All original M2c preflight, exact-source validation and v2 importer checks
+/// are performed FIRST; the rich writer then rebuilds ZIP+SQLite and independently
+/// reopens it through v3. No API request or mandatory enrichment JSON.
+Uint8List _upgradeReviewedPrivateWorld(Map<String, dynamic> data) {
+  return const RichPrivateBookworldWriter().upgradeReviewedV2(
+    verifiedPrivateV2Archive: data['archive'] as Uint8List,
+    sourceIndex: Map<String, dynamic>.from(data['source_index'] as Map),
+    heroName: data['hero_name'] as String,
+    sceneTitles: Map<String, String>.from(data['scene_titles'] as Map),
+  );
+}
+
+Future<Uint8List> compileReviewedRichPrivateBookworldInWorker(
+  BookSourceIndex index,
+  SourceEvidenceGraph evidence,
+  SourceSemanticCatalog catalog,
+  SemanticEditorialReviewSession editorial,
+  IntermediateStoryBlueprint draft, {
+  String heroName = 'Игрок',
+  Map<String, String> sceneTitles = const {},
+}) async {
+  // Preserve the accepted fail-closed M2c checks rather than inventing
+  // another path that trusts LLM-authored source offsets.
+  final v2 = await compileReviewedPrivateBookworldInWorker(
+      index, evidence, catalog, editorial, draft);
+  final archive = await compute(_upgradeReviewedPrivateWorld, {
+    'archive': v2,
+    'source_index': Map<String, dynamic>.from(index.toJson()),
+    'hero_name': heroName,
+    'scene_titles': sceneTitles,
+  });
+  final checked = const RichPrivateBookworldImporter().inspect(archive);
+  if (checked.sourceFingerprint != index.sourceFingerprint ||
+      checked.blueprint.scenes.length != draft.scenes.length ||
+      checked.canDistributePublicly || checked.requiresNetwork) {
+    throw const FormatException(
+        'Богатая частная RPG не соответствует проверенной книге');
+  }
+  return archive;
+}

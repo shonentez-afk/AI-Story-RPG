@@ -134,8 +134,14 @@ void main() {
     expect(built.canDistributePublicly, false);
     expect(built.sceneCount, 7);
     expect(built.sourceQuoteCount, 2);
-    final check = const PrivateBookworldImporter().inspect(built.archive);
+    final check = const RichPrivateBookworldImporter().inspect(built.archive);
     expect(check.sourceFingerprint, index.sourceFingerprint);
+    expect(check.presentation['hero'], containsPair('name', 'Игрок'));
+    expect(check.presentation['item_names'], isEmpty);
+    expect(check.presentation['stat_names'], isEmpty);
+    expect(check.blueprint.initial.stats, isEmpty);
+    expect(() => const PrivateBookworldImporter().inspect(built.archive),
+        throwsFormatException);
     expect(check.requiresNetwork, false);
     expect(check.canDistributePublicly, false);
     final temp = await Directory.systemTemp.createTemp('storyplan-trial-');

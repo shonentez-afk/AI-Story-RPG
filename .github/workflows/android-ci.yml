@@ -140,6 +140,14 @@ jobs:
           test -s artifacts/bookworld/book_private_sample_dart.bworld
           python3 -m tools.bookworld.private_bookworld verify --input artifacts/bookworld/book_private_sample_dart.bworld
           (cd artifacts/bookworld && sha256sum book_private_sample_dart.bworld >> SHA256SUMS.txt)
+          # Verify the native v3 bytes with INDEPENDENT Python rules, not only Dart.
+          test -s artifacts/bookworld/book_private_rich_dart.bworld
+          python3 -c "from pathlib import Path; from tools.bookworld.private_rich_bookworld import verify; p=Path('artifacts/bookworld/book_private_rich_dart.bworld'); assert verify(p.read_bytes())['format_version'] == 3"
+          (cd artifacts/bookworld && sha256sum book_private_rich_dart.bworld >> SHA256SUMS.txt)
+          # Verify the native flag-only v2 -> rich v3 upgrade cross-language.
+          test -s artifacts/bookworld/book_private_rich_upgraded_dart.bworld
+          python3 -c "from pathlib import Path; from tools.bookworld.private_rich_bookworld import verify; p=Path('artifacts/bookworld/book_private_rich_upgraded_dart.bworld'); assert verify(p.read_bytes())['format_version'] == 3"
+          (cd artifacts/bookworld && sha256sum book_private_rich_upgraded_dart.bworld >> SHA256SUMS.txt)
       - name: Analyze and test transactional SQLite BookWorld campaigns
         working-directory: packages/campaign_manager
         run: |

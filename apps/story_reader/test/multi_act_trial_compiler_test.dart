@@ -4,9 +4,9 @@ import 'dart:convert';
 import 'package:ai_story_reader/book_import.dart';
 import 'package:ai_story_reader/book_source_index.dart';
 import 'package:ai_story_reader/bookwide_act_planner.dart';
-import 'package:ai_story_reader/cross_act_source_evidence_packet.dart';
 import 'package:ai_story_reader/bookwide_storyplan_composer.dart';
 import 'package:ai_story_reader/cross_act_consequence_gate.dart';
+import 'package:ai_story_reader/cross_act_source_evidence_packet.dart';
 import 'package:ai_story_reader/multi_act_trial_compiler.dart';
 import 'package:ai_story_reader/reviewed_prose_scene_overlay.dart';
 import 'package:ai_story_reader/zai_source_locked_prose_preview.dart';
@@ -154,12 +154,18 @@ void main() {
     expect(compilation.canDistributePublicly, false);
     expect(compilation.sceneCount, 14);
     expect(compilation.sourceQuoteCount, 4);
-    final inspected = const PrivateBookworldImporter().inspect(
+    final inspected = const RichPrivateBookworldImporter().inspect(
         compilation.archive);
     expect(inspected.sourceFingerprint, index.sourceFingerprint);
     expect(inspected.requiresNetwork, false);
     expect(inspected.canDistributePublicly, false);
     expect(inspected.blueprint.scenes.length, 14);
+    expect(inspected.presentation['hero'], containsPair('name', 'Игрок'));
+    expect(inspected.presentation['item_names'], isEmpty);
+    expect(inspected.presentation['fact_names'], isEmpty);
+    expect(inspected.blueprint.initial.stats, isEmpty);
+    expect(() => const PrivateBookworldImporter().inspect(compilation.archive),
+        throwsFormatException);
 
     final dir = await Directory.systemTemp.createTemp('multiact-private-');
     late String acceptedCampaign, refusedCampaign;
@@ -315,9 +321,9 @@ void main() {
       sourceEventIdsReviewedByUser: input.eventIds,
       privateUseConfirmed: true, fictionalTrialAcknowledged: true,
     );
-    final original = const PrivateBookworldImporter().inspect(
+    final original = const RichPrivateBookworldImporter().inspect(
         baseline.archive);
-    final changed = const PrivateBookworldImporter().inspect(
+    final changed = const RichPrivateBookworldImporter().inspect(
         improved.archive);
     final oldScene = original.blueprint.scenes['act_1_turning_point']!;
     final newScene = changed.blueprint.scenes['act_1_turning_point']!;

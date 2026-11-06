@@ -72,6 +72,55 @@ class RichPrivateTests(unittest.TestCase):
         with self.assertRaises(bookworld.BookworldError):
             bookworld.verify(raw)
 
+    def test_unattested_local_authoring_is_honest_and_rejects_false_claims(self):
+        # A reviewed v2 plan may include model-assisted story proposals.
+        # Its source archive cannot establish which provider authored prose.
+        package, _ = compile_rich_from_project(self.project_dir, self.overlay,
+                                               model_id="gpt-6")
+        with zipfile.ZipFile(io.BytesIO(package)) as archive:
+            blueprint = json.loads(archive.read("scenario/blueprint.json"))
+            provenance = json.loads(archive.read("source/provenance.json"))
+        idx = project.load_project(self.project_dir)[2]
+        origin = {
+            "provider": "unknown", "model_id": None,
+            "model_id_status": "not_attested",
+            "tool": "AI Story RPG", "method": "reviewed_local_compilation",
+        }
+        provenance["model_provenance"] = origin
+        compiled = private_rich_bookworld.build(blueprint, provenance, idx)
+        self.assertEqual(private_rich_bookworld.verify(compiled)["format_version"], 3)
+        with zipfile.ZipFile(io.BytesIO(compiled)) as archive:
+            manifest = json.loads(archive.read("manifest.json"))
+            self.assertEqual(manifest["model_provenance"], origin)
+        changed = deepcopy(provenance)
+        changed["model_provenance"]["model_id"] = "gpt-6"
+        with self.assertRaises(bookworld.BookworldError):
+            private_rich_bookworld.build(blueprint, changed, idx)
+
+    def test_built_in_zai_glm_request_provenance_is_strict(self):
+        # This is synthetic format verification, NOT a real GLM API response.
+        package, _ = compile_rich_from_project(self.project_dir, self.overlay,
+                                               model_id="gpt-6")
+        with zipfile.ZipFile(io.BytesIO(package)) as archive:
+            blueprint = json.loads(archive.read("scenario/blueprint.json"))
+            provenance = json.loads(archive.read("source/provenance.json"))
+        idx = project.load_project(self.project_dir)[2]
+        marker = {
+            "provider": "zai", "model_id": "glm-4.7-flash",
+            "model_id_status": "requested",
+            "tool": "AI Story RPG", "method": "built_in",
+        }
+        provenance["model_provenance"] = marker
+        compiled = private_rich_bookworld.build(blueprint, provenance, idx)
+        self.assertEqual(private_rich_bookworld.verify(compiled)["format_version"], 3)
+        with zipfile.ZipFile(io.BytesIO(compiled)) as archive:
+            manifest = json.loads(archive.read("manifest.json"))
+            self.assertEqual(manifest["model_provenance"], marker)
+        changed = deepcopy(provenance)
+        changed["model_provenance"]["model_id"] = "unknown"
+        with self.assertRaises(bookworld.BookworldError):
+            private_rich_bookworld.build(blueprint, changed, idx)
+
     def test_deterministic_archive_and_explicit_no_model_attestation(self):
         a, sa = compile_rich_from_project(self.project_dir, self.overlay)
         b, sb = compile_rich_from_project(self.project_dir, self.overlay)

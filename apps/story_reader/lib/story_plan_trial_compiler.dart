@@ -179,9 +179,14 @@ class StoryPlanTrialCompiler {
       scenes: scenes,
     );
     // Existing independent M2c/source/copyright/causal checks are mandatory.
-    final archive = await compileReviewedPrivateBookworldInWorker(
-        index, evidence, catalog, editorial, draft);
-    final inspected = const PrivateBookworldImporter().inspect(archive);
+    // The actual in-app trial now produces the unified rich v3 .bworld.
+    // Hero, empty honest catalogs and Journal use the real SQLite game state.
+    final archive = await compileReviewedRichPrivateBookworldInWorker(
+        index, evidence, catalog, editorial, draft,
+        sceneTitles: {
+          for (final scene in quality.plan.situations) scene.id: scene.goal,
+        });
+    final inspected = const RichPrivateBookworldImporter().inspect(archive);
     if (inspected.sourceFingerprint != index.sourceFingerprint ||
         inspected.requiresNetwork ||
         inspected.canDistributePublicly ||
