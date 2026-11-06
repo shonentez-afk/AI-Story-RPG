@@ -6,6 +6,7 @@ import 'package:crypto/crypto.dart';
 import 'ai_connection.dart';
 import 'book_source_index.dart';
 import 'narrative_book_model.dart';
+import 'source_evidence_graph.dart';
 import 'story_plan.dart';
 import 'whole_story_literary_evidence_manifest.dart';
 import 'zai_semantic_preview.dart';
@@ -19,6 +20,7 @@ class WholeStoryLiteraryReviewManifest {
     required this.book,
     required this.plan,
     required this.evidence,
+    required this.claimEvidence,
     required this.approvalDigest,
     required this.maxNewRequestsPerRun,
     required List<LiteraryReviewWindow> windows,
@@ -35,6 +37,7 @@ class WholeStoryLiteraryReviewManifest {
   final NarrativeBookModel book;
   final StoryPlan plan;
   final WholeStoryLiteraryEvidenceManifest evidence;
+  final SourceEvidenceGraph? claimEvidence;
   final String approvalDigest;
   final int maxNewRequestsPerRun;
   final List<LiteraryReviewWindow> windows;
@@ -55,13 +58,16 @@ class WholeStoryLiteraryReviewManifest {
     required NarrativeBookModel book,
     required StoryPlan plan,
     required WholeStoryLiteraryEvidenceManifest evidence,
+    SourceEvidenceGraph? claimEvidence,
     int maxNewRequestsPerRun = maxNewRequests,
   }) {
     if (maxNewRequestsPerRun < 1 ||
         maxNewRequestsPerRun > maxNewRequests) {
       throw const FormatException('Недопустимый бюджет литературного аудита.');
     }
-    evidence.verifyUnchanged(index: index, book: book, plan: plan);
+    evidence.verifyUnchanged(
+        index: index, book: book, plan: plan,
+        claimEvidence: claimEvidence);
     final details = evidence.toJson();
     final rows = details['all_reachable_transitions'];
     if (rows is! List || rows.isEmpty ||
@@ -172,6 +178,7 @@ class WholeStoryLiteraryReviewManifest {
     return WholeStoryLiteraryReviewManifest._(
       index: index, book: book, plan: plan,
       evidence: evidence,
+      claimEvidence: claimEvidence,
       approvalDigest: digest,
       maxNewRequestsPerRun: maxNewRequestsPerRun,
       windows: groups,
@@ -181,6 +188,7 @@ class WholeStoryLiteraryReviewManifest {
   void verifyUnchanged() {
     final current = fromEvidence(
       index: index, book: book, plan: plan, evidence: evidence,
+      claimEvidence: claimEvidence,
       maxNewRequestsPerRun: maxNewRequestsPerRun,
     );
     if (current.approvalDigest != approvalDigest ||
