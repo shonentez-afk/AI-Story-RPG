@@ -14,6 +14,7 @@ import 'source_locked_gameplay_review_page.dart';
 import 'whole_plan_gameplay_batch_page.dart';
 import 'whole_story_literary_review_page.dart';
 import 'whole_story_literary_bounded_repair.dart';
+import 'story_plan_causal_audit.dart';
 import 'narrative_book_model.dart';
 import 'world_library_gateway.dart';
 import 'world_play_page.dart';
@@ -470,7 +471,21 @@ class _MultiActTrialPageState extends State<MultiActTrialPage> {
                     builder: (_) => WholeStoryLiteraryReviewPage(
                       index: widget.index, book: widget.book,
                       plan: widget.draft.plan,
-                      approvedRules: widget.draft.causalContract,
+                      approvedRules: StoryCausalContract(
+                        decisionInvariants: [
+                          ...widget.draft.causalContract.decisionInvariants,
+                          if (_enforceEarlierOutcome)
+                            StoryDecisionInvariant(
+                              id: 'reviewed_cross_act_fictional_gate',
+                              decisionId: 'act_2_accept_offer',
+                              requires: const ['act_1_original_outcome'],
+                            ),
+                        ],
+                        knowledgeGates:
+                            widget.draft.causalContract.knowledgeGates,
+                        exclusiveGroups:
+                            widget.draft.causalContract.exclusiveGroups,
+                      ),
                     ),
                   ),
                 );
