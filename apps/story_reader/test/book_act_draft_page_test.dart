@@ -96,6 +96,97 @@ class _NoCandidateGateway extends ActDilemmaProposalGateway {
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  testWidgets('assisted preparation asks EACH act separately and stops '
+      'after cancellation without duplicate paid requests', (tester) async {
+    final index = _index();
+    final book = await _model(index);
+    final map = BookwideActPlanner.build(index: index, book: book);
+    final storage = ActDilemmaCheckpointStore(
+        repository: MemorySourceAnalysisCheckpointRepository());
+    final gateway = _NoCandidateGateway();
+    Widget page() => MaterialApp(
+      home: BookActDraftPage(
+        index: index, book: book, bookMap: map,
+        gateway: gateway, checkpoint: storage),
+    );
+
+    await tester.pumpWidget(page());
+    await tester.pumpAndSettle();
+    expect(gateway.calls, 0);
+    expect(find.byKey(const Key('act-draft-batch-progress')),
+        findsOneWidget);
+
+    final prepare = find.byKey(const Key('act-draft-prepare-remaining'));
+    await tester.ensureVisible(prepare);
+    await tester.pumpAndSettle();
+    await tester.tap(prepare);
+    await tester.pumpAndSettle();
+
+    // The first pending part requires fresh exact-quote consent, not an
+    // implicit whole-book approval.
+    expect(find.text('Разрешить анализ этой части через Z.ai?'),
+        findsOneWidget);
+    expect(gateway.calls, 0);
+    expect(tester.widget<FilledButton>(
+        find.byKey(const Key('act-draft-approve'))).onPressed, isNull);
+    await tester.tap(find.text('Отмена'));
+    await tester.pumpAndSettle();
+    expect(gateway.calls, 0);
+    expect(await storage.readAll(book: book, bookMap: map), isEmpty);
+
+    await tester.ensureVisible(prepare);
+    await tester.pumpAndSettle();
+    await tester.tap(prepare);
+    await tester.pumpAndSettle();
+    final consent = find.byKey(const Key('act-draft-quote-consent'));
+    await tester.ensureVisible(consent);
+    await tester.pumpAndSettle();
+    await tester.tap(consent);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('act-draft-approve')));
+    await tester.pumpAndSettle();
+
+    // One successful POST was durably checkpointed. The second part is
+    // offered as a NEW dialog, never silently uploaded.
+    expect(gateway.calls, 1);
+    expect((await storage.readAll(book: book, bookMap: map)), hasLength(1));
+    expect(find.text('Разрешить анализ этой части через Z.ai?'),
+        findsOneWidget);
+    expect(tester.widget<FilledButton>(
+        find.byKey(const Key('act-draft-approve'))).onPressed, isNull);
+    await tester.tap(find.text('Отмена'));
+    await tester.pumpAndSettle();
+    expect(gateway.calls, 1);
+
+    // Reopening the same edition skips the paid first part entirely.
+    await tester.pumpWidget(const SizedBox());
+    await tester.pumpAndSettle();
+    await tester.pumpWidget(page());
+    await tester.pumpAndSettle();
+    expect(gateway.calls, 1);
+    final resume = find.byKey(const Key('act-draft-prepare-remaining'));
+    await tester.ensureVisible(resume);
+    await tester.pumpAndSettle();
+    await tester.tap(resume);
+    await tester.pumpAndSettle();
+    expect(gateway.calls, 1);
+    final nextConsent = find.byKey(const Key('act-draft-quote-consent'));
+    await tester.ensureVisible(nextConsent);
+    await tester.pumpAndSettle();
+    await tester.tap(nextConsent);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('act-draft-approve')));
+    await tester.pumpAndSettle();
+    expect(gateway.calls, 2);
+    expect((await storage.readAll(book: book, bookMap: map)), hasLength(2));
+    // Two empty model proposals must never create a playable world.
+    expect(tester.widget<FilledButton>(
+        find.byKey(const Key('act-draft-assemble'))).onPressed, isNull);
+    expect(tester.widget<FilledButton>(
+        find.byKey(const Key('act-draft-prepare-remaining'))).onPressed, isNull);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('reopening multi-act editor makes ZERO cloud calls; '
       'declined quote consent sends nothing and explicit acceptance '
       'persists honest no-candidate outcome', (tester) async {
