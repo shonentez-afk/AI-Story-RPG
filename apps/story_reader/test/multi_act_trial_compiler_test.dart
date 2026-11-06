@@ -11,6 +11,7 @@ import 'package:ai_story_reader/cross_act_source_evidence_packet.dart';
 import 'package:ai_story_reader/multi_act_trial_compiler.dart';
 import 'package:ai_story_reader/zai_source_locked_gameplay_candidates.dart';
 import 'package:ai_story_reader/whole_plan_gameplay_candidate_batch.dart';
+import 'package:ai_story_reader/whole_plan_gameplay_batch_page.dart';
 import 'package:ai_story_reader/reviewed_prose_scene_overlay.dart';
 import 'package:ai_story_reader/zai_source_locked_prose_preview.dart';
 import 'package:ai_story_reader/narrative_book_model.dart';
@@ -851,6 +852,74 @@ void main() {
     expect(requests, progress.newRequests);
     expect(requests, lessThanOrEqualTo(2));
     expect((await service.inspect(manifest)).completed, progress.completed);
+  });
+
+
+  testWidgets('whole-book consent UI sends nothing on opening, sends '
+      'only after two checks and resumes without re-paying', (tester) async {
+    final index = _index();
+    final book = await _analyze(index);
+    final plan = _draft(index, book).draft.plan;
+    final memory = MemorySourceAnalysisCheckpointRepository();
+    var sent = 0;
+    final service = WholePlanGameplayBatchService(
+      repository: memory,
+      previewOverride: (ctx, cancellation) async {
+        sent++;
+        cancellation.check();
+        return GameplayCandidateDraft(
+          sourceFingerprint: ctx.sourceFingerprint,
+          approvalDigest: ctx.approvalDigest,
+          candidates: const [],
+        );
+      },
+    );
+    Widget page() => MaterialApp(
+      home: WholePlanGameplayBatchPage(
+        index: index, book: book, plan: plan, service: service,
+      ),
+    );
+    await tester.pumpWidget(page());
+    await tester.pumpAndSettle();
+    expect(sent, 0);
+    expect(find.text('Предметы: весь игровой план'), findsOneWidget);
+    final scroll = find.byType(Scrollable).first;
+    final run = find.byKey(const Key('whole-gameplay-batch-run'));
+    await tester.scrollUntilVisible(run, 130, scrollable: scroll);
+    await tester.pumpAndSettle();
+    expect(tester.widget<FilledButton>(run).onPressed, isNull);
+
+    final reviewed = find.byKey(const Key('whole-gameplay-batch-reviewed'));
+    await tester.scrollUntilVisible(reviewed, -130, scrollable: scroll);
+    await tester.tap(reviewed);
+    await tester.pumpAndSettle();
+    expect(tester.widget<FilledButton>(run).onPressed, isNull);
+    final cloud = find.byKey(const Key('whole-gameplay-batch-consent'));
+    await tester.scrollUntilVisible(cloud, 100, scrollable: scroll);
+    await tester.tap(cloud);
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(run, 100, scrollable: scroll);
+    expect(tester.widget<FilledButton>(run).onPressed, isNotNull);
+    await tester.tap(run);
+    await tester.pumpAndSettle();
+    expect(sent, 1);
+    expect(find.textContaining('Сохранено пакетов: 1'), findsOneWidget);
+
+    // A successful run resets BOTH permissions; nothing is sent again just
+    // because the result arrived or the user reopened this page.
+    if (find.byKey(const Key('whole-gameplay-batch-run')).evaluate().isNotEmpty) {
+      expect(tester.widget<FilledButton>(run).onPressed, isNull);
+    }
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pumpAndSettle();
+    await tester.pumpWidget(page());
+    await tester.pumpAndSettle();
+    expect(sent, 1);
+    final checkpoint = await memory.read(index.sourceFingerprint);
+    expect(checkpoint, isNotNull);
+    expect(checkpoint, isNot(contains(index.chunks.first.text)));
+    expect(find.byKey(const Key('whole-gameplay-batch-finished')),
+        findsOneWidget);
   });
 
 }
