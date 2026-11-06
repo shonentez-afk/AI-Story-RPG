@@ -19,7 +19,7 @@ class FinalizeIntegrationTests(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         self.base = Path(self.temp.name)
-        source = self.base / "book.txt"
+        source = self.base / "test_story.txt"
         source.write_text(TEXT, encoding="utf-8")
         self.root = self.base / "private_project"
         project.init_project(self.root, source)
