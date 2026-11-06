@@ -12,6 +12,7 @@ import 'package:ai_story_reader/multi_act_trial_compiler.dart';
 import 'package:ai_story_reader/zai_source_locked_gameplay_candidates.dart';
 import 'package:ai_story_reader/whole_plan_gameplay_candidate_batch.dart';
 import 'package:ai_story_reader/gameplay_candidate_reachability.dart';
+import 'package:ai_story_reader/reviewed_gameplay_compiler.dart';
 import 'package:ai_story_reader/whole_plan_gameplay_batch_page.dart';
 import 'package:ai_story_reader/reviewed_prose_scene_overlay.dart';
 import 'package:ai_story_reader/zai_source_locked_prose_preview.dart';
@@ -1077,6 +1078,144 @@ void main() {
         (issue) => issue.code == 'CONSUME_UNOWNED');
     expect(failure.pathChoiceIds, isNotEmpty);
     expect(report.mayAutomaticallyChangeBookworld, false);
+  });
+
+
+  test('approved effects from DIFFERENT source batches compile into one '
+      'new private BookWorld v3 with real item and fact, not canon',
+      () async {
+    final index = BookSourceIndexer.index(ImportedBook(
+      title: 'Четыре части о ключе',
+      author: 'Синтетическое произведение',
+      chapters: [
+        for (var n = 1; n <= 4; n++)
+          List.filled(5, 'Часть $n. Путник нашёл ключ возле ворот, '
+              'услышал правило и задумался о будущем. ').join(' '),
+      ],
+    ));
+    final book = await _analyze(index);
+    final map = BookwideActPlanner.build(index: index, book: book);
+    final draft = BookwideStoryPlanComposer.compose(
+      index: index, book: book, bookMap: map,
+      actProposals: [for (var i = 0; i < 4; i++) _proposal(book, i)],
+    );
+    final manifest = WholePlanGameplayBatchManifest.fromPlan(
+      index: index, book: book, plan: draft.plan,
+      maxNewRequestsPerRun: 2,
+    );
+    expect(manifest.totalBatches, greaterThan(1));
+    GameplayCandidate candidate(SourceLockedGameplayContext ctx, bool item) {
+      final choice = ctx.choices.first;
+      return GameplayCandidate(
+        kind: item ? 'item' : 'fact',
+        id: item ? 'book_key' : 'knows_promise',
+        label: item ? 'ключ' : 'знает обещание',
+        op: item ? 'grant_item' : 'learn_fact',
+        sceneId: choice.sceneId, choiceId: choice.choiceId,
+        sourceEventId: choice.sourceEventId,
+        uncertainty: 'Игровая гипотеза, отдельного канона не проверяли.',
+      );
+    }
+    final last = manifest.totalBatches - 1;
+    final selected = <GameplayCandidate>[];
+    final proposals = [
+      for (var i = 0; i < manifest.totalBatches; i++)
+        GameplayCandidateDraft(
+          sourceFingerprint: manifest.contexts[i].sourceFingerprint,
+          approvalDigest: manifest.contexts[i].approvalDigest,
+          candidates: [
+            if (i == 0 || i == last)
+              candidate(manifest.contexts[i], i == 0),
+          ],
+        ),
+    ];
+    selected.add(proposals.first.candidates.single);
+    selected.add(proposals.last.candidates.single);
+    final notes = {
+      for (final effect in selected)
+        ReviewedGameplayCompiler.signature(effect):
+          'Пользователь разрешил только частный вымышленный эффект, не канон.',
+    };
+    final base = await MultiActTrialCompiler.compile(
+      index: index, book: book, bookMap: map, draft: draft,
+      sourceEventIdsReviewedByUser: {
+        for (final part in draft.parts)
+          ...[part.setupEventId, part.outcomeEventId],
+      },
+      privateUseConfirmed: true, fictionalTrialAcknowledged: true,
+    );
+    final approved = ReviewedGameplayCompiler.previewAcrossBatches(
+      currentRichBookworld: base.archive,
+      index: index, book: book, plan: draft.plan,
+      manifest: manifest, proposals: proposals,
+      selectedUserReviewNotes: notes,
+    );
+    expect(approved.verifiedRoutes, 2);
+    expect(approved.literaryCanonVerified, false);
+    expect((approved.shownReview['effects'] as List), hasLength(2));
+    expect(approved.shownReview['source_payload_digest'],
+        manifest.approvalDigest);
+
+    await expectLater(ReviewedGameplayCompiler.compileAfterUserConfirmation(
+      preview: approved, currentRichBookworld: base.archive,
+      index: index, explicitlyConfirmedPrivateGameFiction: false,
+      approvedReviewDigest: approved.approvalDigest,
+    ), throwsFormatException);
+    await expectLater(ReviewedGameplayCompiler.compileAfterUserConfirmation(
+      preview: approved, currentRichBookworld: base.archive,
+      index: index, explicitlyConfirmedPrivateGameFiction: true,
+      approvedReviewDigest: 'not_the_review',
+    ), throwsFormatException);
+    final archive = await ReviewedGameplayCompiler.compileAfterUserConfirmation(
+      preview: approved, currentRichBookworld: base.archive,
+      index: index, explicitlyConfirmedPrivateGameFiction: true,
+      approvedReviewDigest: approved.approvalDigest,
+    );
+    final imported = const RichPrivateBookworldImporter().inspect(archive);
+    expect(imported.sourceFingerprint, index.sourceFingerprint);
+    expect(imported.bookworldId, isNot(base.bookworldId));
+    expect(imported.presentation['item_names'],
+        containsPair('book_key', 'ключ'));
+    expect(imported.presentation['fact_names'],
+        containsPair('knows_promise', 'знает обещание'));
+    expect(imported.canDistributePublicly, false);
+    expect(imported.requiresNetwork, false);
+
+    expect(() => ReviewedGameplayCompiler.previewAcrossBatches(
+      currentRichBookworld: archive,
+      index: index, book: book, plan: draft.plan,
+      manifest: manifest, proposals: proposals,
+      selectedUserReviewNotes: notes,
+    ), throwsFormatException);
+
+    final folder = await Directory.systemTemp.createTemp(
+        'ai_story_multi_batch_author_');
+    try {
+      final store = BookworldCampaignStore.openPrivateDirectory(folder.path);
+      try {
+        final installed = store.installBookworld(archive);
+        final campaign = store.createCampaign(installed.archiveHash);
+        expect(store.loadCampaign(campaign).metadata.revision, 0);
+        expect(store.installedWorlds(), hasLength(1));
+      } finally {
+        store.close();
+      }
+    } finally {
+      await folder.delete(recursive: true);
+    }
+
+    // Distinct, book-bound notes are mandatory; a fake or missing human
+    // approval cannot sneak into an otherwise complete batch manifest.
+    expect(() => ReviewedGameplayCompiler.previewAcrossBatches(
+      currentRichBookworld: base.archive,
+      index: index, book: book, plan: draft.plan,
+      manifest: manifest, proposals: proposals,
+      selectedUserReviewNotes: {
+        ReviewedGameplayCompiler.signature(selected.first):
+          'Only one accepted effect, not all proposals.',
+        'made_up_choice/fake_op/fake_id/missing': 'Фальшивая подпись.',
+      },
+    ), throwsFormatException);
   });
 
 }
