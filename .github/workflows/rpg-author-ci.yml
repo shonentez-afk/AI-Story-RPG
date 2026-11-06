@@ -61,16 +61,16 @@ jobs:
       - name: Prepare read-only E5 external compiler source bundle
         run: |
           mkdir -p "$RUNNER_TEMP/e5-toolchain"
-          printf '%s\\n' "$GITHUB_SHA" > "$RUNNER_TEMP/e5-toolchain/commit.txt"
-          tar -czf "$RUNNER_TEMP/e5-toolchain/source.tar.gz" \\
-            tools/rpg_author tools/bookworld schemas/rpg_author tests/rpg_author \\
-            tests/__init__.py shared_schemas \\
-            apps/story_reader/lib/book_import.dart \\
-            apps/story_reader/lib/book_text_decoder.dart \\
-            apps/story_reader/lib/book_source_index.dart \\
-            packages/bookworld_format/lib/private_bookworld.dart \\
-            packages/bookworld_format/lib/private_rich_bookworld.dart \\
-            packages/bookworld_format/lib/private_bookworld_writer.dart \\
+          printf '%s\n' "$GITHUB_SHA" > "$RUNNER_TEMP/e5-toolchain/commit.txt"
+          tar -czf "$RUNNER_TEMP/e5-toolchain/source.tar.gz" \
+            tools/rpg_author tools/bookworld schemas/rpg_author tests/rpg_author \
+            tests/__init__.py shared_schemas \
+            apps/story_reader/lib/book_import.dart \
+            apps/story_reader/lib/book_text_decoder.dart \
+            apps/story_reader/lib/book_source_index.dart \
+            packages/bookworld_format/lib/private_bookworld.dart \
+            packages/bookworld_format/lib/private_rich_bookworld.dart \
+            packages/bookworld_format/lib/private_bookworld_writer.dart \
             packages/story_core/lib/src/blueprint.dart
       - name: Export read-only toolchain source for private offline authoring
         uses: actions/upload-artifact@v4
