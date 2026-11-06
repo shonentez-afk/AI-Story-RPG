@@ -75,6 +75,7 @@ class WholeStoryLiteraryReviewManifest {
       throw const FormatException('Неполная проверка игровых маршрутов.');
     }
     final eventById = {for (final event in book.events) event.id: event};
+    final sceneById = {for (final scene in plan.situations) scene.id: scene};
     final groups = <LiteraryReviewWindow>[];
     var windowRows = <Map<String, dynamic>>[];
 
@@ -106,11 +107,34 @@ class WholeStoryLiteraryReviewManifest {
           'scope': 'EXACT_WORDS_NOT_WORLD_TRUTH',
         });
       }
+      // Replay alone exposes flags, not literary motivation. Add the exact
+      // user-visible draft scene goal/conflict and selected choice intent.
+      // They remain UNTRUSTED GAME FICTION, not original book prose.
+      final enrichedTransitions = <Map<String, Object?>>[];
+      for (final entry in entries) {
+        final sceneId = entry['scene_id'];
+        final choiceId = entry['choice_id'];
+        final scene = sceneById[sceneId];
+        if (scene == null) {
+          throw const FormatException('Переход ссылается на чужую сцену.');
+        }
+        final matches = scene.decisions.where((c) => c.id == choiceId).toList();
+        if (matches.length != 1) {
+          throw const FormatException('Переход ссылается на чужое решение.');
+        }
+        enrichedTransitions.add({
+          ...entry,
+          'scene_goal_game_draft': scene.goal,
+          'scene_conflict_game_draft': scene.conflict,
+          'choice_intent_game_draft': matches.single.intent,
+          'prose_is_literary_canon': false,
+        });
+      }
       final payload = <String, Object?>{
         'review_kind': 'POSSIBLE_LITERARY_CONTRADICTIONS_NOT_CANON',
         'window_number': position + 1,
         'source_quotes': quotes,
-        'reachable_game_transitions': entries,
+        'reachable_game_transitions': enrichedTransitions,
         'uncovered_book_events_total': evidence.uncoveredSourceEvents,
         'chapter_order_is_world_time': false,
         'npc_statements_are_world_truth': false,
