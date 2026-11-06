@@ -1,6 +1,6 @@
 # M2g3f.2b.5 — постоянный character_id адресата отношений NPC
 
-Дата: 2026-11-06. База: main 641fabbcd32ff8491ebf83d8c6e6a8f7a03efc48. Статус: PR / CI требуется; не считать готовым до exact-head и merge.
+Дата: 2026-11-06. База: main 641fabbcd32ff8491ebf83d8c6e6a8f7a03efc48. Статус: PR #127 MERGED в main (`4cfdab1147`); exact-head CI #804, M0 #889, Windows/Android и независимый Dart CLI — SUCCESS. Post-merge main CI #805/M0 #890 перепроверить.
 
 ## Что изменилось
 
