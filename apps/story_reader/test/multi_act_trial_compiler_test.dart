@@ -8,6 +8,8 @@ import 'package:ai_story_reader/bookwide_storyplan_composer.dart';
 import 'package:ai_story_reader/cross_act_consequence_gate.dart';
 import 'package:ai_story_reader/cross_act_source_evidence_packet.dart';
 import 'package:ai_story_reader/multi_act_trial_compiler.dart';
+import 'package:ai_story_reader/whole_plan_gameplay_candidate_batch.dart';
+import 'package:ai_story_reader/zai_source_locked_gameplay_candidates.dart';
 import 'package:ai_story_reader/reviewed_prose_scene_overlay.dart';
 import 'package:ai_story_reader/zai_source_locked_prose_preview.dart';
 import 'package:ai_story_reader/narrative_book_model.dart';
@@ -508,6 +510,158 @@ void main() {
         from: _index(suffix: ' другой перевод')),
         throwsFormatException);
     expect(() => build([accepted, []]), throwsFormatException);
+  });
+
+
+  test('whole-plan gameplay batching covers anchored acts with exact consent, '
+      'bounded requests and recoverable proposal-only checkpoints', () async {
+    final index = _index();
+    final book = await _analyze(index);
+    final input = _draft(index, book);
+    final manifest = WholePlanGameplayBatchManifest.fromPlan(
+      index: index, book: book, plan: input.draft.plan,
+      maxNewRequestsPerRun: 1,
+    );
+    expect(manifest.totalBatches, greaterThanOrEqualTo(1));
+    expect(manifest.totalReferencedSourceEvents,
+        greaterThanOrEqualTo(1));
+    expect(manifest.totalReferencedSourceEvents + manifest.unanchoredBookEvents,
+        book.events.length);
+    expect(manifest.sentContextBytes, greaterThan(0));
+    expect(manifest.literaryCanonVerified, false);
+    expect(manifest.mayInstallGame, false);
+    expect(manifest.coversUnanchoredEvents, false);
+    expect(manifest.maxHttpAttempts,
+        ZaiSourceLockedGameplayCandidateService.maxAttempts);
+    expect(manifest.sentContexts.length, manifest.totalBatches);
+    manifest.verifyUnchanged();
+
+    var networkCalls = 0;
+    final memory = MemorySourceAnalysisCheckpointRepository();
+    final service = WholePlanGameplayBatchService(
+      repository: memory,
+      previewOverride: (ctx, token) async {
+        networkCalls++;
+        token.check();
+        expect(ctx.payloadJson, isNot(contains('Два акта с разными')));
+        return GameplayCandidateDraft(
+          sourceFingerprint: ctx.sourceFingerprint,
+          approvalDigest: ctx.approvalDigest,
+          candidates: const [],
+        );
+      },
+    );
+    final before = await service.inspect(manifest);
+    expect(before.completed, 0);
+    expect(networkCalls, 0);
+    await expectLater(service.generate(
+      manifest: manifest, approvedManifestDigest: manifest.approvalDigest,
+      explicitBatchConsent: false,
+    ), throwsFormatException);
+    await expectLater(service.generate(
+      manifest: manifest, approvedManifestDigest: 'f' * 64,
+      explicitBatchConsent: true,
+    ), throwsFormatException);
+    expect(networkCalls, 0);
+
+    var report = await service.generate(
+      manifest: manifest, approvedManifestDigest: manifest.approvalDigest,
+      explicitBatchConsent: true,
+    );
+    expect(report.completed, 1);
+    expect(report.newRequests, 1);
+    expect(networkCalls, 1);
+    // Reopening must NOT pay for the already saved first batch again.
+    final reloaded = WholePlanGameplayBatchService(
+      repository: memory,
+      previewOverride: (ctx, token) async {
+        networkCalls++;
+        return GameplayCandidateDraft(
+          sourceFingerprint: ctx.sourceFingerprint,
+          approvalDigest: ctx.approvalDigest,
+          candidates: const [],
+        );
+      },
+    );
+    for (var i = 1; i < manifest.totalBatches; i++) {
+      report = await reloaded.generate(
+        manifest: manifest,
+        approvedManifestDigest: manifest.approvalDigest,
+        explicitBatchConsent: true,
+      );
+      expect(report.newRequests, lessThanOrEqualTo(1));
+    }
+    report = await reloaded.generate(
+      manifest: manifest,
+      approvedManifestDigest: manifest.approvalDigest,
+      explicitBatchConsent: true,
+    );
+    expect(report.allProposalsCollected, true);
+    expect(report.newRequests, 0);
+    expect(report.recovered, manifest.totalBatches);
+    expect(networkCalls, manifest.totalBatches);
+    final saved = await reloaded.readReviewedProposals(manifest);
+    expect(saved, hasLength(manifest.totalBatches));
+    for (var i = 0; i < saved.length; i++) {
+      expect(saved[i].approvalDigest, manifest.contexts[i].approvalDigest);
+      expect(saved[i].candidates, isEmpty);
+      expect(saved[i].provesLiteraryMeaning, false);
+      expect(saved[i].mayChangeGameState, false);
+    }
+
+    // Reinterpreting the SAME book with a different authorized request
+    // budget invalidates old consent and cannot silently reuse checkpoints.
+    final different = WholePlanGameplayBatchManifest.fromPlan(
+      index: index, book: book, plan: input.draft.plan,
+      maxNewRequestsPerRun: 2,
+    );
+    expect(different.approvalDigest, isNot(manifest.approvalDigest));
+    await expectLater(reloaded.inspect(different), throwsFormatException);
+    expect(networkCalls, manifest.totalBatches);
+  });
+
+  test('gameplay batches reject corrupted checkpoint and failed atomic write '
+      'without silently scheduling another API call', () async {
+    final index = _index();
+    final book = await _analyze(index);
+    final input = _draft(index, book);
+    final manifest = WholePlanGameplayBatchManifest.fromPlan(
+      index: index, book: book, plan: input.draft.plan,
+      maxNewRequestsPerRun: 1,
+    );
+    final memory = MemorySourceAnalysisCheckpointRepository();
+    var calls = 0;
+    final service = WholePlanGameplayBatchService(
+      repository: memory,
+      previewOverride: (ctx, token) async {
+        calls++;
+        return GameplayCandidateDraft(
+          sourceFingerprint: ctx.sourceFingerprint,
+          approvalDigest: ctx.approvalDigest, candidates: const [],
+        );
+      },
+    );
+    memory.failNextWrite = true;
+    await expectLater(service.generate(
+      manifest: manifest, approvedManifestDigest: manifest.approvalDigest,
+      explicitBatchConsent: true,
+    ), throwsA(isA<FileSystemException>()));
+    expect(calls, 1);
+    expect((await service.inspect(manifest)).completed, 0);
+    await memory.write(index.sourceFingerprint, '{"corrupt":true}');
+    await expectLater(service.generate(
+      manifest: manifest, approvedManifestDigest: manifest.approvalDigest,
+      explicitBatchConsent: true,
+    ), throwsFormatException);
+    expect(calls, 1); // Never retry a paid call over damaged checkpoint.
+    await memory.delete(index.sourceFingerprint);
+    expect((await service.inspect(manifest)).completed, 0);
+    final after = await service.generate(
+      manifest: manifest, approvedManifestDigest: manifest.approvalDigest,
+      explicitBatchConsent: true,
+    );
+    expect(after.completed, 1);
+    expect(calls, 2);
   });
 
 }
