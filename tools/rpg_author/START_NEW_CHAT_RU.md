@@ -1,3 +1,5 @@
+> **Актуализация 7 ноября 2026:** для исправления `contract_drift` после принятого PR #131 и продолжения E6e создана [новая рабочая ветка внешнего генератора](https://github.com/shonentez-afk/AI-Story-RPG/tree/feature/external-rpg-author-e6e-parity-20261107), основанная на принятом `main`. Прочитать [новый START_NEW_CHAT](https://github.com/shonentez-afk/AI-Story-RPG/blob/feature/external-rpg-author-e6e-parity-20261107/tools/rpg_author/START_NEW_CHAT_RU.md) и [E6e finalization](https://github.com/shonentez-afk/AI-Story-RPG/blob/feature/external-rpg-author-e6e-parity-20261107/tools/rpg_author/E6E_FINALIZATION_RU_2026-11-07.md) **вместо продолжения кода в старой ветке**. Ниже — историческая передача E6d. Старый pin навыка остаётся, пока не пройден полный точный CI новой ветки; `main/apps/packages` не трогать.
+
 # Продолжение внешнего генератора AI Story RPG — E6d
 
 ## ОБЯЗАТЕЛЬНЫЙ НОВЫЙ ПЛАН: проверенные источники и единая архитектура (2026-11-07)
