@@ -5,6 +5,7 @@ import 'package:crypto/crypto.dart';
 import 'package:story_core/story_core.dart';
 
 import 'src/sqlite_v1.dart';
+import 'private_gameplay_review.dart';
 import 'src/zip_v1.dart';
 
 /// A *private*, source-bound, offline CLASSIC package. It carries no original
@@ -516,7 +517,12 @@ class RichPrivateBookworldImporter {
     }
     _causality(blueprint);
     final source = _object(files['source/provenance.json']!, 'provenance');
-    _fields(source, {'format', 'bookworld_id', 'source_fingerprint',
+    // New v3 games may carry a separately recorded USER-DECLARED game
+    // adaptation. Old v3 games remain fully compatible and unchanged.
+    final hasGameplayReview = source.containsKey('gameplay_review');
+    final knownSource = Map<String, dynamic>.of(source)
+      ..remove('gameplay_review');
+    _fields(knownSource, {'format', 'bookworld_id', 'source_fingerprint',
                      'source_title', 'source_author',
                      'source_chapters_total', 'source_chapters_indexed',
                      'semantic_catalog_sha256', 'intermediate_draft_sha256',
@@ -536,10 +542,18 @@ class RichPrivateBookworldImporter {
     }
     _model(source, manifest);
     final presentation = _presentation(source, blueprint);
+    if (hasGameplayReview) {
+      final review = source['gameplay_review'];
+      if (review is! Map<String, dynamic>) {
+        throw const FormatException('Некорректная редакторская приёмка');
+      }
+      PrivateGameplayReview.verify(review, blueprint, source);
+    }
     // Reuse the *strict* v2 evidence/manifest checks on a non-persisted
     // normalized view. This never changes the actual signed ZIP payload.
     final originV2 = Map<String, dynamic>.of(source);
     originV2.remove('presentation');
+    originV2.remove('gameplay_review');
     originV2['format'] = 'ai_story_private_provenance_v1';
     originV2['model_provenance'] = {'provider': 'none', 'model_id': null};
     _provenance(originV2, blueprint);
