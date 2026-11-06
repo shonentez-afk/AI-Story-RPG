@@ -71,18 +71,19 @@ class SourceLockedDialogueSpeakerAudit {
   /// All inputs must belong to one EXACT book revision. Ambiguous names,
   /// unresolved identity and future-only source appearances stay unbound.
   Map<String, String> bindReviewedCharacterIds({
-    required NarrativeBookModel book,
+    required String sourceFingerprint,
+    required List<NarrativeCharacter> sourceCharacters,
     required NpcEditorialNotebook notebook,
   }) {
-    if (notebook.sourceFingerprint != book.sourceFingerprint) {
+    if (notebook.sourceFingerprint != sourceFingerprint) {
       throw const FormatException(
           'Нельзя привязать диалог к карточкам другой редакции книги');
     }
     final groups = {
-      for (final character in book.characters)
+      for (final character in sourceCharacters)
         character.mentionGroupId: character,
     };
-    if (groups.length != book.characters.length) {
+    if (groups.length != sourceCharacters.length) {
       throw const FormatException('Повторные группы персонажей книги');
     }
     final profiles = {
