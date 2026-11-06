@@ -30,6 +30,8 @@ class NpcKnowledgeRichWorldBridge {
     required Map<String, dynamic> provenance,
     required Map<String, String> sourceQuoteByRuleId,
     required bool userConfirmed,
+    Map<String, List<Map<String, dynamic>>> reviewedDialogueTurns = const {},
+    Map<String, String> reviewedSpeakerBindings = const {},
     String heroName = 'Игрок',
     String heroDescription =
         'Герой частной игровой адаптации. Решения сохраняются в журнале.',
@@ -176,6 +178,29 @@ class NpcKnowledgeRichWorldBridge {
       final turns = RichSceneDialogue.presentationFor(scene['text'] as String);
       if (turns != null) dialogues[id] = turns;
     }
+    if (dialogues.keys.toSet().difference(
+            reviewedDialogueTurns.keys.toSet()).isNotEmpty ||
+        reviewedDialogueTurns.keys.toSet().difference(
+            dialogues.keys.toSet()).isNotEmpty) {
+      throw const FormatException('Нужна проверка всех реплик NPC');
+    }
+    for (final entries in reviewedDialogueTurns.values) {
+      for (final entry in entries) {
+        final speaker = entry['speaker'];
+        final actor = entry['actor_id'];
+        if (actor != 'player' &&
+            (speaker is! String ||
+             reviewedSpeakerBindings[speaker] != actor)) {
+          throw const FormatException(
+              'У говорящего нет подтверждённого character_id');
+        }
+      }
+    }
+    RichNpcDialogueKnowledge.validate(
+      reviewedDialogueTurns.isEmpty ? null :
+          <String, dynamic>{...reviewedDialogueTurns},
+      world, <String, dynamic>{...dialogues},
+    );
     final facts = world.facts.toList()..sort();
     result['presentation'] = {
       'hero': {'name': heroName.trim(), 'description': heroDescription.trim()},
@@ -188,6 +213,8 @@ class NpcKnowledgeRichWorldBridge {
       },
       'scene_names': sceneNames,
       'scene_dialogues': dialogues,
+      if (reviewedDialogueTurns.isNotEmpty)
+        'scene_dialogue_knowledge': reviewedDialogueTurns,
     };
     result['npc_knowledge'] = {
       'format': RichPrivateBookworldImporter.npcKnowledgeFormat,
