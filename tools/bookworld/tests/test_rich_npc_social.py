@@ -13,6 +13,27 @@ from tools.bookworld.tests.test_rich_npc_knowledge import NPC, reviewed_sample
 def social_sample():
     bp, prov, index = reviewed_sample()
     quote = prov["scene_origins"][0]["source_refs"][0]["quote_sha256"]
+    bp["scenes"][0]["text"] = (
+        "Встреча у ворот.\\n"
+        "Мария: «Я услышала обещание!»\\n"
+        "Игрок: «Обещаю».")
+    prov["presentation"]["scene_dialogues"] = {
+        "entry": rich._exact_scene_dialogue(bp["scenes"][0]["text"]),
+    }
+    prov["presentation"]["scene_dialogue_knowledge"] = {
+        "entry": [
+            {
+                "turn_index": 1, "speaker": "Мария", "actor_id": NPC,
+                "required_fact_ids": [],
+                "required_social_memory_id": "guard_observed_promise",
+                "minimum_trust_to_player": 7,
+            },
+            {
+                "turn_index": 2, "speaker": "Игрок", "actor_id": "player",
+                "required_fact_ids": [],
+            },
+        ],
+    }
     prov["npc_social"] = {
         "format": rich.NPC_SOCIAL_FORMAT,
         "review_scope": "user_declared_private_game_fiction",
@@ -42,6 +63,9 @@ class RichNpcSocialTests(unittest.TestCase):
         self.assertEqual(archive, rich.build(bp, prov, source))
 
         del prov["npc_social"]
+        for spoken in prov["presentation"]["scene_dialogue_knowledge"]["entry"]:
+            spoken.pop("required_social_memory_id", None)
+            spoken.pop("minimum_trust_to_player", None)
         previous = rich.build(bp, prov, source)
         self.assertEqual(rich.verify(previous)["format_version"], 3)
 
@@ -89,6 +113,26 @@ class RichNpcSocialTests(unittest.TestCase):
                 with self.assertRaises(legacy.BookworldError):
                     rich.build(bp, prov, index)
 
+    def test_spoiler_dialogue_requires_reviewed_memory_and_trust(self):
+        for mutation in ("missing_social", "wrong_memory", "missing_actor",
+                         "false_trust", "missing_review"):
+            with self.subTest(mutation=mutation):
+                bp, prov, index = social_sample()
+                review = prov["presentation"]["scene_dialogue_knowledge"]
+                turn = review["entry"][0]
+                if mutation == "missing_social":
+                    del prov["npc_social"]
+                elif mutation == "wrong_memory":
+                    turn["required_social_memory_id"] = "fake_memory"
+                elif mutation == "missing_actor":
+                    turn["actor_id"] = "player"
+                elif mutation == "false_trust":
+                    turn["minimum_trust_to_player"] = -100
+                elif mutation == "missing_review":
+                    del prov["presentation"]["scene_dialogue_knowledge"]
+                with self.assertRaises(legacy.BookworldError):
+                    rich.build(bp, prov, index)
+
     def test_reported_rumor_cannot_grant_trust(self):
         bp, prov, index = social_sample()
         social = prov["npc_social"]
@@ -96,6 +140,8 @@ class RichNpcSocialTests(unittest.TestCase):
         social["rules"][0]["kind"] = "rumorHeard"
         social["rules"][0]["relationship_delta"] = 0
         social["rules"][0]["related_actor_id"] = None
+        for spoken in prov["presentation"]["scene_dialogue_knowledge"]["entry"]:
+            spoken.pop("minimum_trust_to_player", None)
         self.assertEqual(rich.verify(rich.build(bp, prov, index))
                          ["format_version"], 3)
 
