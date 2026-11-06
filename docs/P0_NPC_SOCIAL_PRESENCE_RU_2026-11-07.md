@@ -11,6 +11,13 @@
 
 **Ограничения подтверждения:** связь цитаты с главой и ручное `user_confirmed` **не означает** литературную истинность интерпретации и не удостоверяет действительное присутствие без независимого review. Авторские заметки/весь текст книги/ключи не должны попасть в repo, snapshot или публичный release.
 
+### Дополнительная приёмка PR #132 — реальный SQLite и социальная память (2026-11-07)
+
+- `packages/campaign_manager/test/npc_social_sqlite_replay_test.dart`: один синтетический source-reviewed rich-v3 архив проходит `installBookworld`, 2 кампании, запрет преждевременного `help`, подтверждённый `wait`, memory/trust-gated NPC dialogue, реальный `BookworldCampaignStore.close()` → повторный `openPrivateDirectory()`, проверку точного `stateHash`, `snapshotHash`, переносимого `.bwsave`, повторное действие без «фарма» и альтернативный `leave` без памяти. Пользовательская FB2 и реальная GLM **не** тестировались.
+- Exact-head commit этого теста: `88eba53a7c1be68f8173a1ac99e326f2736d2be1`; M0 **#959 SUCCESS**, AI Story RPG CI **#874**: Dart engine/Python/M1.7 SQLite **SUCCESS**, Flutter/Win/Android на последнем просмотре продолжаются. Проверить окончательный статус текущего SHA, а не считать преждевременно зелёным.
+- External RPG author #147 **FAIL / contract_drift** только по трём изменённым rich-v3 source/format/writer файлам, то есть E6d pinned SHA нужно **отдельно пересогласовать** по PR #132, как делалось для #131; не отключать защиту и не изменять E6d skill без проверки.
+- `NpcSocialLedger` — event-sourced read-only; фактические NPC item ownership, status alive/present across scenes и authoritative gating игровых choices **НЕ закончены**, это оставшиеся части **этого же единого PR #132**.
+
 ## Оставшиеся действия в ЭТОМ ЖЕ пакете
 
 **Внесено как вертикальный игровой срез, но ждёт общей приёмки:** `scene_dialogue_knowledge.required_social_memory_id` и `minimum_trust_to_player` в подписанной реплике допустимы только когда `npc_social` source-locked правило существует и speaker actor совпадает. `RichNpcDialogueKnowledge.validate` / Python `_presentation` отвергают неизвестный memory или неподтверждённый positive directed relation. `RichNpcDialogueKnowledge.redact` блокирует текст до нужного события/порога; клиент `WorldLibraryGateway` сам восстанавливает `StoryWorld.replay` из SQLite и вычисляет `NpcSocialLedger`. Условия выбираются вручную в той же форме авторства. Тесты до/после события, избыточный порог и перезапуск должны пройти точный CI. **Не путать** этот gate реплик с авторитетным gate игровых choices.

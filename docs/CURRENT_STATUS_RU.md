@@ -6,6 +6,15 @@
 
 ## Текущая реализация: один PR #132 (DRAFT)
 
+### Дополнительная приёмка PR #132 — реальный SQLite и социальная память (2026-11-07)
+
+- `packages/campaign_manager/test/npc_social_sqlite_replay_test.dart`: один синтетический source-reviewed rich-v3 архив проходит `installBookworld`, 2 кампании, запрет преждевременного `help`, подтверждённый `wait`, memory/trust-gated NPC dialogue, реальный `BookworldCampaignStore.close()` → повторный `openPrivateDirectory()`, проверку точного `stateHash`, `snapshotHash`, переносимого `.bwsave`, повторное действие без «фарма» и альтернативный `leave` без памяти. Пользовательская FB2 и реальная GLM **не** тестировались.
+- Exact-head commit этого теста: `88eba53a7c1be68f8173a1ac99e326f2736d2be1`; M0 **#959 SUCCESS**, AI Story RPG CI **#874**: Dart engine/Python/M1.7 SQLite **SUCCESS**, Flutter/Win/Android на последнем просмотре продолжаются. Проверить окончательный статус текущего SHA, а не считать преждевременно зелёным.
+- External RPG author #147 **FAIL / contract_drift** только по трём изменённым rich-v3 source/format/writer файлам, то есть E6d pinned SHA нужно **отдельно пересогласовать** по PR #132, как делалось для #131; не отключать защиту и не изменять E6d skill без проверки.
+- `NpcSocialLedger` — event-sourced read-only; фактические NPC item ownership, status alive/present across scenes и authoritative gating игровых choices **НЕ закончены**, это оставшиеся части **этого же единого PR #132**.
+
+
+
 **Код игрового диалога:** signed реплика может требовать NPC-воспоминание/порог направленного доверия (новые опциональные поля reviewed turn). Python/Dart импортёры валидируют исходное правило, а `WorldLibraryGateway` после replay SQLite журналов скрывает реплику до подтверждённого события/отношений. Ручной выбор внутри существующего NPC build dialog, без новой страницы. Тесты и CI на актуальном HEAD обязательны; это **не** готовое gating самих choices или NPC ownership.
 
 В `feature/p0-npc-presence-social-gameplay-20261107` реализуются **вместе**: `NpcSceneWitness` (личное наблюдение/слух), запрет памяти без присутствия и фарминга доверия, переносимый `npc_social` private-v3 со source refs и author consent, независимые валидаторы Dart/Python, двусторонние ZIP-сборки и ручная классификация в прежнем диалоге подготовки NPC. **Ещё не готово:** авторитетное social gating, NPC-предметы/состояние жизни, журнал/диалоговые последствия и общий exact-head CI. Внешний E6d pin для расширения #132 требует review. Спецификация `docs/P0_NPC_SOCIAL_PRESENCE_RU_2026-11-07.md`. Нет отдельного PR для карточки/поля.
