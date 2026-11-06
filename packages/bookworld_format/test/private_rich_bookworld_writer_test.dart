@@ -152,6 +152,12 @@ void main() {
         expectedStateHash: world.state.stateHash);
     expect(NpcSocialLedger.inspect(replay, rules).snapshotHash,
         social.snapshotHash);
+    // The exact Dart archive, not a recreated Python fixture, must pass
+    // the independent source-bound Python social review in CI.
+    final socialFile = File(
+        '../../artifacts/bookworld/book_private_rich_social_dart.bworld');
+    socialFile.parent.createSync(recursive: true);
+    socialFile.writeAsBytesSync(archive, flush: true);
 
     void rejects(void Function(Map<String, dynamic>) mutate) {
       final changed = _npcRichSample();

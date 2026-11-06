@@ -45,5 +45,20 @@ void main(List<String> args) {
           world.events.first.hash) {
     throw StateError('NPC provenance did not survive deterministic replay');
   }
+  final socialRules = verified.npcSocialRulebook;
+  if (socialRules != null) {
+    if (!socialRules.requireReviewedWitnesses) {
+      throw StateError('Python-built social contract was not reviewed');
+    }
+    final social = NpcSocialLedger.inspect(world, socialRules);
+    final saved = NpcSocialLedger.inspect(restored, socialRules);
+    if (social.directedScore(npc, 'player') != 7 ||
+        social.directedScore('player', npc) != 0 ||
+        social.memoriesFor(npc).length != 1 ||
+        social.memoriesFor(npc).single.witnessMode != NpcWitnessMode.present ||
+        social.snapshotHash != saved.snapshotHash) {
+      throw StateError('Python social witness/replay parity mismatch');
+    }
+  }
   stdout.writeln('Python-built NPC rich-v3 passed independent Dart replay.');
 }
