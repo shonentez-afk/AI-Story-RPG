@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'book_source_index.dart';
+import 'gameplay_candidate_reachability.dart';
 import 'narrative_book_model.dart';
 import 'story_plan.dart';
 import 'whole_plan_gameplay_candidate_batch.dart';
@@ -35,6 +36,7 @@ class _WholePlanGameplayBatchPageState
   late final WholePlanGameplayBatchService _service;
   WholePlanGameplayBatchManifest? _manifest;
   WholePlanGameplayBatchProgress? _progress;
+  GameplayReachabilityReport? _audit;
   String? _error;
   bool _working = false;
   bool _loaded = false;
@@ -70,9 +72,15 @@ class _WholePlanGameplayBatchPageState
     try {
       final progress = await _service.inspect(manifest);
       final all = await _service.readUnreviewedProposals(manifest);
+      final report = progress.allProposalsCollected
+          ? const GameplayCandidateReachabilityAuditor().auditAcrossBatches(
+              plan: manifest.plan, manifest: manifest, drafts: all,
+            )
+          : null;
       if (!mounted) return;
       setState(() {
         _progress = progress;
+        _audit = report;
         _suggestions = all.fold<int>(
             0, (n, draft) => n + draft.candidates.length);
         _loaded = true;
@@ -107,9 +115,15 @@ class _WholePlanGameplayBatchPageState
         },
       );
       final all = await _service.readUnreviewedProposals(manifest);
+      final report = progress.allProposalsCollected
+          ? const GameplayCandidateReachabilityAuditor().auditAcrossBatches(
+              plan: manifest.plan, manifest: manifest, drafts: all,
+            )
+          : null;
       if (!mounted) return;
       setState(() {
         _progress = progress;
+        _audit = report;
         _suggestions = all.fold<int>(
             0, (n, draft) => n + draft.candidates.length);
       });
@@ -208,6 +222,33 @@ class _WholePlanGameplayBatchPageState
                   subtitle: Text('Это только черновики, '
                       'не исполняемые правила RPG.'),
                 ),
+              if (_audit != null) ...[
+                ListTile(
+                  key: Key(_audit!.hasNoRouteConflicts
+                      ? 'whole-gameplay-batch-audit-ok'
+                      : 'whole-gameplay-batch-audit-problems'),
+                  leading: Icon(_audit!.hasNoRouteConflicts
+                      ? Icons.fact_check_outlined
+                      : Icons.report_problem_outlined),
+                  title: Text(_audit!.hasNoRouteConflicts
+                      ? 'Противоречий игровых маршрутов не найдено'
+                      : 'Конфликты игровых маршрутов: '
+                          '${_audit!.issues.length}'),
+                  subtitle: Text('Проверено состояний: '
+                      '${_audit!.visitedStates}. '
+                      'Это НЕ подтверждает литературный канон.'),
+                ),
+                for (final issue in _audit!.issues)
+                  Card(
+                    child: ListTile(
+                      title: Text(issue.code + ' / ' +
+                          issue.resourceId),
+                      subtitle: Text('Сцена: ' + issue.sceneId +
+                          ', выбор: ' + issue.choiceId +
+                          ', путь: ' + issue.pathChoiceIds.join(' → ')),
+                    ),
+                  ),
+              ],
             ],
             if (status != null && status.remaining > 0) ...[
               CheckboxListTile(
