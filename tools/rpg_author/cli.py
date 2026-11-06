@@ -38,6 +38,17 @@ def parser():
                         help="User-declared, not independently attested model ID")
     legacy.add_argument("--ack-legacy-provenance", action="store_true",
                         help="Acknowledge provider=none in v2 is only a legacy packaging constant")
+    quality = commands.add_parser("gameplay-audit", help="E6: exhaustive game-design quality review, read-only")
+    quality.add_argument("--project", type=Path)
+    quality.add_argument("--enrichment", type=Path)
+    quality.add_argument("--bworld", type=Path,
+                         help="Read-only audit of any structurally verified E5/E6 rich v3 archive")
+    quality.add_argument("--attribution", type=Path,
+                         help="Optional matching attribution sidecar for --bworld")
+    quality.add_argument("--output", type=Path,
+                         help="Write a private, immutable JSON report outside the repository")
+    quality.add_argument("--strict", action="store_true",
+                         help="Exit 3 when any mechanical quality warning remains")
     bundle = commands.add_parser("verify-bundle", help="Check package and sidecar SHA binding")
     bundle.add_argument("--input", required=True, type=Path)
     bundle.add_argument("--attribution", required=True, type=Path)
@@ -76,6 +87,23 @@ def main(argv=None) -> int:
             result = project.validate_project(args.project)
         elif name == "export":
             result = project.export_candidate(args.project, args.output)
+        elif name == "gameplay-audit":
+            from .gameplay_quality import audit_archive, audit_project
+            from .common import atomic_write, canonical, outside_repository, require
+            if args.bworld is not None:
+                require(args.project is None and args.enrichment is None, "invalid_args",
+                        "Use --bworld OR --project with --enrichment")
+                result = audit_archive(args.bworld, args.attribution)
+            else:
+                require(args.project is not None and args.enrichment is not None
+                        and args.attribution is None, "invalid_args",
+                        "Provide --project and --enrichment, or --bworld")
+                result = audit_project(args.project, args.enrichment)
+            if args.output is not None:
+                out = outside_repository(args.output)
+                require(not out.exists(), "output_exists", "Report cannot overwrite an existing file")
+                atomic_write(out, canonical(result))
+                result["report_output"] = str(out)
         elif name == "build-legacy":
             from .legacy_package import build_legacy
             result = build_legacy(args.project, args.output,
@@ -101,6 +129,8 @@ def main(argv=None) -> int:
             except (BookworldError, KeyError, TypeError, ValueError) as exc:
                 raise AuthoringError("invalid_package", str(exc)) from exc
         print(json.dumps(result, ensure_ascii=False, indent=2, allow_nan=False))
+        if name == "gameplay-audit" and args.strict and result["warning_count"]:
+            return 3
         return 0
     except AuthoringError as exc:
         print(json.dumps({"status": "error", "code": exc.code, "message": str(exc)},
