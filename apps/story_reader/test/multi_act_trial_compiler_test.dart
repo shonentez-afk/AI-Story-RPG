@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:ai_story_reader/book_import.dart';
@@ -662,6 +663,62 @@ void main() {
     );
     expect(after.completed, 1);
     expect(calls, 2);
+  });
+
+
+  test('parallel screens may not send two billable batches for same edition',
+      () async {
+    final index = _index();
+    final book = await _analyze(index);
+    final plan = _draft(index, book).draft.plan;
+    final manifest = WholePlanGameplayBatchManifest.fromPlan(
+      index: index, book: book, plan: plan,
+      maxNewRequestsPerRun: 1,
+    );
+    final gate = Completer<void>();
+    final memory = MemorySourceAnalysisCheckpointRepository();
+    var calls = 0;
+    final first = WholePlanGameplayBatchService(
+      repository: memory,
+      previewOverride: (ctx, token) async {
+        calls++;
+        await gate.future;
+        token.check();
+        return GameplayCandidateDraft(
+          sourceFingerprint: ctx.sourceFingerprint,
+          approvalDigest: ctx.approvalDigest, candidates: const [],
+        );
+      },
+    );
+    final second = WholePlanGameplayBatchService(
+      repository: memory,
+      previewOverride: (ctx, token) async {
+        calls++;
+        return GameplayCandidateDraft(
+          sourceFingerprint: ctx.sourceFingerprint,
+          approvalDigest: ctx.approvalDigest, candidates: const [],
+        );
+      },
+    );
+    final running = first.generate(
+      manifest: manifest, approvedManifestDigest: manifest.approvalDigest,
+      explicitBatchConsent: true,
+    );
+    // The first continuation reaches its awaited model after reading the
+    // source checkpoint. The second runner shares the same in-process lock.
+    for (var i = 0; i < 10 && calls == 0; i++) {
+      await Future<void>.delayed(Duration.zero);
+    }
+    expect(calls, 1);
+    await expectLater(second.generate(
+      manifest: manifest, approvedManifestDigest: manifest.approvalDigest,
+      explicitBatchConsent: true,
+    ), throwsFormatException);
+    expect(calls, 1);
+    gate.complete();
+    expect((await running).completed, 1);
+    expect((await second.inspect(manifest)).completed, 1);
+    expect(calls, 1);
   });
 
 }
