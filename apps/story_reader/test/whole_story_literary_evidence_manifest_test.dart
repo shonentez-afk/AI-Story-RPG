@@ -874,8 +874,11 @@ void main() {
     await tester.tap(find.byKey(const Key('open-literary-review')));
     await tester.pumpAndSettle();
     expect(modelCalls, beforeOpen);
-    expect(find.byKey(const Key('whole-literary-complete')),
-        findsOneWidget);
+    final complete = find.byKey(const Key('whole-literary-complete'));
+    await tester.scrollUntilVisible(complete, 150,
+        scrollable: find.byType(Scrollable).first);
+    await tester.pumpAndSettle();
+    expect(complete, findsOneWidget);
     final accept = find.byKey(
         const Key('whole-literary-unchanged-accept'));
     await tester.scrollUntilVisible(accept, 150,
