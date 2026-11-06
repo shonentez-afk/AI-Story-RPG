@@ -491,7 +491,7 @@ void main() {
     expect(corrected.mayChangeGameOrSave, false);
     expect(() => WholeStoryLiteraryBoundedRepair.propose(
       manifest: manifest, reports: reports,
-      approvedRules: contract, expectedReportDigest: '0' * 64,
+      approvedRules: contract, expectedReportDigest: List.filled(64, '0').join(),
       explicitRuleReview: true,
     ), throwsFormatException);
     expect(() => WholeStoryLiteraryBoundedRepair.propose(
