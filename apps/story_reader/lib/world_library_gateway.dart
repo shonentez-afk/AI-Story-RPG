@@ -89,6 +89,7 @@ class WorldGameView {
     this.itemNames = const {}, this.itemDescriptions = const {},
     this.statNames = const {}, this.factNames = const {},
     this.sceneNames = const {},
+    this.sceneDialogueTurns,
   });
 
   final String campaignId;
@@ -111,6 +112,8 @@ class WorldGameView {
   final Map<String, String> statNames;
   final Map<String, String> factNames;
   final Map<String, String> sceneNames;
+  /// Exact, importer-verified speaker turns. Null for older worlds or prose.
+  final List<RichDialogueTurn>? sceneDialogueTurns;
 }
 
 class WorldChoiceResult {
@@ -217,6 +220,16 @@ class DeviceWorldLibraryGateway implements WorldLibraryGateway {
     final stats = names('stat_names');
     final facts = names('fact_names');
     final scenes = names('scene_names');
+    // No separate NPC identity or gameplay is trusted here. The v3 importer
+    // has already compared each projection to the exact signed scene text.
+    // Recheck the currently displayed scene so nothing else can override it.
+    List<RichDialogueTurn>? signedTurns;
+    final allDialogues = presentation['scene_dialogues'];
+    if (allDialogues is Map<String, dynamic> &&
+        allDialogues.containsKey(current.id)) {
+      signedTurns = RichSceneDialogue.verify(
+          allDialogues[current.id], current.text);
+    }
     final hero = presentation['hero'];
     final heroName = hero is Map<String, dynamic> ? hero['name'] as String? : null;
     final heroDescription =
@@ -303,6 +316,7 @@ class DeviceWorldLibraryGateway implements WorldLibraryGateway {
       statNames: stats,
       factNames: facts,
       sceneNames: scenes,
+      sceneDialogueTurns: signedTurns,
     );
   }
 
