@@ -560,8 +560,11 @@ void main() {
     await tester.scrollUntilVisible(report, 125,
         scrollable: find.byType(Scrollable).first);
     expect(report, findsOneWidget);
-    expect(find.textContaining(
-        'не доказывает принадлежность реплики'), findsOneWidget);
+    final provenanceWarning = find.textContaining(
+        'не доказывает принадлежность реплики');
+    await tester.scrollUntilVisible(provenanceWarning, 125,
+        scrollable: find.byType(Scrollable).first);
+    expect(provenanceWarning, findsOneWidget);
     final lena = find.byKey(const Key('prose-scene-speaker-Лена'));
     await tester.scrollUntilVisible(lena, 120,
         scrollable: find.byType(Scrollable).first);
