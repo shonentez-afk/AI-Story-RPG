@@ -198,7 +198,7 @@ void main() {
     rejects((data) {
       final blueprint = _asObject(data['blueprint']);
       final first = (blueprint['scenes'] as List).first as Map;
-      first['text'] = 'Мария: «Я всё знаю».\\nИгрок: «Верно».';
+      first['text'] = 'Мария: «Я всё знаю».\nИгрок: «Верно».';
       // A named scene with NPC actors cannot fall back to raw text
       // by deleting both exact dialogue and knowledge projections.
     });
