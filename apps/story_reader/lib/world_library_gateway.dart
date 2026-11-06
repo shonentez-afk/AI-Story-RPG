@@ -191,13 +191,17 @@ class DeviceWorldLibraryGateway implements WorldLibraryGateway {
         savedAt: entry.savedAt,
       );
 
-  static Map<String, dynamic> _verifiedRichPresentation(
+  static ({
+    Map<String, dynamic> presentation,
+    NpcSocialRulebook? social,
+  }) _verifiedRichContent(
       BookworldCampaignStore store, String worldHash) {
     // The store first verifies exact saved ZIP/SQLite. Only the new v3
     // importer can return rich presentation; legacy v1/v2 stay untouched.
     final bytes = store.exportBookworld(worldHash);
     try {
-      return const RichPrivateBookworldImporter().inspect(bytes).presentation;
+      final rich = const RichPrivateBookworldImporter().inspect(bytes);
+      return (presentation: rich.presentation, social: rich.npcSocialRulebook);
     } on FormatException {
       // An invalid v3 NPC review must NEVER be downgraded to raw scene
       // text; that would bypass actor/fact gates and leak sealed dialogue.
@@ -205,20 +209,31 @@ class DeviceWorldLibraryGateway implements WorldLibraryGateway {
       // without a signed rich presentation.
       try {
         const PrivateBookworldImporter().inspect(bytes);
-        return const {};
+        return (presentation: const <String, dynamic>{}, social: null);
       } on FormatException {
         const BookworldImporter().inspect(bytes);
-        return const {};
+        return (presentation: const <String, dynamic>{}, social: null);
       }
     }
   }
 
   static WorldGameView _view(CampaignRecord record,
-      {Map<String, dynamic> presentation = const {}}) {
+      {Map<String, dynamic> presentation = const {},
+       NpcSocialRulebook? socialRules}) {
     final coordinator = record.coordinator;
     final blueprint = coordinator.blueprint;
     final state = coordinator.state;
     final current = blueprint.scenes[coordinator.sceneId]!;
+    // The SQLite store already checked all events. Independently recompute
+    // social memory from the exact replayed head, never from UI labels.
+    final social = socialRules == null ? null : NpcSocialLedger.inspect(
+      StoryWorld.replay(
+        blueprint, coordinator.events.map((event) => event.toJson()),
+        expectedSequence: state.revision,
+        expectedStateHash: state.stateHash,
+      ),
+      socialRules,
+    );
     Map<String, String> names(String field) {
       final value = presentation[field];
       return value is Map<String, dynamic>
@@ -250,7 +265,8 @@ class DeviceWorldLibraryGateway implements WorldLibraryGateway {
       // The importer already verified EVERY signed line and reviewed actor ID.
       // Only the replay-verified campaign state decides which words reach UI.
       signedTurns = RichNpcDialogueKnowledge.redact(
-          signedTurns, guards[current.id] as List, state.knowledge);
+          signedTurns, guards[current.id] as List, state.knowledge,
+          social: social);
     }
     final hero = presentation['hero'];
     final heroName = hero is Map<String, dynamic> ? hero['name'] as String? : null;
@@ -372,8 +388,10 @@ class DeviceWorldLibraryGateway implements WorldLibraryGateway {
   Future<WorldGameView> load(String campaignId) =>
       _execute((store) {
         final record = store.loadCampaign(campaignId);
-        return _view(record, presentation: _verifiedRichPresentation(
-          store, record.metadata.worldHash));
+        final rich = _verifiedRichContent(
+          store, record.metadata.worldHash);
+        return _view(record, presentation: rich.presentation,
+            socialRules: rich.social);
       });
 
   @override
@@ -390,8 +408,10 @@ class DeviceWorldLibraryGateway implements WorldLibraryGateway {
     );
     // A complete view is read only after the SQLite transaction returned.
     final record = store.loadCampaign(campaignId);
-    final view = _view(record, presentation: _verifiedRichPresentation(
-      store, record.metadata.worldHash));
+    final rich = _verifiedRichContent(
+      store, record.metadata.worldHash);
+    final view = _view(record, presentation: rich.presentation,
+        socialRules: rich.social);
     return WorldChoiceResult(
       applied: result.applied,
       duplicate: result.status.name == 'duplicate',
