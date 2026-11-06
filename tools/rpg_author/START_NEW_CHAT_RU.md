@@ -1,5 +1,16 @@
 # Продолжение внешнего генератора AI Story RPG — E6d
 
+## ОБЯЗАТЕЛЬНЫЙ НОВЫЙ ПЛАН: проверенные источники и единая архитектура (2026-11-07)
+
+**Начинать с:** [ENGINE_BEST_PRACTICES_INTEGRATION_PLAN_RU_2026-11-07.md](https://github.com/shonentez-afk/AI-Story-RPG/blob/feature/external-rpg-author-e6d-handoff-20261106/tools/rpg_author/ENGINE_BEST_PRACTICES_INTEGRATION_PLAN_RU_2026-11-07.md) — подробные технические решения по BookModel, StoryPlan, Storylets, обязательствам, NPC, памяти, отношениям, целям, диалогам, RPG, времени, AI, процедурной графике, редактору, QA, формату .bworld, CI и отдельному движку. Внутри **прямые проверенные ссылки на файлы сторонних GitHub-репозиториев**, с правильными ветками main/master/develop и сведениями о лицензиях.
+
+**Согласование:** [основная программа — roadmap](https://github.com/shonentez-afk/AI-Story-RPG/blob/main/docs/ROADMAP_AUTOMATIC_RPG_RU_V2_2026-11-05.md); [приёмка 1.0](https://github.com/shonentez-afk/AI-Story-RPG/blob/main/docs/PROJECT_COMPLETION_GATE_RU_2026-11-06.md); [генеральный план нашей внешней ветки](https://github.com/shonentez-afk/AI-Story-RPG/blob/feature/external-rpg-author-e6d-handoff-20261106/tools/rpg_author/AI_STORY_RPG_COMPLETE_GAME_UNIFIED_SPEC_RU.md). Новый документ **дополняет, а не заменяет** их; P1/P2 после доказанной полной игры. Не расширять P0 ради Storylets/GOAP/визуального редактора.
+
+**Срез основного main 2026-11-07:** [PR #130](https://github.com/shonentez-afk/AI-Story-RPG/pull/130) MERGED, основной SHA f4331851ef5752e0e2821f328d75703808579ef5. NpcSocialLedger пока read-only по подтверждённым событиям; реальный runtime effect/присутствие/допуск реплики остаются задачами. Exact-head CI #823 / M0 #908 SUCCESS; post-merge #824 ещё выполнялся, M0 #909 SUCCESS. ПЕРЕД любым следующим кодом обязательно получить актуальные SHA/CI/PR: этот пункт — исторический срез. Внешняя E6d по-прежнему только tools/rpg_author, пакеты/Flutter/main read-only; закреплённый pin не менять без parity gate.
+
+**Задача другого основного чата:** продолжить P0 NPC и завершить «полная книга → игра» с самостоятельным Dart engine и сохранениями. **Задача нашей ветки:** развивать внешний генератор по уже принятому API, не создавать конкурирующие schema/runtime. Новые идеи сторонних проектов — ориентиры, не инструкция копировать чужой код.
+
+
 Обновлено: **6 ноября 2026 года**.
 Репозиторий: https://github.com/shonentez-afk/AI-Story-RPG
 Рабочая ветка: `feature/external-rpg-author-e6d-handoff-20261106`.
