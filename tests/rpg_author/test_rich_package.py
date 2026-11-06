@@ -72,6 +72,74 @@ class RichPrivateTests(unittest.TestCase):
         with self.assertRaises(bookworld.BookworldError):
             bookworld.verify(raw)
 
+    def test_reviewed_private_game_effect_is_bound_to_exact_source_scene(self):
+        # Source-grounded is a byte-integrity condition; literary acquisition
+        # is only explicitly USER-DECLARED private game fiction, not CANON.
+        plain = deepcopy(self.overlay)
+        plain["items"] = {}
+        plain["stats"] = {}
+        plain["facts"] = {}
+        plain["choices"] = {}
+        base, _ = compile_rich_from_project(self.project_dir, plain)
+        with zipfile.ZipFile(io.BytesIO(base)) as archive:
+            bp = json.loads(archive.read("scenario/blueprint.json"))
+            prov = json.loads(archive.read("source/provenance.json"))
+        idx = project.load_project(self.project_dir)[2]
+        for origin in prov["scene_origins"]:
+            candidates = [s for s in bp["scenes"]
+                          if s["id"] == origin["scene_id"] and s["choices"]]
+            if origin["origin"] == "SOURCE_PASSAGE" and \
+                    origin["source_refs"] and candidates:
+                scene = candidates[0]
+                break
+        else:
+            self.fail("Synthetic project lacks a source-backed gameplay choice")
+        action = scene["choices"][0]
+        action["effects"].append({"op": "grant_item", "id": "source_token"})
+        bp["items"] = ["source_token"]
+        prov["presentation"]["item_names"] = {"source_token": "Знак пути"}
+        prov["presentation"]["item_descriptions"] = {
+            "source_token": "Частная игровая выдумка, не литературный факт."}
+        review = {
+            "format": "ai_story_private_gameplay_review_m2h8e1_v1",
+            "review_scope": "user_declared_private_game_fiction",
+            "source_fingerprint": idx["source_fingerprint"],
+            "base_archive_sha256": digest(base),
+            "source_payload_digest": "e" * 64,
+            "user_confirmed": True,
+            "literary_canon_verified": False,
+            "effects": [{
+                "scene_id": scene["id"],
+                "choice_id": action["id"],
+                "op": "grant_item", "kind": "item",
+                "id": "source_token", "label": "Знак пути",
+                "source_quote_sha256":
+                    origin["source_refs"][0]["quote_sha256"],
+                "review_note":
+                    "Читатель разрешил вымышленный предмет только для игры.",
+            }],
+        }
+        prov["gameplay_review"] = review
+        compiled = private_rich_bookworld.build(bp, prov, idx)
+        self.assertEqual(private_rich_bookworld.verify(compiled)["format_version"], 3)
+        with zipfile.ZipFile(io.BytesIO(compiled)) as archive:
+            saved = json.loads(archive.read("source/provenance.json"))
+        self.assertEqual(saved["gameplay_review"], review)
+
+        forged = deepcopy(prov)
+        forged["gameplay_review"]["effects"][0]["source_quote_sha256"] = "f" * 64
+        with self.assertRaises(bookworld.BookworldError):
+            private_rich_bookworld.build(bp, forged, idx)
+        false_canon = deepcopy(prov)
+        false_canon["gameplay_review"]["literary_canon_verified"] = True
+        with self.assertRaises(bookworld.BookworldError):
+            private_rich_bookworld.build(bp, false_canon, idx)
+        phantom = deepcopy(bp)
+        phantom["scenes"][0]["choices"][0]["effects"].append(
+            {"op": "grant_item", "id": "source_token"})
+        with self.assertRaises(bookworld.BookworldError):
+            private_rich_bookworld.build(phantom, prov, idx)
+
     def test_unattested_local_authoring_is_honest_and_rejects_false_claims(self):
         # A reviewed v2 plan may include model-assisted story proposals.
         # Its source archive cannot establish which provider authored prose.
