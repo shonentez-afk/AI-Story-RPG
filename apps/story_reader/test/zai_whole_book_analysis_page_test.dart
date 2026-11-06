@@ -297,8 +297,13 @@ void main() {
     expect(find.byKey(const Key('story-trial-review')), findsOneWidget);
     expect(find.byKey(const Key('story-trial-private-fiction')),
         findsOneWidget);
-    expect(tester.widget<FilledButton>(
-        find.byKey(const Key('story-trial-start'))).onPressed, isNull);
+    // The new optional item-review control pushes Start below the small
+    // viewport. Scroll to build it before reading the disabled state.
+    final start = find.byKey(const Key('story-trial-start'));
+    await tester.scrollUntilVisible(start, 120,
+        scrollable: find.byType(Scrollable).last);
+    await tester.pumpAndSettle();
+    expect(tester.widget<FilledButton>(start).onPressed, isNull);
     expect(fake.requests, 1);
     expect(tester.takeException(), isNull);
   });
