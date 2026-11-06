@@ -5,6 +5,7 @@ import 'package:crypto/crypto.dart';
 import 'blueprint.dart';
 import 'codec.dart';
 import 'world_state.dart';
+import 'npc_social_ledger.dart';
 
 enum DecisionStatus { applied, denied, duplicate }
 
@@ -157,9 +158,14 @@ class WorldEvent {
 /// No Flutter, network, LLM, Python or arbitrary user-supplied executable code.
 /// Navigation presentation remains the responsibility of story_engine.
 class StoryWorld {
-  StoryWorld(this.blueprint) : _state = blueprint.initial;
+  StoryWorld(this.blueprint, {this.socialRulebook})
+      : _state = blueprint.initial {
+    socialRulebook?.validate(blueprint);
+  }
 
   final StoryBlueprint blueprint;
+  /// Optional signed social decision contract, never inferred from scene text.
+  final NpcSocialRulebook? socialRulebook;
   WorldState _state;
   final List<WorldEvent> _events = [];
   final Map<String, WorldEvent> _byAction = {};
@@ -236,7 +242,7 @@ class StoryWorld {
   /// An isolated tentative world for coordinating with the scenario runtime.
   /// No I/O occurs here; a rejected proposal never mutates the live world.
   StoryWorld fork() {
-    final draft = StoryWorld(blueprint);
+    final draft = StoryWorld(blueprint, socialRulebook: socialRulebook);
     draft._state = _state;
     draft._events.addAll(_events);
     draft._byAction.addAll(_byAction);
@@ -259,6 +265,23 @@ class StoryWorld {
     for (final condition in selected.conditions) {
       if (!_matches(condition)) {
         return 'condition_not_met:${condition.op}';
+      }
+    }
+    if (socialRulebook != null && socialRulebook!.choiceGates.isNotEmpty) {
+      for (final gate in socialRulebook!.choiceGates) {
+        if (gate.sceneId != _state.sceneId || gate.choiceId != choiceId) {
+          continue;
+        }
+        final social = NpcSocialLedger.inspect(this, socialRulebook!);
+        if (gate.requiredMemoryId != null &&
+            !social.hasMemory(gate.actorId, gate.requiredMemoryId!)) {
+          return 'condition_not_met:npc_memory';
+        }
+        if (gate.minimumTrustToPlayer != null &&
+            social.directedScore(gate.actorId, 'player') <
+                gate.minimumTrustToPlayer!) {
+          return 'condition_not_met:npc_trust';
+        }
       }
     }
     return null;
@@ -382,8 +405,9 @@ class StoryWorld {
     StoryBlueprint blueprint, Iterable<Object?> recordedEvents, {
     int? expectedSequence,
     String? expectedStateHash,
+    NpcSocialRulebook? socialRulebook,
   }) {
-    final world = StoryWorld(blueprint);
+    final world = StoryWorld(blueprint, socialRulebook: socialRulebook);
     for (final raw in recordedEvents) {
       final expected = WorldEvent.fromJson(raw);
       final result = world.apply(
