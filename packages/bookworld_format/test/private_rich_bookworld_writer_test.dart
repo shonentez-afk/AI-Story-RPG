@@ -99,21 +99,57 @@ void main() {
 
   test('explicit private NPC v3 roundtrip uses source-reviewed fact grants', () {
     final data = _npcRichSample();
+    final rawBlueprint = _asObject(data['blueprint']);
+    final first = (rawBlueprint['scenes'] as List).first as Map<String, dynamic>;
+    first['text'] = 'Встреча у ворот.\\n'
+        'Мария: «Мне известен секрет!»\\n'
+        'Игрок: «Я слушаю».';
+    final provenance = _asObject(data['provenance']);
+    final presentation = _asObject(provenance['presentation']);
+    presentation['scene_dialogues'] = {
+      'entry': RichSceneDialogue.presentationFor(first['text'] as String),
+    };
+    final npcId = 'npc_' + List.filled(32, 'c').join();
+    presentation['scene_dialogue_knowledge'] = {
+      'entry': [
+        {
+          'turn_index': 1, 'speaker': 'Мария', 'actor_id': npcId,
+          'required_fact_ids': ['npc_secret'],
+        },
+        {
+          'turn_index': 2, 'speaker': 'Игрок', 'actor_id': 'player',
+          'required_fact_ids': <String>[],
+        },
+      ],
+    };
+    provenance['presentation'] = presentation;
     final archive = writer.build(
       blueprint: _asObject(data['blueprint']),
       provenance: _asObject(data['provenance']),
       sourceIndex: _asObject(data['source_index']),
     );
     final inspected = importer.inspect(archive);
-    final npcId = 'npc_' + List.filled(32, 'c').join();
     expect(inspected.blueprint.actors, contains(npcId));
     final world = StoryWorld(inspected.blueprint);
+    final signed = RichSceneDialogue.verify(
+      (inspected.presentation['scene_dialogues'] as Map)['entry'],
+      inspected.blueprint.scenes['entry']!.text,
+    );
+    final reviewed = (inspected.presentation['scene_dialogue_knowledge']
+        as Map)['entry'] as List;
+    final blockedWords = RichNpcDialogueKnowledge.redact(
+        signed, reviewed, world.state.knowledge);
+    expect(blockedWords[1].text, RichNpcDialogueKnowledge.unavailableLine);
+    expect(blockedWords[2].text, 'Я слушаю');
     final denied = world.apply(actionId: 'too_soon', choiceId: 'help');
     expect(denied.applied, isFalse);
     expect(denied.reason, 'condition_not_met:knows_fact');
     expect(world.actorKnowsFact(npcId, 'npc_secret'), isFalse);
     expect(world.apply(actionId: 'talk', choiceId: 'wait').applied, isTrue);
     expect(world.actorKnowsFact(npcId, 'npc_secret'), isTrue);
+    expect(RichNpcDialogueKnowledge.redact(
+        signed, reviewed, world.state.knowledge)[1].text,
+        'Мне известен секрет!');
     expect(world.actorKnowsFact('player', 'npc_secret'), isFalse);
     expect(world.factLearningEvents(npcId, 'npc_secret').single.actionId,
         'talk');
