@@ -6,7 +6,7 @@ import 'book_isolate_workers.dart';
 import 'book_storage.dart';
 import 'book_reader.dart';
 import 'source_index_preview_page.dart';
-import 'quick_rpg_page.dart';
+import 'book_rpg_start_page.dart';
 import 'world_library_gateway.dart';
 import 'world_campaigns_page.dart';
 import 'world_play_page.dart';
@@ -528,8 +528,10 @@ class _LibraryPageState extends State<LibraryPage> {
   }
 
   void _quickRpg(StoredBook entry) {
+    // One visible entry for both supported preparation paths. Choosing AI
+    // does not send the user's book without a later, exact consent.
     unawaited(_openBookRoute(
-      QuickRpgFromBookPage(
+      BookRpgStartPage(
         book: entry.book,
         gateway: widget.worldGateway ??
             const DeviceWorldLibraryGateway(),
