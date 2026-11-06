@@ -49,9 +49,123 @@ Map<String, dynamic> _richSample() {
   return input;
 }
 
+Map<String, dynamic> _npcRichSample() {
+  final data = _richSample();
+  final blueprint = _asObject(data['blueprint']);
+  final provenance = _asObject(data['provenance']);
+  final npcId = 'npc_' + List.filled(32, 'c').join();
+  const factId = 'npc_secret';
+  (blueprint['actors'] as List).add(npcId);
+  (blueprint['facts'] as List).add(factId);
+  final initial = _asObject(blueprint['initial_state']);
+  (initial['knowledge'] as Map<String, dynamic>)[npcId] = <String>[];
+  final entry = (blueprint['scenes'] as List).first as Map<String, dynamic>;
+  final wait = (entry['choices'] as List)[0] as Map<String, dynamic>;
+  final help = (entry['choices'] as List)[1] as Map<String, dynamic>;
+  (wait['effects'] as List).add({
+    'op': 'learn_fact', 'id': factId, 'actor': npcId,
+  });
+  (help['conditions'] as List).add({
+    'op': 'knows_fact', 'id': factId, 'actor': npcId,
+  });
+  final origin = (provenance['scene_origins'] as List).first as Map;
+  final source = (origin['source_refs'] as List).first as Map;
+  final presentation = _asObject(provenance['presentation']);
+  presentation['fact_names'] = {factId: 'Секрет, переданный NPC'};
+  provenance['presentation'] = presentation;
+  provenance['npc_knowledge'] = {
+    'format': RichPrivateBookworldImporter.npcKnowledgeFormat,
+    'review_scope': 'user_declared_private_game_fiction',
+    'source_fingerprint': blueprint['source_fingerprint'],
+    'user_confirmed': true,
+    'literary_canon_verified': false,
+    'grants': [
+      {
+        'scene_id': 'entry', 'choice_id': 'wait',
+        'actor_id': npcId, 'fact_id': factId,
+        'source_quote_sha256': source['quote_sha256'],
+      },
+    ],
+  };
+  blueprint['initial_state'] = initial;
+  data['blueprint'] = blueprint;
+  data['provenance'] = provenance;
+  return data;
+}
+
 void main() {
   const writer = RichPrivateBookworldWriter();
   const importer = RichPrivateBookworldImporter();
+
+  test('explicit private NPC v3 roundtrip uses source-reviewed fact grants', () {
+    final data = _npcRichSample();
+    final archive = writer.build(
+      blueprint: _asObject(data['blueprint']),
+      provenance: _asObject(data['provenance']),
+      sourceIndex: _asObject(data['source_index']),
+    );
+    final inspected = importer.inspect(archive);
+    final npcId = 'npc_' + List.filled(32, 'c').join();
+    expect(inspected.blueprint.actors, contains(npcId));
+    final world = StoryWorld(inspected.blueprint);
+    final denied = world.apply(actionId: 'too_soon', choiceId: 'help');
+    expect(denied.applied, isFalse);
+    expect(denied.reason, 'condition_not_met:knows_fact');
+    expect(world.actorKnowsFact(npcId, 'npc_secret'), isFalse);
+    expect(world.apply(actionId: 'talk', choiceId: 'wait').applied, isTrue);
+    expect(world.actorKnowsFact(npcId, 'npc_secret'), isTrue);
+    expect(world.actorKnowsFact('player', 'npc_secret'), isFalse);
+    expect(world.factLearningEvents(npcId, 'npc_secret').single.actionId,
+        'talk');
+    expect(world.apply(actionId: 'help_later', choiceId: 'help').applied, isTrue);
+    final restored = StoryWorld.replay(inspected.blueprint,
+        world.events.map((e) => e.toJson()),
+        expectedSequence: world.state.revision,
+        expectedStateHash: world.state.stateHash);
+    expect(restored.state.knowledge[npcId], {'npc_secret'});
+    expect(restored.state.stateHash, world.state.stateHash);
+
+    // CI verifies these exact Dart-produced bytes independently in Python.
+    final output = File(
+      '../../artifacts/bookworld/book_private_rich_npc_dart.bworld');
+    output.parent.createSync(recursive: true);
+    output.writeAsBytesSync(archive, flush: true);
+  });
+
+  test('versioned NPC grant review rejects tampered identity and quote', () {
+    void rejects(void Function(Map<String, dynamic>) mutate) {
+      final data = _npcRichSample();
+      mutate(data);
+      expect(() => writer.build(
+        blueprint: _asObject(data['blueprint']),
+        provenance: _asObject(data['provenance']),
+        sourceIndex: _asObject(data['source_index']),
+      ), throwsFormatException);
+    }
+    rejects((data) => _asObject(data['provenance'])
+        .remove('npc_knowledge'));
+    rejects((data) {
+      final provenance = _asObject(data['provenance']);
+      final review = _asObject(provenance['npc_knowledge']);
+      ((review['grants'] as List).first as Map)['source_quote_sha256'] =
+          List.filled(64, 'f').join();
+    });
+    rejects((data) {
+      final provenance = _asObject(data['provenance']);
+      final review = _asObject(provenance['npc_knowledge']);
+      ((review['grants'] as List).first as Map)['actor_id'] = 'player';
+    });
+    rejects((data) {
+      final blueprint = _asObject(data['blueprint']);
+      (blueprint['actors'] as List)[1] = 'npc_unstable_alias';
+    });
+    rejects((data) {
+      final blueprint = _asObject(data['blueprint']);
+      final initial = _asObject(blueprint['initial_state']);
+      final npcId = 'npc_' + List.filled(32, 'c').join();
+      (initial['knowledge'] as Map)[npcId] = ['npc_secret'];
+    });
+  });
 
   test('native rich v3 writes deterministic offline package with real hero and honest empty catalogs', () {
     final input = _richSample();
