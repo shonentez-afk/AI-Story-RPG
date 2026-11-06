@@ -1,49 +1,29 @@
 # AI Story RPG — CURRENT_STATUS_RU
 
-**Главный факт 2026-11-07:** [PR #131](https://github.com/shonentez-afk/AI-Story-RPG/pull/131) **MERGED**, main `9c9bdc142495e536b5d11ca5e61680948e45f8fe`. Exact-head CI #855 **SUCCESS** (Python, Dart, SQLite, Flutter, Win/Android), M0 #940 **SUCCESS**, External E6d #128 **SUCCESS**. Post-merge CI #856, M0 #941 и E6d #129 **SUCCESS**; [test-build-856](https://github.com/shonentez-afk/AI-Story-RPG/releases/tag/test-build-856) соответствует main `9c9bdc14`. Всё это технический NPC-пакет, а не готовая full-book 1.0. Никаких E5-архивов/миграций не требуется.
+**Проверено 2026-11-07.** `main` = `9c9bdc142495e536b5d11ca5e61680948e45f8fe`; PR #131 MERGED, post-merge AI CI #856 и M0 #941 SUCCESS, [test-build-856](https://github.com/shonentez-afk/AI-Story-RPG/releases/tag/test-build-856) (Windows portable, Android APK). **RPG 1.0 не завершена.**
 
-**Новый крупный этап в [feature/p0-npc-presence-social-gameplay-20261107](https://github.com/shonentez-afk/AI-Story-RPG/tree/feature/p0-npc-presence-social-gameplay-20261107):** source-locked NPC присутствие и свидетели реальных событий, promises/rumors/relations, ownership/actions и последствия через отделяемый движок, переносимый schema + UI + общие тесты. НЕ делать микропиар и не выдавать preview за авторитетное игровое состояние; не менять отдельный skill E6d без версионного согласования.
+## Единый текущий PR #132 — реализация, но НЕ merge
 
-## Текущая реализация: один PR #132 (DRAFT)
+[PR #132](https://github.com/shonentez-afk/AI-Story-RPG/pull/132), `feature/p0-npc-presence-social-gameplay-20261107`, DRAFT. Один связанный функциональный пакет, никакого PR на отдельное поле или служебный экран.
 
-### Дополнительная приёмка PR #132 — реальный SQLite и социальная память (2026-11-07)
+- Присутствие NPC (`present/reported`), verified source refs, `character_id`, память фактических событий и направленное доверие; слух не равен очевидцу. Не выдавать редакторские знания за автоматически доказанный канон.
+- **Геймплей:** `NpcSocialChoiceGate` в `story_core` не позволяет принять решение без требуемой подтверждённой памяти/доверия; проверка до `WorldEvent`. Запрещены самопорождающие условия, циклические prerequisites, future-chapter источники (Dart/Python).
+- **Предметы NPC:** `NpcItemTransfer` в независимом Dart-ядре, детерминированная проекция владельца по `grant_item/consume_item` и точным committed event SHA; запрет вернуть не принадлежащий NPC предмет, отдать чужой, создать копию у героя, когда предмет у NPC. Спекулятивная проверка проводится до публикации следующего state/журнала.
+- **Перенос:** private rich `.bworld` format_version=3 + опциональные source-reviewed `npc_social` версии v1/v2/v3; строгая Dart/Python parity, независимый CLI, `campaign_manager` SQLite и `.bwsave` replay. Никаких изменений старых миров.
+- **UI:** прежний NPC build dialog позволяет явно подтвердить событие, очевидца/слух, память/доверие для диалога и решений; `WorldLibraryGateway` получает точный сохранённый социальный контракт; вкладки «Предметы» и «Журнал» показывают доказанные передачи. Секретная реплика блокируется до UI.
+- **Тесты в ветке:** core отрицательные случаи и циклы, Python/Dart версионные ZIP tamper/replay, реальный SQLite close/reopen и альтернативные ветви, предмет у NPC до/после рестарта. **Итоговые Actions сверять по последнему точному SHA**; зелёные прошлые коммиты ≠ приёмка нынешнего HEAD.
 
-- `packages/campaign_manager/test/npc_social_sqlite_replay_test.dart`: один синтетический source-reviewed rich-v3 архив проходит `installBookworld`, 2 кампании, запрет преждевременного `help`, подтверждённый `wait`, memory/trust-gated NPC dialogue, реальный `BookworldCampaignStore.close()` → повторный `openPrivateDirectory()`, проверку точного `stateHash`, `snapshotHash`, переносимого `.bwsave`, повторное действие без «фарма» и альтернативный `leave` без памяти. Пользовательская FB2 и реальная GLM **не** тестировались.
-- Exact-head commit этого теста: `88eba53a7c1be68f8173a1ac99e326f2736d2be1`; M0 **#959 SUCCESS**, AI Story RPG CI **#874**: Dart engine/Python/M1.7 SQLite **SUCCESS**, Flutter/Win/Android на последнем просмотре продолжаются. Проверить окончательный статус текущего SHA, а не считать преждевременно зелёным.
-- External RPG author #147 **FAIL / contract_drift** только по трём изменённым rich-v3 source/format/writer файлам, то есть E6d pinned SHA нужно **отдельно пересогласовать** по PR #132, как делалось для #131; не отключать защиту и не изменять E6d skill без проверки.
-- `NpcSocialLedger` — event-sourced read-only; фактические NPC item ownership, status alive/present across scenes и authoritative gating игровых choices **НЕ закончены**, это оставшиеся части **этого же единого PR #132**.
+## Что не готово
 
+1. Встроенный `PrivateClassicScenarioTranslator` пока отдаёт `items: []`. Нужно связать реальные подтверждённые предметные эффекты сценария, владение/передачу NPC и согласие автора с существующим UX без нового движка/сложного редактора. Rich-v3 импорт уже способен исполнять и проверять item transfer, но стандартный book→game автор ещё не выпускает такие действия.
+2. Длительное присутствие, перемещение, отсутствие, гибель NPC и последствия для контактов/диалогов; причинность при другой ветви и таймлайне.
+3. Доказательство полной книги: multi-act GLM, цельный CANON/ALTER_FATE, выбор героя, мастер, 2 реальные русские FB2 с реальным GLM и устройствами Android/Windows; не обозначать mock как E2E.
+4. Общая приёмка PR #132: exact-head Dart/Python/SQLite/Flutter/Win/Android/M0, SHA, merge и post-merge. Документация не заменяет эти проверки.
 
+**E6d: отложено по решению пользователя до окончания основной программы.** Не тратить время, не менять pinned skill или другую ветку, не считать внешний contract_drift блокером текущей разработки основного приложения. Пересогласование — отдельным этапом позже.
 
-**Код игрового диалога:** signed реплика может требовать NPC-воспоминание/порог направленного доверия (новые опциональные поля reviewed turn). Python/Dart импортёры валидируют исходное правило, а `WorldLibraryGateway` после replay SQLite журналов скрывает реплику до подтверждённого события/отношений. Ручной выбор внутри существующего NPC build dialog, без новой страницы. Тесты и CI на актуальном HEAD обязательны; это **не** готовое gating самих choices или NPC ownership.
+## Независимость движка
 
-В `feature/p0-npc-presence-social-gameplay-20261107` реализуются **вместе**: `NpcSceneWitness` (личное наблюдение/слух), запрет памяти без присутствия и фарминга доверия, переносимый `npc_social` private-v3 со source refs и author consent, независимые валидаторы Dart/Python, двусторонние ZIP-сборки и ручная классификация в прежнем диалоге подготовки NPC. **Ещё не готово:** авторитетное social gating, NPC-предметы/состояние жизни, журнал/диалоговые последствия и общий exact-head CI. Внешний E6d pin для расширения #132 требует review. Спецификация `docs/P0_NPC_SOCIAL_PRESENCE_RU_2026-11-07.md`. Нет отдельного PR для карточки/поля.
+`packages/story_core` — единственный владелец правил и событий; `story_runtime_adapter` — клиентский контракт/навигация, `bookworld_format` — парсинг/подтверждение источника, `campaign_manager` — SQLite/save/replay, Flutter — оболочка. Не импортировать `apps/`, Flutter, SQLite или сетевой код в `story_core`; после полного игрового E2E готовить стабильный публичный SDK, не второй движок.
 
-## Что уже в main
-
-1. Читалка TXT/FB2/FB2.ZIP и библиотека; офлайн-игровой runtime и SQLite-кампании.
-2. `.bworld` v1/v2/v3, source-lock и Dart/Python валидация, реальные игровые выборы/вещи/факты/журнал.
-3. GLM 4.7 Flash с информированными согласиями, ограниченными пакетами, checkpoint/resume; существующие StoryPlan, литературные аудиты и частные игровые сборки.
-4. UI диалогов: последовательные подписанные реплики, история, локальные портреты, строго проверенный структурированный текст.
-5. NPC карточки с постоянным `character_id` (#126), проверка редакторских отношений по `target_character_id` и `speaker → character_id` только при однозначности (#127).
-6. Независимые Dart-пакеты `story_core`, `story_runtime_adapter`, `bookworld_format`, `campaign_manager`; отдельный CLI-проход без Flutter/ИИ и CI-проверки направления зависимостей (#127).
-
-## Принятый единый пакет #131 — уже в main
-
-Содержит **единый путь** из редакторских NPC-правил к source-locked rich-v3 через `NpcKnowledgeRichWorldBridge` и локальный `compileReviewedNpcRichPrivateBookworldInWorker`, явное согласие и цитаты по ID правила; независимый Dart/Python архив/SQLite/replay; обязательные списки требований к каждой именованной реплике, постоянные speaker character_id и сокрытие недоступного текста **до показа** через `WorldLibraryGateway`. Новых вспомогательных экранов и второго движка нет. Старые player-only v3 и v1/v2 не меняются.
-
-**Приёмка не завершена:** PR Draft, exact-head CI и External RPG author pin review E6d проверяются отдельно. Пользовательские книги и API-ключи не публиковать. Не разбивать этот комплекс на PR по полям.
-
-## До 1.0 НЕ доказано
-
-- Полные **event-scoped** NPC знания и изменения отношений по конкретным событиям, не только хранилище карточек/проверка ID.
-- Автоматическая связная адаптация **всей** книги, включая мотивы, принадлежность предметов, последовательность фактов и финалы.
-- Настоящий выбор героя и проверенные режимы CANON/ALTER_FATE.
-- Цельный простой мастер «книга → согласие → готовая RPG».
-- Реальные GLM E2E по **двум разным FB2**, физические Windows/Android испытания, офлайн восстановление игры.
-
-## Следующий шаг
-
-**Единый P0: event-scoped NPC knowledge/relationship effects**, затем полный book-to-RPG. Правила только в `story_core`, UI/авторский источник отдельно. Не вводить новый engine и не переносить текущие пакеты в отдельный репозиторий до стабилизации API; не трогать отдельную ветку E6d.
-
-Документы: [START_NEW_CHAT](../START_NEW_CHAT_RU.md), [архитектура](ENGINE_STANDALONE_OPEN_SOURCE_ARCHITECTURE_RU_2026-11-06.md), [приёмка](PROJECT_COMPLETION_GATE_RU_2026-11-06.md), [Issue #118](https://github.com/shonentez-afk/AI-Story-RPG/issues/118). Предыдущие исторические срезы — в git history.
+Ссылки: [START_NEW_CHAT](../START_NEW_CHAT_RU.md), [социальный NPC контракт](P0_NPC_SOCIAL_PRESENCE_RU_2026-11-07.md), [gate 1.0](PROJECT_COMPLETION_GATE_RU_2026-11-06.md), [Issue #118](https://github.com/shonentez-afk/AI-Story-RPG/issues/118), [PR #132](https://github.com/shonentez-afk/AI-Story-RPG/pull/132).
