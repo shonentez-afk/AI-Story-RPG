@@ -290,7 +290,8 @@ class ZaiSourceLockedGameplayCandidateService {
         'choice_id', 'source_event_id', 'uncertainty',
       };
       final proposals = <GameplayCandidate>[];
-      final usedIds = <String>{};
+      // One item may be acquired and later consumed in separate actions.
+      final knownEntities = <String, (String, String)>{};
       final seenOperations = <String>{};
       for (final rawCandidate in list) {
         final item = Map<String, dynamic>.from(rawCandidate as Map);
@@ -303,12 +304,19 @@ class ZaiSourceLockedGameplayCandidateService {
             !_safeText(item['uncertainty'], 10, 350) ||
             item['scene_id'] is! String ||
             item['choice_id'] is! String ||
-            item['source_event_id'] is! String ||
-            !usedIds.add(item['id'] as String)) {
+            item['source_event_id'] is! String) {
           throw const FormatException();
         }
         final kind = item['kind'] as String;
         final op = item['op'];
+        final entityId = item['id'] as String;
+        final label = item['label'] as String;
+        final known = knownEntities[entityId];
+        if (known != null &&
+            (known.$1 != kind || known.$2 != label)) {
+          throw const FormatException();
+        }
+        knownEntities[entityId] = (kind, label);
         if (!(kind == 'item' && (op == 'grant_item' || op == 'consume_item')) &&
             !(kind == 'fact' && op == 'learn_fact')) {
           throw const FormatException();
