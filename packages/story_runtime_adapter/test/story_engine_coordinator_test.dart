@@ -122,6 +122,38 @@ void main() {
         .single.hash, adapter.events.single.hash);
   });
 
+  test('standalone runtime mirrors witnessed memories after checkpoint', () {
+    final blueprint = fixture();
+    var adapter = StoryEngineCoordinator.start(blueprint);
+    final rules = NpcSocialRulebook(
+      blueprintHash: blueprint.blueprintHash,
+      rules: const [
+        NpcSocialRule(
+          memoryId: 'guard_promised',
+          sceneId: 'gate',
+          choiceId: 'inspect_gate',
+          observerId: 'guard',
+          kind: NpcMemoryKind.promiseReceived,
+          relatedActorId: 'player',
+          relationshipDelta: 5,
+        ),
+      ],
+    );
+    expect(adapter.inspectNpcSocial(rules).memoriesFor('guard'), isEmpty);
+    expect(take(adapter, 'guard_meeting', 'inspect_gate').applied, isTrue);
+    final observed = adapter.inspectNpcSocial(rules);
+    expect(observed.directedScore('guard', 'player'), 5);
+    expect(observed.hasMemory('guard', 'guard_promised'), isTrue);
+    expect(observed.memoriesFor('guard').single.event.hash,
+        adapter.events.single.hash);
+    adapter = StoryEngineCoordinator.restore(
+        blueprint, jsonDecode(jsonEncode(adapter.checkpoint())));
+    final restored = adapter.inspectNpcSocial(rules);
+    expect(restored.snapshotHash, observed.snapshotHash);
+    expect(restored.directedScore('player', 'guard'), 0);
+    expect(adapter.actorKnowsFact('guard', 'family_secret'), isFalse);
+  });
+
   test('blocked move leaves both engine scene and world hash unchanged', () {
     final coordinator = StoryEngineCoordinator.start(fixture());
     final before = coordinator.state.stateHash;
