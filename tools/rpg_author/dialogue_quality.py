@@ -114,32 +114,38 @@ def audit_blueprint(blueprint: dict, contract: dict, *, max_states: int = MAX_ST
             continue
         fact = topic["requires_fact"]
         if fact is not None:
-            for _, next_state in asked[q]:
-                if fact not in next_state[4]:
+            for before, _ in asked[q]:
+                if fact not in before[4]:
                     issue("UNAUTHORIZED_DISCLOSURE", q,
-                          "NPC answer is reachable before the specified fact is learned",
-                          path[next_state])
+                          "The specified fact must be known before asking the question",
+                          path[before] + (q,))
                     break
         if not topic["one_shot"]:
             continue
         source_states = {state for state, _ in asked[q]}
-        for _, after in asked[q]:
-            seen = {after}
+        for before, after in asked[q]:
+            # Reconstruct a continuation from this exact first question.
+            # A shortest path from the game entry may bypass that question.
+            parents = {after: None}
             queue = deque([after])
             duplicate_path = None
             while queue:
                 node = queue.popleft()
                 if node in source_states:
-                    duplicate_path = path[node]
+                    continuation = []
+                    while parents[node] is not None:
+                        node, choice_id = parents[node]
+                        continuation.append(choice_id)
+                    duplicate_path = tuple(reversed(continuation)) + (q,)
                     break
-                for _, nxt in edges.get(node, ()):
-                    if nxt not in seen:
-                        seen.add(nxt)
+                for choice_id, nxt in edges.get(node, ()):
+                    if nxt not in parents:
+                        parents[nxt] = (node, choice_id)
                         queue.append(nxt)
             if duplicate_path is not None:
                 issue("REPEATABLE_DIALOGUE_REWARD", q,
                       "The same one-shot question can be taken twice in one campaign",
-                      path[after] + duplicate_path)
+                      path[before] + (q,) + duplicate_path)
                 break
     issues.sort(key=lambda i: (i["code"], i["question_id"]))
     return {"format": FORMAT,
