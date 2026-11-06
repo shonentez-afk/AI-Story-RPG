@@ -250,11 +250,12 @@ class RichPrivateBookworldImporter {
         blueprint.facts.length > 64 ||
         blueprint.initial.stats.length > 8 ||
         blueprint.initial.flags.length > 32 ||
-        blueprint.actors.length != 1 ||
+        blueprint.actors.length > 16 ||
         !blueprint.actors.contains('player') ||
         blueprint.initial.inventory.isNotEmpty ||
-        blueprint.initial.knowledge.length != 1 ||
-        (blueprint.initial.knowledge['player'] ?? const <String>{}).isNotEmpty ||
+        blueprint.initial.knowledge.length != blueprint.actors.length ||
+        !blueprint.initial.knowledge.keys.toSet().containsAll(blueprint.actors) ||
+        blueprint.initial.knowledge.values.any((facts) => facts.isNotEmpty) ||
         blueprint.initial.stats.values.any((v) => v < 0 || v > 1000)) {
       throw const FormatException('Некорректные каталоги RPG v3');
     }
@@ -282,7 +283,7 @@ class RichPrivateBookworldImporter {
               }
             case 'knows_fact':
               if (!blueprint.facts.contains(condition.id) ||
-                  condition.actor != 'player') {
+                  !blueprint.actors.contains(condition.actor)) {
                 throw const FormatException('Чужое знание нельзя использовать');
               }
             default:
@@ -312,7 +313,7 @@ class RichPrivateBookworldImporter {
               }
             case 'learn_fact':
               if (!blueprint.facts.contains(effect.id) ||
-                  effect.actor != 'player') {
+                  !blueprint.actors.contains(effect.actor)) {
                 throw const FormatException('Непроверенное знание');
               }
               seenFactGrants.add(effect.id!);
@@ -327,23 +328,27 @@ class RichPrivateBookworldImporter {
       throw const FormatException('Каталог не связан с игровыми действиями');
     }
 
-    // Snapshot: scene, flags, inventory, hero stats and knowledge.
-    // Revision/time deliberately excluded: this format has no time gates.
+    // Every actor owns an independent knowledge set. The exact actor->fact
+    // mapping is part of reachability; chapters and dialogue cannot teach
+    // facts on behalf of a committed choice. No clock/revision in this DSL.
     final start = (
       blueprint.entrySceneId,
       blueprint.initial.flags.entries
           .where((e) => e.value).map((e) => e.key).toSet(),
       <String>{},
       Map<String, int>.of(blueprint.initial.stats),
-      <String>{},
+      {for (final actor in blueprint.actors) actor: <String>{}},
     );
     String keyOf((String, Set<String>, Set<String>, Map<String, int>,
-        Set<String>) s) => canonicalJson({
-      'scene': s.$1,
-      'flags': s.$2.toList()..sort(),
-      'inventory': s.$3.toList()..sort(),
-      'stats': s.$4,
-      'knowledge': s.$5.toList()..sort(),
+        Map<String, Set<String>>) state) => canonicalJson({
+      'scene': state.$1,
+      'flags': state.$2.toList()..sort(),
+      'inventory': state.$3.toList()..sort(),
+      'stats': state.$4,
+      'knowledge': {
+        for (final actor in blueprint.actors)
+          actor: state.$5[actor]!.toList()..sort(),
+      },
     });
 
     final seen = <String>{keyOf(start)};
@@ -375,7 +380,8 @@ class RichPrivateBookworldImporter {
             'has_item' => s.$3.contains(condition.id),
             'stat_at_least' =>
                 s.$4[condition.id!]! >= condition.amount!,
-            'knows_fact' => s.$5.contains(condition.id),
+            'knows_fact' =>
+                s.$5[condition.actor!]!.contains(condition.id),
             _ => false,
           };
           if (!meets) { allowed = false; break; }
@@ -385,7 +391,8 @@ class RichPrivateBookworldImporter {
         final flags = Set<String>.of(s.$2);
         final items = Set<String>.of(s.$3);
         final stats = Map<String, int>.of(s.$4);
-        final facts = Set<String>.of(s.$5);
+        final facts = s.$5.map((actor, known) =>
+            MapEntry(actor, Set<String>.of(known)));
         for (final effect in choice.effects) {
           switch (effect.op) {
             case 'set_flag':
@@ -408,7 +415,7 @@ class RichPrivateBookworldImporter {
               }
               stats[effect.id!] = updated;
             case 'learn_fact':
-              facts.add(effect.id!);
+              facts[effect.actor!]!.add(effect.id!);
             default:
               throw const FormatException('Непредусмотренный игровой эффект');
           }
@@ -549,8 +556,10 @@ class RichPrivateBookworldImporter {
     // New v3 games may carry a separately recorded USER-DECLARED game
     // adaptation. Old v3 games remain fully compatible and unchanged.
     final hasGameplayReview = source.containsKey('gameplay_review');
+    final hasNpcKnowledge = source.containsKey('npc_knowledge');
     final knownSource = Map<String, dynamic>.of(source)
-      ..remove('gameplay_review');
+      ..remove('gameplay_review')
+      ..remove('npc_knowledge');
     _fields(knownSource, {'format', 'bookworld_id', 'source_fingerprint',
                      'source_title', 'source_author',
                      'source_chapters_total', 'source_chapters_indexed',
@@ -571,6 +580,11 @@ class RichPrivateBookworldImporter {
     }
     _model(source, manifest);
     final presentation = _presentation(source, blueprint);
+    _npcKnowledge(source, manifest, blueprint);
+    if (hasNpcKnowledge && hasGameplayReview) {
+      throw const FormatException(
+          'NPC grants and separate gameplay review need unified review');
+    }
     if (hasGameplayReview) {
       final review = source['gameplay_review'];
       if (review is! Map<String, dynamic>) {
@@ -583,10 +597,12 @@ class RichPrivateBookworldImporter {
     final originV2 = Map<String, dynamic>.of(source);
     originV2.remove('presentation');
     originV2.remove('gameplay_review');
+    originV2.remove('npc_knowledge');
     originV2['format'] = 'ai_story_private_provenance_v1';
     originV2['model_provenance'] = {'provider': 'none', 'model_id': null};
     _provenance(originV2, blueprint);
     final manifestV2 = Map<String, dynamic>.of(manifest);
+    manifestV2.remove('npc_knowledge_format');
     manifestV2['format_version'] = 2;
     manifestV2['build_status'] = 'private_classic_structural';
     manifestV2['build_tool'] = {
