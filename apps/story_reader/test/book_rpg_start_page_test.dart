@@ -69,6 +69,9 @@ void main() {
     expect(indexingCalls, 0);
     expect(networkCalls, 0);
 
+    // The second card can be below the initial 600dp test viewport.
+    await tester.ensureVisible(find.byKey(const Key('rpg-start-ai')));
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('rpg-start-ai')));
     await tester.pumpAndSettle();
 
@@ -104,8 +107,15 @@ void main() {
         indexer: (_) async => throw const FormatException('index broken'),
       ),
     ));
+    // The second card can be below the initial 600dp test viewport.
+    await tester.ensureVisible(find.byKey(const Key('rpg-start-ai')));
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('rpg-start-ai')));
     await tester.pumpAndSettle();
+    // Error follows the two mode cards and must remain scroll-reachable.
+    await tester.scrollUntilVisible(
+        find.byKey(const Key('rpg-start-error')), 150,
+        scrollable: find.byType(Scrollable).first);
     expect(find.byKey(const Key('rpg-start-error')), findsOneWidget);
     expect(find.byKey(const Key('rpg-start-ai')), findsOneWidget);
   });
@@ -125,10 +135,14 @@ void main() {
         ),
       ),
     ));
-    expect(find.byKey(const Key('rpg-start-offline')), findsOneWidget);
+    final scroll = find.byType(Scrollable).first;
+    // ListView is lazy: at 320dp and 200% text even the first button
+    // can start below the viewport and is not yet built.
+    final offline = find.byKey(const Key('rpg-start-offline'));
+    await tester.scrollUntilVisible(offline, 120, scrollable: scroll);
+    expect(offline, findsOneWidget);
     final ai = find.byKey(const Key('rpg-start-ai'));
-    await tester.scrollUntilVisible(ai, 160,
-        scrollable: find.byType(Scrollable).first);
+    await tester.scrollUntilVisible(ai, 120, scrollable: scroll);
     expect(ai, findsOneWidget);
     expect(tester.takeException(), isNull);
   });
