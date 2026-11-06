@@ -218,6 +218,26 @@ class RichNpcSocialTests(unittest.TestCase):
                 with self.assertRaises(legacy.BookworldError):
                     rich.build(bp, prov, index)
 
+    def test_approved_references_still_cannot_form_a_memory_cycle(self):
+        bp, prov, index = social_sample()
+        social = prov["npc_social"]
+        quote = prov["scene_origins"][0]["source_refs"][0]["quote_sha256"]
+        social["rules"].append({
+            "memory_id": "learned_after_help", "scene_id": "entry",
+            "choice_id": "help", "observer_id": NPC,
+            "kind": "witnessed", "related_actor_id": None,
+            "relationship_delta": 0, "max_triggers": 1,
+            "source_quote_sha256": quote,
+        })
+        social["choice_gates"].append({
+            "scene_id": "entry", "choice_id": "wait", "actor_id": NPC,
+            "required_memory_id": "learned_after_help",
+            "minimum_trust_to_player": None,
+            "source_quote_sha256": quote,
+        })
+        with self.assertRaises(legacy.BookworldError):
+            rich.build(bp, prov, index)
+
     def test_owned_npc_item_transfers_are_portable_and_source_locked(self):
         bp, prov, index = item_social_sample()
         archive = rich.build(bp, prov, index)
