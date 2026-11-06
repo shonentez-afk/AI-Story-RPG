@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:ai_story_reader/book_import.dart';
 import 'package:ai_story_reader/book_source_index.dart';
 import 'package:ai_story_reader/npc_editorial_notebook.dart';
+import 'package:ai_story_reader/npc_character_card.dart';
 import 'package:ai_story_reader/source_analysis_checkpoint_repository.dart';
 import 'package:ai_story_reader/source_character_dossiers.dart';
 import 'package:ai_story_reader/source_evidence_graph.dart';
@@ -64,6 +65,69 @@ void main() {
     book.validate(index, dossiers, graph, catalog, editorial);
     return book;
   }
+
+  test('new NPC stores one permanent character ID through rename, notes, '
+      'restart and source-only facts', () {
+    final first = NpcEditorialNotebook.freshProfile(artem);
+    final other = NpcEditorialNotebook.freshProfile(maria);
+    expect(first.characterId, isNotNull);
+    expect(first.characterId, isNot(other.characterId));
+    expect(first.hasPermanentIdentity, true);
+    expect(first.card!.literaryCanonVerified, false);
+
+    var notebook = NpcEditorialNotebook.empty(index)
+        .putProfile(first).putProfile(other);
+    checked(notebook);
+    final previousId = first.characterId!;
+    // The existing editor sometimes reconstructs a profile from notes.
+    // Even if that old call-site omits the card, putProfile retains the ID.
+    notebook = notebook.putProfile(NpcDraftProfile(
+      dossierId: first.dossierId, mentionIds: first.mentionIds,
+      displayName: 'Волк, личная адаптация',
+      notes: const [
+        NpcDraftNote(
+          id: 'npc_note_1', field: NpcDraftField.knowledge,
+          text: 'Нельзя считать известным до выбранного события.',
+        ),
+      ],
+    ));
+    expect(notebook.profiles.first.characterId, previousId);
+    final changed = notebook.profiles.first;
+    notebook = notebook.putProfile(changed.copyWith(
+        displayName: 'Страж ворот',
+        card: changed.card!.copyWith(
+          aliases: ['Волк'],
+          appearance: 'Седой плащ',
+          personality: 'Осторожный',
+          speechStyle: 'Медленно и коротко',
+          goals: 'Охранять проход',
+          portraitAssetId: 'wolf_local',
+        )));
+    checked(notebook);
+    final raw = notebook.encode();
+    final restored = NpcEditorialNotebook.decode(
+        index, dossiers, graph, catalog, editorial, raw);
+    expect(restored.encode(), raw);
+    expect(restored.profiles.first.characterId, previousId);
+    expect(restored.profiles.first.displayName, 'Страж ворот');
+    expect(restored.profiles.first.card!.aliases, ['Волк']);
+    expect(restored.profiles.first.card!.portraitAssetId, 'wolf_local');
+    expect(restored.profiles.first.notes.single.field,
+        NpcDraftField.knowledge);
+
+    // Reissuing an ID is NOT a rename. Duplicate or swapped IDs fail.
+    final swapped = NpcCharacterCard.fresh();
+    expect(() => restored.putProfile(restored.profiles.first.copyWith(
+      card: swapped,
+    )), throwsFormatException);
+    final sameId = NpcCharacterCard(
+        characterId: restored.profiles.first.characterId!);
+    final duplicate = NpcEditorialNotebook.empty(index)
+        .putProfile(restored.profiles.first)
+        .putProfile(other.copyWith(card: sameId));
+    expect(() => checked(duplicate), throwsFormatException);
+    expect(restored.canPublishBookworld, false);
+  });
 
   test('explicit role, motivation, secret and linked knowledge roundtrip',
       () {
