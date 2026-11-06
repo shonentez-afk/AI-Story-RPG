@@ -918,8 +918,12 @@ void main() {
     final checkpoint = await memory.read(index.sourceFingerprint);
     expect(checkpoint, isNotNull);
     expect(checkpoint, isNot(contains(index.chunks.first.text)));
-    expect(find.byKey(const Key('whole-gameplay-batch-finished')),
-        findsOneWidget);
+    final finished = find.byKey(
+        const Key('whole-gameplay-batch-finished'));
+    await tester.scrollUntilVisible(finished, 120,
+        scrollable: find.byType(Scrollable).first);
+    await tester.pumpAndSettle();
+    expect(finished, findsOneWidget);
   });
 
 }
