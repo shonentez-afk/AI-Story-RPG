@@ -6,6 +6,10 @@ import 'package:story_engine/story_engine.dart';
 abstract class StoryRuntimeAdapter {
   WorldState get state;
   List<WorldEvent> get events;
+  /// Current committed knowledge; source text alone never grants a fact.
+  bool actorKnowsFact(String actorId, String factId);
+  /// Immutable committed events which granted the fact to this actor.
+  List<WorldEvent> factLearningEvents(String actorId, String factId);
   bool get isTerminal;
   String get sceneId;
   /// The exact current scene's verified narrative text, without UI rendering.
@@ -76,6 +80,14 @@ class StoryEngineCoordinator implements StoryRuntimeAdapter {
 
   @override
   bool get isTerminal => _world.isTerminal;
+
+  @override
+  bool actorKnowsFact(String actorId, String factId) =>
+      _world.actorKnowsFact(actorId, factId);
+
+  @override
+  List<WorldEvent> factLearningEvents(String actorId, String factId) =>
+      _world.factLearningEvents(actorId, factId);
 
   @override
   String get sceneId => state.sceneId;
