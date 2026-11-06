@@ -151,6 +151,18 @@ void main() {
     final choice = find.byKey(const ValueKey('world-choice-ask_guard'));
     await tester.scrollUntilVisible(choice, 100,
         scrollable: find.byType(Scrollable).first);
+    // A taller portrait card can leave the choice center under the
+    // floating reading-mode button even though it is technically visible.
+    // Scroll it fully clear of the bottom chrome before an actual tap.
+    final scroll = find.byKey(const ValueKey('world-scene-scroll'));
+    final viewport = tester.getRect(scroll);
+    final buttonCenter = tester.getCenter(choice);
+    if (buttonCenter.dy > viewport.bottom - 115) {
+      await tester.drag(
+        scroll, Offset(0, viewport.bottom - 180 - buttonCenter.dy),
+      );
+      await tester.pumpAndSettle();
+    }
     await tester.tap(choice);
     await tester.pumpAndSettle();
     expect(gateway.commits, 1);
