@@ -220,6 +220,10 @@ class LiteraryReviewWindow {
       Map<String, dynamic>.from(value as Map),
   ];
   String get payloadJson => _encoded;
+  String get exactUserMessage => jsonEncode({
+    'window_digest': approvalDigest,
+    'source_locked_context': sentContext,
+  });
   bool get establishesCanon => false;
 }
 
@@ -473,10 +477,7 @@ class ZaiWholeStoryLiteraryCritic {
     if (key == null || key.trim().isEmpty) {
       throw const AiSetupException('Отсутствует ключ Z.ai.');
     }
-    final user = jsonEncode({
-      'window_digest': window.approvalDigest,
-      'source_locked_context': window.sentContext,
-    });
+    final user = window.exactUserMessage;
     final request = jsonEncode({
       'model': ZaiModel.id,
       'messages': [
