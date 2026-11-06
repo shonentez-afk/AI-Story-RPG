@@ -175,13 +175,13 @@ class _MultiActTrialPageState extends State<MultiActTrialPage> {
         } else {
           final selection = _gameplaySelection!;
           preview = ReviewedGameplayCompiler.preview(
-          currentRichBookworld: compiled.archive,
-          index: widget.index,
-          book: widget.book,
-          plan: widget.draft.plan,
-          context: selection.context,
-          proposals: selection.draft,
-          selectedUserReviewNotes: selection.selectedUserReviewNotes,
+            currentRichBookworld: compiled.archive,
+            index: widget.index,
+            book: widget.book,
+            plan: widget.draft.plan,
+            context: selection.context,
+            proposals: selection.draft,
+            selectedUserReviewNotes: selection.selectedUserReviewNotes,
           );
         }
         if (!mounted) return;
@@ -442,7 +442,7 @@ class _MultiActTrialPageState extends State<MultiActTrialPage> {
             const Text('Пакеты используют все привязанные к игровым '
                 'решениям цитаты, сохраняя прогресс на устройстве. '
                 'Модельные предложения не добавляются в игру без '
-                'отдельного выбора и второго подтверждения.'), 
+                'отдельного выбора и второго подтверждения.'),
             if (_wholeGameplaySelection != null)
               ListTile(
                 title: Text('Выбрано из всех пакетов: ' +
