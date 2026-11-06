@@ -1218,4 +1218,93 @@ void main() {
     ), throwsFormatException);
   });
 
+
+  testWidgets('completed whole-book GLM drafts can be selected and '
+      'returned with human notes without a second paid request',
+      (tester) async {
+    final index = _index();
+    final book = await _analyze(index);
+    final plan = _draft(index, book).draft.plan;
+    final manifest = WholePlanGameplayBatchManifest.fromPlan(
+      index: index, book: book, plan: plan,
+      maxNewRequestsPerRun: 2,
+    );
+    final memory = MemorySourceAnalysisCheckpointRepository();
+    var calls = 0;
+    final service = WholePlanGameplayBatchService(
+      repository: memory,
+      previewOverride: (ctx, cancellation) async {
+        calls++;
+        final choice = ctx.choices.first;
+        return GameplayCandidateDraft(
+          sourceFingerprint: ctx.sourceFingerprint,
+          approvalDigest: ctx.approvalDigest,
+          candidates: [
+            GameplayCandidate(
+              kind: 'fact', id: 'remembered_offer',
+              label: 'знает о предложении',
+              op: 'learn_fact', sceneId: choice.sceneId,
+              choiceId: choice.choiceId,
+              sourceEventId: choice.sourceEventId,
+              uncertainty: 'Знание является только игровой гипотезой.',
+            ),
+          ],
+        );
+      },
+    );
+    final first = await service.generate(
+      manifest: manifest,
+      approvedManifestDigest: manifest.approvalDigest,
+      explicitBatchConsent: true,
+    );
+    expect(first.allProposalsCollected, true);
+    expect(calls, manifest.totalBatches);
+
+    SelectedWholePlanGameplayCandidates? returned;
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: Builder(builder: (context) => ElevatedButton(
+          onPressed: () async {
+            returned = await Navigator.of(context)
+                .push<SelectedWholePlanGameplayCandidates>(
+              MaterialPageRoute(builder: (_) => WholePlanGameplayBatchPage(
+                index: index, book: book, plan: plan, service: service,
+              )),
+            );
+          },
+          child: const Text('Открыть пакетный редактор'),
+        )),
+      ),
+    ));
+    await tester.tap(find.text('Открыть пакетный редактор'));
+    await tester.pumpAndSettle();
+    expect(calls, manifest.totalBatches);
+    final scroll = find.byType(Scrollable).first;
+    final item = find.byKey(const Key('whole-gameplay-select-0'));
+    await tester.scrollUntilVisible(item, 160, scrollable: scroll);
+    await tester.tap(item);
+    await tester.pumpAndSettle();
+    final note = find.byKey(const Key('whole-gameplay-note-0'));
+    await tester.scrollUntilVisible(note, 120, scrollable: scroll);
+    await tester.enterText(note,
+        'Читатель разрешает игровое знание, но не подтверждает канон.');
+    await tester.pumpAndSettle();
+    final confirmation = find.byKey(
+        const Key('whole-gameplay-private-fiction'));
+    await tester.scrollUntilVisible(confirmation, 120, scrollable: scroll);
+    await tester.tap(confirmation);
+    await tester.pumpAndSettle();
+    final button = find.byKey(
+        const Key('whole-gameplay-return-selection'));
+    await tester.scrollUntilVisible(button, 120, scrollable: scroll);
+    await tester.tap(button);
+    await tester.pumpAndSettle();
+    expect(returned, isNotNull);
+    expect(returned!.drafts, hasLength(manifest.totalBatches));
+    expect(returned!.selectedUserReviewNotes, hasLength(1));
+    expect(returned!.manifest.approvalDigest, manifest.approvalDigest);
+    expect(calls, manifest.totalBatches);
+    expect(find.text('Открыть пакетный редактор'), findsOneWidget);
+  });
+
 }
