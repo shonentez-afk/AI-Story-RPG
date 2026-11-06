@@ -1,0 +1,104 @@
+"""Exact NPC scene presence + committed social actions in private rich-v3.
+
+This synthetic test does NOT assert literary truth or actual GLM authoring.
+"""
+from copy import deepcopy
+import unittest
+
+from tools.bookworld import bookworld as legacy
+from tools.bookworld import private_rich_bookworld as rich
+from tools.bookworld.tests.test_rich_npc_knowledge import NPC, reviewed_sample
+
+
+def social_sample():
+    bp, prov, index = reviewed_sample()
+    quote = prov["scene_origins"][0]["source_refs"][0]["quote_sha256"]
+    prov["npc_social"] = {
+        "format": rich.NPC_SOCIAL_FORMAT,
+        "review_scope": "user_declared_private_game_fiction",
+        "source_fingerprint": bp["source_fingerprint"],
+        "user_confirmed": True,
+        "literary_canon_verified": False,
+        "witnesses": [{
+            "scene_id": "entry", "actor_id": NPC, "mode": "present",
+            "source_quote_sha256": quote,
+        }],
+        "rules": [{
+            "memory_id": "guard_observed_promise", "scene_id": "entry",
+            "choice_id": "wait", "observer_id": NPC,
+            "kind": "promiseReceived", "related_actor_id": "player",
+            "relationship_delta": 7, "max_triggers": 1,
+            "source_quote_sha256": quote,
+        }],
+    }
+    return bp, prov, index
+
+
+class RichNpcSocialTests(unittest.TestCase):
+    def test_bounded_source_review_writer_verifier_old_format_parity(self):
+        bp, prov, source = social_sample()
+        archive = rich.build(bp, prov, source)
+        self.assertEqual(rich.verify(archive)["format_version"], 3)
+        self.assertEqual(archive, rich.build(bp, prov, source))
+
+        del prov["npc_social"]
+        previous = rich.build(bp, prov, source)
+        self.assertEqual(rich.verify(previous)["format_version"], 3)
+
+    def test_invalid_source_presence_actor_trust_or_unapproved_rules(self):
+        variants = (
+            "no_approval", "fake_quote", "wrong_scene", "unknown_actor",
+            "missing_witness", "duplicate_witness", "reported_trust",
+            "report_not_eye", "future_quote", "orphan_witness",
+            "invalid_relation", "duplicate_rule", "unexpected_field",
+        )
+        for name in variants:
+            with self.subTest(name=name):
+                bp, prov, index = social_sample()
+                social = prov["npc_social"]
+                witness = social["witnesses"][0]
+                rule = social["rules"][0]
+                if name == "no_approval":
+                    social["user_confirmed"] = False
+                elif name == "fake_quote":
+                    rule["source_quote_sha256"] = "f" * 64
+                elif name == "wrong_scene":
+                    witness["scene_id"] = "missing"
+                elif name == "unknown_actor":
+                    witness["actor_id"] = "npc_" + "d" * 32
+                elif name == "missing_witness":
+                    social["witnesses"].clear()
+                elif name == "duplicate_witness":
+                    social["witnesses"].append(deepcopy(witness))
+                elif name == "reported_trust":
+                    witness["mode"] = "reported"
+                elif name == "report_not_eye":
+                    witness["mode"] = "reported"
+                    rule["kind"] = "betrayed"
+                    rule["relationship_delta"] = 0
+                elif name == "future_quote":
+                    social["witnesses"][0]["source_quote_sha256"] = "f" * 64
+                elif name == "orphan_witness":
+                    social["rules"][0]["observer_id"] = "player"
+                elif name == "invalid_relation":
+                    rule["related_actor_id"] = NPC
+                elif name == "duplicate_rule":
+                    social["rules"].append(deepcopy(rule))
+                elif name == "unexpected_field":
+                    rule["fake_social_authority"] = True
+                with self.assertRaises(legacy.BookworldError):
+                    rich.build(bp, prov, index)
+
+    def test_reported_rumor_cannot_grant_trust(self):
+        bp, prov, index = social_sample()
+        social = prov["npc_social"]
+        social["witnesses"][0]["mode"] = "reported"
+        social["rules"][0]["kind"] = "rumorHeard"
+        social["rules"][0]["relationship_delta"] = 0
+        social["rules"][0]["related_actor_id"] = None
+        self.assertEqual(rich.verify(rich.build(bp, prov, index))
+                         ["format_version"], 3)
+
+
+if __name__ == "__main__":
+    unittest.main()
