@@ -66,8 +66,8 @@ class NpcKnowledgeWorldBridge {
     final profiles = {for (final p in notebook.profiles) p.dossierId: p};
     final actorIds = <String, String>{
       for (final profile in notebook.profiles)
-        profile.dossierId: NpcKnowledgeRulebook.actorId(
-            groups[profile.dossierId]!, index.sourceFingerprint),
+        profile.dossierId: NpcKnowledgeRulebook.profileActorId(
+            profile, groups[profile.dossierId]!, index.sourceFingerprint),
     };
     if (actorIds.values.toSet().length != actorIds.length ||
         actorIds.values.contains('player')) {
