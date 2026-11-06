@@ -1,6 +1,6 @@
 # AI Story RPG — START_NEW_CHAT (актуальный, 2026-11-07)
 
-> **Источник истины:** `main` на `551e1e0712e7d488c507c44c6c5c110272c164e4` (06.11.2026). CI #806 SUCCESS и M0 #891 SUCCESS на **этом SHA**, опубликован [test-build-806](https://github.com/shonentez-afk/AI-Story-RPG/releases/tag/test-build-806) (Android debug APK, Windows portable, SHA256SUMS). PR #126 и #127 MERGED. Открытых PR при проверке не было. Это НЕ выпуск 1.0. Перед продолжением перепроверить live GitHub — SHA, CI, PR, Issue #118 и release.
+> **Источник истины:** `main` `f4331851ef5752e0e2821f328d75703808579ef5` (PR #130 MERGED, exact-head CI #823 и M0 #908 SUCCESS, post-merge CI #824 проверить отдельно). PR #129/#130 приняты. [test-build-817](https://github.com/shonentez-afk/AI-Story-RPG/releases/tag/test-build-817) — последний проверенный релиз, собран **до** #130. [PR #131](https://github.com/shonentez-afk/AI-Story-RPG/pull/131) — DRAFT: переносимое NPC-знание в rich-v3 с отдельным versioned review contract; не заявлять готовым до CI. Перед любым продолжением перепроверить GitHub.
 
 ## Цель, важнее остальных этапов
 
