@@ -27,6 +27,7 @@ MAX_STATES = 2500
 NPC_GRANTS_FORMAT = "ai_story_npc_knowledge_grants_v1"
 NPC_SOCIAL_FORMAT = "ai_story_npc_social_witness_v1"
 NPC_SOCIAL_GATE_FORMAT = "ai_story_npc_social_witness_v2"
+NPC_SOCIAL_ITEM_FORMAT = "ai_story_npc_social_witness_v3"
 
 
 def fail(message: str):
@@ -588,13 +589,18 @@ def _npc_social(prov, bp):
     reviewed = prov.get("npc_social")
     if reviewed is None:
         return
+    item_format = (type(reviewed) is dict and
+                   reviewed.get("format") == NPC_SOCIAL_ITEM_FORMAT)
     gate_format = (type(reviewed) is dict and
-                   reviewed.get("format") == NPC_SOCIAL_GATE_FORMAT)
+                   reviewed.get("format") == NPC_SOCIAL_GATE_FORMAT) or item_format
     _keys(reviewed, {"format", "review_scope", "source_fingerprint",
                      "user_confirmed", "literary_canon_verified",
                      "witnesses", "rules"} |
-          ({"choice_gates"} if gate_format else set()), "NPC social")
-    if reviewed["format"] not in (NPC_SOCIAL_FORMAT, NPC_SOCIAL_GATE_FORMAT) or \
+          ({"choice_gates"} if gate_format else set()) |
+          ({"item_transfers"} if item_format else set()), "NPC social")
+    if reviewed["format"] not in (
+            NPC_SOCIAL_FORMAT, NPC_SOCIAL_GATE_FORMAT,
+            NPC_SOCIAL_ITEM_FORMAT) or \
             reviewed["review_scope"] != "user_declared_private_game_fiction" or \
             reviewed["source_fingerprint"] != bp["source_fingerprint"] or \
             reviewed["user_confirmed"] is not True or \
@@ -678,12 +684,50 @@ def _npc_social(prov, bp):
                  (row["kind"] != "rumorHeard" or delta != 0)):
             fail("NPC remembered an unseen event or rumor became trust")
         used.add((scene, actor))
+    if item_format:
+        transfers = reviewed["item_transfers"]
+        if type(transfers) is not list or not 1 <= len(transfers) <= 128:
+            fail("Invalid NPC item custody review list")
+        seen_transfers = set()
+        for transfer in transfers:
+            _keys(transfer, {"scene_id", "choice_id", "item_id",
+                             "from_actor_id", "to_actor_id",
+                             "source_quote_sha256"}, "NPC item transfer")
+            scene, choice, item = (transfer["scene_id"],
+                                   transfer["choice_id"],
+                                   transfer["item_id"])
+            sender, receiver = (transfer["from_actor_id"],
+                                 transfer["to_actor_id"])
+            if not all(_id(v) for v in (scene, choice, item,
+                                         sender, receiver)) or \
+                    scene not in scenes or item not in bp["items"] or \
+                    sender not in actors or receiver not in actors or \
+                    sender == receiver or \
+                    ((sender == "player") == (receiver == "player")) or \
+                    (scene, choice, item) in seen_transfers:
+                fail("Invalid NPC item transfer identities")
+            seen_transfers.add((scene, choice, item))
+            npc = receiver if sender == "player" else sender
+            if not re.fullmatch(r"npc_[0-9a-f]{32}", npc) or \
+                    present.get((scene, npc)) != "present":
+                fail("Item transfer NPC was not witnessed at the scene")
+            citation(scene, transfer["source_quote_sha256"])
+            choices = [c for c in scenes[scene]["choices"]
+                       if c["id"] == choice]
+            expected = "consume_item" if sender == "player" else "grant_item"
+            if len(choices) != 1 or sum(
+                    1 for effect in choices[0]["effects"]
+                    if effect["op"] == expected and effect["id"] == item) != 1:
+                fail("NPC item custody has no matching typed effect")
+            used.add((scene, npc))
+
     if set(present) != used:
         fail("Orphaned or unreviewed NPC witness")
 
     if gate_format:
         gates = reviewed["choice_gates"]
-        if type(gates) is not list or not 1 <= len(gates) <= 128:
+        if type(gates) is not list or len(gates) > 128 or \
+                (not item_format and not gates):
             fail("NPC game choices need bounded reviewed social gates")
         seen_gates = set()
         for gate in gates:
