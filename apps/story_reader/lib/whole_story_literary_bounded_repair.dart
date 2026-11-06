@@ -32,6 +32,7 @@ class WholeStoryLiteraryRepairResult {
   bool get provesBookCanon => false;
   bool get mayChangeGameOrSave => false;
   bool get canPublish => false;
+  bool get isReadyToPlay => false;
 
   Map<String, Object?> toJson() => {
     'status': changed ? 'NEW_DRAFT_REVIEW_REQUIRED'
