@@ -1,5 +1,8 @@
 # P0 — переносимое NPC-знание в частном BookWorld rich v3
 
+**Принят:** [PR #131](https://github.com/shonentez-afk/AI-Story-RPG/pull/131) merge `9c9bdc142495e536b5d11ca5e61680948e45f8fe`, exact-head #855/#940/#128 SUCCESS (Android/Windows, независимые Dart/Python и E6d). Подписанное знание NPC, диалоговые guard, SQLite/replay, ручная сборка на прежнем экране и fail-closed v3 импорт уже в main. Опциональный контракт **не** подтверждает канон или автоматически проставленное согласие. Post-merge CI #856 и release проверить отдельно. Дальше — единый пакет социальных последствий NPC, а не PR по отдельному полю.
+
+
 **Статус 2026-11-07:** [PR #131](https://github.com/shonentez-afk/AI-Story-RPG/pull/131) Draft, требуется полный exact-head CI/M0 и E6d compatibility review. База main `f4331851` (PR #130). Не объявлять функциональность выпущенной до merge и post-merge.
 
 ## Почему нужен этот этап

@@ -1,9 +1,8 @@
 # AI Story RPG — CURRENT_STATUS_RU
 
-> **Единый UX-пакет #131 (НЕ в main):** редактор правил знаний NPC теперь позволяет открыть один диалог приёмки источников/говорящих/факт-гейтов, собрать частный rich-v3 и открыть игру, если и только если каждый источник подтверждён; новый helper UI не создавался. Сигнатуры событий, исходные заметки и старые сохранения не изменены. В шлюзе библиотеки устранён небезопасный переход из повреждённого v3 на чтение сырого текста, fallback сохранён для проверенных v1/v2. До полного CI/проверок E6d это **не принято в main**.
+**Главный факт 2026-11-07:** [PR #131](https://github.com/shonentez-afk/AI-Story-RPG/pull/131) **MERGED**, main `9c9bdc142495e536b5d11ca5e61680948e45f8fe`. Exact-head CI #855 **SUCCESS** (Python, Dart, SQLite, Flutter, Win/Android), M0 #940 **SUCCESS**, External E6d #128 **SUCCESS**. Post-merge main CI #856/M0 #941/E6d #129 ещё перепроверить; release [test-build-824](https://github.com/shonentez-afk/AI-Story-RPG/releases/tag/test-build-824) сделан **до** #131. Всё это технический NPC-пакет, а не готовая full-book 1.0. Никаких E5-архивов/миграций не требуется.
 
-
-**Срез 2026-11-07.** `main`: `f4331851ef5752e0e2821f328d75703808579ef5` (#130 MERGED). Exact-head CI #823/M0 #908 SUCCESS; post-merge CI #824 SUCCESS. [test-build-824](https://github.com/shonentez-afk/AI-Story-RPG/releases/tag/test-build-824) — последняя проверенная APK/Windows сборка **после #130**. PR #129 реализовал read-only доказательства знаний; PR #130 — детерминированную проекцию событийной памяти и направленных отношений, без тайной записи в world state. [PR #131](https://github.com/shonentez-afk/AI-Story-RPG/pull/131) — Draft, явный v1 контракт source-locked NPC `learn_fact`/`knows_fact` для rich-v3 с Dart/Python проверками. **Это ещё не готовая 1.0.**
+**Новый крупный этап в [feature/p0-npc-presence-social-gameplay-20261107](https://github.com/shonentez-afk/AI-Story-RPG/tree/feature/p0-npc-presence-social-gameplay-20261107):** source-locked NPC присутствие и свидетели реальных событий, promises/rumors/relations, ownership/actions и последствия через отделяемый движок, переносимый schema + UI + общие тесты. НЕ делать микропиар и не выдавать preview за авторитетное игровое состояние; не менять отдельный skill E6d без версионного согласования.
 
 ## Что уже в main
 
