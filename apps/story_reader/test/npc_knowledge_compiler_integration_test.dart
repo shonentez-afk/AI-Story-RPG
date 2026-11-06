@@ -1,5 +1,8 @@
 import 'dart:convert';
 import 'dart:typed_data';
+import 'dart:io';
+
+import 'package:campaign_manager/campaign_manager.dart';
 
 import 'package:ai_story_reader/book_import.dart';
 import 'package:ai_story_reader/book_source_index.dart';
@@ -216,6 +219,51 @@ void main() {
     expect(replay.factLearningEvents(
         richActor, checked.blueprint.facts.single).single.actionId,
         'rich_talk');
+    final sqliteDirectory = Directory.systemTemp
+        .createTempSync('npc_rich_campaign_acceptance_');
+    try {
+      late String campaignId;
+      final firstStore = BookworldCampaignStore.openPrivateDirectory(
+          sqliteDirectory.path);
+      try {
+        final installed = firstStore.installBookworld(richBytes);
+        campaignId = firstStore.createCampaign(installed.archiveHash);
+        final blockedSqlite = firstStore.commitChoice(
+          campaignId, actionId: 'sqlite_blocked',
+          choiceId: expandedEntry.choices.first.id, expectedRevision: 0);
+        expect(blockedSqlite.applied, false);
+        expect(firstStore.loadCampaign(campaignId).coordinator.state.revision, 0);
+        final npcLearned = firstStore.commitChoice(
+          campaignId, actionId: 'sqlite_npc_learned',
+          choiceId: learnChoice.id, expectedRevision: 0);
+        expect(npcLearned.applied, true);
+        final saved = firstStore.loadCampaign(campaignId);
+        expect(saved.coordinator.state.knowledge[richActor],
+            contains(checked.blueprint.facts.single));
+        expect(saved.coordinator.state.knowledge['player'], isEmpty);
+      } finally {
+        firstStore.close();
+      }
+      // This is a real SQLite close/reopen, not only StoryWorld.replay.
+      final reopened = BookworldCampaignStore.openPrivateDirectory(
+          sqliteDirectory.path);
+      try {
+        final restored = reopened.loadCampaign(campaignId);
+        expect(restored.coordinator.state.revision, 1);
+        expect(restored.coordinator.state.knowledge[richActor],
+            contains(checked.blueprint.facts.single));
+        expect(reopened.commitChoice(
+          campaignId, actionId: 'sqlite_after_restart',
+          choiceId: expandedEntry.choices.first.id,
+          expectedRevision: 1).applied, true);
+        expect(reopened.loadCampaign(campaignId).coordinator.state.revision, 2);
+        expect(reopened.exportPortable(campaignId), isNotEmpty);
+      } finally {
+        reopened.close();
+      }
+    } finally {
+      sqliteDirectory.deleteSync(recursive: true);
+    }
     final text = utf8.decode(richBytes, allowMalformed: true);
     expect(text, isNot(contains(note.text)));
   });
