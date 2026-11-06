@@ -26,6 +26,15 @@ class RichNpcDialogueKnowledge {
       }
       return;
     }
+    // A rich world cannot remove the signed presentation and then rely
+    // on the UI's legacy scene-text parser to reveal unreviewed words.
+    for (final scene in blueprint.scenes.values) {
+      if (RichSceneDialogue.parse(scene.text) != null &&
+          !signed.containsKey(scene.id)) {
+        throw const FormatException(
+            'Structured NPC speech must be signed and source-reviewed');
+      }
+    }
     if (signed.isEmpty) {
       if (review != null && review.isNotEmpty) {
         throw const FormatException('NPC dialogue review has no scene');
