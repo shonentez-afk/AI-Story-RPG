@@ -142,8 +142,8 @@ void main() {
         sourceIndex: _asObject(data['source_index']),
       ), throwsFormatException);
     }
-    rejects((data) => _asObject(data['provenance'])
-        .remove('npc_knowledge'));
+    rejects((data) =>
+        (data['provenance'] as Map).remove('npc_knowledge'));
     rejects((data) {
       final provenance = _asObject(data['provenance']);
       final review = _asObject(provenance['npc_knowledge']);
