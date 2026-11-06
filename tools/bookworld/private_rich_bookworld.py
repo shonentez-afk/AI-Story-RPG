@@ -25,6 +25,7 @@ BUILD_TOOL = {"name": "ai_story_private_rich_bookworld", "version": "3.0"}
 MAX_SCENES = 192
 MAX_STATES = 2500
 NPC_GRANTS_FORMAT = "ai_story_npc_knowledge_grants_v1"
+NPC_SOCIAL_FORMAT = "ai_story_npc_social_witness_v1"
 
 
 def fail(message: str):
@@ -553,6 +554,107 @@ def _npc_knowledge(prov, bp):
         fail("NPC knowledge actions do not match reviewed grant manifest")
 
 
+def _npc_social(prov, bp):
+    """Opt-in reviewed NPC witnesses and event classifications, not canon.
+
+    Authoritative actions remain in the original deterministic event stream;
+    this package only classifies hash-chained actions. It never fabricates
+    presence, learns a secret, or grants an item based on prose inference.
+    """
+    reviewed = prov.get("npc_social")
+    if reviewed is None:
+        return
+    _keys(reviewed, {"format", "review_scope", "source_fingerprint",
+                     "user_confirmed", "literary_canon_verified",
+                     "witnesses", "rules"}, "NPC social")
+    if reviewed["format"] != NPC_SOCIAL_FORMAT or \
+            reviewed["review_scope"] != "user_declared_private_game_fiction" or \
+            reviewed["source_fingerprint"] != bp["source_fingerprint"] or \
+            reviewed["user_confirmed"] is not True or \
+            reviewed["literary_canon_verified"] is not False:
+        fail("NPC social review is not authorized for this private source")
+    witnesses, rules = reviewed["witnesses"], reviewed["rules"]
+    if type(witnesses) is not list or type(rules) is not list or \
+            not 1 <= len(witnesses) <= 128 or not 1 <= len(rules) <= 128:
+        fail("Missing or oversized NPC social declarations")
+    origin = {item["scene_id"]: item
+              for item in prov["scene_origins"]}
+    if len(origin) != len(prov["scene_origins"]):
+        fail("Ambiguous NPC scene evidence")
+    scenes = {scene["id"]: scene for scene in bp["scenes"]}
+    actors = set(bp["actors"])
+
+    def citation(scene_id, digest):
+        src = origin.get(scene_id)
+        if not isinstance(digest, str) or \
+                not legacy.SHA_RE.fullmatch(digest) or \
+                src is None or src["origin"] != "SOURCE_PASSAGE":
+            fail("Unverified NPC social quote")
+        chapter = src["chapter_index"]
+        if not any(ref["quote_sha256"] == digest and
+                   ref["chapter_index"] <= chapter and
+                   ref["visible_after_chapter"] <= chapter
+                   for ref in src["source_refs"]):
+            fail("NPC social witness cites absent or future passage")
+
+    present = {}
+    for row in witnesses:
+        _keys(row, {"scene_id", "actor_id", "mode",
+                    "source_quote_sha256"}, "NPC social witness")
+        scene, actor, mode = (row["scene_id"], row["actor_id"], row["mode"])
+        if not _id(scene) or scene not in scenes or \
+                not _id(actor) or actor not in actors or actor == "player" or \
+                not re.fullmatch(r"npc_[0-9a-f]{32}", actor) or \
+                mode not in ("present", "reported") or \
+                (scene, actor) in present:
+            fail("NPC social witness is unknown/duplicated/unstable")
+        citation(scene, row["source_quote_sha256"])
+        present[(scene, actor)] = mode
+
+    seen = set()
+    used = set()
+    memory_kinds = {"witnessed", "promiseReceived", "promiseBroken",
+                    "helped", "betrayed", "rumorHeard"}
+    for row in rules:
+        _keys(row, {"memory_id", "scene_id", "choice_id", "observer_id",
+                    "kind", "related_actor_id", "relationship_delta",
+                    "max_triggers", "source_quote_sha256"}, "NPC social rule")
+        memory, scene, choice, actor = (
+            row["memory_id"], row["scene_id"],
+            row["choice_id"], row["observer_id"])
+        relation, delta, maximum = (
+            row["related_actor_id"], row["relationship_delta"],
+            row["max_triggers"])
+        if not all(_id(v) for v in (memory, scene, choice, actor)) or \
+                scene not in scenes or actor not in actors or \
+                (actor != "player" and
+                 not re.fullmatch(r"npc_[0-9a-f]{32}", actor)) or \
+                not any(c["id"] == choice for c in scenes[scene]["choices"]) or \
+                row["kind"] not in memory_kinds or \
+                (relation is not None and
+                 (not _id(relation) or relation not in actors or
+                  relation == actor)) or \
+                (relation != "player" and relation is not None and
+                 not re.fullmatch(r"npc_[0-9a-f]{32}", relation)) or \
+                type(delta) is not int or not -20 <= delta <= 20 or \
+                type(maximum) is not int or not 1 <= maximum <= 10 or \
+                (delta != 0 and relation is None) or \
+                (actor, memory) in seen:
+            fail("Invalid, inconsistent or duplicated NPC social memory")
+        citation(scene, row["source_quote_sha256"])
+        seen.add((actor, memory))
+        if actor == "player":
+            continue
+        witness = present.get((scene, actor))
+        if witness is None or \
+                (witness == "reported" and
+                 (row["kind"] != "rumorHeard" or delta != 0)):
+            fail("NPC remembered an unseen event or rumor became trust")
+        used.add((scene, actor))
+    if set(present) != used:
+        fail("Orphaned or unreviewed NPC witness")
+
+
 def _provenance(prov, bp):
     keys = {"format", "bookworld_id", "source_fingerprint", "source_title",
             "source_author", "source_chapters_total", "source_chapters_indexed",
@@ -560,13 +662,14 @@ def _provenance(prov, bp):
             "rights_status", "publication_authorized", "model_provenance",
             "scene_origins", "presentation"}
     _keys({k: v for k, v in prov.items()
-           if k not in {"gameplay_review", "npc_knowledge"}},
+           if k not in {"gameplay_review", "npc_knowledge", "npc_social"}},
           keys, "rich provenance")
     if prov["format"] != PROVENANCE_FORMAT:
         fail("Wrong rich provenance format")
     _model(prov["model_provenance"])
     _presentation(prov["presentation"], bp)
     _npc_knowledge(prov, bp)
+    _npc_social(prov, bp)
     if "npc_knowledge" in prov and "gameplay_review" in prov:
         fail("NPC grant review and gameplay review must be unified")
     if "gameplay_review" in prov:
@@ -574,6 +677,7 @@ def _provenance(prov, bp):
     old = dict(prov)
     old.pop("gameplay_review", None)
     old.pop("npc_knowledge", None)
+    old.pop("npc_social", None)
     old.pop("presentation")
     old["format"] = "ai_story_private_provenance_v1"
     old["model_provenance"] = {"provider": "none", "model_id": None}
@@ -586,6 +690,8 @@ def _manifest(bp, prov, payloads):
         "format": "ai_story_bookworld", "format_version": 3,
         **({"npc_knowledge_format": NPC_GRANTS_FORMAT}
            if "npc_knowledge" in prov else {}),
+        **({"npc_social_format": NPC_SOCIAL_FORMAT}
+           if "npc_social" in prov else {}),
         "bookworld_id": bp["book_id"],
         "source_fingerprint": bp["source_fingerprint"],
         "title": bp["title"], "author": prov["source_author"],
