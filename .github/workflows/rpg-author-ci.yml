@@ -14,6 +14,8 @@ on:
       - 'apps/story_reader/lib/book_text_decoder.dart'
       - 'apps/story_reader/lib/book_source_index.dart'
       - 'packages/bookworld_format/lib/private_bookworld.dart'
+      - 'packages/bookworld_format/lib/private_rich_bookworld.dart'
+      - 'packages/bookworld_format/lib/private_bookworld_writer.dart'
       - 'packages/story_core/lib/src/blueprint.dart'
   pull_request:
     paths:
@@ -27,6 +29,8 @@ on:
       - 'apps/story_reader/lib/book_text_decoder.dart'
       - 'apps/story_reader/lib/book_source_index.dart'
       - 'packages/bookworld_format/lib/private_bookworld.dart'
+      - 'packages/bookworld_format/lib/private_rich_bookworld.dart'
+      - 'packages/bookworld_format/lib/private_bookworld_writer.dart'
       - 'packages/story_core/lib/src/blueprint.dart'
   workflow_dispatch:
 

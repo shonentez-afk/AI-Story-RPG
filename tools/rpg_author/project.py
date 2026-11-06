@@ -8,7 +8,7 @@ from pathlib import Path
 from . import VERSION
 from .common import (DIGEST, AuthoringError, atomic_write, canonical, digest, fields,
                      outside_repository, parse_json, read_bytes, read_json, require)
-from .compatibility import block_unsupported_export, toolchain_id
+from .compatibility import toolchain_id
 from .source_adapter import MAX_SOURCE_BYTES, make_index, parse_book
 from .validate import assertion_registry, candidate_blueprint, validate_analysis, validate_story
 
@@ -128,8 +128,9 @@ def _status(state, index):
     return {"stage": stage, "revision": state["revision"], "title": index["title"],
             "source_fingerprint": index["source_fingerprint"],
             "text_chunks_total": total, "chunks_with_analysis": completed,
-            "story_sha256": state["story_sha256"], "package_built": False,
-            "external_ai_bworld_export": "blocked_by_existing_provenance_contract"}
+            "story_sha256": state["story_sha256"],
+            "package_status": "not_tracked_outputs_are_external",
+            "external_ai_bworld_export": "supported_rich_v3"}
 
 
 def status(root: Path) -> dict:
@@ -159,10 +160,14 @@ def next_task(root: Path, limit: int = 1) -> dict:
                                 "choices and at least two endings. Cite assertion ids. Preserve "
                                 "uncertainty and label invented alternatives. Do not treat an "
                                 "exact source quote as proof of the model's interpretation."}
-    return {"status": "ready_for_candidate_export", "task": "export_and_review",
+    return {"status": "ready_for_rich_enrichment", "task": "prepare_enrichment_and_build",
             "story_sha256": state["story_sha256"],
-            "instructions": "Export the validated candidate. .bworld export remains blocked "
-                            "until external AI provenance has a compatible application contract."}
+            "instructions": "Prepare source- and story-bound rpg_author_rich_enrichment_v1 "
+                            "with hero, stats, items, facts, scene_names and choices. Empty "
+                            "item/stat/fact catalogs are allowed; do not invent possessions. "
+                            "Run build --project PROJECT --enrichment JSON --output GAME.bworld, "
+                            "then verify --input GAME.bworld --attribution GAME.attribution.json. "
+                            "Review literary meaning separately; structural checks do not certify it."}
 
 
 def _advance(state: dict, kind: str, previous):
@@ -241,9 +246,8 @@ def export_candidate(root: Path, output: Path) -> dict:
             "sha256": digest(data), "package_built": False, "validation": report}
 
 
-def build(root: Path):
-    # Deliberately no legacy build call and no --force/--provider-none bypass.
-    # The gate is about a real schema limitation, not a fabricated package.
-    _, _, _, _, story = load_project(root)
-    require(story is not None, "story_missing", "Submit a complete validated story first")
-    block_unsupported_export()
+def build(root: Path, enrichment_path: Path, output: Path,
+          *, model_id: str | None = None):
+    """Default output is the current rich v3 contract, with actual AI attribution."""
+    from .rich_package import build_rich
+    return build_rich(root, enrichment_path, output, model_id=model_id)

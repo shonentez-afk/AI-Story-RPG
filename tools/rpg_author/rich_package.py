@@ -6,13 +6,15 @@ overlay only adds typed, checked gameplay effects and Russian presentation.
 """
 from __future__ import annotations
 
+import io
 import json
 from pathlib import Path
+import zipfile
 
 from tools.bookworld import private_rich_bookworld as rich
 from tools.rpg_author.common import (AuthoringError, atomic_write, canonical,
                                      digest, fields, identifier, outside_repository,
-                                     read_bytes, read_json, require, string)
+                                     parse_json, read_bytes, read_json, require, string)
 from tools.rpg_author.compatibility import check_contract
 from tools.rpg_author.legacy_package import _provenance
 from tools.rpg_author.project import load_project
@@ -118,35 +120,36 @@ def compile_rich_from_project(root: Path, enrichment: dict,
             "unvalidated_story", "Story failed original source checks")
     require(model_id in (None, MODEL_ID), "unverified_model",
             "Only explicitly declared gpt-6 is supported")
-    blueprint, presentation = _enrich(candidate_blueprint(story, index),
-                                      story, index, enrichment)
-    provenance = _provenance(story, index, analyses, blueprint)
-    provenance["format"] = rich.PROVENANCE_FORMAT
-    provenance["presentation"] = presentation
-    provenance["model_provenance"] = {
-        "provider": "openai",
-        "model_id": model_id,
-        "model_id_status": "user_declared" if model_id else "not_attested",
-        "tool": "ChatGPT", "method": "external",
-    }
     from tools.bookworld.bookworld import BookworldError
     try:
+        blueprint, presentation = _enrich(candidate_blueprint(story, index),
+                                          story, index, enrichment)
+        provenance = _provenance(story, index, analyses, blueprint)
+        provenance["format"] = rich.PROVENANCE_FORMAT
+        provenance["presentation"] = presentation
+        provenance["model_provenance"] = {
+            "provider": "openai",
+            "model_id": model_id,
+            "model_id_status": "user_declared" if model_id else "not_attested",
+            "tool": "ChatGPT", "method": "external",
+        }
         raw = rich.build(blueprint, provenance, index)
         verified = rich.verify(raw)
     except (BookworldError, KeyError, TypeError) as error:
         raise AuthoringError("rich_compile_rejected", str(error)) from error
     require(verified["source_fingerprint"] == index["source_fingerprint"],
             "mismatch", "Compiled world belongs to another source edition")
-    sidecar = {
+    return raw, canonical(_attribution(raw, digest(canonical(blueprint)), provenance))
+
+
+def _attribution(archive: bytes, blueprint_sha256: str, provenance: dict) -> dict:
+    """Disclose only verified archive data; neither hashes nor labels attest a model."""
+    return {
         "format": "ai_story_external_attribution_v2",
-        "bookworld_sha256": digest(raw),
-        "source_fingerprint": index["source_fingerprint"],
-        "blueprint_sha256": digest(canonical(blueprint)),
-        "scenario_generation": {
-            "provider": "openai", "model_id": model_id,
-            "model_id_status": "user_declared" if model_id else "not_attested",
-            "tool": "ChatGPT", "method": "external",
-        },
+        "bookworld_sha256": digest(archive),
+        "source_fingerprint": provenance["source_fingerprint"],
+        "blueprint_sha256": blueprint_sha256,
+        "scenario_generation": dict(provenance["model_provenance"]),
         "bookworld_packaging": {
             "method": "local_compiler",
             "build_tool": "ai_story_private_rich_bookworld",
@@ -158,12 +161,14 @@ def compile_rich_from_project(root: Path, enrichment: dict,
         "semantic_review_completed": False,
         "device_playtest_completed": False,
     }
-    return raw, canonical(sidecar)
 
 
 def build_rich(root: Path, enrichment_path: Path, output: Path,
                *, model_id: str | None = None):
     output = outside_repository(output)
+    root = outside_repository(root)
+    require(output != root and root not in output.parents, "output_in_project",
+            "Build outside the checkpoint directory")
     require(output.suffix.lower() == ".bworld", "invalid_output",
             "Expected a .bworld output")
     sidecar = output.with_suffix(".attribution.json")
@@ -190,19 +195,27 @@ def build_rich(root: Path, enrichment_path: Path, output: Path,
 
 def verify_rich_bundle(package: Path, attribution: Path):
     from tools.bookworld.bookworld import BookworldError
+    check_contract()
     archive = read_bytes(package, 12 * 1024 * 1024)
     sidecar = read_json(attribution)
     try:
         inspected = rich.verify(archive)
     except BookworldError as error:
         raise AuthoringError("rich_package_invalid", str(error)) from error
-    require(sidecar.get("format") == "ai_story_external_attribution_v2" and
-            sidecar.get("bookworld_sha256") == inspected["archive_sha256"] and
-            sidecar.get("source_fingerprint") == inspected["source_fingerprint"] and
-            sidecar.get("rights_status") == "private_use_only" and
-            sidecar.get("publication_authorized") is False,
-            "attribution_mismatch", "Disclosure is not bound to this rich world")
+    # Open only after the real v3 verifier has validated ZIP/JSON/SQLite,
+    # including equality of manifest and source model_provenance.
+    with zipfile.ZipFile(io.BytesIO(archive)) as contents:
+        blueprint_sha256 = digest(contents.read("scenario/blueprint.json"))
+        provenance = parse_json(contents.read("source/provenance.json"))
+    expected = _attribution(archive, blueprint_sha256, provenance)
+    # Canonical comparison also rejects extra/missing fields and bool/int
+    # substitutions (False == 0 in ordinary Python object equality).
+    require(type(sidecar) is dict and canonical(sidecar) == canonical(expected),
+            "attribution_mismatch", "Attribution fields must match this verified archive exactly")
     return {"status": "rich_bundle_structurally_verified",
             "archive_sha256": inspected["archive_sha256"],
             "authorship_inside_archive": True,
+            "attribution_matches_archive": True,
+            "authorship_cryptographically_attested": False,
+            "semantic_review_completed": False,
             "device_playtest_completed": False}

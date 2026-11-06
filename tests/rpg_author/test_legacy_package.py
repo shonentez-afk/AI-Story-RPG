@@ -66,11 +66,6 @@ class LegacySidecarTests(unittest.TestCase):
         self.assertFalse(target.exists())
         self.assertFalse(target.with_suffix(".attribution.json").exists())
 
-    def test_old_build_command_still_blocks(self):
-        with self.assertRaises(AuthoringError) as ctx:
-            project.build(self.root)
-        self.assertEqual(ctx.exception.code, "external_ai_provenance_unsupported")
-
     def test_package_deterministic_and_sidecar_binds_exact_bytes(self):
         a, sa = compile_from_project(self.root, model_id="gpt-6")
         b, sb = compile_from_project(self.root, model_id="gpt-6")

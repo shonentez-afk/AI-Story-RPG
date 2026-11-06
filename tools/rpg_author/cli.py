@@ -21,7 +21,7 @@ def parser():
     init.add_argument("--book", required=True, type=Path)
     init.add_argument("--project", required=True, type=Path)
     init.add_argument("--chunk-size", type=int, default=4096)
-    for name in ("status", "next", "accept-analysis", "accept-story", "validate", "export", "build"):
+    for name in ("status", "next", "accept-analysis", "accept-story", "validate", "export"):
         command = commands.add_parser(name)
         command.add_argument("--project", required=True, type=Path)
         if name == "next":
@@ -38,18 +38,38 @@ def parser():
                         help="User-declared, not independently attested model ID")
     legacy.add_argument("--ack-legacy-provenance", action="store_true",
                         help="Acknowledge provider=none in v2 is only a legacy packaging constant")
+    quality = commands.add_parser("gameplay-audit", help="E6: exhaustive game-design quality review, read-only")
+    quality.add_argument("--project", type=Path)
+    quality.add_argument("--enrichment", type=Path)
+    quality.add_argument("--bworld", type=Path,
+                         help="Read-only audit of any structurally verified E5/E6 rich v3 archive")
+    quality.add_argument("--attribution", type=Path,
+                         help="Optional matching attribution sidecar for --bworld")
+    quality.add_argument("--output", type=Path,
+                         help="Write a private, immutable JSON report outside the repository")
+    quality.add_argument("--strict", action="store_true",
+                         help="Exit 3 when any mechanical quality warning remains")
+    dialogue = commands.add_parser("dialogue-audit", help="E6c: read-only NPC question and answer QA")
+    dialogue.add_argument("--bworld", required=True, type=Path)
+    dialogue.add_argument("--contract", required=True, type=Path,
+                          help="Private source-bound dialogue topics manifest")
+    dialogue.add_argument("--attribution", type=Path)
+    dialogue.add_argument("--output", type=Path)
+    dialogue.add_argument("--strict", action="store_true")
     bundle = commands.add_parser("verify-bundle", help="Check package and sidecar SHA binding")
     bundle.add_argument("--input", required=True, type=Path)
     bundle.add_argument("--attribution", required=True, type=Path)
-    richer = commands.add_parser("build-rich", help="Build source-checked rich private v3 game")
+    richer = commands.add_parser("build", aliases=["build-rich"],
+                                 help="Build source-checked rich private v3 game and attribution")
     richer.add_argument("--project", required=True, type=Path)
     richer.add_argument("--enrichment", required=True, type=Path)
     richer.add_argument("--output", required=True, type=Path)
     richer.add_argument("--model-id", choices=["gpt-6"], default=None)
-    richer_check = commands.add_parser("verify-rich", help="Verify v3 archive and attribution")
+    richer_check = commands.add_parser("verify", aliases=["verify-rich"],
+                                       help="Verify v3 archive and matching attribution")
     richer_check.add_argument("--input", required=True, type=Path)
     richer_check.add_argument("--attribution", required=True, type=Path)
-    verify = commands.add_parser("verify", help="Inspect an existing legacy v2 .bworld, read-only")
+    verify = commands.add_parser("verify-legacy", help="Inspect a historical v2 test package, read-only")
     verify.add_argument("--input", required=True, type=Path)
     return cli
 
@@ -74,8 +94,32 @@ def main(argv=None) -> int:
             result = project.validate_project(args.project)
         elif name == "export":
             result = project.export_candidate(args.project, args.output)
-        elif name == "build":
-            result = project.build(args.project)
+        elif name == "gameplay-audit":
+            from .gameplay_quality import audit_archive, audit_project
+            from .common import atomic_write, canonical, outside_repository, require
+            if args.bworld is not None:
+                require(args.project is None and args.enrichment is None, "invalid_args",
+                        "Use --bworld OR --project with --enrichment")
+                result = audit_archive(args.bworld, args.attribution)
+            else:
+                require(args.project is not None and args.enrichment is not None
+                        and args.attribution is None, "invalid_args",
+                        "Provide --project and --enrichment, or --bworld")
+                result = audit_project(args.project, args.enrichment)
+            if args.output is not None:
+                out = outside_repository(args.output)
+                require(not out.exists(), "output_exists", "Report cannot overwrite an existing file")
+                atomic_write(out, canonical(result))
+                result["report_output"] = str(out)
+        elif name == "dialogue-audit":
+            from .dialogue_quality import audit_archive
+            from .common import atomic_write, canonical, outside_repository, require
+            result = audit_archive(args.bworld, args.contract, args.attribution)
+            if args.output is not None:
+                out = outside_repository(args.output)
+                require(not out.exists(), "output_exists", "Report cannot overwrite another file")
+                atomic_write(out, canonical(result))
+                result["report_output"] = str(out)
         elif name == "build-legacy":
             from .legacy_package import build_legacy
             result = build_legacy(args.project, args.output,
@@ -84,11 +128,10 @@ def main(argv=None) -> int:
         elif name == "verify-bundle":
             from .legacy_package import verify_bundle
             result = verify_bundle(args.input, args.attribution)
-        elif name == "build-rich":
-            from .rich_package import build_rich
-            result = build_rich(args.project, args.enrichment, args.output,
-                                model_id=args.model_id)
-        elif name == "verify-rich":
+        elif name in ("build", "build-rich"):
+            result = project.build(args.project, args.enrichment, args.output,
+                                   model_id=args.model_id)
+        elif name in ("verify", "verify-rich"):
             from .rich_package import verify_rich_bundle
             result = verify_rich_bundle(args.input, args.attribution)
         else:
@@ -102,6 +145,8 @@ def main(argv=None) -> int:
             except (BookworldError, KeyError, TypeError, ValueError) as exc:
                 raise AuthoringError("invalid_package", str(exc)) from exc
         print(json.dumps(result, ensure_ascii=False, indent=2, allow_nan=False))
+        if name in ("gameplay-audit", "dialogue-audit") and args.strict and result["warning_count"]:
+            return 3
         return 0
     except AuthoringError as exc:
         print(json.dumps({"status": "error", "code": exc.code, "message": str(exc)},
