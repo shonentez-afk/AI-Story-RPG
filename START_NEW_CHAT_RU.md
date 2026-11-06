@@ -1,5 +1,8 @@
 # AI Story RPG — START_NEW_CHAT (актуальный, 2026-11-07)
 
+> **Срез PR #131 (ещё DRAFT).** В существующей странице `NpcKnowledgeRulesPage` реализован один пользовательский путь «Проверить и собрать RPG с NPC» с выбором подтверждённых цитат, каждого говорящего и условий показа реплики. Используется исходный компилятор `PrivateClassicScenarioTranslator` + `RichPrivateBookworldWriter`, затем SQLite-библиотека и готовый экран прохождений, без второго движка. Если SOURCE_PASSAGE доказательств или постоянного character_id нет — **сборка блокируется**, без скрытого автоодобрения. Защита `WorldLibraryGateway` от silent fallback: для **повреждённого v3** нельзя показывать сырые реплики; fallback только для отдельно проверенных v1/v2. Последний HEAD и результаты CI/совместимости E6d обязательно проверить в GitHub.
+
+
 > **Источник истины:** `main` `f4331851ef5752e0e2821f328d75703808579ef5` (PR #130 MERGED, exact-head CI #823 и M0 #908 SUCCESS, post-merge CI #824 SUCCESS). PR #129/#130 приняты. [test-build-824](https://github.com/shonentez-afk/AI-Story-RPG/releases/tag/test-build-824) — последний проверенный релиз, уже **после** #130. [PR #131](https://github.com/shonentez-afk/AI-Story-RPG/pull/131) — DRAFT: переносимое NPC-знание в rich-v3 с отдельным versioned review contract; не заявлять готовым до CI. Перед любым продолжением перепроверить GitHub.
 
 ## Как продолжать: функциональные пакеты
