@@ -24,6 +24,7 @@ void main() {
   test('selected story_engine starts at the exact authoritative core scene', () {
     final adapter = StoryEngineCoordinator.start(fixture());
     expect(adapter.sceneId, 'gate');
+    expect(adapter.sceneText, fixture().scenes['gate']!.text);
     expect(adapter.state.revision, 0);
     expect(adapter.events, isEmpty);
     expect(adapter.choices.length, 4);

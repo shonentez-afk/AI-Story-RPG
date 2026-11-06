@@ -31,3 +31,7 @@
 ## Ускоренный режим работы без снижения качества
 
 Вместо PR на отдельное поле объединяем согласованные инварианты в один PR с одной полной проверкой на точный HEAD. Ошибки статического анализа, релизные артефакты на старом SHA, ошибки Dart/Python parity и сценарные регрессии остаются блокирующими. Merge только после SUCCESS основного CI, M0, Windows и Android; затем post-merge контроль. Внешнюю E6d не изменять.
+
+## Проверка требования независимого open-source движка (в том же PR)
+
+Добавлен общий `CharacterId` в `story_core`, приложение использует его для генерации/проверки ID; новая абстракция игрового движка не создаётся. Публичный `StoryRuntimeAdapter.sceneText` позволяет Dart-клиенту получать проверенный текст сцены, не импортируя Flutter. Добавлены `packages/campaign_manager/example/standalone_rpg.dart`, автоматический импорт-гейт `tools/ci_check_engine_boundaries.py`, шаги CI и спецификация `docs/ENGINE_STANDALONE_OPEN_SOURCE_ARCHITECTURE_RU_2026-11-06.md`. Требуется exact-head CI #127, including standalone/save/replay, Windows/Android, then post-merge. Внешняя E6d остаётся отдельной и не изменялась.
