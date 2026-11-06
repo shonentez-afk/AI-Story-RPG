@@ -89,15 +89,15 @@ void main() {
       'not an independent NPC truth claim', () {
     final presentation = RichSceneDialogue.presentationFor(_sample)!;
     final turns = RichSceneDialogue.verify(presentation, _sample);
-    final UI = SceneDialogueScript.fromSignedTurns(turns);
+    final script = SceneDialogueScript.fromSignedTurns(turns);
     final legacy = SceneDialogueScript.fromSceneText(_sample)!;
-    expect(UI.turns, hasLength(legacy.turns.length));
-    for (var i = 0; i < UI.turns.length; i++) {
-      expect(UI.turns[i].speaker, legacy.turns[i].speaker);
-      expect(UI.turns[i].text, legacy.turns[i].text);
+    expect(script.turns, hasLength(legacy.turns.length));
+    for (var i = 0; i < script.turns.length; i++) {
+      expect(script.turns[i].speaker, legacy.turns[i].speaker);
+      expect(script.turns[i].text, legacy.turns[i].text);
     }
-    expect(UI.turns.first.isNarration, true);
-    expect(UI.turns.last.isNarration, true);
+    expect(script.turns.first.isNarration, true);
+    expect(script.turns.last.isNarration, true);
     expect(() => RichSceneDialogue.verify({
       'scene_text_sha256': presentation['scene_text_sha256'],
       'turns': [
