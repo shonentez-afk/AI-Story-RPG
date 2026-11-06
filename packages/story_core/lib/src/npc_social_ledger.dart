@@ -42,6 +42,34 @@ class NpcSceneWitness {
   };
 }
 
+/// A reviewed, *authoritative* prerequisite on one real game decision.
+/// It never changes the stored WorldState; it is evaluated from committed
+/// hash-chained events by StoryWorld before an action can be accepted.
+/// Without an exact signed, source-locked rulebook, the gate cannot be used.
+class NpcSocialChoiceGate {
+  const NpcSocialChoiceGate({
+    required this.sceneId,
+    required this.choiceId,
+    required this.actorId,
+    this.requiredMemoryId,
+    this.minimumTrustToPlayer,
+  });
+
+  final String sceneId;
+  final String choiceId;
+  final String actorId;
+  final String? requiredMemoryId;
+  final int? minimumTrustToPlayer;
+
+  Map<String, Object?> toJson() => {
+    'scene_id': sceneId,
+    'choice_id': choiceId,
+    'actor_id': actorId,
+    'required_memory_id': requiredMemoryId,
+    'minimum_trust_to_player': minimumTrustToPlayer,
+  };
+}
+
 /// A declarative, source-reviewable event annotation. It has no runtime
 /// effect by itself; the optional relationship delta is a read-only
 /// projection, NOT a hidden world mutation or a new blueprint DSL operation.
@@ -87,13 +115,16 @@ class NpcSocialRulebook {
     required this.blueprintHash,
     required List<NpcSocialRule> rules,
     List<NpcSceneWitness> witnesses = const [],
+    List<NpcSocialChoiceGate> choiceGates = const [],
     this.requireReviewedWitnesses = false,
   }) : rules = List.unmodifiable(rules),
-       witnesses = List.unmodifiable(witnesses);
+       witnesses = List.unmodifiable(witnesses),
+       choiceGates = List.unmodifiable(choiceGates);
 
   final String blueprintHash;
   final List<NpcSocialRule> rules;
   final List<NpcSceneWitness> witnesses;
+  final List<NpcSocialChoiceGate> choiceGates;
   /// Strict portable social rules must prove how each observer learned
   /// about the event. Old local preview rulebooks keep legacy semantics.
   final bool requireReviewedWitnesses;
@@ -104,8 +135,9 @@ class NpcSocialRulebook {
         rules.length > 512) {
       throw const FormatException('NPC social rules not bound to blueprint');
     }
-    if (witnesses.length > 512 ||
-        (witnesses.isNotEmpty && !requireReviewedWitnesses)) {
+    if (witnesses.length > 512 || choiceGates.length > 128 ||
+        ((witnesses.isNotEmpty || choiceGates.isNotEmpty) &&
+         !requireReviewedWitnesses)) {
       throw const FormatException('NPC witness review must be explicit');
     }
     final presence = <String, NpcWitnessMode>{};
@@ -182,6 +214,49 @@ class NpcSocialRulebook {
          !usedWitnesses.containsAll(presence.keys))) {
       throw const FormatException('Orphaned NPC witness evidence');
     }
+    final gated = <String>{};
+    for (final gate in choiceGates) {
+      jsonId(gate.sceneId, 'npc.choice_gate.scene_id');
+      jsonId(gate.choiceId, 'npc.choice_gate.choice_id');
+      jsonId(gate.actorId, 'npc.choice_gate.actor_id');
+      if (gate.requiredMemoryId != null) {
+        jsonId(gate.requiredMemoryId!, 'npc.choice_gate.required_memory_id');
+      }
+      final scene = blueprint.scenes[gate.sceneId];
+      if (scene == null ||
+          !scene.choices.any((choice) => choice.id == gate.choiceId) ||
+          !blueprint.actors.contains(gate.actorId) ||
+          gate.actorId == 'player' ||
+          (blueprint.rightsStatus == 'private_adaptation' &&
+              !CharacterId.isValidNpc(gate.actorId)) ||
+          !gated.add('${gate.sceneId}|${gate.choiceId}') ||
+          (gate.requiredMemoryId == null &&
+              gate.minimumTrustToPlayer == null) ||
+          (gate.minimumTrustToPlayer != null &&
+              (gate.minimumTrustToPlayer! < 1 ||
+               gate.minimumTrustToPlayer! > 100))) {
+        throw const FormatException('Invalid or duplicate NPC choice gate');
+      }
+      if (gate.requiredMemoryId != null &&
+          !rules.any((rule) =>
+              rule.observerId == gate.actorId &&
+              rule.memoryId == gate.requiredMemoryId &&
+              !(rule.sceneId == gate.sceneId &&
+                rule.choiceId == gate.choiceId))) {
+        throw const FormatException(
+            'NPC choice requires unreviewed or self-granted memory');
+      }
+      if (gate.minimumTrustToPlayer != null &&
+          !rules.any((rule) =>
+              rule.observerId == gate.actorId &&
+              rule.relatedActorId == 'player' &&
+              rule.relationshipDelta > 0 &&
+              !(rule.sceneId == gate.sceneId &&
+                rule.choiceId == gate.choiceId))) {
+        throw const FormatException(
+            'NPC choice requires unearned or self-granted trust');
+      }
+    }
   }
 
   /// Digest is stable under rule order changes. The authoring client must
@@ -202,6 +277,13 @@ class NpcSocialRulebook {
                 .compareTo('${b['scene_id']}|${b['actor_id']}'));
       signed['witnesses'] = sortedWitnesses;
       signed['require_reviewed_witnesses'] = true;
+    }
+    if (choiceGates.isNotEmpty) {
+      final gates = choiceGates.map((gate) => gate.toJson()).toList()
+        ..sort((a, b) =>
+            ('${a['scene_id']}|${a['choice_id']}')
+                .compareTo('${b['scene_id']}|${b['choice_id']}'));
+      signed['choice_gates'] = gates;
     }
     return sha256.convert(utf8.encode(canonicalJson(signed))).toString();
   }
