@@ -11,6 +11,7 @@ import 'package:ai_story_reader/cross_act_source_evidence_packet.dart';
 import 'package:ai_story_reader/multi_act_trial_compiler.dart';
 import 'package:ai_story_reader/zai_source_locked_gameplay_candidates.dart';
 import 'package:ai_story_reader/whole_plan_gameplay_candidate_batch.dart';
+import 'package:ai_story_reader/gameplay_candidate_reachability.dart';
 import 'package:ai_story_reader/whole_plan_gameplay_batch_page.dart';
 import 'package:ai_story_reader/reviewed_prose_scene_overlay.dart';
 import 'package:ai_story_reader/zai_source_locked_prose_preview.dart';
@@ -924,6 +925,148 @@ void main() {
         scrollable: find.byType(Scrollable).first);
     await tester.pumpAndSettle();
     expect(finished, findsOneWidget);
+  });
+
+
+  test('cross-batch audit joins item/fact IDs across every source-locked '
+      'act, rejecting conflicting names and altered consent', () async {
+    final index = BookSourceIndexer.index(ImportedBook(
+      title: 'Четыре главы для совместной проверки персонажей',
+      author: 'Синтетическая книга',
+      chapters: [
+        for (var n = 1; n <= 4; n++)
+          List.filled(5, 'Часть $n. Путник увидел старый ключ возле '
+              'ворот и услышал условие помощи. Он решил подумать. ').join(' '),
+      ],
+    ));
+    final book = await _analyze(index);
+    final map = BookwideActPlanner.build(index: index, book: book);
+    final draft = BookwideStoryPlanComposer.compose(
+      index: index, book: book, bookMap: map,
+      actProposals: [for (var i = 0; i < 4; i++) _proposal(book, i)],
+    );
+    final manifest = WholePlanGameplayBatchManifest.fromPlan(
+      index: index, book: book, plan: draft.plan,
+      maxNewRequestsPerRun: 2,
+    );
+    expect(manifest.contexts.length, greaterThan(1));
+    GameplayCandidate suggestion(
+        SourceLockedGameplayContext ctx, String label) {
+      final choice = ctx.choices.first;
+      return GameplayCandidate(
+        kind: 'fact', id: 'remembered_promise',
+        label: label, op: 'learn_fact',
+        sceneId: choice.sceneId, choiceId: choice.choiceId,
+        sourceEventId: choice.sourceEventId,
+        uncertainty: 'Знание героя является только игровой гипотезой.',
+      );
+    }
+    final proposals = [
+      for (final ctx in manifest.contexts)
+        GameplayCandidateDraft(
+          sourceFingerprint: ctx.sourceFingerprint,
+          approvalDigest: ctx.approvalDigest,
+          candidates: [suggestion(ctx, 'Помнит об условии')],
+        ),
+    ];
+    const auditor = GameplayCandidateReachabilityAuditor();
+    final whole = auditor.auditAcrossBatches(
+      plan: draft.plan, manifest: manifest, drafts: proposals,
+    );
+    expect(whole.issues, isEmpty);
+    expect(whole.checkedCandidateOperations, manifest.totalBatches);
+    expect(whole.reachedEndingIds.length, greaterThanOrEqualTo(2));
+    expect(whole.verifiesLiteraryCanon, false);
+    expect(whole.verifiesLiteraryOwnership, false);
+    expect(whole.mayAutomaticallyChangeBookworld, false);
+
+    await expectLater(() => auditor.auditAcrossBatches(
+      plan: draft.plan, manifest: manifest,
+      drafts: proposals.take(1).toList(),
+    ), throwsFormatException);
+    final second = manifest.contexts[1];
+    final conflicting = [
+      proposals.first,
+      GameplayCandidateDraft(
+        sourceFingerprint: second.sourceFingerprint,
+        approvalDigest: second.approvalDigest,
+        candidates: [suggestion(second, 'Другое непроверенное знание')],
+      ),
+      ...proposals.skip(2),
+    ];
+    expect(() => auditor.auditAcrossBatches(
+      plan: draft.plan, manifest: manifest, drafts: conflicting,
+    ), throwsFormatException);
+    final forgery = [
+      proposals.first,
+      GameplayCandidateDraft(
+        sourceFingerprint: second.sourceFingerprint,
+        approvalDigest: 'f' * 64, candidates: proposals[1].candidates,
+      ),
+      ...proposals.skip(2),
+    ];
+    expect(() => auditor.auditAcrossBatches(
+      plan: draft.plan, manifest: manifest, drafts: forgery,
+    ), throwsFormatException);
+  });
+
+  test('cross-batch route audit finds spend without prior pickup '
+      'even when both isolated proposals are source-bound', () async {
+    final index = BookSourceIndexer.index(ImportedBook(
+      title: 'Четыре части: ключ и отказ',
+      author: 'Синтетический источник',
+      chapters: [
+        for (var n = 1; n <= 4; n++)
+          List.filled(5, 'Часть $n. Путник нашёл ключ около ворот '
+              'и задумался о предложении помощника. ').join(' '),
+      ],
+    ));
+    final book = await _analyze(index);
+    final map = BookwideActPlanner.build(index: index, book: book);
+    final draft = BookwideStoryPlanComposer.compose(
+      index: index, book: book, bookMap: map,
+      actProposals: [for (var i = 0; i < 4; i++) _proposal(book, i)],
+    );
+    final manifest = WholePlanGameplayBatchManifest.fromPlan(
+      index: index, book: book, plan: draft.plan,
+      maxNewRequestsPerRun: 2,
+    );
+    expect(manifest.totalBatches, greaterThan(1));
+    GameplayCandidate item(SourceLockedGameplayContext ctx, String op) {
+      final choices = ctx.choices.where((anchor) =>
+        ctx.excerpts.any((event) =>
+          event.id == anchor.sourceEventId &&
+          event.source.quote.toLowerCase().contains('ключ'))).toList();
+      expect(choices, isNotEmpty);
+      final a = choices.first;
+      return GameplayCandidate(
+        kind: 'item', id: 'old_key', label: 'ключ', op: op,
+        sceneId: a.sceneId, choiceId: a.choiceId,
+        sourceEventId: a.sourceEventId,
+        uncertainty: 'В исходной книге упоминание не доказывает владение.',
+      );
+    }
+    final data = [
+      for (var n = 0; n < manifest.totalBatches; n++)
+        GameplayCandidateDraft(
+          sourceFingerprint: manifest.contexts[n].sourceFingerprint,
+          approvalDigest: manifest.contexts[n].approvalDigest,
+          candidates: [
+            if (n == 0) item(manifest.contexts[n], 'grant_item'),
+            if (n == 1) item(manifest.contexts[n], 'consume_item'),
+          ],
+        ),
+    ];
+    final report = const GameplayCandidateReachabilityAuditor()
+        .auditAcrossBatches(
+      plan: draft.plan, manifest: manifest, drafts: data,
+    );
+    expect(report.issues.map((i) => i.code),
+        contains('CONSUME_UNOWNED'));
+    final failure = report.issues.firstWhere(
+        (issue) => issue.code == 'CONSUME_UNOWNED');
+    expect(failure.pathChoiceIds, isNotEmpty);
+    expect(report.mayAutomaticallyChangeBookworld, false);
   });
 
 }
