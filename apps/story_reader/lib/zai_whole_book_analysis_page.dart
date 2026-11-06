@@ -545,6 +545,36 @@ class _ZaiWholeBookAnalysisPageState extends State<ZaiWholeBookAnalysisPage> {
                 const Text('Следующий этап — проверка связей, '
                     'причинных развилок и компиляция полного сценария. '
                     'Пока можно сыграть короткую RPG по найденным событиям.'),
+                if (outline != null && _bookActs != null &&
+                    _bookActs!.acts.where(
+                        (a) => a.events.length >= 2).length >= 2) ...[
+                  const SizedBox(height: 10),
+                  FilledButton.icon(
+                    key: const Key('whole-book-act-draft-start'),
+                    onPressed: _working ? null : () async {
+                      final book = NarrativeBookModel.fromExisting(
+                          index: widget.index, outline: outline);
+                      if (!mounted) return;
+                      await Navigator.of(context).push<void>(
+                        MaterialPageRoute(
+                          builder: (_) => BookActDraftPage(
+                            index: widget.index,
+                            book: book,
+                            bookMap: _bookActs!,
+                            worldGateway: widget.gateway ??
+                                const DeviceWorldLibraryGateway(),
+                          ),
+                        ),
+                      );
+                    },
+                    icon: const Icon(Icons.auto_awesome_outlined),
+                    label: const Text('Продолжить подготовку сценария'),
+                  ),
+                  const Text('Следующие части книги будут предложены '
+                      'по порядку. Перед каждой отправкой в Z.ai '
+                      'нужно увидеть цитаты и дать отдельное согласие. '
+                      'Это ещё не полная литературно проверенная RPG.'),
+                ],
                 if (outline != null && outline.events.length >= 2) ...[
                   const SizedBox(height: 10),
                   FilledButton.icon(
@@ -710,32 +740,10 @@ class _ZaiWholeBookAnalysisPageState extends State<ZaiWholeBookAnalysisPage> {
                 ),
                 if (_bookActs!.acts.where(
                     (a) => a.events.length >= 2).length >= 2)
-                  OutlinedButton.icon(
-                    key: const Key('whole-book-act-draft-start'),
-                    onPressed: _working ? null : () async {
-                      final book = NarrativeBookModel.fromExisting(
-                        index: widget.index, outline: outline);
-                      if (!mounted) return;
-                      await Navigator.of(context).push<void>(
-                        MaterialPageRoute(
-                          builder: (_) => BookActDraftPage(
-                            index: widget.index,
-                            book: book,
-                            bookMap: _bookActs!,
-                            worldGateway: widget.gateway,
-                          ),
-                        ),
-                      );
-                    },
-                    icon: const Icon(Icons.account_tree_outlined),
-                    label: const Text('Подготовить решения по частям книги'),
-                  ),
-                if (_bookActs!.acts.where(
-                    (a) => a.events.length >= 2).length >= 2)
-                  const Text('В расширенном режиме каждая часть '
-                      'отправляется в Z.ai отдельно и только с согласия. '
-                      'Пока создаётся многоактовый черновик, '
-                      'не полноценная литературная игра.'),
+                  const Text('Сохранённые сценарные предложения '
+                      'можно возобновить без повторной оплаты. '
+                      'Каждый новый запрос требует отдельного согласия. '
+                      'Пока создаётся многоактовый ЧЕРНОВИК.'),
               ],
               if (_bookActError != null)
                 Text(_bookActError!,
