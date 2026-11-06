@@ -99,8 +99,8 @@ class RichNpcKnowledgeContractTests(unittest.TestCase):
 
     def test_reviewed_speaker_turns_hide_future_npc_knowledge(self):
         bp, prov, index = reviewed_sample()
-        text = ("Встреча у ворот.\\n"
-                "Мария: «Мне известен секрет!»\\n"
+        text = ("Встреча у ворот.\n"
+                "Мария: «Мне известен секрет!»\n"
                 "Игрок: «Я слушаю».")
         bp["scenes"][0]["text"] = text
         signed = rich._exact_scene_dialogue(text)
@@ -118,11 +118,15 @@ class RichNpcKnowledgeContractTests(unittest.TestCase):
         self.assertEqual(rich.verify(raw)["format_version"], 3)
 
         for mutation in ("no_review", "wrong_actor", "missing_turn",
-                         "future_fact", "changed_speaker"):
+                         "future_fact", "changed_speaker",
+                         "unsigned_bypass"):
             with self.subTest(mutation=mutation):
                 changed = deepcopy(prov)
                 if mutation == "no_review":
                     del changed["presentation"]["scene_dialogue_knowledge"]
+                elif mutation == "unsigned_bypass":
+                    del changed["presentation"]["scene_dialogue_knowledge"]
+                    del changed["presentation"]["scene_dialogues"]
                 else:
                     rows = changed["presentation"]["scene_dialogue_knowledge"]["entry"]
                     if mutation == "wrong_actor":

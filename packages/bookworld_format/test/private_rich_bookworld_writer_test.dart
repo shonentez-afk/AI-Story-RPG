@@ -101,8 +101,8 @@ void main() {
     final data = _npcRichSample();
     final rawBlueprint = _asObject(data['blueprint']);
     final first = (rawBlueprint['scenes'] as List).first as Map<String, dynamic>;
-    first['text'] = 'Встреча у ворот.\\n'
-        'Мария: «Мне известен секрет!»\\n'
+    first['text'] = 'Встреча у ворот.\n'
+        'Мария: «Мне известен секрет!»\n'
         'Игрок: «Я слушаю».';
     final provenance = _asObject(data['provenance']);
     final presentation = _asObject(provenance['presentation']);
@@ -194,6 +194,13 @@ void main() {
     rejects((data) {
       final blueprint = _asObject(data['blueprint']);
       (blueprint['actors'] as List)[1] = 'npc_unstable_alias';
+    });
+    rejects((data) {
+      final blueprint = _asObject(data['blueprint']);
+      final first = (blueprint['scenes'] as List).first as Map;
+      first['text'] = 'Мария: «Я всё знаю».\\nИгрок: «Верно».';
+      // A named scene with NPC actors cannot fall back to raw text
+      // by deleting both exact dialogue and knowledge projections.
     });
     rejects((data) {
       final blueprint = _asObject(data['blueprint']);
