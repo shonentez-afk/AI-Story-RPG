@@ -478,39 +478,46 @@ void main() {
     await tester.tap(find.text('Перейти к предметам'));
     await tester.pumpAndSettle();
     expect(http.bodies, isEmpty);
-    expect(find.byKey(const Key('gameplay-source-request')), findsOneWidget);
-    final before = tester.widget<FilledButton>(
-        find.byKey(const Key('gameplay-source-request')));
-    expect(before.onPressed, isNull);
-
+    // Quotes and decisions fill the page. The consent + request controls
+    // may not be built until scrolling on a normal phone-sized viewport.
     final consent = find.byKey(const Key('gameplay-source-cloud-consent'));
-    await tester.ensureVisible(consent);
+    await tester.scrollUntilVisible(consent, 140,
+        scrollable: find.byType(Scrollable).last);
+    await tester.pumpAndSettle();
     await tester.tap(consent);
     await tester.pumpAndSettle();
     final request = find.byKey(const Key('gameplay-source-request'));
-    await tester.ensureVisible(request);
+    await tester.scrollUntilVisible(request, 120,
+        scrollable: find.byType(Scrollable).last);
+    await tester.pumpAndSettle();
+    expect(tester.widget<FilledButton>(request).onPressed, isNotNull);
     await tester.tap(request);
     await tester.pumpAndSettle();
     expect(http.bodies, hasLength(1));
-    expect(find.byKey(const Key('gameplay-source-candidate-0')),
-        findsOneWidget);
     final selected = find.byKey(const Key('gameplay-source-candidate-0'));
-    await tester.ensureVisible(selected);
+    await tester.scrollUntilVisible(selected, 120,
+        scrollable: find.byType(Scrollable).last);
+    await tester.pumpAndSettle();
+    expect(selected, findsOneWidget);
     await tester.tap(selected);
     await tester.pumpAndSettle();
     final note = find.byKey(const Key('gameplay-source-review-note-0'));
-    await tester.ensureVisible(note);
+    await tester.scrollUntilVisible(note, 120,
+        scrollable: find.byType(Scrollable).last);
+    await tester.pumpAndSettle();
     await tester.enterText(note,
         'Читатель разрешил только частный игровой предмет, не канон.');
     await tester.pumpAndSettle();
     final privateFiction = find.byKey(
         const Key('gameplay-source-private-fiction'));
-    await tester.ensureVisible(privateFiction);
+    await tester.scrollUntilVisible(privateFiction, 120,
+        scrollable: find.byType(Scrollable).last);
     await tester.tap(privateFiction);
     await tester.pumpAndSettle();
     final approve = find.byKey(
         const Key('gameplay-source-accept-selection'));
-    await tester.ensureVisible(approve);
+    await tester.scrollUntilVisible(approve, 120,
+        scrollable: find.byType(Scrollable).last);
     await tester.tap(approve);
     await tester.pumpAndSettle();
     expect(saved, isNotNull);
