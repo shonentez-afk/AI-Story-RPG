@@ -201,6 +201,30 @@ class RichNpcSocialContract {
         if (!_cited(sceneId, quote, origins)) {
           throw const FormatException('NPC choice gate lacks scene source');
         }
+        final targetChapter = origins[sceneId]?['chapter_index'];
+        if (targetChapter is! int) {
+          throw const FormatException('Unknown chapter for NPC choice gate');
+        }
+        if (memory != null) {
+          final relevant = rules.where((rule) =>
+              rule.observerId == actorId &&
+              rule.memoryId == memory).toList();
+          if (relevant.length != 1 ||
+              (origins[relevant.single.sceneId]?['chapter_index'] as int) >
+                  targetChapter) {
+            throw const FormatException(
+                'NPC choice requires an event from a future chapter');
+          }
+        }
+        if (trust != null && !rules.any((rule) =>
+            rule.observerId == actorId &&
+            rule.relatedActorId == 'player' &&
+            rule.relationshipDelta > 0 &&
+            origins[rule.sceneId]?['chapter_index'] is int &&
+            (origins[rule.sceneId]!['chapter_index'] as int) <= targetChapter)) {
+          throw const FormatException(
+              'NPC choice trust cannot precede its source event');
+        }
         choiceGates.add(NpcSocialChoiceGate(
           sceneId: sceneId, choiceId: choiceId, actorId: actorId,
           requiredMemoryId: memory as String?,
