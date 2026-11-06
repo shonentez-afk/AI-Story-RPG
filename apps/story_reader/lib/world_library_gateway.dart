@@ -231,6 +231,7 @@ class DeviceWorldLibraryGateway implements WorldLibraryGateway {
         blueprint, coordinator.events.map((event) => event.toJson()),
         expectedSequence: state.revision,
         expectedStateHash: state.stateHash,
+        socialRulebook: socialRules,
       ),
       socialRules,
     );
