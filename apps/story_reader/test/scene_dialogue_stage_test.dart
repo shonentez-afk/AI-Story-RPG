@@ -1,4 +1,5 @@
 import 'package:ai_story_reader/scene_dialogue_stage.dart';
+import 'package:bookworld_format/bookworld_format.dart';
 import 'package:ai_story_reader/world_library_gateway.dart';
 import 'package:ai_story_reader/world_play_page.dart';
 import 'package:flutter/material.dart';
@@ -82,6 +83,30 @@ void main() {
         '— Как зовут тебя?\n— Я не знаю, кто спросил.'), isNull);
     expect(SceneDialogueScript.fromSceneText(
         'Лена: «Одна реплика»\nГлава: просто рассказ.'), isNull);
+  });
+
+  test('rich v3 scene produces the same signed speaker turns as UI, '
+      'not an independent NPC truth claim', () {
+    final presentation = RichSceneDialogue.presentationFor(_sample)!;
+    final turns = RichSceneDialogue.verify(presentation, _sample);
+    final UI = SceneDialogueScript.fromSignedTurns(turns);
+    final legacy = SceneDialogueScript.fromSceneText(_sample)!;
+    expect(UI.turns, hasLength(legacy.turns.length));
+    for (var i = 0; i < UI.turns.length; i++) {
+      expect(UI.turns[i].speaker, legacy.turns[i].speaker);
+      expect(UI.turns[i].text, legacy.turns[i].text);
+    }
+    expect(UI.turns.first.isNarration, true);
+    expect(UI.turns.last.isNarration, true);
+    expect(() => RichSceneDialogue.verify({
+      'scene_text_sha256': presentation['scene_text_sha256'],
+      'turns': [
+        {'speaker': null, 'text': 'Подменённые слова.'},
+        ...(presentation['turns'] as List).skip(1),
+      ],
+    }, _sample), throwsFormatException);
+    expect(RichSceneDialogue.presentationFor(
+        '— Кто говорит?\n— Никто не знает.'), isNull);
   });
 
   testWidgets('named speakers, portrait slots, history and saved reading position',
