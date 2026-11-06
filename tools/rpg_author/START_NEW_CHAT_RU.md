@@ -5,6 +5,14 @@
 Рабочая ветка: `feature/external-rpg-author-e6d-handoff-20261106`.
 Этот файл: `tools/rpg_author/START_NEW_CHAT_RU.md`.
 
+## СРОЧНОЕ обновление интеграции с основным main — после PR #124 (2026-11-06)
+
+Основной `main` **`6711011c0e55ca14f43c0ad0cab1f9976754c08a`**, [PR #124 MERGED](https://github.com/shonentez-afk/AI-Story-RPG/pull/124). [Подробный аудит изменений и блокеров CI](E6H_MAIN_PR124_INTEGRATION_AUDIT_RU_2026-11-06.md) — читать **после** единого архитектурного плана, **до** внесения следующей программной правки генератора.
+
+Новое: `RichSceneDialogue` + optional `presentation.scene_dialogues` в прежних четырёх ZIP-файлах `.bworld v3`, проверка Dart/Python, `WorldGameView` и `DialogueStage` воспроизводят подписанные `speaker/text`; старые v3 читаются. **Не писать второй parser и не утверждать, что в v3 нет никаких структурированных диалогов.** Полных `character_id/turn_id`, NPC profile/AI memory и code-only visual recipes в v3 всё ещё нет.
+
+**Важный CI-risk:** post-merge main #770 ещё в процессе на момент аудита, PR-head #769 success, M0 #855 success; отдельные E6d author tests #94 FAILED (step `Check pinned application compatibility` и `dart-parity`). PR #124 изменил три pinned файла Python/Dart, поэтому текущий E6d compatibility lock расходится с main. **НЕ отключать checks, НЕ редактировать SHA вручную.** Проверить новые контракты/паритет, затем согласовать обновлённый tested pin отдельной задачей. Действующий skill E6d `9849c22d...` **не обновлялся**; последний релиз с исходной main `959c8134` = `test-build-761` (без #124). Закрыть полную книгу/реальный E2E до ухода в редактор.
+
 ## ЕДИНЫЙ ГЛАВНЫЙ ДОКУМЕНТ: полная игра из книги, генератор, редактор, AI-NPC, пиксели (2026-11-06)
 
 **Начинать с [AI_STORY_RPG_COMPLETE_GAME_UNIFIED_SPEC_RU.md](AI_STORY_RPG_COMPLETE_GAME_UNIFIED_SPEC_RU.md).** Это основной нормативный план, объединяющий все решения из прежних MASTER/E6f/E6g заметок и дополнительно закрепляющий главное требование: навык **сам** создаёт готовую игру и **полные профили всех нужных NPC**; конечный игрок импортирует **ОДИН .bworld**, редактор встроен в Windows/Android-приложение и **не обязателен**. Свободные AI-NPC ответы/осмотр/ввод действий опциональны и не могут менять `story_core` в обход choice gates; pixельные сцены строятся кодом, а не картинками.
