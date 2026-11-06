@@ -135,7 +135,11 @@ void main() {
     await tester.pumpWidget(MaterialApp(
       home: WorldPlayPage(gateway: gateway, campaignId: 'dialogue_campaign'),
     ));
-    await tester.pumpAndSettle();
+    // An indeterminate loading indicator can keep pumpAndSettle active
+    // while mocked asynchronous view/prefs settle; pump bounded frames.
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 250));
+    await tester.pump();
     expect(find.byKey(const ValueKey('dialogue-stage')), findsOneWidget);
     expect(find.byKey(const ValueKey('world-choice-ask_guard')), findsNothing);
     expect(gateway.commits, 0);
