@@ -14,8 +14,8 @@ def social_sample():
     bp, prov, index = reviewed_sample()
     quote = prov["scene_origins"][0]["source_refs"][0]["quote_sha256"]
     bp["scenes"][0]["text"] = (
-        "Встреча у ворот.\\n"
-        "Мария: «Я услышала обещание!»\\n"
+        "Встреча у ворот.\n"
+        "Мария: «Я услышала обещание!»\n"
         "Игрок: «Обещаю».")
     prov["presentation"]["scene_dialogues"] = {
         "entry": rich._exact_scene_dialogue(bp["scenes"][0]["text"]),

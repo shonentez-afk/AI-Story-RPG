@@ -107,8 +107,8 @@ void main() {
     final rawBlueprint = _asObject(data['blueprint']);
     final sourceScene =
         (rawBlueprint['scenes'] as List).first as Map<String, dynamic>;
-    sourceScene['text'] = 'Встреча у ворот.\\n'
-        'Мария: «Я услышала обещание!»\\n'
+    sourceScene['text'] = 'Встреча у ворот.\n'
+        'Мария: «Я услышала обещание!»\n'
         'Игрок: «Обещаю».';
     final presentation = _asObject(provenance['presentation']);
     presentation['scene_dialogues'] = {
