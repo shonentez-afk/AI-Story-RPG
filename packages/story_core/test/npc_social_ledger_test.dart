@@ -304,6 +304,76 @@ void main() {
     )), throwsFormatException);
   });
 
+  test('reviewed NPC memory and trust authoritatively lock decisions/replay',
+      () {
+    final bp = _blueprint();
+    final rules = NpcSocialRulebook(
+      blueprintHash: bp.blueprintHash,
+      requireReviewedWitnesses: true,
+      witnesses: const [
+        NpcSceneWitness(
+          sceneId: 'gate', actorId: 'guard', mode: NpcWitnessMode.present),
+      ],
+      rules: const [
+        NpcSocialRule(
+          memoryId: 'guard_remembers_promise', sceneId: 'gate',
+          choiceId: 'inspect_gate', observerId: 'guard',
+          kind: NpcMemoryKind.promiseReceived,
+          relatedActorId: 'player', relationshipDelta: 10),
+      ],
+      choiceGates: const [
+        NpcSocialChoiceGate(
+          sceneId: 'gate', choiceId: 'walk_market', actorId: 'guard',
+          requiredMemoryId: 'guard_remembers_promise',
+          minimumTrustToPlayer: 10),
+      ],
+    );
+    final world = StoryWorld(bp, socialRulebook: rules);
+    final initialHash = world.state.stateHash;
+    expect(world.choiceLockReason('walk_market'),
+        'condition_not_met:npc_memory');
+    final denied = world.apply(actionId: 'no', choiceId: 'walk_market');
+    expect(denied.status, DecisionStatus.denied);
+    expect(world.state.stateHash, initialHash);
+    expect(world.events, isEmpty);
+    expect(world.apply(actionId: 'witnessed', choiceId: 'inspect_gate').applied,
+        isTrue);
+    expect(world.choiceLockReason('walk_market'), isNull);
+    final checkpoint = world.events.map((event) => event.toJson()).toList();
+    final restored = StoryWorld.replay(bp, checkpoint,
+      socialRulebook: rules,
+      expectedSequence: world.state.revision,
+      expectedStateHash: world.state.stateHash,
+    );
+    expect(restored.choiceLockReason('walk_market'), isNull);
+    expect(restored.state.stateHash, world.state.stateHash);
+    expect(world.apply(actionId: 'to_market', choiceId: 'walk_market').applied,
+        isTrue);
+    final withoutGate = StoryWorld(bp);
+    expect(withoutGate.apply(actionId: 'unearned', choiceId: 'walk_market')
+        .applied, isTrue);
+    expect(() => StoryWorld.replay(bp,
+        withoutGate.events.map((event) => event.toJson()),
+        socialRulebook: rules,
+        expectedSequence: withoutGate.state.revision,
+        expectedStateHash: withoutGate.state.stateHash),
+        throwsFormatException);
+    final tooHigh = NpcSocialRulebook(
+      blueprintHash: bp.blueprintHash,
+      requireReviewedWitnesses: true,
+      witnesses: rules.witnesses,
+      rules: rules.rules,
+      choiceGates: const [
+        NpcSocialChoiceGate(
+          sceneId: 'gate', choiceId: 'walk_market', actorId: 'guard',
+          requiredMemoryId: 'guard_remembers_promise',
+          minimumTrustToPlayer: 11),
+      ],
+    );
+    expect(StoryWorld.replay(bp, checkpoint, socialRulebook: tooHigh)
+        .choiceLockReason('walk_market'), 'condition_not_met:npc_trust');
+  });
+
   test('rumor is second-hand information, not witnessed promise or trust',
       () {
     final bp = _blueprint();
