@@ -64,5 +64,41 @@ void main(List<String> args) {
       throw StateError('Python social witness/replay parity mismatch');
     }
   }
+  if (socialRules != null && socialRules.itemTransfers.isNotEmpty) {
+    final custodyWorld = StoryWorld(verified.blueprint,
+        socialRulebook: socialRules);
+    if (custodyWorld.apply(actionId: 'false_return',
+        choiceId: 'return_map').reason !=
+            'condition_not_met:npc_item_owner' ||
+        custodyWorld.apply(actionId: 'initial_gift',
+        choiceId: 'give_map').applied) {
+      throw StateError('NPC fabricated a gift or return without ownership');
+    }
+    if (!custodyWorld.apply(actionId: 'acquire',
+        choiceId: 'wait').applied ||
+        !custodyWorld.apply(actionId: 'give',
+        choiceId: 'give_map').applied ||
+        NpcSocialLedger.inspect(custodyWorld, socialRules)
+            .itemOwner('map') != npc ||
+        custodyWorld.apply(actionId: 'counterfeit',
+        choiceId: 'wait').reason !=
+            'condition_not_met:npc_item_custody' ||
+        !custodyWorld.apply(actionId: 'return',
+        choiceId: 'return_map').applied ||
+        NpcSocialLedger.inspect(custodyWorld, socialRules)
+            .itemOwner('map') != 'player') {
+      throw StateError('NPC ownership transfer was not enforced');
+    }
+    final restoredItems = StoryWorld.replay(
+      verified.blueprint, custodyWorld.events.map((e) => e.toJson()),
+      expectedSequence: custodyWorld.state.revision,
+      expectedStateHash: custodyWorld.state.stateHash,
+      socialRulebook: socialRules,
+    );
+    if (NpcSocialLedger.inspect(restoredItems, socialRules).snapshotHash !=
+        NpcSocialLedger.inspect(custodyWorld, socialRules).snapshotHash) {
+      throw StateError('NPC custody changed after replay');
+    }
+  }
   stdout.writeln('Python-built NPC rich-v3 passed independent Dart replay.');
 }
