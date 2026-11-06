@@ -77,3 +77,66 @@
 
 **Разделение релизов:** пока новая версия не создана, установленный E6d может собирать проверенную **текстовую** rich v3, но нельзя обещать, что она автоматически содержит пиксельные сцены и свободные AI-NPC. Временные внешние JSON допустимы лишь для dev/QA, **не как окончательный обязательный пользовательский импорт**.
 
+
+## 4. Сторонние проекты: ЧТО берём, ЗАЧЕМ, ГДЕ, в каком виде
+
+Категории: **«внедрить»** — кандидат на прямую зависимость только после отдельного spike и тестов; **«взять алгоритм»** — реализовать нужную идею у нас, копирование исходного кода лишь после проверки лицензий; **«UX-ориентир»** — заимствовать принципы, но не чужой runtime, GUI и сервис.
+
+| Проект и источник | Конкретно полезное | Для какого модуля | Решение |
+|---|---|---|---|
+| **BookNLP** https://github.com/booknlp/booknlp | Entity clusters, coreference, «кто произнёс цитату», events | Навык и Python-анализ книги | **Идея**, текущие модели преимущественно англоязычные; не использовать как русский канонический анализатор |
+| **Natasha** https://github.com/natasha/natasha | Русская сегментация, леммы, NER и ограниченное извлечение фактов | Python-индекс, вспомогательные подсказки при чтении FB2/TXT | **Опциональный локальный NLP**, MIT; оценить на реальной художественной прозе (модели в основном тестировались на новостях); не доверять связям без независимой проверки |
+| **Arcweave** https://docs.arcweave.com/ | Boards, общий каталог элементов, сцены и связи, playtest | Структура source/game graphs и UI editor | **UX-ориентир**, не подключать коммерческий проект/его API |
+| **Twine** https://github.com/klembot/twinejs | Passage graph, наглядные варианты, понятные узлы и переходы | Редактор сценария | **UX-ориентир**, GPL-3.0 код не переносить в наше приложение |
+| **Ink / Inky** https://github.com/inkle/inky | Play-as-you-write, jump-to-source, диагностика, воспроизведение последнего маршрута | Редактор, QA сцен/выборов | **UX-ориентир**, не заменять story_engine движком ink |
+| **Yarn Spinner** https://www.yarnspinner.dev/docs/ | Stable line tags, speaker/line IDs, branching dialogue, localization hooks | Генератор реплик, NPC dialogue stage | **Модель структурных диалогов**; свой data contract, чужой runtime не нужен |
+| **Dialogic 2** https://docs.dialogic.pro/ | Character editor, timeline: say/condition/gesture/choice | Редактор NPC и анимаций | **UX-ориентир**, Godot не подключаем; авторы отмечают alpha и возможные изменения |
+| **Mermaid** https://github.com/mermaid-js/mermaid | Декларативный вывод блок-схем в GitHub и диагностике | Генератор, отчёты, автопроверки | **Экспорт .mmd**, не JavaScript в мобильном приложении, MIT |
+| **Vyuh Node Flow** https://pub.dev/packages/vyuh_node_flow | Nodes, ports, pan/zoom, groups, minimap, JSON serialization | Встроенный Flutter editor | **Первый кандидат прямой зависимости**, MIT. Учитывать MobX/http и проверять размер/сложность |
+| **node_flow** https://pub.dev/packages/node_flow | Flutter nodes/edges/ports/zoom, минимум зависимостей | Встроенный Flutter editor | **Альтернатива**, MIT; persistence/undo/redo обеспечиваем сами. После benchmark оставить **одну**, не обе |
+| **PixelForge** https://github.com/KodoRe/pixel-forge | JSON→seeded procedural geometry: humanoid, animals, tiles, trees, buildings; animation/palettes | Python Visual Director → Dart primitive renderer | **Главный алгоритмический ориентир**, но JS-код как runtime не нужен. README заявляет MIT, GitHub metadata не определяет лицензию: проверить точные исходники/атрибуции ДО копирования |
+| **Sprite Forge** https://github.com/paperhurts/sprite-forge | Послойное построение внешности персонажа, волосы/одежда/эмоция и сохраняемые параметры | Детерминированный Dart actor generator | **Алгоритмический ориентир**, браузерный HTML/JS не внедрять; при копировании проверить отдельную лицензию |
+| **pixel-sprite-generator** https://github.com/zfedoran/pixel-sprite-generator | Маски, симметрия, seeded variation | Генератор маленьких животных/предметов/декораций | **Небольшой алгоритм-кандидат**; MIT и attribution при переносе |
+| **Flutter Canvas / CustomPainter** https://api.flutter.dev/flutter/rendering/CustomPainter-class.html | 2D процедурная геометрия, рисование по целочисленной пиксельной сетке | Runtime в основном приложении | **Внедрить первым** — Flutter SDK уже есть, нет обязательного ассетного движка |
+| **Flame** https://docs.flame-engine.org/latest/flame/game_widget.html | GameWidget, компонентная сцена, камера, анимации и lifecycle | При развитии визуального runtime | **Опциональный будущий кандидат** после FPS/памяти benchmark; не второй gameplay engine, PNG sprite sheets не обязательны |
+| **Character Card V2** https://github.com/malfoyslastname/character-card-spec-v2/blob/main/spec_v2.md | name/personality/scenario/first message/example dialogue/lorebook | Создание карточек всех NPC навыком | **Идея формы NPC**; НЕ принимать произвольные чужие system_prompt/jailbreak/hidden instructions, дополняем source-locked knowledge gate |
+| **AI Dungeon** https://help.aidungeon.com/getting-started и https://help.aidungeon.com/faq/story-cards | Do/Say/Story, Story Cards по релевантности, память и recap | UX свободного ввода, контекстные карточки NPC/мира | **Идея UX/контекста**, без коммерческого сервиса и неконтролируемого сюжета |
+| **Convai Narrative Design** https://docs.convai.com/api-docs/convai-playground/character-customization/narrative-design | NPC objectives, narrative sections, decision points, triggers | NPC goals по сценам и API разговоры | **Ключевая архитектурная идея**, без SaaS/SDK Convai |
+| **AI Town** https://github.com/a16z-infra/ai-town | Персонажная память, история бесед, личный контекст, события | NPC Conversation Memory/Context Builder | **Архитектурный ориентир**, MIT. Не переносить TS/Convex/PixiJS, готовые изображения или постоянный онлайн backend |
+| **Rasa CALM** https://rasa.com/faq/rasa-playground | LLM понимает фразу; детерминированный flow контролирует действие | Free-text gate и deterministic gameplay | **Ключевой шаблон безопасности**, без установки Rasa/backend |
+| **chasm** https://github.com/chasmlol/chasm | NPC viewpoint: что видел/слышал, агентные предложения | Ограничение знаний и допустимых действий | **Экспериментальный ориентир**, license metadata не определена, backend не копировать |
+| **LangGraph** https://docs.langchain.com/oss/python/langgraph/overview | Контрольные точки и human-in-the-loop | Навык и Python подготовка | **Идея**, лишняя зависимость: наш генератор уже имеет hash-locked checkpoints |
+
+**Выбор зависимостей в первой реализации:** только существующий Python+Flutter, плюс необязательный Mermaid export; Flutter CustomPainter для пикселей. Лишь после тестов выбрать один граф-редактор (Vyuh vs node_flow); Flame — если Canvas недостаточен. **Не внедряем** Ren'Py, Godot, Unity, сторонний JS-renderer/WebView, готовые PNG/тайлы, облачные изображения, новый game engine, чужую серверную платформу NPC или произвольно сгенерированный программный код.
+
+**Лицензионные ворота:** до прямого копирования кода — проверить конкретный LICENSE каждого upstream и всех использованных фрагментов, при MIT сохранить copyright/NOTICE. «README говорит MIT» не автоматически означает юридически проверенный дистрибутив. Для нашего проекта предпочтительна независимая Dart-реализация идей. Книжные права проверять на конкретном издании/переводе, а не только на авторстве оригинального произведения.
+
+## 5. Обязанности НАВЫКА и ChatGPT: выпустить полный мир самому
+
+Навык ai-story-book-to-rpg — **главный автор/координатор**, а не инструкции пользователю «сделайте персонажей». Он получает проверенную версию Python генератора **из нашего GitHub** и пишет структурированные данные по строгим схемам. Вся выдумка, маркировка адаптаций, QA и финальная компиляция проходят здесь **до** импорта в приложение.
+
+### Полный pipeline будущей версии навыка
+
+1. **Приём книги и настроек.** FB2/TXT сейчас; EPUB позже после реализации. Выбрать сюжет CANON/ALTER_FATE, героя, язык, визуальный режим. Если необязательные параметры не заданы, явно записать разумные defaults. Для облачного анализа книги нужно отдельное информированное согласие; частные книги никогда не публиковать.
+2. **Версионированный bootstrap.** Навык загружает проверенный commit Python tools/rpg_author из нашего GitHub, сверяет SHA/doctor/contract. Приватные исходники, проекты, отчёты лежат вне публичного checkout. Без рабочей среды **не заявлять**, что файл собран.
+3. **Прочитать ВСЮ книгу небольшими отрезками.** Сохранить original block/chapter/chunk, точные UTF-16 цитаты и source_fingerprint. Отделить факт повествования NARRATED, чью-то реплику REPORTED и вывод INFERRED.
+4. **Единый литературный каталог.** Создать source-linked события, утверждения, действующих лиц, псевдонимы, места, предметы, цели, обещания, владение и знания; различать текстовый порядок и реальную хронологию. Никакого слияния NPC по одинаковому имени без подтверждённой связи.
+5. **Независимый BookEvidenceGraph.** Узлы и связи: source quotes, happens_before, verified_causes, candidate_causes, knows_after, owns_after, located_at. У каждой спорной связи evidence/uncertainty. Сверить с уже имеющимися Dart narrative/evidence types.
+6. **Цельная игра по всей книге.** Сцены, акты, выбор героя, задачи, предметы, знания, журнальные описания, условия, последствия, концовки. CANON не заменять искусственными развилками; ALTER_FATE создавать с реально разными маршрутами и пометками EXPLICIT_ADAPTATION. Завершённость сцены обязательна.
+7. **Записать ВСЕ нужные NPC-карточки** (см. §6): identity, характер, цели, мотивация, отношения, эмоциональные состояния, манера речи, цитаты, knowledge_by_act/scene/state, неизвестное и запрет спойлеров, что NPC видел, визуальная идентичность, реакция на выборы. Для второстепенных персонажей допускаются краткие, но честные карточки.
+8. **Выписать все обязательные диалоги.** Структурированные speaker_id и turn_id, оригинал/адаптация, текст реплики, допустимые ответы/вопросы, эмоции, действия и последствия. Создать полноценный offline fallback: API не нужен, чтобы завершить игру.
+9. **Подготовить AI interaction affordances.** Для каждой сцены описать, кто виден/доступен, о чём можно говорить, что можно осмотреть и с чем взаимодействовать, какие естественные фразы относятся к **разрешённым** choice_id. Не превращать свободный текст в произвольный код/эффект.
+10. **Автоматически спланировать пиксельные сцены.** Для всех важных мест/персонажей определить кодовый archetype, style/palette, seeded appearance, планы сцены, позиции, предметы, gestures и лёгкие animation cues; от неизвестных объектов требовать честный TEXT_ONLY/PARTIAL fallback, не выдумывать достоверный вид.
+11. **Независимые проверки и исправления.** Пройти вторым отдельным литературным критиком мотивацию/хронологию/знания/логические последствия. Исполнить reachability/replay/диалоговые one-shot/предварительное знание, проверку NPC spoilers, visual coverage/unknown renderer opcode, prompt injection/privacy, consistency source/story/visual IDs. При правке инвалидация зависимых SHA/gates, повтор QA.
+12. **Собрать ОДИН .bworld.** Писать только через проверенный writer поддерживаемой версии, архив, манифест, graph/NPC/dialogue/interaction/visual данные и QA fingerprints связаны хешами. Независимо проверить Python и Dart import, восстановить реальное прохождение по маршрутам и сохранения.
+13. **Отдать пользователю.** Главный результат game.bworld; указать supported_app_min_version и status. Отдельно по желанию — project_snapshot.zip для продолжения другого чата и короткие отчёты с SHA. Редактор для завершения работы не требуется.
+
+**Инструкция для будущего обновления навыка:** стадии 4–10 становятся обязательными при построении самодостаточной визуальной версии. В skill закрепить, какие входные и выходные schemas читает ИИ, требования к полноте, проверку синтаксиса/источников, независимую литературную оценку, автоматическую сборку/verify/replay, stop conditions и сохранение проектов. Не менять работающий pinned E6d до полной реализации новой pipeline и тестового acceptance gate.
+
+### Статусы готовности различать обязательно
+
+- **STRUCTURE_PASS**: архив, точные SHA/типы/трассируемые ссылки, SQLite, replay.
+- **LITERARY_REVIEW_PASS**: полное покрытие выбранной книги, проверка смысла, идентичности, знаний и мотивов; литературная оценка не является математическим доказательством.
+- **RUNTIME_PASS**: настоящий Dart importer, воспроизведение ветвей, диалогов и кадров, сохранения, тесты на Windows/Android.
+- **USER_READY**: все применимые ворота закрыты, ограничения честно заявлены. Зелёный CI с фиктивной сказкой не доказывает реальную книгу; если физический E2E на устройстве не выполнен — это явно обозначенный остаточный риск, не заявленный PASS.
+
