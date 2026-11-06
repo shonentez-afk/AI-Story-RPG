@@ -48,6 +48,7 @@ class _BookActDraftPageState extends State<BookActDraftPage> {
   MultiActStoryPlanDraft? _composed;
   bool _loading = true, _working = false;
   bool _sequencePreparing = false, _stopAfterCurrent = false;
+  bool _awaitingActConsent = false;
   int _actPage = 0;
   static const int _pageSize = 12;
   String? _notice, _error;
@@ -173,7 +174,16 @@ class _BookActDraftPageState extends State<BookActDraftPage> {
       if (mounted) setState(() => _error = error.toString());
       return false;
     }
-    final includeTitle = await _askActConsent(manifest);
+    // Do not keep an indeterminate progress animation running behind
+    // the consent dialog: it makes widget settling unreliable and suggests
+    // a network request already started when none has.
+    setState(() => _awaitingActConsent = true);
+    bool? includeTitle;
+    try {
+      includeTitle = await _askActConsent(manifest);
+    } finally {
+      if (mounted) setState(() => _awaitingActConsent = false);
+    }
     if (includeTitle == null || !mounted) {
       if (mounted) setState(() => _notice =
           'Следующая часть не отправлена. Можно возобновить позже.');
@@ -515,7 +525,8 @@ class _BookActDraftPageState extends State<BookActDraftPage> {
                   ),
               ],
               const SizedBox(height: 8),
-              if (_working) const LinearProgressIndicator(),
+              if (_working && !_awaitingActConsent)
+                const LinearProgressIndicator(),
               if (_notice != null)
                 Text(_notice!, key: const Key('act-draft-notice')),
               if (_error != null)
