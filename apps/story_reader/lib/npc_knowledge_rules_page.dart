@@ -1,4 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:bookworld_format/bookworld_format.dart';
+
+import 'native_private_bookworld_compiler.dart';
+import 'private_classic_scenario_translator.dart';
+import 'world_campaigns_page.dart';
+import 'world_library_gateway.dart';
 
 import 'book_source_index.dart';
 import 'intermediate_story_blueprint.dart';
@@ -21,6 +27,7 @@ class NpcKnowledgeRulesPage extends StatefulWidget {
     super.key, required this.index, required this.dossiers,
     required this.graph, required this.catalog, required this.editorial,
     required this.notebook, required this.scenario, this.repository,
+    this.gateway,
   });
   final BookSourceIndex index;
   final SourceCharacterDossierIndex dossiers;
@@ -30,6 +37,9 @@ class NpcKnowledgeRulesPage extends StatefulWidget {
   final NpcEditorialNotebook notebook;
   final IntermediateStoryBlueprint scenario;
   final SourceAnalysisCheckpointRepository? repository;
+  /// Test/host can inject an existing library; production uses the same
+  /// DeviceWorldLibraryGateway as all other BookWorld paths.
+  final WorldLibraryGateway? gateway;
 
   @override
   State<NpcKnowledgeRulesPage> createState() => _NpcKnowledgeRulesPageState();
@@ -432,6 +442,301 @@ class _NpcKnowledgeRulesPageState extends State<NpcKnowledgeRulesPage> {
     )));
   }
 
+  /// ONE source-reviewed handoff from the existing NPC rules screen to the
+  /// existing compiler/library. No new authoring page, game core or cloud API.
+  Future<void> _buildNpcRichWorld() async {
+    final book = _book;
+    if (_saving || book == null ||
+        !book.rules.any((rule) =>
+            rule.recipient == KnowledgeRecipient.ownerNpc)) return;
+    setState(() { _saving = true; _error = null; _notice = null; });
+    try {
+      _check(book);
+      final translation = PrivateClassicScenarioTranslator.translate(
+        widget.index, widget.graph, widget.catalog, widget.editorial,
+        widget.scenario,
+        npcRules: book, npcNotebook: widget.notebook,
+        npcDossiers: widget.dossiers,
+      );
+      final blueprint = translation.blueprintJson;
+      final originValues = translation.provenanceJson['scene_origins'] as List;
+      final origins = {
+        for (final raw in originValues)
+          (raw as Map<String, dynamic>)['scene_id'] as String: raw,
+      };
+      final sourceEvidence = {
+        for (final evidence in widget.graph.records) evidence.id: evidence,
+      };
+      final sceneByChoice = <String, String>{};
+      final dialogues = <({String sceneId, int index, String speaker})>[];
+      for (final raw in blueprint['scenes'] as List) {
+        final scene = raw as Map<String, dynamic>;
+        final id = scene['id'] as String;
+        for (final rawChoice in scene['choices'] as List) {
+          final choice = rawChoice as Map<String, dynamic>;
+          sceneByChoice[choice['id'] as String] = id;
+        }
+        final turns = RichSceneDialogue.parse(scene['text'] as String);
+        if (turns == null) continue;
+        for (var i = 0; i < turns.length; i++) {
+          final speaker = turns[i].speaker;
+          if (speaker != null) {
+            dialogues.add((sceneId: id, index: i, speaker: speaker));
+          }
+        }
+      }
+      final grants = book.rules.where((rule) =>
+          rule.recipient == KnowledgeRecipient.ownerNpc).toList();
+      final options = <String, List<({String digest, String caption})>>{};
+      for (final rule in grants) {
+        final sceneId = sceneByChoice[rule.choiceId];
+        final origin = origins[sceneId];
+        final sourceRefs = origin?['source_refs'];
+        if (sceneId == null || origin?['origin'] != 'SOURCE_PASSAGE' ||
+            sourceRefs is! List || sourceRefs.isEmpty) {
+          throw FormatException('Для правила ' + rule.id +
+              ' нужна сцена с подтверждённой цитатой книги. '
+              'Вернитесь к источникам и сценарию.');
+        }
+        final available = <String, ({String digest, String caption})>{};
+        for (final raw in sourceRefs) {
+          if (raw is! Map) continue;
+          final evidenceId = raw['id'];
+          final quote = evidenceId is String ? sourceEvidence[evidenceId] : null;
+          if (quote == null || quote.status != EvidenceStatus.confirmed ||
+              quote.visibleAfterChapter > (origin!['chapter_index'] as int) ||
+              raw['quote_sha256'] != quote.evidenceSha256) continue;
+          available[quote.evidenceSha256] = (
+            digest: quote.evidenceSha256,
+            caption: 'Глава ' + (quote.chapterIndex + 1).toString() +
+                ' · ' + quote.label,
+          );
+        }
+        if (available.isEmpty) {
+          throw FormatException('Для правила ' + rule.id +
+              ' нет доступных подтверждённых цитат.');
+        }
+        options[rule.id] = available.values.toList();
+      }
+      final profiles = {
+        for (final profile in widget.notebook.profiles)
+          if (profile.characterId != null)
+            profile.characterId!: profile.displayName,
+      };
+      final actors = blueprint['actors'] as List;
+      if (profiles.isEmpty || actors.length != profiles.length + 1 ||
+          !profiles.keys.toSet().containsAll(actors.where(
+              (id) => id != 'player').cast<String>())) {
+        throw const FormatException(
+            'Нужны постоянные карточки character_id всех NPC');
+      }
+      final factNames = <String, String>{};
+      for (final rule in book.rules) {
+        final profile = widget.notebook.profiles.singleWhere(
+            (profile) => profile.dossierId == rule.dossierId);
+        final note = profile.notes.singleWhere(
+            (note) => note.id == rule.noteId);
+        factNames[NpcKnowledgeRulebook.factId(
+            widget.index.sourceFingerprint, rule.groupDigest, note)] =
+            profile.displayName + ' · ' + rule.noteId;
+      }
+      final factIds = (blueprint['facts'] as List).cast<String>();
+      if (!factNames.keys.toSet().containsAll(factIds)) {
+        throw const FormatException('Есть факты без проверенной заметки');
+      }
+      final quotes = <String, String>{};
+      final actorsForTurn = <String, String>{};
+      final prerequisites = <String, String>{};
+      var consent = false;
+      final accepted = await showDialog<bool>(
+        context: context,
+        builder: (dialog) => StatefulBuilder(builder: (ctx, update) {
+          final ready = consent &&
+              quotes.length == grants.length &&
+              actorsForTurn.length == dialogues.length &&
+              prerequisites.length == dialogues.length;
+          return AlertDialog(
+            title: const Text('Проверить и собрать RPG с NPC'),
+            content: SizedBox(width: 620, child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('Это личная игровая адаптация, а не '
+                      'доказанный литературный канон. Сначала выберите '
+                      'источник каждого знания, затем проверьте говорящих. '
+                      'Без этого сборка не начнётся.'),
+                  const SizedBox(height: 14),
+                  for (final rule in grants) ...[
+                    Text('После действия ' + rule.choiceId +
+                        ' · знание ' + rule.noteId),
+                    DropdownButtonFormField<String>(
+                      key: Key('npc-build-quote-' + rule.id),
+                      isExpanded: true,
+                      initialValue: quotes[rule.id],
+                      decoration: const InputDecoration(
+                        labelText: 'Подтверждённая цитата',
+                        border: OutlineInputBorder(),
+                      ),
+                      items: [
+                        for (final ref in options[rule.id]!)
+                          DropdownMenuItem(
+                            value: ref.digest,
+                            child: Text(ref.caption,
+                                overflow: TextOverflow.ellipsis),
+                          ),
+                      ],
+                      onChanged: (digest) {
+                        if (digest != null) {
+                          update(() => quotes[rule.id] = digest);
+                        }
+                      },
+                    ),
+                    const SizedBox(height: 10),
+                  ],
+                  if (dialogues.isNotEmpty)
+                    const Text('Говорящие и необходимое знание. '
+                        'У каждой именованной реплики подтверждаются '
+                        'личность и условие показа.'),
+                  for (final turn in dialogues) ...[
+                    const Divider(),
+                    Text('Сцена ' + turn.sceneId + ' · реплика ' +
+                        (turn.index + 1).toString() + ' · ' + turn.speaker),
+                    DropdownButtonFormField<String>(
+                      key: Key('npc-build-speaker-' + turn.sceneId +
+                          '-' + turn.index.toString()),
+                      isExpanded: true,
+                      initialValue: actorsForTurn[
+                          turn.sceneId + '|' + turn.index.toString()],
+                      decoration: const InputDecoration(
+                        labelText: 'Кто именно говорит',
+                        border: OutlineInputBorder(),
+                      ),
+                      items: [
+                        const DropdownMenuItem(value: 'player',
+                            child: Text('Игрок')),
+                        for (final actorId in (profiles.keys.toList()..sort()))
+                          DropdownMenuItem(value: actorId,
+                              child: Text(profiles[actorId]!,
+                                  overflow: TextOverflow.ellipsis)),
+                      ],
+                      onChanged: (actorId) {
+                        if (actorId != null) {
+                          update(() => actorsForTurn[
+                              turn.sceneId + '|' +
+                                  turn.index.toString()] = actorId);
+                        }
+                      },
+                    ),
+                    const SizedBox(height: 6),
+                    DropdownButtonFormField<String>(
+                      key: Key('npc-build-fact-' + turn.sceneId +
+                          '-' + turn.index.toString()),
+                      isExpanded: true,
+                      initialValue: prerequisites[
+                          turn.sceneId + '|' + turn.index.toString()],
+                      decoration: const InputDecoration(
+                        labelText: 'Какое знание нужно для реплики',
+                        border: OutlineInputBorder(),
+                      ),
+                      items: [
+                        const DropdownMenuItem(
+                          value: 'none_required',
+                          child: Text('Не требует знания (я проверил)'),
+                        ),
+                        for (final id in factIds)
+                          DropdownMenuItem(value: id,
+                            child: Text(factNames[id] ?? id,
+                                overflow: TextOverflow.ellipsis)),
+                      ],
+                      onChanged: (fact) {
+                        if (fact != null) {
+                          update(() => prerequisites[
+                              turn.sceneId + '|' +
+                                  turn.index.toString()] = fact);
+                        }
+                      },
+                    ),
+                    const SizedBox(height: 8),
+                  ],
+                  CheckboxListTile(
+                    key: const Key('npc-build-consent'),
+                    contentPadding: EdgeInsets.zero,
+                    value: consent,
+                    onChanged: (value) =>
+                        update(() => consent = value == true),
+                    controlAffinity: ListTileControlAffinity.leading,
+                    title: const Text('Я проверил факты и разрешаю '
+                        'создать личную RPG с NPC'),
+                    subtitle: const Text(
+                        'ИИ не вызывается. Заметки NPC не публикуются. '
+                        'Новая игра не изменяет существующие прохождения.'),
+                  ),
+                ],
+              ),
+            )),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(ctx, false),
+                  child: const Text('Отмена')),
+              FilledButton(
+                key: const Key('npc-build-confirm'),
+                onPressed: ready ? () => Navigator.pop(ctx, true) : null,
+                child: const Text('Проверить и собрать'),
+              ),
+            ],
+          );
+        }),
+      );
+      if (accepted != true || !mounted) return;
+      final spoken = <String, List<Map<String, dynamic>>>{};
+      final verifiedSpeakers = <String, String>{};
+      for (final turn in dialogues) {
+        final key = turn.sceneId + '|' + turn.index.toString();
+        final actorId = actorsForTurn[key]!;
+        final prior = verifiedSpeakers[turn.speaker];
+        if (prior != null && prior != actorId) {
+          throw const FormatException(
+              'Одинаковое имя назначено разным персонажам.');
+        }
+        verifiedSpeakers[turn.speaker] = actorId;
+        final required = prerequisites[key]!;
+        spoken.putIfAbsent(turn.sceneId, () => []).add({
+          'turn_index': turn.index, 'speaker': turn.speaker,
+          'actor_id': actorId,
+          'required_fact_ids':
+              required == 'none_required' ? <String>[] : <String>[required],
+        });
+      }
+      final bytes = await compileReviewedNpcRichPrivateBookworldInWorker(
+        widget.index, widget.graph, widget.catalog, widget.editorial,
+        widget.scenario,
+        npcRules: book, npcNotebook: widget.notebook,
+        npcDossiers: widget.dossiers,
+        sourceQuoteByRuleId: quotes,
+        userConfirmed: true,
+        reviewedDialogueTurns: spoken,
+        reviewedSpeakerBindings: verifiedSpeakers,
+      );
+      // Writer + importer have already checked the archive; install via
+      // the existing SQLite gateway and open ONE existing campaigns page.
+      final gateway = widget.gateway ?? const DeviceWorldLibraryGateway();
+      final installed = await gateway.install(bytes);
+      if (!mounted) return;
+      setState(() => _notice =
+          'Частная RPG с проверенными правилами NPC создана.');
+      await Navigator.of(context).push<void>(MaterialPageRoute(
+        builder: (_) => WorldCampaignsPage(
+          world: installed, gateway: gateway,
+        ),
+      ));
+    } catch (error) {
+      if (mounted) setState(() =>
+          _error = 'Сборка NPC заблокирована: ' + error.toString());
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final book = _book;
@@ -547,9 +852,18 @@ class _NpcKnowledgeRulesPageState extends State<NpcKnowledgeRulesPage> {
                         ),
                       ),
                     const Divider(height: 18),
-                    const Text('Для применения вернитесь в конструктор '
-                        'многосценной RPG и вручную включите эти правила '
-                        'при создании новой личной сборки.'),
+                    const Text('Все связанные правила можно проверить '
+                        'и собрать прямо здесь, без отдельного технического '
+                        'экрана. Требуются исходные цитаты и постоянные ID NPC.'),
+                    const SizedBox(height: 10),
+                    FilledButton.icon(
+                      key: const Key('npc-build-world'),
+                      onPressed: _saving || !book.rules.any((rule) =>
+                          rule.recipient == KnowledgeRecipient.ownerNpc)
+                          ? null : _buildNpcRichWorld,
+                      icon: const Icon(Icons.play_arrow),
+                      label: const Text('Проверить и собрать RPG с NPC'),
+                    ),
                     if (_saving) const LinearProgressIndicator(),
                   ],
                 ],
