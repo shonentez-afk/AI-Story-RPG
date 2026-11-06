@@ -4,6 +4,7 @@ import 'package:ai_story_reader/book_import.dart';
 import 'package:ai_story_reader/book_source_index.dart';
 import 'package:ai_story_reader/intermediate_story_blueprint.dart';
 import 'package:ai_story_reader/npc_editorial_notebook.dart';
+import 'package:ai_story_reader/npc_character_card.dart';
 import 'package:ai_story_reader/npc_knowledge_rulebook.dart';
 import 'package:ai_story_reader/npc_knowledge_world_bridge.dart';
 import 'package:ai_story_reader/source_character_dossiers.dart';
@@ -194,6 +195,67 @@ void main() {
     expect(world.state.knowledge[actor], contains(fact));
     expect(world.state.knowledge['player'], isEmpty);
     expect(world.state.revision, 1);
+  });
+
+  test('permanent character_id is runtime actor for learned facts and '
+      'survives private card edits without leaking persona text', () {
+    final initial = notebook.profiles.single;
+    final card = NpcCharacterCard.fresh().copyWith(
+      role: 'Хранитель ворот', appearance: 'Темный плащ',
+      personality: 'Осторожный',
+      speechStyle: 'Тихая речь',
+      goals: 'Защитить деревню',
+    );
+    notebook = notebook.putProfile(initial.copyWith(
+      card: card, displayName: 'Волк',
+    ));
+    final rules = NpcKnowledgeRulebook.empty(index).withRule(makeRule());
+    check(rules);
+    final approved = NpcKnowledgeWorldBridge.preview(
+      index: index, dossiers: dossiers, graph: graph,
+      catalog: catalog, editorial: editorial,
+      notebook: notebook, scenario: draft,
+      rulebook: rules, originalBlueprint: base(),
+    );
+    expect(approved.actorIds[artem.id], card.characterId);
+    expect(approved.story.actors, contains(card.characterId));
+    expect(jsonEncode(approved.blueprint),
+        isNot(contains(card.personality)));
+    expect(jsonEncode(approved.blueprint),
+        isNot(contains(card.speechStyle)));
+    expect(jsonEncode(approved.blueprint),
+        isNot(contains(secret.text)));
+    final world = StoryWorld(approved.story);
+    final fact = approved.factIds[artem.id + '|' + secret.id]!;
+    expect(world.state.knowledge[card.characterId], isEmpty);
+    final result = world.apply(
+      actionId: 'character-id-learn', choiceId: 'repeat',
+      expectedRevision: 0,
+    );
+    expect(result.applied, true);
+    expect(world.state.knowledge[card.characterId], contains(fact));
+    expect(world.state.knowledge['player'], isEmpty);
+
+    // Altered display name, alias, portrait and personality are editorial,
+    // NOT a new NPC. Neither knowledge or game event IDs should rotate.
+    notebook = notebook.putProfile(notebook.profiles.single.copyWith(
+      displayName: 'Артём',
+      card: card.copyWith(
+        aliases: ['Волк', 'Страж'], personality: 'Нетерпеливый',
+        portraitAssetId: 'guard_local_1',
+      ),
+    ));
+    check(rules);
+    final after = NpcKnowledgeWorldBridge.preview(
+      index: index, dossiers: dossiers, graph: graph,
+      catalog: catalog, editorial: editorial,
+      notebook: notebook, scenario: draft,
+      rulebook: rules, originalBlueprint: base(),
+    );
+    expect(after.actorIds[artem.id], card.characterId);
+    expect(after.story.actors, approved.story.actors);
+    expect(after.factIds, approved.factIds);
+    expect(after.story.bookId, approved.story.bookId);
   });
 
   test('explicit separate player consent is compulsory, not AI generated', () {
