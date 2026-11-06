@@ -1,6 +1,6 @@
 # M2g3f.2a — последовательная подготовка актов с возобновлением
 
-Дата 2026-11-06. Ветка `feature/m2g3f2-resumable-act-preparation-20261106`.
+**Статус: принято в main.** PR #122 merged, commit `a19f7ea5851a60a1ab174d2b0f7939c89cbe9708`. Exact-head CI #756, M0 #841 — SUCCESS (Python, Dart, Flutter widget, contract/schema, Windows, Android). Постслияние main и публикацию проверять отдельно. Ветка разработки: `feature/m2g3f2-resumable-act-preparation-20261106`.
 
 ## Зачем
 
