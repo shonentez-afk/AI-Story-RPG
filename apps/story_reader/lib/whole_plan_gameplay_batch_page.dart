@@ -334,6 +334,97 @@ class _WholePlanGameplayBatchPageState
                     ),
                   ),
               ],
+              if (status.allProposalsCollected &&
+                  _drafts.length == manifest.totalBatches) ...[
+                const SizedBox(height: 16),
+                const Text('Одобрить отдельные игровые эффекты',
+                    style: TextStyle(fontWeight: FontWeight.w600)),
+                const Text('Это отдельное редакторское решение. '
+                    'Можно выбрать максимум ШЕСТЬ эффектов '
+                    'из ВСЕХ пакетов. Никаких новых запросов Z.ai '
+                    'при выборе не отправляется. '
+                    'Отказ от всех предложений допустим.'),
+                for (final (n, candidate) in [
+                  for (final draft in _drafts) ...draft.candidates,
+                ].indexed)
+                  Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(10),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          CheckboxListTile(
+                            key: Key('whole-gameplay-select-' +
+                                n.toString()),
+                            title: Text(candidate.label),
+                            subtitle: Text(candidate.op + ' · ' +
+                                candidate.sceneId + '/' +
+                                candidate.choiceId),
+                            value: _selected.contains(
+                                ReviewedGameplayCompiler.signature(candidate)),
+                            onChanged: _working || (_selected.length == 6 &&
+                                    !_selected.contains(ReviewedGameplayCompiler
+                                        .signature(candidate)))
+                                ? null : (checked) => setState(() {
+                                  final id = ReviewedGameplayCompiler
+                                      .signature(candidate);
+                                  if (checked == true) {
+                                    _selected.add(id);
+                                    _notes.putIfAbsent(id,
+                                        () => TextEditingController());
+                                  } else {
+                                    _selected.remove(id);
+                                  }
+                                  _confirmPrivateFiction = false;
+                                }),
+                          ),
+                          Text(candidate.uncertainty),
+                          if (_selected.contains(
+                              ReviewedGameplayCompiler.signature(candidate)))
+                            TextField(
+                              key: Key('whole-gameplay-note-' +
+                                  n.toString()),
+                              controller: _notes[
+                                  ReviewedGameplayCompiler.signature(
+                                      candidate)],
+                              maxLength: 350,
+                              maxLines: 3,
+                              onChanged: (_) => setState(() {}),
+                              decoration: const InputDecoration(
+                                labelText: 'Почему допустимо для частной игры',
+                                helperText: '18–350 символов. '
+                                    'Не подтверждает канон книги.',
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ),
+                if (_selected.isNotEmpty) ...[
+                  Text('Выбрано: ' + _selected.length.toString() +
+                      ' из 6 возможных эффектов.'),
+                  CheckboxListTile(
+                    key: const Key('whole-gameplay-private-fiction'),
+                    value: _confirmPrivateFiction,
+                    onChanged: _working ? null :
+                        (value) => setState(() =>
+                            _confirmPrivateFiction = value == true),
+                    title: const Text('Я отдельно разрешаю только '
+                        'частную ИГРОВУЮ выдумку, не литературный канон'),
+                  ),
+                  FilledButton.icon(
+                    key: const Key('whole-gameplay-return-selection'),
+                    onPressed: !_working && _confirmPrivateFiction &&
+                        _selected.length <= 6 &&
+                        _selected.every((id) {
+                          final note = _notes[id]?.text.trim() ?? '';
+                          return note.length >= 18 && note.length <= 350;
+                        }) ? _selectForNextGame : null,
+                    icon: const Icon(Icons.check_circle_outline),
+                    label: const Text('Вернуть выбранное в подготовку RPG'),
+                  ),
+                ],
+              ],
             ],
             if (status != null && status.remaining > 0) ...[
               CheckboxListTile(
