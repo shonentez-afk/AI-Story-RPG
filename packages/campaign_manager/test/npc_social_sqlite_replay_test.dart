@@ -29,9 +29,8 @@ Map<String, dynamic> _richNpcSocialFixture() {
   (choices.firstWhere((e) => e['id'] == 'wait')['effects'] as List).add({
     'op': 'learn_fact', 'id': _fact, 'actor': _npc,
   });
-  (choices.firstWhere((e) => e['id'] == 'help')['conditions'] as List).add({
-    'op': 'knows_fact', 'id': _fact, 'actor': _npc,
-  });
+  // This path is deliberately NOT guarded by the old fact predicate.
+  // Only the independently verified social rule may lock this decision.
   final origin = (provenance['scene_origins'] as List).first as Map;
   final quote = (origin['source_refs'] as List).first['quote_sha256'] as String;
   provenance['format'] = 'ai_story_private_provenance_v2';
@@ -81,7 +80,7 @@ Map<String, dynamic> _richNpcSocialFixture() {
     ],
   };
   provenance['npc_social'] = {
-    'format': RichNpcSocialContract.format,
+    'format': RichNpcSocialContract.choiceGateFormat,
     'review_scope': 'user_declared_private_game_fiction',
     'source_fingerprint': blueprint['source_fingerprint'],
     'user_confirmed': true, 'literary_canon_verified': false,
@@ -98,6 +97,14 @@ Map<String, dynamic> _richNpcSocialFixture() {
         'observer_id': _npc,
         'kind': 'promiseReceived', 'related_actor_id': 'player',
         'relationship_delta': 7, 'max_triggers': 1,
+        'source_quote_sha256': quote,
+      },
+    ],
+    'choice_gates': [
+      {
+        'scene_id': 'entry', 'choice_id': 'help', 'actor_id': _npc,
+        'required_memory_id': _memory,
+        'minimum_trust_to_player': 7,
         'source_quote_sha256': quote,
       },
     ],
@@ -154,6 +161,7 @@ void main() {
         expectedRevision: 0,
       );
       expect(cannotSkip.applied, false);
+      expect(cannotSkip.reason, 'condition_not_met:npc_memory');
       expect(original.loadCampaign(campaignId).metadata.revision, 0);
 
       final alternative = original.commitChoice(
@@ -177,6 +185,8 @@ void main() {
           'promise_confirmed');
       expect(social.directedScore(_npc, 'player'), 7);
       expect(social.directedScore('player', _npc), 0);
+      expect(after.coordinator.choices
+          .singleWhere((choice) => choice.id == 'help').enabled, true);
       expect(RichNpcDialogueKnowledge.redact(
         spoken, reviews, after.coordinator.state.knowledge,
         social: social,

@@ -130,8 +130,12 @@ void main() {
       ],
     };
     provenance['presentation'] = presentation;
+    // Only social memory (not an ordinary knows_fact) unlocks this decision.
+    final gatedHelp = ((rawBlueprint['scenes'] as List).first
+        as Map<String, dynamic>)['choices'] as List;
+    ((gatedHelp[1] as Map)['conditions'] as List).clear();
     provenance['npc_social'] = {
-      'format': RichNpcSocialContract.format,
+      'format': RichNpcSocialContract.choiceGateFormat,
       'review_scope': 'user_declared_private_game_fiction',
       'source_fingerprint': _asObject(data['blueprint'])['source_fingerprint'],
       'user_confirmed': true,
@@ -152,6 +156,14 @@ void main() {
           'source_quote_sha256': quote,
         },
       ],
+      'choice_gates': [
+        {
+          'scene_id': 'entry', 'choice_id': 'help', 'actor_id': npc,
+          'required_memory_id': 'npc_heard_promise',
+          'minimum_trust_to_player': 7,
+          'source_quote_sha256': quote,
+        },
+      ],
     };
     data['provenance'] = provenance;
     Uint8List build() => writer.build(
@@ -164,7 +176,8 @@ void main() {
     final verified = importer.inspect(archive);
     final rules = verified.npcSocialRulebook!;
     expect(rules.requireReviewedWitnesses, isTrue);
-    final world = StoryWorld(verified.blueprint);
+    final world = StoryWorld(verified.blueprint, socialRulebook: rules);
+    expect(world.choiceLockReason('help'), 'condition_not_met:npc_memory');
     final signed = RichSceneDialogue.verify(
       (verified.presentation['scene_dialogues'] as Map)['entry'],
       verified.blueprint.scenes['entry']!.text,
@@ -183,6 +196,7 @@ void main() {
     expect(social.memoriesFor(npc).single.witnessMode, NpcWitnessMode.present);
     expect(social.directedScore(npc, 'player'), 7);
     expect(social.directedScore('player', npc), 0);
+    expect(world.choiceLockReason('help'), isNull);
     expect(RichNpcDialogueKnowledge.redact(
         signed, reviews, world.state.knowledge, social: social)[1].text,
         'Я услышала обещание!');
@@ -194,7 +208,8 @@ void main() {
     final replay = StoryWorld.replay(
         verified.blueprint, world.events.map((e) => e.toJson()),
         expectedSequence: world.state.revision,
-        expectedStateHash: world.state.stateHash);
+        expectedStateHash: world.state.stateHash,
+        socialRulebook: rules);
     expect(NpcSocialLedger.inspect(replay, rules).snapshotHash,
         social.snapshotHash);
     // The exact Dart archive, not a recreated Python fixture, must pass

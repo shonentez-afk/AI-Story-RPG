@@ -19,10 +19,13 @@ void main(List<String> args) {
   }
   final npc = npcIds.single;
   final fact = verified.blueprint.facts.single;
-  final world = StoryWorld(verified.blueprint);
+  final world = StoryWorld(verified.blueprint,
+      socialRulebook: verified.npcSocialRulebook);
   final before = world.apply(actionId: 'early', choiceId: 'help');
+  final expectedLock = verified.npcSocialRulebook?.choiceGates.isNotEmpty == true
+      ? 'condition_not_met:npc_memory' : 'condition_not_met:knows_fact';
   if (before.applied ||
-      before.reason != 'condition_not_met:knows_fact' ||
+      before.reason != expectedLock ||
       world.actorKnowsFact(npc, fact)) {
     throw StateError('NPC learned a fact before its committed event');
   }
@@ -39,6 +42,7 @@ void main(List<String> args) {
     world.events.map((event) => event.toJson()),
     expectedSequence: world.state.revision,
     expectedStateHash: world.state.stateHash,
+    socialRulebook: verified.npcSocialRulebook,
   );
   if (!restored.actorKnowsFact(npc, fact) ||
       restored.factLearningEvents(npc, fact).single.hash !=

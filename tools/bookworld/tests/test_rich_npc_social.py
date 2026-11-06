@@ -13,6 +13,9 @@ from tools.bookworld.tests.test_rich_npc_knowledge import NPC, reviewed_sample
 def social_sample():
     bp, prov, index = reviewed_sample()
     quote = prov["scene_origins"][0]["source_refs"][0]["quote_sha256"]
+    # This choice is gated by the real NPC promise/trust contract alone,
+    # not by the older actor-specific fact predicate.
+    bp["scenes"][0]["choices"][1]["conditions"].clear()
     bp["scenes"][0]["text"] = (
         "Встреча у ворот.\n"
         "Мария: «Я услышала обещание!»\n"
@@ -35,7 +38,7 @@ def social_sample():
         ],
     }
     prov["npc_social"] = {
-        "format": rich.NPC_SOCIAL_FORMAT,
+        "format": rich.NPC_SOCIAL_GATE_FORMAT,
         "review_scope": "user_declared_private_game_fiction",
         "source_fingerprint": bp["source_fingerprint"],
         "user_confirmed": True,
@@ -49,6 +52,12 @@ def social_sample():
             "choice_id": "wait", "observer_id": NPC,
             "kind": "promiseReceived", "related_actor_id": "player",
             "relationship_delta": 7, "max_triggers": 1,
+            "source_quote_sha256": quote,
+        }],
+        "choice_gates": [{
+            "scene_id": "entry", "choice_id": "help", "actor_id": NPC,
+            "required_memory_id": "guard_observed_promise",
+            "minimum_trust_to_player": 7,
             "source_quote_sha256": quote,
         }],
     }
@@ -133,6 +142,37 @@ class RichNpcSocialTests(unittest.TestCase):
                 with self.assertRaises(legacy.BookworldError):
                     rich.build(bp, prov, index)
 
+    def test_reviewed_authoritative_social_choice_gate_rejects_tampering(self):
+        for mutation in ("wrong_memory", "missing_target", "wrong_actor",
+                         "threshold_bool", "threshold_large", "fake_quote",
+                         "duplicate", "self_condition", "no_approval",
+                         "empty_gates"):
+            with self.subTest(mutation=mutation):
+                bp, prov, index = social_sample()
+                gate = prov["npc_social"]["choice_gates"][0]
+                if mutation == "wrong_memory":
+                    gate["required_memory_id"] = "unreviewed_memory"
+                elif mutation == "missing_target":
+                    gate["choice_id"] = "invisible_choice"
+                elif mutation == "wrong_actor":
+                    gate["actor_id"] = "npc_" + "b" * 32
+                elif mutation == "threshold_bool":
+                    gate["minimum_trust_to_player"] = True
+                elif mutation == "threshold_large":
+                    gate["minimum_trust_to_player"] = 101
+                elif mutation == "fake_quote":
+                    gate["source_quote_sha256"] = "f" * 64
+                elif mutation == "duplicate":
+                    prov["npc_social"]["choice_gates"].append(deepcopy(gate))
+                elif mutation == "self_condition":
+                    gate["choice_id"] = "wait"
+                elif mutation == "no_approval":
+                    prov["npc_social"]["user_confirmed"] = False
+                elif mutation == "empty_gates":
+                    prov["npc_social"]["choice_gates"] = []
+                with self.assertRaises(legacy.BookworldError):
+                    rich.build(bp, prov, index)
+
     def test_reported_rumor_cannot_grant_trust(self):
         bp, prov, index = social_sample()
         social = prov["npc_social"]
@@ -140,6 +180,8 @@ class RichNpcSocialTests(unittest.TestCase):
         social["rules"][0]["kind"] = "rumorHeard"
         social["rules"][0]["relationship_delta"] = 0
         social["rules"][0]["related_actor_id"] = None
+        social["format"] = rich.NPC_SOCIAL_FORMAT
+        del social["choice_gates"]
         for spoken in prov["presentation"]["scene_dialogue_knowledge"]["entry"]:
             spoken.pop("minimum_trust_to_player", None)
         self.assertEqual(rich.verify(rich.build(bp, prov, index))
