@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:bookworld_format/bookworld_format.dart';
 
 import 'book_source_index.dart';
 import 'narrative_book_model.dart';
 import 'story_plan_quality_gate.dart';
 import 'story_plan_trial_compiler.dart';
+import 'reviewed_gameplay_compiler.dart';
+import 'source_locked_gameplay_review_page.dart';
 import 'world_library_gateway.dart';
 import 'world_play_page.dart';
 import 'zai_story_dilemma_proposal.dart';
@@ -36,6 +39,7 @@ class _StoryPlanTrialPageState extends State<StoryPlanTrialPage> {
   bool _privateFiction = false;
   bool _working = false;
   String? _error;
+  SelectedGameplayCandidates? _gameplaySelection;
 
   List<NarrativeEvent> get _sourceEvents {
     final proposal = widget.preview.proposal;
@@ -45,6 +49,25 @@ class _StoryPlanTrialPageState extends State<StoryPlanTrialPage> {
       for (final event in widget.book.events)
         if (ids.contains(event.id)) event,
     ];
+  }
+
+  Future<void> _chooseGameplay() async {
+    if (_working || !_reviewedQuotes || !_privateFiction ||
+        !widget.quality.passedFormalPreflight) return;
+    final selection = await Navigator.of(context)
+        .push<SelectedGameplayCandidates>(MaterialPageRoute(
+      builder: (_) => SourceLockedGameplayReviewPage(
+        index: widget.index,
+        book: widget.book,
+        plan: widget.quality.plan,
+        exactEventIds: [for (final e in _sourceEvents) e.id],
+      ),
+    ));
+    if (!mounted || selection == null) return;
+    setState(() {
+      _gameplaySelection = selection;
+      _error = null;
+    });
   }
 
   Future<void> _start() async {
@@ -66,9 +89,76 @@ class _StoryPlanTrialPageState extends State<StoryPlanTrialPage> {
       );
       if (!mounted || compiled.sourceFingerprint !=
           widget.index.sourceFingerprint) return;
-      final installed = await widget.gateway.install(compiled.archive);
-      if (installed.archiveHash != compiled.archiveSha256 ||
-          installed.bookworldId != compiled.bookworldId) {
+      var archive = compiled.archive;
+      if (_gameplaySelection != null) {
+        final selection = _gameplaySelection!;
+        final review = ReviewedGameplayCompiler.preview(
+          currentRichBookworld: compiled.archive,
+          index: widget.index, book: widget.book,
+          plan: widget.quality.plan,
+          context: selection.context,
+          proposals: selection.draft,
+          selectedUserReviewNotes: selection.selectedUserReviewNotes,
+        );
+        if (!mounted) return;
+        final effects = review.shownReview['effects'] as List;
+        final confirmed = await showDialog<bool>(
+          context: context,
+          builder: (dialogContext) => AlertDialog(
+            title: const Text('Подтвердить игровые предметы'),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('Это вымышленная частная игровая '
+                      'адаптация. Цитаты подтверждают слова, но '
+                      'не доказывают владение или канон.'),
+                  const SizedBox(height: 8),
+                  for (final e in effects)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 4),
+                      child: Text(
+                        (e as Map)['label'].toString() + ' — ' +
+                        e['op'].toString() + ' / ' +
+                        e['choice_id'].toString(),
+                      ),
+                    ),
+                  const Text('Только после подтверждения будет '
+                      'собран НОВЫЙ игровой мир. Старые игры '
+                      'и сохранения останутся без изменений.'),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(false),
+                child: const Text('Отменить'),
+              ),
+              FilledButton(
+                key: const Key('story-trial-final-gameplay-approval'),
+                onPressed: () => Navigator.of(dialogContext).pop(true),
+                child: const Text('Подтверждаю частную игровую выдумку'),
+              ),
+            ],
+          ),
+        );
+        if (confirmed != true || !mounted) return;
+        archive = await ReviewedGameplayCompiler.compileAfterUserConfirmation(
+          preview: review,
+          currentRichBookworld: compiled.archive,
+          index: widget.index,
+          explicitlyConfirmedPrivateGameFiction: true,
+          approvedReviewDigest: review.approvalDigest,
+        );
+      }
+      final finalCheck = const RichPrivateBookworldImporter().inspect(archive);
+      if (finalCheck.sourceFingerprint != widget.index.sourceFingerprint) {
+        throw const FormatException('Чужая редакция готовой игровой истории');
+      }
+      final installed = await widget.gateway.install(archive);
+      if (installed.archiveHash != finalCheck.archiveSha256 ||
+          installed.bookworldId != finalCheck.bookworldId) {
         throw const FormatException(
             'Установленный пакет отличается от проверенной частной игры.');
       }
@@ -154,6 +244,30 @@ class _StoryPlanTrialPageState extends State<StoryPlanTrialPage> {
               contentPadding: EdgeInsets.zero,
             ),
             const SizedBox(height: 10),
+            OutlinedButton.icon(
+              key: const Key('story-trial-optional-gameplay'),
+              onPressed: allowed && _reviewedQuotes && _privateFiction
+                  ? _chooseGameplay : null,
+              icon: const Icon(Icons.inventory_2_outlined),
+              label: const Text('Предметы и знания из книги '
+                  '(дополнительный запрос ИИ)'),
+            ),
+            if (_gameplaySelection != null) ...[
+              ListTile(
+                title: Text('Выбрано игровых эффектов: ' +
+                    _gameplaySelection!.selectedUserReviewNotes.length
+                        .toString()),
+                subtitle: const Text('Не канон. Можно убрать '
+                    'перед запуском пробной игры.'),
+                trailing: IconButton(
+                  key: const Key('story-trial-clear-gameplay'),
+                  tooltip: 'Убрать игровые эффекты',
+                  onPressed: _working ? null :
+                      () => setState(() => _gameplaySelection = null),
+                  icon: const Icon(Icons.close),
+                ),
+              ),
+            ],
             FilledButton.icon(
               key: const Key('story-trial-start'),
               onPressed: allowed && _reviewedQuotes && _privateFiction
