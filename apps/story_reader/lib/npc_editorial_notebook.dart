@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:crypto/crypto.dart';
 
 import 'book_source_index.dart';
+import 'npc_character_card.dart';
 import 'source_character_dossiers.dart';
 import 'source_evidence_graph.dart';
 import 'source_semantic_catalog.dart';
@@ -82,6 +83,7 @@ class NpcDraftProfile {
     required List<String> mentionIds,
     required this.displayName,
     required List<NpcDraftNote> notes,
+    this.card,
   }) : mentionIds = List.unmodifiable(mentionIds),
        notes = List.unmodifiable(notes);
 
@@ -90,6 +92,25 @@ class NpcDraftProfile {
   final List<String> mentionIds;
   final String displayName;
   final List<NpcDraftNote> notes;
+  /// Null only for older editorial test/checkpoint formats that never had a
+  /// stable character identity. All NEW user-created cards get this exactly
+  /// once through freshProfile(), and it is immutable thereafter.
+  final NpcCharacterCard? card;
+
+  String? get characterId => card?.characterId;
+  bool get hasPermanentIdentity => card != null;
+
+  NpcDraftProfile copyWith({
+    String? displayName,
+    List<NpcDraftNote>? notes,
+    NpcCharacterCard? card,
+  }) => NpcDraftProfile(
+    dossierId: dossierId,
+    mentionIds: mentionIds,
+    displayName: displayName ?? this.displayName,
+    notes: notes ?? this.notes,
+    card: card ?? this.card,
+  );
 
   bool get canPublishToGame => false;
 
@@ -98,11 +119,17 @@ class NpcDraftProfile {
     'mention_ids': mentionIds,
     'display_name': displayName,
     'notes': [for (final n in notes) n.toJson()],
+    if (card != null) 'character_card': card!.toJson(),
   };
 
   static NpcDraftProfile fromJson(Map<String, dynamic> item) {
     const keys = {'dossier_id', 'mention_ids', 'display_name', 'notes'};
-    if (item.length != keys.length || !item.keys.toSet().containsAll(keys)) {
+    final expected = {
+      ...keys,
+      if (item.containsKey('character_card')) 'character_card',
+    };
+    if (item.length != expected.length ||
+        !item.keys.toSet().containsAll(expected)) {
       throw const FormatException('Неизвестные поля карточки NPC');
     }
     try {
@@ -114,6 +141,10 @@ class NpcDraftProfile {
           for (final raw in item['notes'] as List)
             NpcDraftNote.fromJson(Map<String, dynamic>.from(raw as Map)),
         ],
+        card: item.containsKey('character_card')
+            ? NpcCharacterCard.fromJson(
+                Map<String, dynamic>.from(item['character_card'] as Map))
+            : null,
       );
     } catch (_) {
       throw const FormatException('Повреждённая карточка NPC');
@@ -225,6 +256,7 @@ class NpcEditorialNotebook {
     }
     final groupById = {for (final d in dossiers.dossiers) d.id: d};
     final usedProfiles = <String>{};
+    final usedCharacterIds = <String>{};
     final usedNotes = <String>{};
     for (final profile in profiles) {
       final dossier = groupById[profile.dossierId];
@@ -237,6 +269,11 @@ class NpcEditorialNotebook {
             'Изменились подтверждения или объединение имён NPC');
       }
       _text(profile.displayName, 96, 'имя NPC');
+      profile.card?.validate();
+      if (profile.characterId != null &&
+          !usedCharacterIds.add(profile.characterId!)) {
+        throw const FormatException('Один character_id назначен двум NPC');
+      }
       if (profile.notes.length > maxNotesPerProfile) {
         throw const FormatException('Слишком много заметок у NPC');
       }
@@ -275,13 +312,32 @@ class NpcEditorialNotebook {
     }
   }
 
-  /// Adds or replaces one profile without mutating the prior notebook.
-  NpcEditorialNotebook putProfile(NpcDraftProfile profile) =>
-      NpcEditorialNotebook._(sourceFingerprint, [
-        for (final p in profiles)
-          if (p.dossierId != profile.dossierId) p,
-        profile,
-      ]);
+  /// Once issued, the identity is never changed by editing name, prose,
+  /// aliases, quotes, notes or source grouping. A raw stale profile may omit
+  /// the card; in that case we retain the already persisted identity. A
+  /// deliberate replacement with another ID is rejected rather than silently
+  /// reassigning the actor and its existing game knowledge.
+  NpcEditorialNotebook putProfile(NpcDraftProfile profile) {
+    final previous = [
+      for (final p in profiles)
+        if (p.dossierId == profile.dossierId) p,
+    ];
+    if (previous.isNotEmpty) {
+      final oldId = previous.single.characterId;
+      final newId = profile.characterId;
+      if (oldId != null && newId != null && oldId != newId) {
+        throw const FormatException('Нельзя заменять постоянный character_id');
+      }
+      if (oldId != null && newId == null) {
+        profile = profile.copyWith(card: previous.single.card);
+      }
+    }
+    return NpcEditorialNotebook._(sourceFingerprint, [
+      for (final p in profiles)
+        if (p.dossierId != profile.dossierId) p,
+      profile,
+    ]);
+  }
 
   NpcEditorialNotebook removeProfile(String dossierId) =>
       NpcEditorialNotebook._(sourceFingerprint, [
@@ -297,6 +353,7 @@ class NpcEditorialNotebook {
       mentionIds: mentionIds(dossier),
       displayName: dossier.labels.first,
       notes: const [],
+      card: NpcCharacterCard.fresh(),
     );
   }
 
