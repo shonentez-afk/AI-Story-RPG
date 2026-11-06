@@ -104,6 +104,32 @@ void main() {
     final first = (provenance['scene_origins'] as List).first as Map;
     final quote = (first['source_refs'] as List).first['quote_sha256'] as String;
     final npc = 'npc_' + List.filled(32, 'c').join();
+    final rawBlueprint = _asObject(data['blueprint']);
+    final sourceScene =
+        (rawBlueprint['scenes'] as List).first as Map<String, dynamic>;
+    sourceScene['text'] = 'Встреча у ворот.\\n'
+        'Мария: «Я услышала обещание!»\\n'
+        'Игрок: «Обещаю».';
+    final presentation = _asObject(provenance['presentation']);
+    presentation['scene_dialogues'] = {
+      'entry': RichSceneDialogue.presentationFor(
+          sourceScene['text'] as String),
+    };
+    presentation['scene_dialogue_knowledge'] = {
+      'entry': [
+        {
+          'turn_index': 1, 'speaker': 'Мария', 'actor_id': npc,
+          'required_fact_ids': <String>[],
+          'required_social_memory_id': 'npc_heard_promise',
+          'minimum_trust_to_player': 7,
+        },
+        {
+          'turn_index': 2, 'speaker': 'Игрок', 'actor_id': 'player',
+          'required_fact_ids': <String>[],
+        },
+      ],
+    };
+    provenance['presentation'] = presentation;
     provenance['npc_social'] = {
       'format': RichNpcSocialContract.format,
       'review_scope': 'user_declared_private_game_fiction',
@@ -139,13 +165,32 @@ void main() {
     final rules = verified.npcSocialRulebook!;
     expect(rules.requireReviewedWitnesses, isTrue);
     final world = StoryWorld(verified.blueprint);
-    expect(NpcSocialLedger.inspect(world, rules).memoriesFor(npc), isEmpty);
+    final signed = RichSceneDialogue.verify(
+      (verified.presentation['scene_dialogues'] as Map)['entry'],
+      verified.blueprint.scenes['entry']!.text,
+    );
+    final reviews =
+        (verified.presentation['scene_dialogue_knowledge'] as Map)['entry']
+            as List;
+    final initial = NpcSocialLedger.inspect(world, rules);
+    expect(initial.memoriesFor(npc), isEmpty);
+    expect(RichNpcDialogueKnowledge.redact(
+        signed, reviews, world.state.knowledge, social: initial)[1].text,
+        RichNpcDialogueKnowledge.unavailableLine);
     expect(world.apply(actionId: 'got_it', choiceId: 'wait').applied, isTrue);
     final social = NpcSocialLedger.inspect(world, rules);
     expect(social.memoriesFor(npc), hasLength(1));
     expect(social.memoriesFor(npc).single.witnessMode, NpcWitnessMode.present);
     expect(social.directedScore(npc, 'player'), 7);
     expect(social.directedScore('player', npc), 0);
+    expect(RichNpcDialogueKnowledge.redact(
+        signed, reviews, world.state.knowledge, social: social)[1].text,
+        'Я услышала обещание!');
+    final overThreshold = jsonDecode(jsonEncode(reviews)) as List;
+    (overThreshold.first as Map)['minimum_trust_to_player'] = 8;
+    expect(RichNpcDialogueKnowledge.redact(
+        signed, overThreshold, world.state.knowledge, social: social)[1].text,
+        RichNpcDialogueKnowledge.unavailableLine);
     final replay = StoryWorld.replay(
         verified.blueprint, world.events.map((e) => e.toJson()),
         expectedSequence: world.state.revision,
