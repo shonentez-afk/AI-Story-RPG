@@ -531,6 +531,51 @@ void main() {
   });
 
 
+  testWidgets('cached two-speaker scene shows unresolved source identity '
+      'without network, and no spoken words become canon', (tester) async {
+    final (index, book, plan) = await _fixture();
+    final context = SourceLockedProseContext.forSituation(
+      index: index, book: book, plan: plan, situationId: 'turning_point',
+    );
+    const namedScene = 'Путники остановились у ворот, стараясь '
+        'разобраться, почему проход оказался закрытым.\\n'
+        'Лена: «Ты видел, кто построил эту дверь?»\\n'
+        'Страж: «Я не знаю ответа и не могу ничего обещать».\\n'
+        'Рассказчик не объясняет, кто сообщил людям эту историю.';
+    final net = _Network([_answer('turning_point', namedScene)]);
+    final draft = await _service(net).preview(
+      context: context, approvedContextDigest: context.approvalDigest,
+      userReviewedExactContext: true,
+    );
+    final store = SourceLockedProseCheckpointStore(
+        repository: MemorySourceAnalysisCheckpointRepository());
+    await store.save(context: context, draft: draft);
+    final noNetwork = _Network([]);
+    await tester.pumpWidget(MaterialApp(home: SourceLockedProsePreviewPage(
+      index: index, book: book, plan: plan,
+      store: store, previewService: _service(noNetwork),
+    )));
+    await tester.pumpAndSettle();
+    final report = find.byKey(const Key('prose-scene-speaker-audit'));
+    await tester.scrollUntilVisible(report, 125,
+        scrollable: find.byType(Scrollable).first);
+    expect(report, findsOneWidget);
+    expect(find.textContaining(
+        'не доказывает принадлежность реплики'), findsOneWidget);
+    final lena = find.byKey(const Key('prose-scene-speaker-Лена'));
+    await tester.scrollUntilVisible(lena, 120,
+        scrollable: find.byType(Scrollable).first);
+    expect(lena, findsOneWidget);
+    expect(tester.widget<Text>(lena).data,
+        contains('не найдено'));
+    final guard = find.byKey(const Key('prose-scene-speaker-Страж'));
+    await tester.scrollUntilVisible(guard, 120,
+        scrollable: find.byType(Scrollable).first);
+    expect(guard, findsOneWidget);
+    expect(noNetwork.bodies, isEmpty);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('accepting cached prose for game requires TWO separate '
       'confirmations; reopening never posts to cloud', (tester) async {
     final (index, book, plan) = await _fixture();
