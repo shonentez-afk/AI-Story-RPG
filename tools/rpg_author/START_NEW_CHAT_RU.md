@@ -1,3 +1,15 @@
+## E6e — синхронизация с принятым NPC rich-v3 (7 ноября 2026)
+
+**Новая активная внешняя ветка:** [feature/external-rpg-author-e6e-parity-20261107](https://github.com/shonentez-afk/AI-Story-RPG/tree/feature/external-rpg-author-e6e-parity-20261107), создана поверх `main` после принятого [PR #131](https://github.com/shonentez-afk/AI-Story-RPG/pull/131) (baseline `9c9bdc142495e536b5d11ca5e61680948e45f8fe`).
+
+В одном переносе сохранены изменения E6d исключительно в `tools/rpg_author/` и `tests/rpg_author/`: два исправления аудита диалогов, регрессии и исследовательские документы. Контракты приложения и BookWorld в этой ветке **в точности** унаследованы из уже проверенного `main`; `tools/rpg_author/compatibility.json`, `compatibility.py` и `npc_compatibility_probe.py` также взяты из принятого PR #131. Никакого ручного отключения защиты `contract_drift`, подмены SHA и изменения `apps/packages/tools/bookworld` не делали. Прежнюю E6d-ветку и её закреплённый навык не переписывать.
+
+**Обязательно:** перед любым заявлением о совместимости проверить два задания `External RPG author tests` (author-tests, dart-parity) на точном HEAD новой ветки; после новых коммитов повторить проверку. Пока не подтверждены оба SUCCESS, состояние остаётся `CI_PENDING`, а старый skill pin `9849c22d18e2761b49766b0c213b4a3fb3fe053b` сохраняется. Для [Draft PR #132](https://github.com/shonentez-afk/AI-Story-RPG/pull/132) требуется отдельный parity gate после принятия нового `npc_social`; не обновлять pin автоматически при каждом неподтверждённом контракте.
+
+Дальнейшая E6e задача — единая завершающая команда build→verify→quality→dialogue→literary-review, поддержка корректного snapshot; не объявлять настоящую книжную адаптацию или E2E готовыми без фактического испытания. Этот блок является текущим состоянием, исторические записи ниже относятся к старой ветке.
+
+---
+
 # Продолжение внешнего генератора AI Story RPG — E6d
 
 ## ОБЯЗАТЕЛЬНЫЙ НОВЫЙ ПЛАН: проверенные источники и единая архитектура (2026-11-07)
