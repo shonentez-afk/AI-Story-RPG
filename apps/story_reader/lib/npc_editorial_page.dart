@@ -459,7 +459,10 @@ class _NpcEditorialPageState extends State<NpcEditorialPage> {
         _profileFor(d.id)?.characterId != null).toList();
     var field = existing?.field ?? NpcDraftField.role;
     var sourceId = existing?.sourceAssertionId;
-    var targetId = existing?.targetDossierId;
+    // A legacy unpinned relationship can be viewed but editing it requires
+    // an explicit new, permanently identified target. No name-only rebinding.
+    var targetId = targets.any((d) => d.id == existing?.targetDossierId)
+        ? existing?.targetDossierId : null;
     var enteredText = existing?.text ?? '';
     final proposal = await showDialog<({NpcDraftField field,
           String text, String? sourceId, String? targetId})>(
@@ -582,7 +585,8 @@ class _NpcEditorialPageState extends State<NpcEditorialPage> {
             ),
             FilledButton(
               key: const Key('npc-note-confirm'),
-              onPressed: () => Navigator.pop(dialog, (
+              onPressed: field == NpcDraftField.relationship && targetId == null
+                  ? null : () => Navigator.pop(dialog, (
                 field: field, text: enteredText.trim(),
                 sourceId: sourceId, targetId: targetId,
               )),
