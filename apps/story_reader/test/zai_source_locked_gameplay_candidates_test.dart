@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:ai_story_reader/ai_connection.dart';
+import 'package:ai_story_reader/gameplay_candidate_reachability.dart';
 import 'package:ai_story_reader/book_import.dart';
 import 'package:ai_story_reader/book_source_index.dart';
 import 'package:ai_story_reader/narrative_book_model.dart';
@@ -63,7 +64,7 @@ Future<(BookSourceIndex, NarrativeBookModel, StoryPlan)> _fixture({
       'Путник обнаружил старый ключ возле колодца. '
           'Сторож предложил помощь за обещание, но путник '
           'пока не согласился на условие.',
-      'На следующий день путник увидел другую дорогу. '
+      'Ключ оставался у колодца. На следующий день путник увидел дорогу. '
           'Он мог отказаться от условия и искать собственный путь, '
           'а принадлежность ключа всё ещё оставалась неизвестной.',
     ],
@@ -170,6 +171,30 @@ Future<GameplayCandidateDraft> _propose(
 }) => service.propose(
   context: context, explicitExcerptConsent: consent,
   approvedDigest: digest ?? context.approvalDigest,
+);
+
+
+GameplayCandidate _at(SourceLockedGameplayContext context,
+    String choiceId, String op, {
+    String id = 'old_key',
+    String label = 'ключ',
+}) {
+  final anchor = context.choices.singleWhere(
+      (c) => c.choiceId == choiceId);
+  return GameplayCandidate(
+    kind: 'item', id: id, label: label, op: op,
+    sceneId: anchor.sceneId, choiceId: anchor.choiceId,
+    sourceEventId: anchor.sourceEventId,
+    uncertainty: 'Нужно проверить, действительно ли герой получил вещь.',
+  );
+}
+
+GameplayCandidateDraft _draft(
+    SourceLockedGameplayContext context,
+    List<GameplayCandidate> proposals) => GameplayCandidateDraft(
+  sourceFingerprint: context.sourceFingerprint,
+  approvalDigest: context.approvalDigest,
+  candidates: List.unmodifiable(proposals),
 );
 
 void main() {
@@ -302,4 +327,125 @@ void main() {
       exactEventIds: ['a_different_book_event'],
     ), throwsFormatException);
   });
+
+  test('same source item ID may be granted then consumed in another choice',
+      () async {
+    final (index, book, plan) = await _fixture();
+    final context = _context(index, book, plan);
+    final source = _candidate(context);
+    final next = context.choices.singleWhere(
+        (c) => c.choiceId == 'honor_condition');
+    final consume = {
+      ...source,
+      'op': 'consume_item',
+      'scene_id': next.sceneId,
+      'choice_id': next.choiceId,
+      'source_event_id': next.sourceEventId,
+    };
+    final api = _Http([_reply([source, consume])]);
+    final result = await _propose(_service(api), context);
+    expect(result.candidates, hasLength(2));
+    expect(result.candidates.last.id, result.candidates.first.id);
+    expect(result.candidates.last.op, 'consume_item');
+    expect(result.mayChangeGameState, false);
+  });
+
+  test('all branches: acquisition then use is structurally consistent',
+      () async {
+    final (index, book, plan) = await _fixture();
+    final ctx = _context(index, book, plan);
+    final draft = _draft(ctx, [
+      _at(ctx, 'accept_offer', 'grant_item'),
+      _at(ctx, 'honor_condition', 'consume_item'),
+    ]);
+    final report = const GameplayCandidateReachabilityAuditor().audit(
+        plan: plan, context: ctx, draft: draft);
+    expect(report.issues, isEmpty);
+    expect(report.hasNoRouteConflicts, true);
+    expect(report.checkedCandidateOperations, 2);
+    expect(report.reachedEndingIds, hasLength(2));
+    expect(report.verifiesLiteraryCanon, false);
+    expect(report.verifiesLiteraryOwnership, false);
+    expect(report.mayAutomaticallyChangeBookworld, false);
+  });
+
+  test('refusal path cannot consume an item acquired only on agreement path',
+      () async {
+    final (index, book, plan) = await _fixture();
+    final ctx = _context(index, book, plan);
+    final result = const GameplayCandidateReachabilityAuditor().audit(
+        plan: plan, context: ctx,
+        draft: _draft(ctx, [
+          _at(ctx, 'accept_offer', 'grant_item'),
+          _at(ctx, 'refuse_offer', 'consume_item'),
+        ]));
+    expect(result.hasNoRouteConflicts, false);
+    final problem = result.issues.singleWhere(
+        (e) => e.code == 'CONSUME_UNOWNED');
+    expect(problem.choiceId, 'refuse_offer');
+    expect(problem.pathChoiceIds, contains('refuse_offer'));
+  });
+
+  test('cannot consume a never acquired item or silently regrant owned item',
+      () async {
+    final (index, book, plan) = await _fixture();
+    final ctx = _context(index, book, plan);
+    final auditor = const GameplayCandidateReachabilityAuditor();
+    final unowned = auditor.audit(plan: plan, context: ctx,
+        draft: _draft(ctx, [
+          _at(ctx, 'honor_condition', 'consume_item'),
+        ]));
+    expect(unowned.issues.map((e) => e.code),
+        contains('CONSUME_UNOWNED'));
+    final duplicate = auditor.audit(plan: plan, context: ctx,
+        draft: _draft(ctx, [
+          _at(ctx, 'accept_offer', 'grant_item'),
+          _at(ctx, 'honor_condition', 'grant_item'),
+        ]));
+    expect(duplicate.issues.map((e) => e.code),
+        contains('GRANT_WHILE_OWNED'));
+  });
+
+  test('ambiguous same-choice effects and false source bindings fail closed',
+      () async {
+    final (index, book, plan) = await _fixture();
+    final ctx = _context(index, book, plan);
+    final auditor = const GameplayCandidateReachabilityAuditor();
+    final ambiguous = auditor.audit(plan: plan, context: ctx,
+        draft: _draft(ctx, [
+          _at(ctx, 'accept_offer', 'grant_item'),
+          _at(ctx, 'accept_offer', 'consume_item'),
+        ]));
+    expect(ambiguous.issues.map((e) => e.code),
+        contains('AMBIGUOUS_SAME_CHOICE'));
+    expect(() => auditor.audit(plan: plan, context: ctx,
+      draft: _draft(ctx, [
+        _at(ctx, 'accept_offer', 'grant_item', label: 'чужой предмет'),
+      ]),
+    ), throwsFormatException);
+    expect(() => auditor.audit(plan: plan, context: ctx,
+      draft: GameplayCandidateDraft(
+        sourceFingerprint: ctx.sourceFingerprint,
+        approvalDigest: 'wrong_edition_or_consent',
+        candidates: [_at(ctx, 'accept_offer', 'grant_item')],
+      ),
+    ), throwsFormatException);
+    expect(() => auditor.audit(plan: plan, context: ctx,
+      draft: _draft(ctx, [
+        _at(ctx, 'accept_offer', 'grant_item'),
+        _at(ctx, 'honor_condition', 'consume_item', label: 'иной ключ'),
+      ]),
+    ), throwsFormatException);
+  });
+
+  test('zero supported items remains a valid, non-executable answer', () async {
+    final (index, book, plan) = await _fixture();
+    final ctx = _context(index, book, plan);
+    final report = const GameplayCandidateReachabilityAuditor().audit(
+        plan: plan, context: ctx, draft: _draft(ctx, const []));
+    expect(report.issues, isEmpty);
+    expect(report.checkedCandidateOperations, 0);
+    expect(report.mayAutomaticallyChangeBookworld, false);
+  });
+
 }
