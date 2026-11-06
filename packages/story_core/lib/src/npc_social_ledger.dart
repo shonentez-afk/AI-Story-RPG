@@ -142,9 +142,11 @@ class NpcSocialSnapshot {
     required this.rulebookDigest,
     required this.worldStateHash,
     required this.eventHeadHash,
+    required Set<String> actorIds,
     required Map<String, List<NpcEventMemory>> memoryByActor,
     required Map<String, Map<String, int>> directedRelations,
-  })  : _memoryByActor = Map.unmodifiable(
+  })  : _actorIds = Set<String>.unmodifiable(actorIds),
+        _memoryByActor = Map.unmodifiable(
             memoryByActor.map((actor, memories) =>
                 MapEntry(actor, List<NpcEventMemory>.unmodifiable(memories)))),
         _directedRelations = Map.unmodifiable(
@@ -155,6 +157,7 @@ class NpcSocialSnapshot {
   final String rulebookDigest;
   final String worldStateHash;
   final String? eventHeadHash;
+  final Set<String> _actorIds;
   final Map<String, List<NpcEventMemory>> _memoryByActor;
   final Map<String, Map<String, int>> _directedRelations;
 
@@ -167,6 +170,9 @@ class NpcSocialSnapshot {
 
   List<NpcEventMemory> memoriesFor(String actorId) {
     jsonId(actorId, 'observer_id');
+    if (!_actorIds.contains(actorId)) {
+      throw const FormatException('Unknown NPC memory actor');
+    }
     return _memoryByActor[actorId] ?? List<NpcEventMemory>.unmodifiable([]);
   }
 
@@ -179,6 +185,9 @@ class NpcSocialSnapshot {
   int directedScore(String fromActorId, String toActorId) {
     jsonId(fromActorId, 'from_actor_id');
     jsonId(toActorId, 'to_actor_id');
+    if (!_actorIds.contains(fromActorId) || !_actorIds.contains(toActorId)) {
+      throw const FormatException('Unknown directed relationship actors');
+    }
     return _directedRelations[fromActorId]?[toActorId] ?? 0;
   }
 }
@@ -232,6 +241,7 @@ class NpcSocialLedger {
       rulebookDigest: rulebook.digest,
       worldStateHash: world.state.stateHash,
       eventHeadHash: events.isEmpty ? null : events.last.hash,
+      actorIds: blueprint.actors,
       memoryByActor: memory,
       directedRelations: relations,
     );
