@@ -154,6 +154,48 @@ void main() {
     expect(find.byKey(const ValueKey('dialogue-complete')), findsOneWidget);
   });
 
+  testWidgets('verified rich v3 turns drive dialogue, portraits and '
+      'choice gate without extra game-state writes', (tester) async {
+    final gateway = _DialogueGateway();
+    final signed = RichSceneDialogue.verify(
+        RichSceneDialogue.presentationFor(_spoken), _spoken);
+    gateway.current = WorldGameView(
+      campaignId: 'dialogue_campaign', worldTitle: 'Тайна ворот',
+      sceneId: 'gate', sceneText: _spoken,
+      sceneDialogueTurns: signed,
+      revision: 0, tick: 0, isTerminal: false,
+      stats: const {}, inventory: const [], flags: const {},
+      knownFacts: const [],
+      choices: const [WorldChoiceView(
+          id: 'ask_guard', label: 'Ответить стражу')],
+      journal: const [],
+    );
+    await tester.pumpWidget(MaterialApp(
+      home: WorldPlayPage(gateway: gateway, campaignId: 'dialogue_campaign'),
+    ));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 250));
+    await tester.pump();
+    expect(find.byKey(const ValueKey('dialogue-stage')), findsOneWidget);
+    expect(find.text('Лена'), findsOneWidget);
+    expect(find.byKey(const ValueKey('world-dialogue-choice-gate')),
+        findsOneWidget);
+    expect(find.byKey(const ValueKey('world-choice-ask_guard')), findsNothing);
+    expect(gateway.commits, 0);
+    await tester.tap(find.byKey(const ValueKey('dialogue-next')));
+    await tester.pumpAndSettle();
+    expect(find.text('Страж'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('dialogue-skip')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('dialogue-complete')), findsOneWidget);
+    final choice = find.byKey(const ValueKey('world-choice-ask_guard'));
+    await tester.scrollUntilVisible(choice, 100,
+        scrollable: find.byType(Scrollable).first);
+    expect(choice, findsOneWidget);
+    expect(gateway.commits, 0);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('choices remain hidden until conversation finishes',
       (tester) async {
     final gateway = _DialogueGateway();
