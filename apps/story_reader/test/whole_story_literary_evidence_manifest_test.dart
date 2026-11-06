@@ -16,6 +16,7 @@ import 'package:ai_story_reader/whole_story_literary_review_page.dart';
 import 'package:flutter/material.dart';
 import 'package:ai_story_reader/ai_connection.dart';
 import 'dart:convert';
+import 'package:crypto/crypto.dart';
 import 'package:ai_story_reader/zai_auto_whole_book_analysis.dart';
 import 'package:ai_story_reader/zai_semantic_preview.dart';
 import 'package:ai_story_reader/zai_whole_book_event_outline.dart';
@@ -758,9 +759,12 @@ void main() {
       explicitBatchConsent: true);
     expect(again.newRequests, 0);
     expect(posts, 3);
-    final saved = await memory.read(index.sourceFingerprint);
+    final revisionKey = sha256.convert(utf8.encode('g1b/' +
+        index.sourceFingerprint + '/' + manifest.approvalDigest)).toString();
+    final saved = await memory.read(revisionKey);
     expect(saved, isNotNull);
-    await memory.write(index.sourceFingerprint,
+    // Tampering with the SHA-scoped active checkpoint still FAILS CLOSED.
+    await memory.write(revisionKey,
         saved!.replaceFirst('UNVERIFIED_AI_REVIEW', 'CANON_APPROVED'));
     await expectLater(resumed.inspect(manifest), throwsFormatException);
   });
