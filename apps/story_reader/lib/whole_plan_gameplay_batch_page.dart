@@ -2,10 +2,26 @@ import 'package:flutter/material.dart';
 
 import 'book_source_index.dart';
 import 'gameplay_candidate_reachability.dart';
+import 'reviewed_gameplay_compiler.dart';
+import 'zai_source_locked_gameplay_candidates.dart';
 import 'narrative_book_model.dart';
 import 'story_plan.dart';
 import 'whole_plan_gameplay_candidate_batch.dart';
 import 'zai_semantic_preview.dart';
+
+/// A reviewed subset of the completed whole-book, multi-window candidates.
+/// Returning it to the parent DOES NOT install an effect or make a new game.
+class SelectedWholePlanGameplayCandidates {
+  const SelectedWholePlanGameplayCandidates({
+    required this.manifest,
+    required this.drafts,
+    required this.selectedUserReviewNotes,
+  });
+
+  final WholePlanGameplayBatchManifest manifest;
+  final List<GameplayCandidateDraft> drafts;
+  final Map<String, String> selectedUserReviewNotes;
+}
 
 /// Optional foreground UI. No GLM call until exact on-screen consent.
 /// Suggestions collected here NEVER edit a BookWorld or install a campaign.
@@ -37,6 +53,11 @@ class _WholePlanGameplayBatchPageState
   WholePlanGameplayBatchManifest? _manifest;
   WholePlanGameplayBatchProgress? _progress;
   GameplayReachabilityReport? _audit;
+  String? _auditMessage;
+  List<GameplayCandidateDraft> _drafts = const [];
+  final Set<String> _selected = {};
+  final Map<String, TextEditingController> _notes = {};
+  bool _confirmPrivateFiction = false;
   String? _error;
   bool _working = false;
   bool _loaded = false;
@@ -63,6 +84,9 @@ class _WholePlanGameplayBatchPageState
   @override
   void dispose() {
     _cancellation.cancel();
+    for (final c in _notes.values) {
+      c.dispose();
+    }
     super.dispose();
   }
 
@@ -72,15 +96,29 @@ class _WholePlanGameplayBatchPageState
     try {
       final progress = await _service.inspect(manifest);
       final all = await _service.readUnreviewedProposals(manifest);
-      final report = progress.allProposalsCollected
-          ? const GameplayCandidateReachabilityAuditor().auditAcrossBatches(
-              plan: manifest.plan, manifest: manifest, drafts: all,
-            )
-          : null;
+      GameplayReachabilityReport? report;
+      String? auditMessage;
+      if (progress.allProposalsCollected) {
+        try {
+          report = const GameplayCandidateReachabilityAuditor()
+              .auditAcrossBatches(
+            plan: manifest.plan, manifest: manifest, drafts: all,
+          );
+        } on FormatException catch (error) {
+          // Per-packet integrity was independently checked on read.
+          // Conflicting MODEL proposals are not a corrupt checkpoint:
+          // the reader may reject those and select a safer subset.
+          auditMessage = error.message;
+        }
+      }
       if (!mounted) return;
       setState(() {
         _progress = progress;
         _audit = report;
+        _auditMessage = auditMessage;
+        if (progress.allProposalsCollected) {
+          _drafts = List.unmodifiable(all);
+        }
         _suggestions = all.fold<int>(
             0, (n, draft) => n + draft.candidates.length);
         _loaded = true;
@@ -115,15 +153,29 @@ class _WholePlanGameplayBatchPageState
         },
       );
       final all = await _service.readUnreviewedProposals(manifest);
-      final report = progress.allProposalsCollected
-          ? const GameplayCandidateReachabilityAuditor().auditAcrossBatches(
-              plan: manifest.plan, manifest: manifest, drafts: all,
-            )
-          : null;
+      GameplayReachabilityReport? report;
+      String? auditMessage;
+      if (progress.allProposalsCollected) {
+        try {
+          report = const GameplayCandidateReachabilityAuditor()
+              .auditAcrossBatches(
+            plan: manifest.plan, manifest: manifest, drafts: all,
+          );
+        } on FormatException catch (error) {
+          // Per-packet integrity was independently checked on read.
+          // Conflicting MODEL proposals are not a corrupt checkpoint:
+          // the reader may reject those and select a safer subset.
+          auditMessage = error.message;
+        }
+      }
       if (!mounted) return;
       setState(() {
         _progress = progress;
         _audit = report;
+        _auditMessage = auditMessage;
+        if (progress.allProposalsCollected) {
+          _drafts = List.unmodifiable(all);
+        }
         _suggestions = all.fold<int>(
             0, (n, draft) => n + draft.candidates.length);
       });
@@ -140,6 +192,62 @@ class _WholePlanGameplayBatchPageState
           _consented = false;
         });
       }
+    }
+  }
+
+  void _selectForNextGame() {
+    final manifest = _manifest;
+    final status = _progress;
+    if (_working || manifest == null || status == null ||
+        !status.allProposalsCollected || !_confirmPrivateFiction ||
+        _selected.isEmpty || _selected.length > 6 ||
+        _drafts.length != manifest.totalBatches) return;
+
+    final notes = <String, String>{};
+    for (final id in _selected) {
+      final value = _notes[id]?.text.trim() ?? '';
+      if (value.length < 18 || value.length > 350) {
+        setState(() => _error = 'Каждый выбранный эффект требует '
+            'отдельного пояснения (от 18 до 350 символов).');
+        return;
+      }
+      notes[id] = value;
+    }
+    final selectedDrafts = [
+      for (final draft in _drafts)
+        GameplayCandidateDraft(
+          sourceFingerprint: draft.sourceFingerprint,
+          approvalDigest: draft.approvalDigest,
+          candidates: [
+            for (final candidate in draft.candidates)
+              if (_selected.contains(
+                  ReviewedGameplayCompiler.signature(candidate)))
+                candidate,
+          ],
+        ),
+    ];
+    try {
+      final audit = const GameplayCandidateReachabilityAuditor()
+          .auditAcrossBatches(
+        plan: manifest.plan, manifest: manifest, drafts: selectedDrafts,
+      );
+      if (!audit.hasNoRouteConflicts) {
+        final failure = audit.issues.first;
+        setState(() => _error = 'Выбранные игровые эффекты '
+            'противоречат маршруту: ' + failure.code +
+            ' / ' + failure.pathChoiceIds.join(' → '));
+        return;
+      }
+      // No game is modified: the parent must compile and ask the user
+      // to confirm the resulting exact-digest review in a SECOND dialog.
+      Navigator.of(context).pop(SelectedWholePlanGameplayCandidates(
+        manifest: manifest,
+        drafts: List.unmodifiable(_drafts),
+        selectedUserReviewNotes: Map.unmodifiable(notes),
+      ));
+    } catch (error) {
+      setState(() => _error = 'Нельзя передать эти предложения '
+          'в подготовку: ' + error.toString());
     }
   }
 
@@ -248,6 +356,107 @@ class _WholePlanGameplayBatchPageState
                           ', путь: ' + issue.pathChoiceIds.join(' → ')),
                     ),
                   ),
+              ],
+              if (_auditMessage != null)
+                ListTile(
+                  key: const Key('whole-gameplay-batch-audit-warning'),
+                  leading: const Icon(Icons.report_problem_outlined),
+                  title: const Text('Противоречие между предложениями ИИ'),
+                  subtitle: Text(_auditMessage! +
+                      '. Исключите конфликтующий кандидат и '
+                      'проверьте выбранное подмножество. '
+                      'Оригинал и checkpoint не изменены.'),
+                ),
+              if (status.allProposalsCollected &&
+                  _drafts.length == manifest.totalBatches) ...[
+                const SizedBox(height: 16),
+                const Text('Одобрить отдельные игровые эффекты',
+                    style: TextStyle(fontWeight: FontWeight.w600)),
+                const Text('Это отдельное редакторское решение. '
+                    'Можно выбрать максимум ШЕСТЬ эффектов '
+                    'из ВСЕХ пакетов. Никаких новых запросов Z.ai '
+                    'при выборе не отправляется. '
+                    'Отказ от всех предложений допустим.'),
+                for (final (n, candidate) in [
+                  for (final draft in _drafts) ...draft.candidates,
+                ].indexed)
+                  Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(10),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          CheckboxListTile(
+                            key: Key('whole-gameplay-select-' +
+                                n.toString()),
+                            title: Text(candidate.label),
+                            subtitle: Text(candidate.op + ' · ' +
+                                candidate.sceneId + '/' +
+                                candidate.choiceId),
+                            value: _selected.contains(
+                                ReviewedGameplayCompiler.signature(candidate)),
+                            onChanged: _working || (_selected.length == 6 &&
+                                    !_selected.contains(ReviewedGameplayCompiler
+                                        .signature(candidate)))
+                                ? null : (checked) => setState(() {
+                                  final id = ReviewedGameplayCompiler
+                                      .signature(candidate);
+                                  if (checked == true) {
+                                    _selected.add(id);
+                                    _notes.putIfAbsent(id,
+                                        () => TextEditingController());
+                                  } else {
+                                    _selected.remove(id);
+                                  }
+                                  _confirmPrivateFiction = false;
+                                }),
+                          ),
+                          Text(candidate.uncertainty),
+                          if (_selected.contains(
+                              ReviewedGameplayCompiler.signature(candidate)))
+                            TextField(
+                              key: Key('whole-gameplay-note-' +
+                                  n.toString()),
+                              controller: _notes[
+                                  ReviewedGameplayCompiler.signature(
+                                      candidate)],
+                              maxLength: 350,
+                              maxLines: 3,
+                              onChanged: (_) => setState(() {}),
+                              decoration: const InputDecoration(
+                                labelText: 'Почему допустимо для частной игры',
+                                helperText: '18–350 символов. '
+                                    'Не подтверждает канон книги.',
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ),
+                if (_selected.isNotEmpty) ...[
+                  Text('Выбрано: ' + _selected.length.toString() +
+                      ' из 6 возможных эффектов.'),
+                  CheckboxListTile(
+                    key: const Key('whole-gameplay-private-fiction'),
+                    value: _confirmPrivateFiction,
+                    onChanged: _working ? null :
+                        (value) => setState(() =>
+                            _confirmPrivateFiction = value == true),
+                    title: const Text('Я отдельно разрешаю только '
+                        'частную ИГРОВУЮ выдумку, не литературный канон'),
+                  ),
+                  FilledButton.icon(
+                    key: const Key('whole-gameplay-return-selection'),
+                    onPressed: !_working && _confirmPrivateFiction &&
+                        _selected.length <= 6 &&
+                        _selected.every((id) {
+                          final note = _notes[id]?.text.trim() ?? '';
+                          return note.length >= 18 && note.length <= 350;
+                        }) ? _selectForNextGame : null,
+                    icon: const Icon(Icons.check_circle_outline),
+                    label: const Text('Вернуть выбранное в подготовку RPG'),
+                  ),
+                ],
               ],
             ],
             if (status != null && status.remaining > 0) ...[

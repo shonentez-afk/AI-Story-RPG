@@ -47,6 +47,7 @@ class _MultiActTrialPageState extends State<MultiActTrialPage> {
   String? _error;
   final Map<String, ReviewedProseSceneApproval> _reviewedProse = {};
   SelectedGameplayCandidates? _gameplaySelection;
+  SelectedWholePlanGameplayCandidates? _wholeGameplaySelection;
 
   List<NarrativeEvent> get _reviewEvents {
     final ids = <String>{
@@ -79,6 +80,25 @@ class _MultiActTrialPageState extends State<MultiActTrialPage> {
     if (!mounted || selection == null) return;
     setState(() {
       _gameplaySelection = selection;
+      _wholeGameplaySelection = null;
+      _error = null;
+    });
+  }
+
+  Future<void> _chooseWholeGameplay() async {
+    if (_working || !_reviewed || !_privateFiction ||
+        _enforceEarlierOutcome || !widget.draft.formalRulesPassed) return;
+    final selection = await Navigator.of(context)
+        .push<SelectedWholePlanGameplayCandidates>(MaterialPageRoute(
+      builder: (_) => WholePlanGameplayBatchPage(
+        index: widget.index, book: widget.book,
+        plan: widget.draft.plan,
+      ),
+    ));
+    if (!mounted || selection == null) return;
+    setState(() {
+      _wholeGameplaySelection = selection;
+      _gameplaySelection = null; // Do not mix two different consent scopes.
       _error = null;
     });
   }
@@ -86,7 +106,8 @@ class _MultiActTrialPageState extends State<MultiActTrialPage> {
   Future<void> _start() async {
     if (!_reviewed || !_privateFiction || _working) return;
     if (_enforceEarlierOutcome &&
-        (_reviewedProse.isNotEmpty || _gameplaySelection != null)) {
+        (_reviewedProse.isNotEmpty || _gameplaySelection != null ||
+         _wholeGameplaySelection != null)) {
       setState(() => _error = 'Подтверждённые художественные сцены '
           'относятся к прежней версии игрового плана. '
           'Снимите дополнительное правило или удалите '
@@ -138,17 +159,31 @@ class _MultiActTrialPageState extends State<MultiActTrialPage> {
       if (!mounted || compiled.sourceFingerprint !=
           widget.index.sourceFingerprint) return;
       var archive = compiled.archive;
-      if (_gameplaySelection != null) {
-        final selection = _gameplaySelection!;
-        final preview = ReviewedGameplayCompiler.preview(
-          currentRichBookworld: compiled.archive,
-          index: widget.index,
-          book: widget.book,
-          plan: widget.draft.plan,
-          context: selection.context,
-          proposals: selection.draft,
-          selectedUserReviewNotes: selection.selectedUserReviewNotes,
-        );
+      if (_wholeGameplaySelection != null || _gameplaySelection != null) {
+        final ReviewedGameplayApprovalPreview preview;
+        if (_wholeGameplaySelection != null) {
+          final selection = _wholeGameplaySelection!;
+          preview = ReviewedGameplayCompiler.previewAcrossBatches(
+            currentRichBookworld: compiled.archive,
+            index: widget.index,
+            book: widget.book,
+            plan: widget.draft.plan,
+            manifest: selection.manifest,
+            proposals: selection.drafts,
+            selectedUserReviewNotes: selection.selectedUserReviewNotes,
+          );
+        } else {
+          final selection = _gameplaySelection!;
+          preview = ReviewedGameplayCompiler.preview(
+            currentRichBookworld: compiled.archive,
+            index: widget.index,
+            book: widget.book,
+            plan: widget.draft.plan,
+            context: selection.context,
+            proposals: selection.draft,
+            selectedUserReviewNotes: selection.selectedUserReviewNotes,
+          );
+        }
         if (!mounted) return;
         final approved = await showDialog<bool>(
           context: context,
@@ -291,7 +326,8 @@ class _MultiActTrialPageState extends State<MultiActTrialPage> {
               contentPadding: EdgeInsets.zero,
               value: _enforceEarlierOutcome,
               onChanged: valid && _reviewedProse.isEmpty &&
-                  _gameplaySelection == null
+                  _gameplaySelection == null &&
+                  _wholeGameplaySelection == null
                   ? (v) => setState(() =>
                       _enforceEarlierOutcome = v == true)
                   : null,
@@ -397,14 +433,7 @@ class _MultiActTrialPageState extends State<MultiActTrialPage> {
               key: const Key('multiact-trial-whole-gameplay-batch'),
               onPressed: valid && _reviewed && _privateFiction &&
                   !_enforceEarlierOutcome ? () async {
-                await Navigator.of(context).push<void>(
-                  MaterialPageRoute(
-                    builder: (_) => WholePlanGameplayBatchPage(
-                      index: widget.index, book: widget.book,
-                      plan: widget.draft.plan,
-                    ),
-                  ),
-                );
+                await _chooseWholeGameplay();
               } : null,
               icon: const Icon(Icons.menu_book_outlined),
               label: const Text('Предложения по всему сюжету '
@@ -412,8 +441,23 @@ class _MultiActTrialPageState extends State<MultiActTrialPage> {
             ),
             const Text('Пакеты используют все привязанные к игровым '
                 'решениям цитаты, сохраняя прогресс на устройстве. '
-                'Это только неподтверждённые предложения: '
-                'они НЕ добавляются в игру автоматически.'),
+                'Модельные предложения не добавляются в игру без '
+                'отдельного выбора и второго подтверждения.'),
+            if (_wholeGameplaySelection != null)
+              ListTile(
+                title: Text('Выбрано из всех пакетов: ' +
+                    _wholeGameplaySelection!.selectedUserReviewNotes.length
+                        .toString() + ' эффектов'),
+                subtitle: const Text('Только частная игровая адаптация. '
+                    'Можно отменить перед новой игрой.'),
+                trailing: IconButton(
+                  key: const Key('multiact-trial-clear-whole-gameplay'),
+                  tooltip: 'Не применять выбранные эффекты из всех пакетов',
+                  onPressed: _working ? null : () => setState(
+                      () => _wholeGameplaySelection = null),
+                  icon: const Icon(Icons.close),
+                ),
+              ),
             if (_gameplaySelection != null)
               ListTile(
                 title: Text('Выбрано игровых эффектов: ' +
