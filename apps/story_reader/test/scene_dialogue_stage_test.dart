@@ -156,11 +156,14 @@ void main() {
 
   testWidgets('verified rich v3 turns drive dialogue, portraits and '
       'choice gate without extra game-state writes', (tester) async {
+    // UI-only resume positions are cached by campaign ID and revision.
+    // Never reuse the next test's campaign or it will restore a completed
+    // dialogue and incorrectly show its choices immediately.
     final gateway = _DialogueGateway();
     final signed = RichSceneDialogue.verify(
         RichSceneDialogue.presentationFor(_spoken), _spoken);
     gateway.current = WorldGameView(
-      campaignId: 'dialogue_campaign', worldTitle: 'Тайна ворот',
+      campaignId: 'signed_v3_isolated_campaign', worldTitle: 'Тайна ворот',
       sceneId: 'gate', sceneText: _spoken,
       sceneDialogueTurns: signed,
       revision: 0, tick: 0, isTerminal: false,
@@ -171,7 +174,7 @@ void main() {
       journal: const [],
     );
     await tester.pumpWidget(MaterialApp(
-      home: WorldPlayPage(gateway: gateway, campaignId: 'dialogue_campaign'),
+      home: WorldPlayPage(gateway: gateway, campaignId: 'signed_v3_isolated_campaign'),
     ));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 250));
