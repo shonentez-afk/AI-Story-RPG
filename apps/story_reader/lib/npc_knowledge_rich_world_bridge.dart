@@ -30,6 +30,7 @@ class NpcKnowledgeRichWorldBridge {
     required Map<String, dynamic> provenance,
     required Map<String, String> sourceQuoteByRuleId,
     required bool userConfirmed,
+    Map<String, dynamic>? reviewedNpcSocial,
     Map<String, List<Map<String, dynamic>>> reviewedDialogueTurns = const {},
     Map<String, String> reviewedSpeakerBindings = const {},
     String heroName = 'Игрок',
@@ -216,6 +217,14 @@ class NpcKnowledgeRichWorldBridge {
       if (reviewedDialogueTurns.isNotEmpty)
         'scene_dialogue_knowledge': reviewedDialogueTurns,
     };
+    if (reviewedNpcSocial != null) {
+      // The model/presentation are already assembled at this point.
+      // Never invent the author's presence, rumor or consent flags.
+      result['npc_social'] =
+          jsonDecode(jsonEncode(reviewedNpcSocial));
+      RichNpcSocialContract.inspect(result,
+          {'npc_social_format': RichNpcSocialContract.format}, world);
+    }
     result['npc_knowledge'] = {
       'format': RichPrivateBookworldImporter.npcKnowledgeFormat,
       'review_scope': 'user_declared_private_game_fiction',
