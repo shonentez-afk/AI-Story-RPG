@@ -94,6 +94,29 @@ void main() {
     scenario: scenario, repository: store,
   ));
 
+  testWidgets('one existing rules screen refuses unreviewed NPC RPG compilation',
+      (tester) async {
+    await tester.pumpWidget(screen());
+    await tester.pumpAndSettle();
+    final build = find.byKey(const Key('npc-build-world'));
+    expect(build, findsOneWidget);
+    expect(tester.widget<FilledButton>(build).onPressed, isNull);
+    await tester.tap(find.byKey(const Key('knowledge-add')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('knowledge-confirm')));
+    await tester.pumpAndSettle();
+    expect(tester.widget<FilledButton>(build).onPressed, isNotNull);
+    final raw = await store.read(index.sourceFingerprint);
+    await tester.ensureVisible(build);
+    await tester.tap(build);
+    await tester.pumpAndSettle();
+    // Old legacy NPC IDs and EXPLICIT_ADAPTATION scenes must not be
+    // misrepresented as approved SOURCE_PASSAGE evidence or playable v3.
+    expect(find.textContaining('Сборка NPC заблокирована'), findsOneWidget);
+    expect(await store.read(index.sourceFingerprint), raw);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('authoring NPC rule persists and editing resumes', (tester) async {
     await tester.pumpWidget(screen());
     await tester.pumpAndSettle();
