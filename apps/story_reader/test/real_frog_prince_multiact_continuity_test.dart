@@ -235,8 +235,13 @@ void main() {
     expect(archive.isFullBookAdaptation, false);
     expect(archive.sceneCount, 14);
     expect(archive.sourceQuoteCount, 4);
-    final verified = const PrivateBookworldImporter().inspect(archive.archive);
+    final verified = const RichPrivateBookworldImporter().inspect(archive.archive);
     expect(verified.sourceFingerprint, index.sourceFingerprint);
+    expect(verified.presentation['hero'], containsPair('name', 'Игрок'));
+    expect(verified.presentation['item_names'], isEmpty);
+    expect(verified.presentation['stat_names'], isEmpty);
+    expect(() => const PrivateBookworldImporter().inspect(archive.archive),
+        throwsFormatException);
     expect(verified.requiresNetwork, false);
     expect(verified.canDistributePublicly, false);
 
