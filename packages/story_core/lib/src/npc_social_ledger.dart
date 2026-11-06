@@ -29,6 +29,7 @@ class NpcSocialRule {
     required this.kind,
     this.relatedActorId,
     this.relationshipDelta = 0,
+    this.maxTriggers = 1,
   });
 
   final String memoryId;
@@ -38,6 +39,8 @@ class NpcSocialRule {
   final NpcMemoryKind kind;
   final String? relatedActorId;
   final int relationshipDelta;
+  /// One event can be revisited: relationship farming is disallowed by default.
+  final int maxTriggers;
 
   Map<String, Object?> toJson() => {
     'memory_id': memoryId,
@@ -47,6 +50,7 @@ class NpcSocialRule {
     'kind': kind.name,
     'related_actor_id': relatedActorId,
     'relationship_delta': relationshipDelta,
+    'max_triggers': maxTriggers,
   };
 }
 
@@ -89,7 +93,8 @@ class NpcSocialRulebook {
           throw const FormatException('Invalid directed NPC relationship');
         }
       }
-      if (rule.relationshipDelta < -20 || rule.relationshipDelta > 20 ||
+      if (rule.maxTriggers < 1 || rule.maxTriggers > 10 ||
+          rule.relationshipDelta < -20 || rule.relationshipDelta > 20 ||
           (rule.relationshipDelta != 0 && rule.relatedActorId == null)) {
         throw const FormatException('Invalid NPC relationship change');
       }
@@ -207,11 +212,16 @@ class NpcSocialLedger {
           () => <NpcSocialRule>[]).add(rule);
     }
     final memory = <String, List<NpcEventMemory>>{};
+    final triggersByRule = <String, int>{};
     final relations = <String, Map<String, int>>{};
     for (final event in world.events) {
       for (final rule in byChoice[
               '${event.sceneId}|${event.choiceId}'] ??
           <NpcSocialRule>[]) {
+        final key = '${rule.observerId}|${rule.memoryId}';
+        final previousTriggers = triggersByRule[key] ?? 0;
+        if (previousTriggers >= rule.maxTriggers) continue;
+        triggersByRule[key] = previousTriggers + 1;
         memory.putIfAbsent(rule.observerId, () => <NpcEventMemory>[]).add(
           NpcEventMemory(
             observerId: rule.observerId,
