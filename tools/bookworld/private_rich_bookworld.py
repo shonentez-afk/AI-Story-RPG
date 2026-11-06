@@ -158,6 +158,13 @@ def _presentation(meta, bp):
     npc_ids = set(bp["actors"]) - {"player"}
     reviewed = meta.get("scene_dialogue_knowledge")
     dialogue_scenes = meta.get("scene_dialogues", {})
+    if npc_ids:
+        # Omitting the optional signed projection must not revive legacy
+        # unguarded parsing of NPC speech in a rich world.
+        for scene in bp["scenes"]:
+            if _exact_scene_dialogue(scene["text"]) is not None and \
+                    scene["id"] not in dialogue_scenes:
+                fail("Structured NPC speech requires signed reviewed turns")
     if not npc_ids:
         if has_npc_review:
             fail("Unexpected NPC speaker review in player-only world")
