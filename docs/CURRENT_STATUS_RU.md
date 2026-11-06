@@ -1,6 +1,6 @@
 # AI Story RPG — CURRENT_STATUS_RU
 
-**Срез 2026-11-07.** Проверенный main: `551e1e0712e7d488c507c44c6c5c110272c164e4` (06.11.2026). CI #806 и M0 #891 **SUCCESS**. Последний подтверждённый релиз: [test-build-806](https://github.com/shonentez-afk/AI-Story-RPG/releases/tag/test-build-806) — Android debug APK + Windows portable + SHA256SUMS. PR #126/#127 приняты, открытых PR при последней проверке нет. Это **техническая тестовая сборка, не 1.0**. Перед следующей работой снова проверить live Actions/HEAD.
+**Срез 2026-11-07.** `main`: `f4331851ef5752e0e2821f328d75703808579ef5` (#130 MERGED). Exact-head CI #823/M0 #908 SUCCESS; post-merge CI #824 проверить. [test-build-817](https://github.com/shonentez-afk/AI-Story-RPG/releases/tag/test-build-817) — последняя проверенная APK/Windows сборка, **ещё до #130**. PR #129 реализовал read-only доказательства знаний; PR #130 — детерминированную проекцию событийной памяти и направленных отношений, без тайной записи в world state. [PR #131](https://github.com/shonentez-afk/AI-Story-RPG/pull/131) — Draft, явный v1 контракт source-locked NPC `learn_fact`/`knows_fact` для rich-v3 с Dart/Python проверками. **Это ещё не готовая 1.0.**
 
 ## Что уже в main
 
