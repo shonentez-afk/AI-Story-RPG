@@ -552,6 +552,8 @@ class _NpcKnowledgeRulesPageState extends State<NpcKnowledgeRulesPage> {
       final socialDelta = <String, int>{};
       final actorsForTurn = <String, String>{};
       final prerequisites = <String, String>{};
+      final socialMemoryForTurn = <String, String>{};
+      final socialTrustForTurn = <String, int>{};
       var consent = false;
       final accepted = await showDialog<bool>(
         context: context,
@@ -567,7 +569,23 @@ class _NpcKnowledgeRulesPageState extends State<NpcKnowledgeRulesPage> {
                    (socialKind[rule.id] != 'rumorHeard' ||
                     socialDelta[rule.id] != 0)))) &&
               actorsForTurn.length == dialogues.length &&
-              prerequisites.length == dialogues.length;
+              prerequisites.length == dialogues.length &&
+              socialMemoryForTurn.length == dialogues.length &&
+              socialTrustForTurn.length == dialogues.length &&
+              socialMemoryForTurn.entries.every((entry) =>
+                entry.value == 'none_required' || grants.any((rule) =>
+                  rule.id == entry.value &&
+                  socialKind[rule.id] != 'none' &&
+                  widget.notebook.profiles.any((profile) =>
+                    profile.dossierId == rule.dossierId &&
+                    profile.characterId == actorsForTurn[entry.key]))) &&
+              socialTrustForTurn.entries.every((entry) =>
+                entry.value == 0 || grants.any((rule) =>
+                  socialKind[rule.id] != 'none' &&
+                  (socialDelta[rule.id] ?? 0) > 0 &&
+                  widget.notebook.profiles.any((profile) =>
+                    profile.dossierId == rule.dossierId &&
+                    profile.characterId == actorsForTurn[entry.key])));
           return AlertDialog(
             title: const Text('Проверить и собрать RPG с NPC'),
             content: SizedBox(width: 620, child: SingleChildScrollView(
@@ -718,9 +736,13 @@ class _NpcKnowledgeRulesPageState extends State<NpcKnowledgeRulesPage> {
                       ],
                       onChanged: (actorId) {
                         if (actorId != null) {
-                          update(() => actorsForTurn[
-                              turn.sceneId + '|' +
-                                  turn.index.toString()] = actorId);
+                          update(() {
+                            final key = turn.sceneId + '|' +
+                                turn.index.toString();
+                            actorsForTurn[key] = actorId;
+                            socialMemoryForTurn.remove(key);
+                            socialTrustForTurn.remove(key);
+                          });
                         }
                       },
                     ),
@@ -751,6 +773,66 @@ class _NpcKnowledgeRulesPageState extends State<NpcKnowledgeRulesPage> {
                               turn.sceneId + '|' +
                                   turn.index.toString()] = fact);
                         }
+                      },
+                    ),
+                    const SizedBox(height: 8),
+                    DropdownButtonFormField<String>(
+                      key: Key('npc-build-memory-gate-' + turn.sceneId +
+                          '-' + turn.index.toString()),
+                      isExpanded: true,
+                      initialValue: socialMemoryForTurn[
+                          turn.sceneId + '|' + turn.index.toString()],
+                      decoration: const InputDecoration(
+                        labelText: 'Какой прошлый поступок NPC должен помнить?',
+                        border: OutlineInputBorder(),
+                      ),
+                      items: [
+                        const DropdownMenuItem(value: 'none_required',
+                            child: Text('Не требует воспоминания')),
+                        for (final rule in grants)
+                          if (socialKind[rule.id] != null &&
+                              socialKind[rule.id] != 'none' &&
+                              widget.notebook.profiles.any((profile) =>
+                                profile.dossierId == rule.dossierId &&
+                                profile.characterId == actorsForTurn[
+                                  turn.sceneId + '|' + turn.index.toString()]))
+                            DropdownMenuItem(value: rule.id,
+                              child: Text('Поступок ' + rule.choiceId,
+                                  overflow: TextOverflow.ellipsis)),
+                      ],
+                      onChanged: (memory) {
+                        if (memory != null) update(() =>
+                            socialMemoryForTurn[turn.sceneId + '|' +
+                                turn.index.toString()] = memory);
+                      },
+                    ),
+                    const SizedBox(height: 6),
+                    DropdownButtonFormField<int>(
+                      key: Key('npc-build-trust-gate-' + turn.sceneId +
+                          '-' + turn.index.toString()),
+                      initialValue: socialTrustForTurn[
+                          turn.sceneId + '|' + turn.index.toString()],
+                      decoration: const InputDecoration(
+                        labelText: 'Минимальное доверие NPC к герою для реплики',
+                        border: OutlineInputBorder(),
+                      ),
+                      items: [
+                        const DropdownMenuItem(value: 0,
+                            child: Text('Не требуется')),
+                        if (grants.any((rule) =>
+                            (socialDelta[rule.id] ?? 0) > 0 &&
+                            socialKind[rule.id] != 'none' &&
+                            widget.notebook.profiles.any((profile) =>
+                              profile.dossierId == rule.dossierId &&
+                              profile.characterId == actorsForTurn[
+                                turn.sceneId + '|' + turn.index.toString()])))
+                          const DropdownMenuItem(value: 10,
+                              child: Text('Доверие не меньше +10')),
+                      ],
+                      onChanged: (score) {
+                        if (score != null) update(() =>
+                            socialTrustForTurn[turn.sceneId + '|' +
+                                turn.index.toString()] = score);
                       },
                     ),
                     const SizedBox(height: 8),
@@ -796,11 +878,16 @@ class _NpcKnowledgeRulesPageState extends State<NpcKnowledgeRulesPage> {
         }
         verifiedSpeakers[turn.speaker] = actorId;
         final required = prerequisites[key]!;
+        final requiredMemory = socialMemoryForTurn[key]!;
+        final requiredTrust = socialTrustForTurn[key]!;
         spoken.putIfAbsent(turn.sceneId, () => []).add({
           'turn_index': turn.index, 'speaker': turn.speaker,
           'actor_id': actorId,
           'required_fact_ids':
               required == 'none_required' ? <String>[] : <String>[required],
+          if (requiredMemory != 'none_required')
+            'required_social_memory_id': requiredMemory,
+          if (requiredTrust > 0) 'minimum_trust_to_player': requiredTrust,
         });
       }
       final socialWitnesses = <Map<String, dynamic>>[];
