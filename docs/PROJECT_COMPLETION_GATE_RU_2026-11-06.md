@@ -1,6 +1,8 @@
 # AI Story RPG — обязательная приёмка 1.0
 
-**Актуально:** PR #131 **MERGED** `9c9bdc142495e536b5d11ca5e61680948e45f8fe`; exact-head CI #855 SUCCESS (включая APK/Windows), M0 #940 SUCCESS, E6d #128 SUCCESS. Post-merge CI #856 / M0 #941 / External #129 проверять; опубликованный test-build-824 **до** #131. Журнал P0: [Issue #118](https://github.com/shonentez-afk/AI-Story-RPG/issues/118). Следующий единый пакет NPC — присутствие, свидетели, обещания/слухи, отношения, владение и игровые последствия в независимом Dart-движке/переносимом rich-v3 + UI + SQLite + Dart/Python tests. **1.0 ещё НЕ готова.**
+**Актуально:** PR #131 **MERGED** `9c9bdc142495e536b5d11ca5e61680948e45f8fe`; exact-head CI #855 SUCCESS (включая APK/Windows), M0 #940 SUCCESS, E6d #128 SUCCESS. Post-merge CI #856, M0 #941, External #129 **SUCCESS**; [test-build-856](https://github.com/shonentez-afk/AI-Story-RPG/releases/tag/test-build-856) содержит принятый #131. Журнал P0: [Issue #118](https://github.com/shonentez-afk/AI-Story-RPG/issues/118). Следующий единый пакет NPC — присутствие, свидетели, обещания/слухи, отношения, владение и игровые последствия в независимом Dart-движке/переносимом rich-v3 + UI + SQLite + Dart/Python tests. **1.0 ещё НЕ готова.**
+
+**Текущий P0 — единый [PR #132](https://github.com/shonentez-afk/AI-Story-RPG/pull/132), пока DRAFT.** Присутствие, очевидцы/слухи, память, обещания, отношения, предметы и последствия — только с версионированным portable-контрактом и общей приёмкой. Сейчас социальная память остаётся read-only; никакой галочки «готово» до реального authority/gating, SQLite/replay, Dart/Python parity, E6d pin review, Windows/Android.
 
 ## Что уже принято — повторно не разрабатывать
 

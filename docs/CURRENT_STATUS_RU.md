@@ -1,8 +1,12 @@
 # AI Story RPG — CURRENT_STATUS_RU
 
-**Главный факт 2026-11-07:** [PR #131](https://github.com/shonentez-afk/AI-Story-RPG/pull/131) **MERGED**, main `9c9bdc142495e536b5d11ca5e61680948e45f8fe`. Exact-head CI #855 **SUCCESS** (Python, Dart, SQLite, Flutter, Win/Android), M0 #940 **SUCCESS**, External E6d #128 **SUCCESS**. Post-merge main CI #856/M0 #941/E6d #129 ещё перепроверить; release [test-build-824](https://github.com/shonentez-afk/AI-Story-RPG/releases/tag/test-build-824) сделан **до** #131. Всё это технический NPC-пакет, а не готовая full-book 1.0. Никаких E5-архивов/миграций не требуется.
+**Главный факт 2026-11-07:** [PR #131](https://github.com/shonentez-afk/AI-Story-RPG/pull/131) **MERGED**, main `9c9bdc142495e536b5d11ca5e61680948e45f8fe`. Exact-head CI #855 **SUCCESS** (Python, Dart, SQLite, Flutter, Win/Android), M0 #940 **SUCCESS**, External E6d #128 **SUCCESS**. Post-merge CI #856, M0 #941 и E6d #129 **SUCCESS**; [test-build-856](https://github.com/shonentez-afk/AI-Story-RPG/releases/tag/test-build-856) соответствует main `9c9bdc14`. Всё это технический NPC-пакет, а не готовая full-book 1.0. Никаких E5-архивов/миграций не требуется.
 
 **Новый крупный этап в [feature/p0-npc-presence-social-gameplay-20261107](https://github.com/shonentez-afk/AI-Story-RPG/tree/feature/p0-npc-presence-social-gameplay-20261107):** source-locked NPC присутствие и свидетели реальных событий, promises/rumors/relations, ownership/actions и последствия через отделяемый движок, переносимый schema + UI + общие тесты. НЕ делать микропиар и не выдавать preview за авторитетное игровое состояние; не менять отдельный skill E6d без версионного согласования.
+
+## Текущая реализация: один PR #132 (DRAFT)
+
+В `feature/p0-npc-presence-social-gameplay-20261107` реализуются **вместе**: `NpcSceneWitness` (личное наблюдение/слух), запрет памяти без присутствия и фарминга доверия, переносимый `npc_social` private-v3 со source refs и author consent, независимые валидаторы Dart/Python, двусторонние ZIP-сборки и ручная классификация в прежнем диалоге подготовки NPC. **Ещё не готово:** авторитетное social gating, NPC-предметы/состояние жизни, журнал/диалоговые последствия и общий exact-head CI. Внешний E6d pin для расширения #132 требует review. Спецификация `docs/P0_NPC_SOCIAL_PRESENCE_RU_2026-11-07.md`. Нет отдельного PR для карточки/поля.
 
 ## Что уже в main
 
@@ -13,7 +17,7 @@
 5. NPC карточки с постоянным `character_id` (#126), проверка редакторских отношений по `target_character_id` и `speaker → character_id` только при однозначности (#127).
 6. Независимые Dart-пакеты `story_core`, `story_runtime_adapter`, `bookworld_format`, `campaign_manager`; отдельный CLI-проход без Flutter/ИИ и CI-проверки направления зависимостей (#127).
 
-## Один функциональный пакет на review — PR #131
+## Принятый единый пакет #131 — уже в main
 
 Содержит **единый путь** из редакторских NPC-правил к source-locked rich-v3 через `NpcKnowledgeRichWorldBridge` и локальный `compileReviewedNpcRichPrivateBookworldInWorker`, явное согласие и цитаты по ID правила; независимый Dart/Python архив/SQLite/replay; обязательные списки требований к каждой именованной реплике, постоянные speaker character_id и сокрытие недоступного текста **до показа** через `WorldLibraryGateway`. Новых вспомогательных экранов и второго движка нет. Старые player-only v3 и v1/v2 не меняются.
 
