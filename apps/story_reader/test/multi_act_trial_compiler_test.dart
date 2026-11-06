@@ -9,8 +9,8 @@ import 'package:ai_story_reader/bookwide_storyplan_composer.dart';
 import 'package:ai_story_reader/cross_act_consequence_gate.dart';
 import 'package:ai_story_reader/cross_act_source_evidence_packet.dart';
 import 'package:ai_story_reader/multi_act_trial_compiler.dart';
-import 'package:ai_story_reader/whole_plan_gameplay_candidate_batch.dart';
 import 'package:ai_story_reader/zai_source_locked_gameplay_candidates.dart';
+import 'package:ai_story_reader/whole_plan_gameplay_candidate_batch.dart';
 import 'package:ai_story_reader/reviewed_prose_scene_overlay.dart';
 import 'package:ai_story_reader/zai_source_locked_prose_preview.dart';
 import 'package:ai_story_reader/narrative_book_model.dart';
@@ -23,6 +23,9 @@ import 'package:ai_story_reader/zai_whole_book_event_outline.dart';
 import 'package:bookworld_format/bookworld_format.dart';
 import 'package:campaign_manager/campaign_manager.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter/material.dart';
+import 'package:ai_story_reader/multi_act_trial_page.dart';
+import 'package:ai_story_reader/world_library_gateway.dart';
 
 BookSourceIndex _index({String suffix = ''}) =>
     BookSourceIndexer.index(ImportedBook(
@@ -513,6 +516,70 @@ void main() {
     expect(() => build([accepted, []]), throwsFormatException);
   });
 
+
+  testWidgets('multi-act item proposal requires explicit approval; '
+      'extra cross-act rule blocks incompatible review',
+      (tester) async {
+    final index = _index();
+    final book = await _analyze(index);
+    final input = _draft(index, book);
+    await tester.pumpWidget(MaterialApp(
+      home: MultiActTrialPage(
+        index: index, book: book, bookMap: input.map, draft: input.draft,
+        gateway: const DeviceWorldLibraryGateway(background: false),
+      ),
+    ));
+
+    // Scroll the PRIMARY page ListView, not an ExpansionTile or nested
+    // ListTile scrollable. Controls below the viewport are lazily built.
+    final scrollable = find.byType(Scrollable).first;
+    final quotes = find.byKey(const Key('multiact-trial-source-reviewed'));
+    await tester.scrollUntilVisible(quotes, 110, scrollable: scrollable);
+    await tester.tap(quotes);
+    await tester.pumpAndSettle();
+    final fiction = find.byKey(const Key('multiact-trial-private-fiction'));
+    await tester.scrollUntilVisible(fiction, 110, scrollable: scrollable);
+    await tester.tap(fiction);
+    await tester.pumpAndSettle();
+
+    final crossAct = find.byKey(const Key('multiact-trial-consequence'));
+    await tester.scrollUntilVisible(crossAct, 110, scrollable: scrollable);
+    await tester.tap(crossAct);
+    await tester.pumpAndSettle();
+    final itemButton = find.byKey(
+        const Key('multiact-trial-optional-gameplay'));
+    await tester.scrollUntilVisible(itemButton, 110, scrollable: scrollable);
+    await tester.pumpAndSettle();
+    expect(tester.widget<OutlinedButton>(itemButton).onPressed, isNull);
+
+    await tester.scrollUntilVisible(crossAct, -110,
+        scrollable: scrollable);
+    await tester.tap(crossAct);
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(itemButton, 110,
+        scrollable: scrollable);
+    await tester.pumpAndSettle();
+    expect(tester.widget<OutlinedButton>(itemButton).onPressed, isNotNull);
+    await tester.tap(itemButton);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Предметы и знания из книги'), findsOneWidget);
+    final request = find.byKey(const Key('gameplay-source-request'));
+    await tester.scrollUntilVisible(request, 110,
+        scrollable: find.byType(Scrollable).first);
+    await tester.pumpAndSettle();
+    expect(tester.widget<FilledButton>(request).onPressed, isNull);
+
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    final start = find.byKey(const Key('multiact-trial-start'));
+    await tester.scrollUntilVisible(start, 110,
+        scrollable: find.byType(Scrollable).first);
+    await tester.pumpAndSettle();
+    expect(start, findsOneWidget);
+    expect(find.byKey(const Key('multiact-trial-clear-gameplay')),
+        findsNothing);
+  });
 
   test('whole-plan gameplay batching covers anchored acts with exact consent, '
       'bounded requests and recoverable proposal-only checkpoints', () async {
