@@ -104,6 +104,11 @@ void main() {
       verifiedPrivateV2Archive: original,
       sourceIndex: _asObject(fixture['source_index']),
     );
+    // Used by the independent Python package verifier in the same CI run.
+    final output = File(
+        '../../artifacts/bookworld/book_private_rich_dialogue_dart.bworld');
+    output.parent.createSync(recursive: true);
+    output.writeAsBytesSync(rich, flush: true);
     final inspected = importer.inspect(rich);
     final transcripts = _asObject(
         inspected.presentation['scene_dialogues']);
@@ -125,8 +130,7 @@ void main() {
       'Рассказчик ничего не утверждает о чужих мыслях.',
     ]);
     expect(inspected.blueprint.scenes['entry']!.choices.length,
-        originalBp['scenes'] is List
-            ? (scenes.first as Map)['choices'].length : 0);
+        ((scenes.first as Map)['choices'] as List).length);
 
     // Even a separately recomputed ZIP SHA must not authorize a fabricated
     // attribution or a partial transcript.
