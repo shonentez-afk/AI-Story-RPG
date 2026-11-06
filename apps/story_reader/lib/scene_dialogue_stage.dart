@@ -75,6 +75,9 @@ class DialoguePositionStore {
   const DialoguePositionStore();
   static const _prefix = 'asr_dialogue_position_v1_';
   static Future<void> _queue = Future<void>.value();
+  // Optimistic, UI-only cursor while a preference write is still pending.
+  // Reading must never wait on a previous widget-test event loop or disk write.
+  static final Map<String, int> _latest = {};
 
   String key({
     required String campaign,
@@ -95,8 +98,10 @@ class DialoguePositionStore {
 
   Future<int> read(String key, int length) async {
     try {
-      // Wait for an earlier in-session write before restoring the position.
-      await _queue.catchError((Object _) {});
+      final pending = _latest[key];
+      if (pending != null) {
+        return pending >= 0 && pending <= length ? pending : 0;
+      }
       final prefs = await SharedPreferences.getInstance();
       final value = prefs.getInt(key) ?? 0;
       return value >= 0 && value <= length ? value : 0;
@@ -106,12 +111,18 @@ class DialoguePositionStore {
   }
 
   Future<void> save(String key, int value) {
+    _latest[key] = value;
     final previous = _queue;
     final task = previous.catchError((Object _) {}).then((_) async {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setInt(key, value);
     });
     _queue = task;
+    task.then((_) {
+      if (_latest[key] == value) _latest.remove(key);
+    }, onError: (Object _) {
+      if (_latest[key] == value) _latest.remove(key);
+    });
     return task;
   }
 }
