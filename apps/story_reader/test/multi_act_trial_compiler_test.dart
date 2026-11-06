@@ -14,6 +14,7 @@ import 'package:ai_story_reader/whole_story_literary_evidence_manifest.dart';
 import 'package:ai_story_reader/whole_story_literary_review.dart';
 import 'package:ai_story_reader/whole_story_literary_summary.dart';
 import 'package:ai_story_reader/whole_story_literary_bounded_repair.dart';
+import 'package:ai_story_reader/whole_story_literary_unchanged_approval.dart';
 import 'package:ai_story_reader/zai_source_locked_gameplay_candidates.dart';
 import 'package:ai_story_reader/whole_plan_gameplay_candidate_batch.dart';
 import 'package:ai_story_reader/gameplay_candidate_reachability.dart';
@@ -391,6 +392,109 @@ void main() {
       continuity: input.continuity,
       sourceEventIdsReviewedByUser: input.eventIds,
       privateUseConfirmed: true, fictionalTrialAcknowledged: true,
+    ), throwsFormatException);
+  });
+
+  test('g2f2b unchanged complete literary review has a typed source-SHA '
+      'receipt and compiles only the exact PRIVATE v3 graph', () async {
+    final index = _index();
+    final book = await _analyze(index);
+    final input = _draft(index, book);
+    final evidence = WholeStoryLiteraryEvidenceManifest.build(
+        index: index, book: book, plan: input.draft.plan);
+    final manifest = WholeStoryLiteraryReviewManifest.fromEvidence(
+        index: index, book: book, plan: input.draft.plan,
+        evidence: evidence);
+    expect(manifest.totalWindows, greaterThan(0));
+    // This is a private, source-locked test review, NOT a claim that
+    // the model correctly understood the actual original book.
+    final reports = [
+      for (final window in manifest.windows)
+        WholeLiteraryReviewReport.fromJson(window, {
+          'window_digest': window.approvalDigest,
+          'verdict': window.sourceQuotes.isEmpty
+              ? 'insufficientEvidence' : 'possibleConsistency',
+          'uncertainty': 'Цитаты доказывают слова, но не всю литературную '
+              'причинность, смысл или знания персонажей книги.',
+          'findings': <Map<String, Object?>>[],
+          'status': 'UNVERIFIED_AI_REVIEW',
+        }),
+    ];
+    final summary = WholeStoryLiterarySummary.compile(
+        manifest: manifest, reports: reports);
+    expect(summary.totalFindings, 0);
+    expect(() => WholeStoryLiteraryUnchangedApproval.accept(
+      manifest: manifest, reports: reports,
+      userReviewedAllReports: false,
+      explicitlyAcceptedPrivateFiction: true,
+    ), throwsFormatException);
+    expect(() => WholeStoryLiteraryUnchangedApproval.accept(
+      manifest: manifest, reports: reports,
+      userReviewedAllReports: true,
+      explicitlyAcceptedPrivateFiction: false,
+    ), throwsFormatException);
+    expect(() => WholeStoryLiteraryUnchangedApproval.accept(
+      manifest: manifest, reports: reports.take(reports.length - 1).toList(),
+      userReviewedAllReports: true,
+      explicitlyAcceptedPrivateFiction: true,
+    ), throwsFormatException);
+
+    final accepted = WholeStoryLiteraryUnchangedApproval.accept(
+      manifest: manifest, reports: reports,
+      userReviewedAllReports: true,
+      explicitlyAcceptedPrivateFiction: true,
+    );
+    expect(accepted.provesBookCanon, false);
+    expect(accepted.canDistributePublicly, false);
+    expect(accepted.unresolvedWindows, summary.insufficient);
+    expect(accepted.uncoveredSourceEvents, summary.uncoveredEvents);
+    accepted.verifyForCompiler(
+        index: index, book: book, plan: input.draft.plan);
+    final compiled = await MultiActTrialCompiler.compile(
+      index: index, book: book, bookMap: input.map,
+      draft: input.draft, unchangedReview: accepted,
+      sourceEventIdsReviewedByUser: input.eventIds,
+      privateUseConfirmed: true,
+      fictionalTrialAcknowledged: true,
+    );
+    final rich = const RichPrivateBookworldImporter().inspect(
+        compiled.archive);
+    expect(rich.sourceFingerprint, index.sourceFingerprint);
+    expect(rich.requiresNetwork, false);
+    expect(rich.canDistributePublicly, false);
+    expect(rich.blueprint.scenes.length, 14);
+
+    // Any additional causal rule after the independent verdict MUST
+    // invalidate the same original-plan receipt before game installation.
+    await expectLater(MultiActTrialCompiler.compile(
+      index: index, book: book, bookMap: input.map,
+      draft: input.draft, unchangedReview: accepted,
+      continuity: input.continuity,
+      sourceEventIdsReviewedByUser: input.eventIds,
+      privateUseConfirmed: true,
+      fictionalTrialAcknowledged: true,
+    ), throwsFormatException);
+    final editedIndex = _index(suffix: ' Другая редакция');
+    final editedBook = await _analyze(editedIndex);
+    expect(() => accepted.verifyForCompiler(
+      index: editedIndex, book: editedBook,
+      plan: input.draft.plan,
+    ), throwsFormatException);
+    final markedForRevision = [
+      for (final window in manifest.windows)
+        WholeLiteraryReviewReport.fromJson(window, {
+          'window_digest': window.approvalDigest,
+          'verdict': 'needsRevision',
+          'uncertainty': 'Необходимо отдельно прояснить литературные '
+              'причины и последствия этого решения персонажа.',
+          'findings': <Map<String, Object?>>[],
+          'status': 'UNVERIFIED_AI_REVIEW',
+        }),
+    ];
+    expect(() => WholeStoryLiteraryUnchangedApproval.accept(
+      manifest: manifest, reports: markedForRevision,
+      userReviewedAllReports: true,
+      explicitlyAcceptedPrivateFiction: true,
     ), throwsFormatException);
   });
 
