@@ -8,6 +8,7 @@ import 'package:ai_story_reader/source_semantic_provider.dart';
 import 'package:ai_story_reader/story_plan.dart';
 import 'package:ai_story_reader/whole_story_literary_evidence_manifest.dart';
 import 'package:ai_story_reader/whole_story_literary_review.dart';
+import 'package:ai_story_reader/whole_story_literary_summary.dart';
 import 'package:ai_story_reader/whole_story_literary_batch.dart';
 import 'package:ai_story_reader/whole_story_literary_review_page.dart';
 import 'package:flutter/material.dart';
@@ -390,6 +391,45 @@ void main() {
     ]});
     expect(() => ZaiWholeStoryLiteraryCritic.parse(window, response),
         throwsA(isA<AiSetupException>()));
+  });
+
+  test('g1c rejects partial and foreign reports; complete report has stable SHA',
+      () async {
+    final index = _index();
+    final book = await _book(index);
+    final plan = _widePlan(book);
+    final manifest = WholeStoryLiteraryReviewManifest.fromEvidence(
+      index: index, book: book, plan: plan,
+      evidence: WholeStoryLiteraryEvidenceManifest.build(
+          index: index, book: book, plan: plan),
+    );
+    expect(manifest.totalWindows, 3);
+    final reports = [
+      for (final window in manifest.windows)
+        WholeLiteraryReviewReport.fromJson(window, _reviewRecord(window)),
+    ];
+    expect(() => WholeStoryLiterarySummary.compile(
+      manifest: manifest, reports: reports.take(2).toList()),
+      throwsFormatException);
+    expect(() => WholeStoryLiterarySummary.compile(
+      manifest: manifest, reports: [reports[1], reports[0], reports[2]]),
+      throwsFormatException);
+    final result = WholeStoryLiterarySummary.compile(
+        manifest: manifest, reports: reports);
+    expect(result.totalWindows, 3);
+    expect(result.totalTransitions, 20);
+    expect(result.totalFindings, 3);
+    expect(result.insufficient, 3);
+    expect(result.crossWindowIssues, isEmpty);
+    expect(result.provesLiteraryCanon, false);
+    expect(result.mayModifyBookWorld, false);
+    expect(result.authorizesAutomaticRepair, false);
+    expect(result.needsEditorialReview, true);
+    expect(result.reportDigest,
+      WholeStoryLiterarySummary.compile(
+          manifest: manifest, reports: reports).reportDigest);
+    expect(result.toJson()['status'],
+        'UNVERIFIED_COMPLETE_AI_DIAGNOSTIC');
   });
 
   test('explicit consent, at most two calls and local resume without re-pay',
