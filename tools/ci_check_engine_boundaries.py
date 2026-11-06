@@ -81,7 +81,7 @@ def validate() -> list[str]:
                         issues.append(f"{where}: forbidden SDK dependency {target}")
                 elif target.startswith("package:"):
                     imported_package = target[8:].split("/", 1)[0]
-                    if imported_package not in allowed:
+                    if imported_package != package and imported_package not in allowed:
                         issues.append(
                             f"{where}: engine-to-app or undeclared package import: "
                             f"{target}"
