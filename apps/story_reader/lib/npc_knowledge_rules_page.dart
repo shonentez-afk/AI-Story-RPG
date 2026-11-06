@@ -654,6 +654,8 @@ class _NpcKnowledgeRulesPageState extends State<NpcKnowledgeRulesPage> {
                           socialKind[rule.id] = kind;
                           socialMode.remove(rule.id);
                           socialDelta.remove(rule.id);
+                          socialMemoryForTurn.clear();
+                          socialTrustForTurn.clear();
                         });
                       },
                     ),
@@ -677,6 +679,8 @@ class _NpcKnowledgeRulesPageState extends State<NpcKnowledgeRulesPage> {
                           if (mode != null) update(() {
                             socialMode[rule.id] = mode;
                             if (mode == 'reported') socialDelta[rule.id] = 0;
+                            socialMemoryForTurn.clear();
+                            socialTrustForTurn.clear();
                           });
                         },
                       ),
@@ -700,8 +704,11 @@ class _NpcKnowledgeRulesPageState extends State<NpcKnowledgeRulesPage> {
                             ],
                           ],
                           onChanged: (value) {
-                            if (value != null) update(() =>
-                                socialDelta[rule.id] = value);
+                            if (value != null) update(() {
+                              socialDelta[rule.id] = value;
+                              socialMemoryForTurn.clear();
+                              socialTrustForTurn.clear();
+                            });
                           },
                         ),
                       ],
