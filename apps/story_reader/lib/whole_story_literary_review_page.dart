@@ -40,6 +40,7 @@ class _WholeStoryLiteraryReviewPageState
   bool _working = false;
   bool _reviewed = false;
   bool _consented = false;
+  bool _storageBlocked = false;
   String? _error;
 
   @override
@@ -78,6 +79,7 @@ class _WholeStoryLiteraryReviewPageState
       if (!mounted) return;
       setState(() {
         _loading = false;
+        _storageBlocked = true;
         _error = 'Повреждён или устарел локальный результат: ' +
             error.toString() + '. Повторные запросы заблокированы.';
       });
@@ -87,7 +89,7 @@ class _WholeStoryLiteraryReviewPageState
   Future<void> _run() async {
     final manifest = _manifest;
     if (manifest == null || _loading || _working ||
-        !_reviewed || !_consented || _error != null ||
+        !_reviewed || !_consented || _storageBlocked ||
         _progress?.complete == true) return;
     final token = ZaiPreviewCancellation();
     _cancellation = token;
@@ -128,7 +130,7 @@ class _WholeStoryLiteraryReviewPageState
   Widget build(BuildContext context) {
     final manifest = _manifest;
     final progress = _progress;
-    final canSend = !_loading && !_working && _error == null &&
+    final canSend = !_loading && !_working && !_storageBlocked &&
         manifest != null && progress != null && !progress.complete &&
         _reviewed && _consented;
     return Scaffold(
@@ -192,7 +194,7 @@ class _WholeStoryLiteraryReviewPageState
                       'Исправление сюжета — отдельный этап.'),
                 ),
             ],
-            if (!_loading && _error == null &&
+            if (!_loading && !_storageBlocked &&
                 progress != null && !progress.complete) ...[
               CheckboxListTile(
                 key: const Key('whole-literary-reviewed'),
@@ -201,7 +203,7 @@ class _WholeStoryLiteraryReviewPageState
                 contentPadding: EdgeInsets.zero,
                 value: _reviewed,
                 onChanged: _working ? null : (v) =>
-                    setState(() => _reviewed = v == true),
+                    setState(() { _reviewed = v == true; _error = null; }),
               ),
               CheckboxListTile(
                 key: const Key('whole-literary-consent'),
@@ -210,7 +212,7 @@ class _WholeStoryLiteraryReviewPageState
                 contentPadding: EdgeInsets.zero,
                 value: _consented,
                 onChanged: _working ? null : (v) =>
-                    setState(() => _consented = v == true),
+                    setState(() { _consented = v == true; _error = null; }),
               ),
               FilledButton.icon(
                 key: const Key('whole-literary-submit'),
