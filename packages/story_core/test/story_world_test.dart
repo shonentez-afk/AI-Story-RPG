@@ -240,6 +240,97 @@ void main() {
     expect(original.choiceLockReason('inspect_gate'), isNull);
   });
 
+  test('NPC knowledge is proven by an actual committed choice, not a book mention', () {
+    final raw = mutableFixture();
+    final scenes = raw['scenes'] as List<dynamic>;
+    final gate = scenes.first as Map<String, dynamic>;
+    final choices = gate['choices'] as List<dynamic>;
+    final inspect = choices.first as Map<String, dynamic>;
+    inspect['effects'] = [
+      {'op': 'learn_fact', 'id': 'family_secret', 'actor': 'guard'},
+    ];
+    final blueprint = StoryBlueprint.fromJson(raw);
+    final world = StoryWorld(blueprint);
+    expect(world.actorKnowsFact('guard', 'family_secret'), isFalse);
+    expect(world.factLearningEvents('guard', 'family_secret'), isEmpty);
+    expect(world.actorKnowsFact('player', 'family_secret'), isFalse);
+
+    // Taking a different branch does not grant knowledge from indexed prose.
+    final alternate = StoryWorld(blueprint);
+    expect(step(alternate, 'other_path', 'walk_market').applied, isTrue);
+    expect(alternate.actorKnowsFact('guard', 'family_secret'), isFalse);
+    expect(alternate.factLearningEvents('guard', 'family_secret'), isEmpty);
+
+    // A rejected action has no knowledge effect or evidence.
+    expect(step(world, 'denied_action', 'enter_hall').applied, isFalse);
+    expect(world.factLearningEvents('guard', 'family_secret'), isEmpty);
+    expect(step(world, 'teach_guard', 'inspect_gate').applied, isTrue);
+    expect(world.actorKnowsFact('guard', 'family_secret'), isTrue);
+    expect(world.actorKnowsFact('player', 'family_secret'), isFalse);
+    final evidence = world.factLearningEvents('guard', 'family_secret');
+    expect(evidence, hasLength(1));
+    expect(evidence.single.actionId, 'teach_guard');
+    expect(evidence.single.choiceId, 'inspect_gate');
+    expect(evidence.single.hash, world.events.single.hash);
+    expect(() => evidence.clear(), throwsUnsupportedError);
+    expect(world.factLearningEvents('player', 'family_secret'), isEmpty);
+
+    // Repeated action IDs cannot manufacture a second learning event.
+    expect(world.apply(actionId: 'teach_guard', choiceId: 'inspect_gate')
+        .status, DecisionStatus.duplicate);
+    expect(world.factLearningEvents('guard', 'family_secret'), hasLength(1));
+
+    // A verified replay proves the identical source of acquired knowledge.
+    final restored = StoryWorld.replay(blueprint,
+        world.events.map((event) => event.toJson()),
+        expectedSequence: 1, expectedStateHash: world.state.stateHash);
+    expect(restored.actorKnowsFact('guard', 'family_secret'), isTrue);
+    expect(restored.factLearningEvents('guard', 'family_secret')
+        .single.hash, evidence.single.hash);
+    expect(() => restored.factLearningEvents('missing', 'family_secret'),
+        throwsFormatException);
+    expect(() => restored.actorKnowsFact('guard', 'missing'),
+        throwsFormatException);
+  });
+
+  test('NPC reviewed-line fact prerequisites fail closed and survive replay', () {
+    final raw = mutableFixture();
+    final gate = (raw['scenes'] as List).first as Map<String, dynamic>;
+    final inspect = (gate['choices'] as List).first as Map<String, dynamic>;
+    inspect['effects'] = [
+      {'op': 'learn_fact', 'id': 'family_secret', 'actor': 'guard'},
+    ];
+    final blueprint = StoryBlueprint.fromJson(raw);
+    final world = StoryWorld(blueprint);
+    const required = ['family_secret', 'archive_origin', 'family_secret'];
+    expect(world.missingKnowledgeForActor('guard', required),
+        ['archive_origin', 'family_secret']);
+    expect(world.missingKnowledgeForActor('guard', const []), isEmpty);
+    expect(() => world.missingKnowledgeForActor('unknown_guard', required),
+        throwsFormatException);
+    expect(() => world.missingKnowledgeForActor('guard', ['unknown_fact']),
+        throwsFormatException);
+    final pre = world.missingKnowledgeForActor('guard', required);
+    expect(() => pre.clear(), throwsUnsupportedError);
+
+    final alternative = StoryWorld(blueprint);
+    expect(step(alternative, 'skip_secret', 'walk_market').applied, isTrue);
+    expect(alternative.missingKnowledgeForActor('guard', required),
+        ['archive_origin', 'family_secret']);
+
+    expect(step(world, 'learn_secret', 'inspect_gate').applied, isTrue);
+    expect(world.missingKnowledgeForActor('guard', required), ['archive_origin']);
+    expect(world.missingKnowledgeForActor('player', ['family_secret']),
+        ['family_secret']);
+    final replay = StoryWorld.replay(blueprint,
+        world.events.map((event) => event.toJson()),
+        expectedSequence: 1, expectedStateHash: world.state.stateHash);
+    expect(replay.missingKnowledgeForActor('guard', required),
+        ['archive_origin']);
+    expect(replay.factLearningEvents('guard', 'family_secret')
+        .single.hash, world.events.single.hash);
+  });
+
   test('authoritative WorldState cannot be modified by UI callers', () {
     final world = StoryWorld(originalBlueprint());
     expect(() => world.state.inventory.add('key'), throwsUnsupportedError);

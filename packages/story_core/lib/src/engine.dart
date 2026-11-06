@@ -168,6 +168,71 @@ class StoryWorld {
   List<WorldEvent> get events => List.unmodifiable(_events);
   bool get isTerminal => blueprint.scenes[_state.sceneId]!.terminal;
 
+  /// Committed decisions that explicitly taught [factId] to [actorId].
+  ///
+  /// This is derived from the verified event chain and the exact blueprint,
+  /// never from the chronological order of chapters or NPC display names.
+  /// Initial knowledge has no learning event. Failed, speculative and
+  /// unvisited choices are excluded; replay produces identical evidence.
+  List<WorldEvent> factLearningEvents(String actorId, String factId) {
+    jsonId(actorId, 'actor_id');
+    jsonId(factId, 'fact_id');
+    if (!blueprint.actors.contains(actorId) ||
+        !blueprint.facts.contains(factId)) {
+      throw const FormatException('Unknown actor or fact');
+    }
+    final evidence = <WorldEvent>[];
+    for (final event in _events) {
+      final scene = blueprint.scenes[event.sceneId]!;
+      final choice = scene.choices.singleWhere((c) => c.id == event.choiceId);
+      if (choice.effects.any((effect) =>
+          effect.op == 'learn_fact' &&
+          effect.actor == actorId &&
+          effect.id == factId)) {
+        evidence.add(event);
+      }
+    }
+    return List<WorldEvent>.unmodifiable(evidence);
+  }
+
+  /// Does the current campaign actually know this fact? Unlike a source
+  /// dossier mention, this reflects only initial state and committed effects.
+  bool actorKnowsFact(String actorId, String factId) {
+    jsonId(actorId, 'actor_id');
+    jsonId(factId, 'fact_id');
+    if (!blueprint.actors.contains(actorId) ||
+        !blueprint.facts.contains(factId)) {
+      throw const FormatException('Unknown actor or fact');
+    }
+    return _state.knowledge[actorId]?.contains(factId) ?? false;
+  }
+
+
+  /// Missing prerequisites for a *reviewed* dialogue turn or action.
+  ///
+  /// The caller must supply exact fact IDs from a validated source/review
+  /// contract. Free-form dialogue text is never searched or trusted here.
+  /// Unknown actors/facts fail closed, even if their display names match.
+  /// This method does not prove that the words were spoken in the book.
+  List<String> missingKnowledgeForActor(
+      String actorId, Iterable<String> requiredFactIds) {
+    jsonId(actorId, 'actor_id');
+    if (!blueprint.actors.contains(actorId)) {
+      throw const FormatException('Unknown knowledge actor');
+    }
+    final missing = <String>{};
+    for (final factId in requiredFactIds) {
+      jsonId(factId, 'fact_id');
+      if (!blueprint.facts.contains(factId)) {
+        throw const FormatException('Unknown required fact');
+      }
+      if (!(_state.knowledge[actorId]?.contains(factId) ?? false)) {
+        missing.add(factId);
+      }
+    }
+    return List<String>.unmodifiable(missing.toList()..sort());
+  }
+
   /// An isolated tentative world for coordinating with the scenario runtime.
   /// No I/O occurs here; a rejected proposal never mutates the live world.
   StoryWorld fork() {
