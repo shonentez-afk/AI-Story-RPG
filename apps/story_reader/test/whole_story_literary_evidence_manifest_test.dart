@@ -2,6 +2,8 @@ import 'package:ai_story_reader/book_import.dart';
 import 'package:ai_story_reader/book_source_index.dart';
 import 'package:ai_story_reader/narrative_book_model.dart';
 import 'package:ai_story_reader/source_analysis_checkpoint_repository.dart';
+import 'package:ai_story_reader/source_evidence_graph.dart';
+import 'package:ai_story_reader/source_semantic_catalog.dart';
 import 'package:ai_story_reader/source_semantic_provider.dart';
 import 'package:ai_story_reader/story_plan.dart';
 import 'package:ai_story_reader/whole_story_literary_evidence_manifest.dart';
@@ -24,7 +26,10 @@ BookSourceIndex _index({String extra = ''}) =>
       ],
     ));
 
-Future<NarrativeBookModel> _book(BookSourceIndex index) async {
+Future<NarrativeBookModel> _book(BookSourceIndex index, {
+  SourceSemanticCatalog? catalog,
+  SourceEvidenceGraph? evidence,
+}) async {
   final preview = ZaiAutoWholeBookAnalysis(
     repository: MemorySourceAnalysisCheckpointRepository(),
     preview: (source, window, token, includeTitle) async {
@@ -58,7 +63,8 @@ Future<NarrativeBookModel> _book(BookSourceIndex index) async {
     explicitWholeBookConsent: true, maxWindowsPerRun: 64,
   );
   return NarrativeBookModel.fromExisting(index: index,
-      outline: ZaiWholeBookEventOutline.build(review));
+      outline: ZaiWholeBookEventOutline.build(review),
+      catalog: catalog, evidence: evidence);
 }
 
 StoryPlan _plan(NarrativeBookModel book, {String accept = 'Согласиться'}) {
@@ -171,6 +177,49 @@ void main() {
     expect(manifest.approvalDigest,
         WholeStoryLiteraryEvidenceManifest.build(
             index: index, book: book, plan: plan).approvalDigest);
+  });
+
+
+  test('reported NPC speech stays an untrusted claim, even with exact quote',
+      () async {
+    final index = _index();
+    final chunk = index.chunks.firstWhere((c) => c.chapterIndex == 1);
+    const quote = 'Прохожий утверждал, что ключ';
+    final at = chunk.text.indexOf(quote);
+    expect(at, greaterThanOrEqualTo(0));
+    final source = SourceEvidence.propose(index,
+      chunkId: chunk.id, kind: EvidenceKind.fact,
+      startUtf16: chunk.startUtf16 + at,
+      endUtf16: chunk.startUtf16 + at + quote.length,
+    );
+    final evidence = SourceEvidenceGraph.empty(index)
+        .addAll(index, [source]);
+    final claim = SourceSemanticAssertion.propose(index, evidence,
+      kind: SemanticAssertionKind.fact,
+      evidenceIds: [source.id],
+      subject: 'прохожий', predicate: 'утверждал',
+      object: 'ключ принадлежит путнику',
+      voice: AssertionVoice.reported,
+      polarity: AssertionPolarity.ambiguous,
+      time: AssertionTime.flashbackPossible,
+      uncertainty: 'Речь свидетеля не устанавливает владение ключом.',
+    );
+    final catalog = SourceSemanticCatalog.checked(
+        index, evidence, [claim]);
+    final book = await _book(index,
+        catalog: catalog, evidence: evidence);
+    final plan = _plan(book);
+    expect(() => WholeStoryLiteraryEvidenceManifest.build(
+        index: index, book: book, plan: plan), throwsFormatException);
+    final manifest = WholeStoryLiteraryEvidenceManifest.build(
+        index: index, book: book, plan: plan, claimEvidence: evidence);
+    expect(manifest.claimsWithVerifiedQuotes, 1);
+    final listed = manifest.toJson()['source_claims'] as List;
+    expect(listed, hasLength(1));
+    expect((listed.single as Map)['voice'],
+        'REPORTED_SPEECH_NOT_WORLD_TRUTH');
+    expect(listed.single['world_time_inferred'], false);
+    expect(listed.single['is_canon'], false);
   });
 
   test('no narrator claim or chapter order is promoted to literary canon',
