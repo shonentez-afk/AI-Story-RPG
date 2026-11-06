@@ -186,6 +186,9 @@ void main() {
     expect(context.independentlyConfirmsKnowledge, false);
     expect(context.consentPreview.containsKey('source_fingerprint'), false);
     expect(context.consentPreview.containsKey('title'), false);
+    // A mutable UI copy must never mutate the EXACT consented wire bytes.
+    (context.consentPreview['source_excerpts'] as List).clear();
+    expect((context.consentPreview['source_excerpts'] as List), isNotEmpty);
     final http = _Http([_reply([_candidate(context)])]);
     final result = await _propose(_service(http), context);
     expect(result.hasCandidate, true);
@@ -263,7 +266,7 @@ void main() {
         throwsA(isA<AiSetupException>()));
   });
 
-  test('427? no: HTTP 429 retries only IDENTICAL approved bytes at most 3',
+  test('HTTP 429 retries only identical consented bytes at most three times',
       () async {
     final (index, book, plan) = await _fixture();
     final context = _context(index, book, plan);
