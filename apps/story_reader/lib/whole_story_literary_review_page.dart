@@ -230,7 +230,7 @@ class _WholeStoryLiteraryReviewPageState
                 label: const Text('Остановить отправку'),
               ),
             if (_loading || _working) const LinearProgressIndicator(),
-            if (manifest != null && progress?.complete == true &&
+            if (progress?.complete == true &&
                 _reports.length == manifest.totalWindows) ...[
               const Divider(height: 24),
               Builder(builder: (context) {
