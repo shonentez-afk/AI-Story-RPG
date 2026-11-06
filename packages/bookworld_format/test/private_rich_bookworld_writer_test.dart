@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:bookworld_format/bookworld_format.dart';
+import 'package:crypto/crypto.dart';
 import 'package:story_core/story_core.dart';
 import 'package:test/test.dart';
 
@@ -233,6 +234,131 @@ void main() {
       verifiedPrivateV2Archive: original,
       sourceIndex: _asObject(input['source_index']),
       sceneTitles: {'another_book_scene': 'Подмена'},
+    ), throwsFormatException);
+  });
+
+  test('user-reviewed book item and fact become actual source-bound v3 runtime state',
+      () {
+    final input = _richSample();
+    final index = _asObject(input['source_index']);
+    final chunks = index['chunks'] as List;
+    final first = chunks.first as Map<String, dynamic>;
+    const excerpt = 'Ключ лежал у двери. Мария решала, кому помочь.';
+    first['text'] = excerpt;
+    first['end_utf16'] = excerpt.length;
+    first['sha256_text'] = sha256.convert(utf8.encode(excerpt)).toString();
+    final total = chunks.fold<int>(
+        0, (count, c) => count + ((c as Map)['text'] as String).length);
+    index['text_total_utf16'] = total;
+    index['text_indexed_utf16'] = total;
+    final quoteSha = sha256.convert(
+        utf8.encode(excerpt.substring(0, 16))).toString();
+    final origins = _asObject(input['provenance'])['scene_origins'] as List;
+    final refs = (origins.first as Map)['source_refs'] as List;
+    (refs.first as Map)['quote_sha256'] = quoteSha;
+
+    final original = writer.build(
+      blueprint: _asObject(input['blueprint']),
+      provenance: _asObject(input['provenance']),
+      sourceIndex: index,
+    );
+    final review = <String, dynamic>{
+      'format': 'ai_story_private_gameplay_review_m2h8e1_v1',
+      'review_scope': 'user_declared_private_game_fiction',
+      'source_fingerprint': 'a' * 64,
+      'base_archive_sha256': sha256.convert(original).toString(),
+      'source_payload_digest': 'e' * 64,
+      'user_confirmed': true,
+      'literary_canon_verified': false,
+      'effects': <Map<String, dynamic>>[
+        {
+          'scene_id': 'entry', 'choice_id': 'help',
+          'op': 'grant_item', 'kind': 'item',
+          'id': 'old_key', 'label': 'Ключ',
+          'source_quote_sha256': quoteSha,
+          'review_note': 'Читатель разрешил только вымышленную находку ключа.',
+        },
+        {
+          'scene_id': 'entry', 'choice_id': 'help',
+          'op': 'learn_fact', 'kind': 'fact',
+          'id': 'opened_door', 'label': 'Открытая дверь',
+          'source_quote_sha256': quoteSha,
+          'review_note': 'Читатель одобрил игровое знание, не вывод о каноне.',
+        },
+      ],
+    };
+    const reviewedWriter = ReviewedGameplayBookworldWriter();
+    final reviewed = reviewedWriter.build(
+      verifiedBaseArchive: original, sourceIndex: index, userReview: review);
+    final again = reviewedWriter.build(
+      verifiedBaseArchive: original, sourceIndex: index, userReview: review);
+    expect(reviewed, orderedEquals(again));
+    final compiled = importer.inspect(reviewed);
+    expect(compiled.bookworldId, isNot('book_private_sample'));
+    expect(compiled.presentation['item_names'],
+        containsPair('old_key', 'Ключ'));
+    expect(compiled.presentation['fact_names'],
+        containsPair('opened_door', 'Открытая дверь'));
+    expect(compiled.canDistributePublicly, false);
+    expect(compiled.requiresNetwork, false);
+    final helping = StoryWorld(compiled.blueprint);
+    expect(helping.apply(actionId: 'pick_up_key', choiceId: 'help',
+        expectedRevision: 0).status, DecisionStatus.applied);
+    expect(helping.state.inventory, contains('old_key'));
+    expect(helping.state.knowledge['player'], contains('opened_door'));
+    expect(helping.events.single.choiceId, 'help');
+    expect(helping.isTerminal, true);
+    final originalRoute = StoryWorld(compiled.blueprint);
+    expect(originalRoute.apply(actionId: 'reject_key', choiceId: 'leave',
+        expectedRevision: 0).status, DecisionStatus.applied);
+    expect(originalRoute.state.inventory, isEmpty);
+    expect(originalRoute.state.knowledge['player'], isEmpty);
+    expect(originalRoute.isTerminal, true);
+    final restored = StoryWorld.replay(
+      compiled.blueprint,
+      helping.events.map((e) => e.toJson()),
+      expectedSequence: helping.state.revision,
+      expectedStateHash: helping.state.stateHash,
+    );
+    expect(restored.state.stateHash, helping.state.stateHash);
+    final output = File(
+        '../../artifacts/bookworld/book_private_reviewed_dart.bworld');
+    output.parent.createSync(recursive: true);
+    output.writeAsBytesSync(reviewed, flush: true);
+
+    final badConsent = Map<String, dynamic>.from(review)
+      ..['user_confirmed'] = false;
+    expect(() => reviewedWriter.build(
+      verifiedBaseArchive: original,
+      sourceIndex: index, userReview: badConsent,
+    ), throwsFormatException);
+    final falseCanon = Map<String, dynamic>.from(review)
+      ..['literary_canon_verified'] = true;
+    expect(() => reviewedWriter.build(
+      verifiedBaseArchive: original,
+      sourceIndex: index, userReview: falseCanon,
+    ), throwsFormatException);
+    final foreignQuote = jsonDecode(jsonEncode(review)) as Map<String, dynamic>;
+    (foreignQuote['effects'] as List).first['source_quote_sha256'] = 'f' * 64;
+    expect(() => reviewedWriter.build(
+      verifiedBaseArchive: original,
+      sourceIndex: index, userReview: foreignQuote,
+    ), throwsFormatException);
+    final consumedOnRefusal =
+        jsonDecode(jsonEncode(review)) as Map<String, dynamic>;
+    final second = (consumedOnRefusal['effects'] as List)[1] as Map;
+    second['choice_id'] = 'leave';
+    second['op'] = 'consume_item';
+    second['kind'] = 'item';
+    second['id'] = 'old_key';
+    second['label'] = 'Ключ';
+    expect(() => reviewedWriter.build(
+      verifiedBaseArchive: original,
+      sourceIndex: index, userReview: consumedOnRefusal,
+    ), throwsFormatException);
+    expect(() => reviewedWriter.build(
+      verifiedBaseArchive: reviewed,
+      sourceIndex: index, userReview: review,
     ), throwsFormatException);
   });
 

@@ -288,18 +288,94 @@ def _causality(bp):
         fail("Rich scenario contains a state without path to any ending")
 
 
+def _gameplay_review(review, bp, prov):
+    """A declared private adaptation, NEVER an attestation of literary canon.
+
+    Review data is bound to exact source-scene citation hashes and the actual
+    typed effects. The importer checks it even when an attacker rehashes ZIP.
+    """
+    _keys(review, {"format", "review_scope", "source_fingerprint",
+                   "base_archive_sha256", "source_payload_digest",
+                   "user_confirmed", "literary_canon_verified", "effects"},
+          "gameplay review")
+    if review["format"] != "ai_story_private_gameplay_review_m2h8e1_v1" or \
+            review["review_scope"] != "user_declared_private_game_fiction" or \
+            review["source_fingerprint"] != bp["source_fingerprint"] or \
+            review["user_confirmed"] is not True or \
+            review["literary_canon_verified"] is not False or \
+            not isinstance(review["base_archive_sha256"], str) or \
+            not legacy.SHA_RE.fullmatch(review["base_archive_sha256"]) or \
+            not isinstance(review["source_payload_digest"], str) or \
+            not legacy.SHA_RE.fullmatch(review["source_payload_digest"]):
+        fail("Incorrect private gameplay review declaration")
+    effects = review["effects"]
+    if type(effects) is not list or not (1 <= len(effects) <= 6):
+        fail("Empty or oversized accepted gameplay effects")
+    sources = {o["scene_id"]: o for o in prov["scene_origins"]}
+    scenes = {s["id"]: s for s in bp["scenes"]}
+    names = prov["presentation"]
+    seen = set()
+    for effect in effects:
+        _keys(effect, {"scene_id", "choice_id", "op", "kind", "id",
+                       "label", "source_quote_sha256", "review_note"},
+              "reviewed gameplay effect")
+        scene, choice, op, kind, key = (effect["scene_id"],
+                                        effect["choice_id"],
+                                        effect["op"], effect["kind"],
+                                        effect["id"])
+        note = effect["review_note"]
+        label = effect["label"]
+        source_sha = effect["source_quote_sha256"]
+        if not all(_id(value) for value in (scene, choice, key)) or \
+                not _txt(label, 120) or not _txt(note, 350) or \
+                len(note) < 18 or not isinstance(source_sha, str) or \
+                not legacy.SHA_RE.fullmatch(source_sha) or \
+                not ((kind == "item" and op in ("grant_item", "consume_item"))
+                     or (kind == "fact" and op == "learn_fact")):
+            fail("Invalid gameplay review reference or semantic type")
+        signature = (scene, choice, op, key)
+        if signature in seen:
+            fail("Duplicate reviewed effect")
+        seen.add(signature)
+        origin = sources.get(scene)
+        if scene not in scenes or origin is None or \
+                origin["origin"] != "SOURCE_PASSAGE" or \
+                source_sha not in {r["quote_sha256"]
+                                   for r in origin["source_refs"]}:
+            fail("Gameplay claim lacks an original scene citation")
+        matching = [c for c in scenes[scene]["choices"] if c["id"] == choice]
+        if len(matching) != 1 or \
+                sum(1 for e in matching[0]["effects"]
+                    if e["op"] == op and e["id"] == key) != 1:
+            fail("Reviewed effect does not match executable gameplay")
+        if (kind == "item" and names["item_names"].get(key) != label) or \
+                (kind == "fact" and names["fact_names"].get(key) != label):
+            fail("Reviewed localized item or fact label mismatch")
+    typed = {
+        (s["id"], c["id"], e["op"], e["id"])
+        for s in bp["scenes"] for c in s["choices"] for e in c["effects"]
+        if e["op"] in ("grant_item", "consume_item", "learn_fact")
+    }
+    if seen != typed:
+        fail("Unreviewed executable gameplay effect in a reviewed world")
+
+
 def _provenance(prov, bp):
     keys = {"format", "bookworld_id", "source_fingerprint", "source_title",
             "source_author", "source_chapters_total", "source_chapters_indexed",
             "semantic_catalog_sha256", "intermediate_draft_sha256",
             "rights_status", "publication_authorized", "model_provenance",
             "scene_origins", "presentation"}
-    _keys(prov, keys, "rich provenance")
+    _keys({k: v for k, v in prov.items() if k != "gameplay_review"},
+          keys, "rich provenance")
     if prov["format"] != PROVENANCE_FORMAT:
         fail("Wrong rich provenance format")
     _model(prov["model_provenance"])
     _presentation(prov["presentation"], bp)
+    if "gameplay_review" in prov:
+        _gameplay_review(prov["gameplay_review"], bp, prov)
     old = dict(prov)
+    old.pop("gameplay_review", None)
     old.pop("presentation")
     old["format"] = "ai_story_private_provenance_v1"
     old["model_provenance"] = {"provider": "none", "model_id": None}
