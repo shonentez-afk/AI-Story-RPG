@@ -5,6 +5,7 @@ import 'book_source_index.dart';
 import 'intermediate_story_blueprint.dart';
 import 'npc_editorial_notebook.dart';
 import 'npc_knowledge_rulebook.dart';
+import 'npc_knowledge_rich_world_bridge.dart';
 import 'source_character_dossiers.dart';
 import 'private_classic_scenario_translator.dart';
 import 'source_evidence_graph.dart';
@@ -97,6 +98,70 @@ Future<Uint8List> compileReviewedRichPrivateBookworldInWorker(
       checked.canDistributePublicly || checked.requiresNetwork) {
     throw const FormatException(
         'Богатая частная RPG не соответствует проверенной книге');
+  }
+  return archive;
+}
+
+/* One source-reviewed functional pipeline, not a new compiler/engine.
+ *
+ * The caller must supply an explicit, user-confirmed quotation for every
+ * private NPC grant; changing the note, source, character_id or scene
+ * invalidates the entire build. The standard rich writer/importers check the
+ * final archive again, and no campaign is installed automatically.
+ */
+Uint8List _compilePrivateNpcRichWorld(Map<String, dynamic> data) {
+  return const RichPrivateBookworldWriter().build(
+    blueprint: Map<String, dynamic>.from(data['blueprint'] as Map),
+    provenance: Map<String, dynamic>.from(data['provenance'] as Map),
+    sourceIndex: Map<String, dynamic>.from(data['source_index'] as Map),
+  );
+}
+
+Future<Uint8List> compileReviewedNpcRichPrivateBookworldInWorker(
+  BookSourceIndex index,
+  SourceEvidenceGraph evidence,
+  SourceSemanticCatalog catalog,
+  SemanticEditorialReviewSession editorial,
+  IntermediateStoryBlueprint draft, {
+  required NpcKnowledgeRulebook npcRules,
+  required NpcEditorialNotebook npcNotebook,
+  required SourceCharacterDossierIndex npcDossiers,
+  required Map<String, String> sourceQuoteByRuleId,
+  required bool userConfirmed,
+  Map<String, List<Map<String, dynamic>>> reviewedDialogueTurns = const {},
+  Map<String, String> reviewedSpeakerBindings = const {},
+  String heroName = 'Игрок',
+}) async {
+  // Exactly the already accepted preflight/translator, no second engine.
+  final translation = PrivateClassicScenarioTranslator.translate(
+    index, evidence, catalog, editorial, draft,
+    npcRules: npcRules, npcNotebook: npcNotebook, npcDossiers: npcDossiers,
+  );
+  if (!translation.preflight.isStructurallyReady) {
+    throw const FormatException('Не завершена приёмка игрового сценария NPC');
+  }
+  final blueprint = translation.blueprintJson;
+  final provenance = NpcKnowledgeRichWorldBridge.prepare(
+    index: index, dossiers: npcDossiers, graph: evidence,
+    catalog: catalog, editorial: editorial,
+    notebook: npcNotebook, scenario: draft, rulebook: npcRules,
+    blueprint: blueprint, provenance: translation.provenanceJson,
+    sourceQuoteByRuleId: sourceQuoteByRuleId,
+    userConfirmed: userConfirmed, heroName: heroName,
+    reviewedDialogueTurns: reviewedDialogueTurns,
+    reviewedSpeakerBindings: reviewedSpeakerBindings,
+  );
+  final archive = await compute(_compilePrivateNpcRichWorld, {
+    'blueprint': blueprint,
+    'provenance': provenance,
+    'source_index': Map<String, dynamic>.from(index.toJson()),
+  });
+  final verified = const RichPrivateBookworldImporter().inspect(archive);
+  if (verified.sourceFingerprint != index.sourceFingerprint ||
+      verified.blueprint.bookId != blueprint['book_id'] ||
+      verified.blueprint.actors.length != (blueprint['actors'] as List).length ||
+      verified.canDistributePublicly || verified.requiresNetwork) {
+    throw const FormatException('Собран чужой или повреждённый NPC .bworld');
   }
   return archive;
 }

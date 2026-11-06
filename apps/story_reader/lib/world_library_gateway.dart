@@ -199,7 +199,17 @@ class DeviceWorldLibraryGateway implements WorldLibraryGateway {
     try {
       return const RichPrivateBookworldImporter().inspect(bytes).presentation;
     } on FormatException {
-      return const {};
+      // An invalid v3 NPC review must NEVER be downgraded to raw scene
+      // text; that would bypass actor/fact gates and leak sealed dialogue.
+      // Only an independently verified legacy v2 or v1 archive may render
+      // without a signed rich presentation.
+      try {
+        const PrivateBookworldImporter().inspect(bytes);
+        return const {};
+      } on FormatException {
+        const BookworldImporter().inspect(bytes);
+        return const {};
+      }
     }
   }
 
@@ -229,6 +239,18 @@ class DeviceWorldLibraryGateway implements WorldLibraryGateway {
         allDialogues.containsKey(current.id)) {
       signedTurns = RichSceneDialogue.verify(
           allDialogues[current.id], current.text);
+    }
+    final guards = presentation['scene_dialogue_knowledge'];
+    final hasReviewedNpcTurns = guards is Map<String, dynamic> &&
+        guards.containsKey(current.id);
+    if (hasReviewedNpcTurns) {
+      if (signedTurns == null || guards[current.id] is! List) {
+        throw const FormatException('Отсутствует проверенный диалог NPC');
+      }
+      // The importer already verified EVERY signed line and reviewed actor ID.
+      // Only the replay-verified campaign state decides which words reach UI.
+      signedTurns = RichNpcDialogueKnowledge.redact(
+          signedTurns, guards[current.id] as List, state.knowledge);
     }
     final hero = presentation['hero'];
     final heroName = hero is Map<String, dynamic> ? hero['name'] as String? : null;
@@ -292,7 +314,10 @@ class DeviceWorldLibraryGateway implements WorldLibraryGateway {
       campaignId: record.metadata.id,
       worldTitle: blueprint.title,
       sceneId: current.id,
-      sceneText: current.text,
+      // When dialogue has per-NPC facts, do not pass its raw signed prose
+      // to a UI fallback, history widget or local position cache.
+      sceneText: hasReviewedNpcTurns
+          ? 'Разговор с проверяемыми репликами.' : current.text,
       revision: state.revision,
       tick: state.tick,
       isTerminal: coordinator.isTerminal,

@@ -1,6 +1,6 @@
 # AI Story RPG — обязательная приёмка 1.0
 
-**Срез 2026-11-07:** main `551e1e0712e7d488c507c44c6c5c110272c164e4`; CI #806/M0 #891 SUCCESS; [test-build-806](https://github.com/shonentez-afk/AI-Story-RPG/releases/tag/test-build-806). Состояние реальной приёмки, а не обещание: **версия 1.0 ещё НЕ готова**. Контрольный Issue [#118](https://github.com/shonentez-afk/AI-Story-RPG/issues/118) открыт.
+**Срез 2026-11-07:** main `f4331851ef5752e0e2821f328d75703808579ef5` (#129 и #130 merged, exact-head #823/#908 green; post-merge #824 SUCCESS). [test-build-824](https://github.com/shonentez-afk/AI-Story-RPG/releases/tag/test-build-824) относится к актуальному main после #130. [PR #131](https://github.com/shonentez-afk/AI-Story-RPG/pull/131) — DRAFT единый NPC-комплекс: source-locked rich-v3, авторский мост, speaker/fact диалоговый gate, Dart/Python+Flutter+replay; не считать принятым. Итог: **1.0 не готова**; Issue [#118](https://github.com/shonentez-afk/AI-Story-RPG/issues/118) открыт.
 
 ## Что уже принято — повторно не разрабатывать
 

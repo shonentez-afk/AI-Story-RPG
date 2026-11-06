@@ -403,6 +403,9 @@ class RichPrivateBookworldWriter {
     final manifest = <String, dynamic>{
       'format': 'ai_story_bookworld',
       'format_version': 3,
+      if (provenance.containsKey('npc_knowledge'))
+        'npc_knowledge_format':
+            RichPrivateBookworldImporter.npcKnowledgeFormat,
       'bookworld_id': checked.bookId,
       'source_fingerprint': checked.sourceFingerprint,
       'title': checked.title,

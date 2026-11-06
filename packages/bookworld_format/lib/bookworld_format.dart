@@ -10,6 +10,7 @@ import 'src/zip_v1.dart';
 export 'private_bookworld.dart' show PrivateBookworldImporter, VerifiedPrivateBookworld;
 export 'private_rich_bookworld.dart' show RichPrivateBookworldImporter, VerifiedRichPrivateBookworld;
 export 'rich_scene_dialogue.dart' show RichSceneDialogue, RichDialogueTurn;
+export 'npc_dialogue_knowledge.dart' show RichNpcDialogueKnowledge;
 export 'private_bookworld_writer.dart' show PrivateBookworldWriter, RichPrivateBookworldWriter;
 export 'reviewed_gameplay_bookworld_writer.dart' show ReviewedGameplayBookworldWriter;
 
