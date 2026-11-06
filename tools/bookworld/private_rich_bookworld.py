@@ -278,7 +278,8 @@ def _causality(bp):
     initial = bp["initial_state"]
     start = (bp["entry_scene_id"],
              tuple(sorted(k for k, v in initial["flags"].items() if v)),
-             (), tuple(sorted(initial["stats"].items())), ())
+             (), tuple(sorted(initial["stats"].items())),
+             tuple((actor, ()) for actor in sorted(bp["actors"])))
     seen = {start}
     queue = deque([start])
     parents = {}
@@ -296,7 +297,8 @@ def _causality(bp):
             endings.add(scene_id)
             continue
         flags, items, stats, facts = set(active_flags), set(owned_items), \
-            dict(stat_entries), set(known_facts)
+            dict(stat_entries), {actor: set(values)
+                                 for actor, values in known_facts}
         available = 0
         for choice in scene["choices"]:
             def permits(rule):
@@ -308,12 +310,14 @@ def _causality(bp):
                 if op == "stat_at_least":
                     return stats[rule["id"]] >= rule["amount"]
                 if op == "knows_fact":
-                    return rule["id"] in facts
+                    return rule["id"] in facts[rule["actor"]]
                 return False
             if not all(permits(r) for r in choice["conditions"]):
                 continue
             available += 1
-            f, it, st, fa = set(flags), set(items), dict(stats), set(facts)
+            f, it, st, fa = set(flags), set(items), dict(stats), {
+                actor: set(values) for actor, values in facts.items()
+            }
             for effect in choice["effects"]:
                 op, key = effect["op"], effect["id"]
                 if op == "grant_item":
@@ -332,9 +336,11 @@ def _causality(bp):
                     if st[key] < 0 or st[key] > 1000000:
                         fail("Stat goes outside engine bounds")
                 elif op == "learn_fact":
-                    fa.add(key)
+                    fa[effect["actor"]].add(key)
             nxt = (choice["next_scene_id"], tuple(sorted(f)), tuple(sorted(it)),
-                   tuple(sorted(st.items())), tuple(sorted(fa)))
+                   tuple(sorted(st.items())),
+                   tuple((actor, tuple(sorted(values)))
+                         for actor, values in sorted(fa.items())))
             parents.setdefault(nxt, set()).add(state)
             if nxt not in seen:
                 seen.add(nxt)
