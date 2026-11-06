@@ -25,6 +25,10 @@ abstract class StoryRuntimeAdapter {
     int? expectedRevision,
   });
 
+  /// Private social preview derived from current committed events and an
+  /// exact-blueprint rulebook. Not a new world mutation or save format.
+  NpcSocialSnapshot inspectNpcSocial(NpcSocialRulebook rulebook);
+
   Map<String, dynamic> checkpoint();
 }
 
@@ -96,6 +100,12 @@ class StoryEngineCoordinator implements StoryRuntimeAdapter {
   List<String> missingKnowledgeForActor(
           String actorId, Iterable<String> requiredFactIds) =>
       _world.missingKnowledgeForActor(actorId, requiredFactIds);
+
+  @override
+  NpcSocialSnapshot inspectNpcSocial(NpcSocialRulebook rulebook) {
+    _ensureSynchronized();
+    return NpcSocialLedger.inspect(_world, rulebook);
+  }
 
   @override
   String get sceneId => state.sceneId;
