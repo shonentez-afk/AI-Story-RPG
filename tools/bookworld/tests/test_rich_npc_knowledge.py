@@ -97,6 +97,45 @@ class RichNpcKnowledgeContractTests(unittest.TestCase):
                 with self.assertRaises(legacy.BookworldError):
                     rich.build(bp, prov, index)
 
+    def test_reviewed_speaker_turns_hide_future_npc_knowledge(self):
+        bp, prov, index = reviewed_sample()
+        text = ("Встреча у ворот.\\n"
+                "Мария: «Мне известен секрет!»\\n"
+                "Игрок: «Я слушаю».")
+        bp["scenes"][0]["text"] = text
+        signed = rich._exact_scene_dialogue(text)
+        self.assertEqual(len(signed["turns"]), 3)
+        prov["presentation"]["scene_dialogues"] = {"entry": signed}
+        prov["presentation"]["scene_dialogue_knowledge"] = {
+            "entry": [
+                {"turn_index": 1, "speaker": "Мария", "actor_id": NPC,
+                 "required_fact_ids": [FACT]},
+                {"turn_index": 2, "speaker": "Игрок", "actor_id": "player",
+                 "required_fact_ids": []},
+            ],
+        }
+        raw = rich.build(bp, prov, index)
+        self.assertEqual(rich.verify(raw)["format_version"], 3)
+
+        for mutation in ("no_review", "wrong_actor", "missing_turn",
+                         "future_fact", "changed_speaker"):
+            with self.subTest(mutation=mutation):
+                changed = deepcopy(prov)
+                if mutation == "no_review":
+                    del changed["presentation"]["scene_dialogue_knowledge"]
+                else:
+                    rows = changed["presentation"]["scene_dialogue_knowledge"]["entry"]
+                    if mutation == "wrong_actor":
+                        rows[0]["actor_id"] = "npc_fake_name"
+                    elif mutation == "missing_turn":
+                        rows.pop()
+                    elif mutation == "future_fact":
+                        rows[0]["required_fact_ids"] = ["not_a_fact"]
+                    elif mutation == "changed_speaker":
+                        rows[0]["speaker"] = "Другое имя"
+                with self.assertRaises(legacy.BookworldError):
+                    rich.build(bp, changed, index)
+
     def test_wrong_npc_identity_and_preknown_secret_fail(self):
         bp, prov, index = reviewed_sample()
         bp["actors"][1] = "npc_legacy_name"
