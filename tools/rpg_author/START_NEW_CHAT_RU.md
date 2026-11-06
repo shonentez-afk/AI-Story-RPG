@@ -5,6 +5,12 @@
 Рабочая ветка: `feature/external-rpg-author-e6d-handoff-20261106`.
 Этот файл: `tools/rpg_author/START_NEW_CHAT_RU.md`.
 
+## PR #126 — новая native NPC-карточка: реальный код уже есть, merge ещё нет (6 ноября 2026)
+
+В GitHub основной программы **[PR #126](https://github.com/shonentez-afk/AI-Story-RPG/pull/126)**: постоянный `character_id = npc_ + 32 hex` (128 случайных бит `Random.secure()`) и поля `aliases, role, biography, appearance, personality, speech_style, motivation, goals, portrait_asset_id`; `display_name` пока находится в соседнем `NpcDraftProfile`. Редактор умеет менять/сохранять карточку, `NpcKnowledgeWorldBridge` использует ID для `StoryWorld` актёра и `learn_fact/knows_fact`. Никогда не менять ID при переименовании/новом источниковом анализе. **Наша Python-подготовка должна выдавать эти же поля, а random ID один раз сохранять в приватном snapshot** (`secrets.token_hex(16)`), а не заново вычислять по имени/книге.
+
+**Пока НЕ готово:** отношения по стабильным character IDs (сейчас targetDossierId), provenance каждого поля, event-scoped knowledge across full book, speaker→ID, NPC карточки внутри полного `.bworld`, AI NPC разговоры/пиксельные сцены. PR #126 — **OPEN DRAFT**, head `a5f88437e7807239c087b184354c1fcd33c457fe`, на момент проверки M0 #864 SUCCESS, Flutter/Dart/Python stages #779 SUCCESS, Windows/Android CI ещё выполняются. **Ничего в основной программе не меняли**. Читать [E6I_PR126_NATIVE_NPC_CARD_CONTRACT_AUDIT_RU_2026-11-06.md](E6I_PR126_NATIVE_NPC_CARD_CONTRACT_AUDIT_RU_2026-11-06.md) перед синхронизацией E6. Не менять E6d pinned skill без нового полного parity gate.
+
 ## Согласование с новой полной карточкой NPC основного приложения (2026-11-06)
 
 Пользователь сообщил, что параллельно разрабатывается **единая карточка персонажа** с 5 разделами: (1) постоянный `character_id`, имя/прозвища, роль, внешность/портрет; (2) темперамент/мотивация/цели/манера речи; (3) отношения строго по `character_id`; (4) знания и подтверждённые события их получения; (5) происхождение каждого утверждения: цитата, вывод ИИ или явная игровая адаптация. **Наш навык и Python-генератор обязаны заполнять именно этот единый контракт АВТОМАТИЧЕСКИ, без второго конкурирующего `npc_profile` формата и без необходимости вручную дописывать NPC после импорта.** Проектный `npc_profile_v1` из прошлых документов не является принятым API.
