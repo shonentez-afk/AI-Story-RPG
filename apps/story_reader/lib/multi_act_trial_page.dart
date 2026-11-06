@@ -12,6 +12,7 @@ import 'reviewed_prose_scene_overlay.dart';
 import 'reviewed_gameplay_compiler.dart';
 import 'source_locked_gameplay_review_page.dart';
 import 'whole_plan_gameplay_batch_page.dart';
+import 'whole_story_literary_review_page.dart';
 import 'narrative_book_model.dart';
 import 'world_library_gateway.dart';
 import 'world_play_page.dart';
@@ -443,6 +444,26 @@ class _MultiActTrialPageState extends State<MultiActTrialPage> {
                 'решениям цитаты, сохраняя прогресс на устройстве. '
                 'Модельные предложения не добавляются в игру без '
                 'отдельного выбора и второго подтверждения.'),
+            const SizedBox(height: 8),
+            OutlinedButton.icon(
+              key: const Key('multiact-trial-whole-literary-review'),
+              onPressed: valid && !_working ? () async {
+                await Navigator.of(context).push<void>(
+                  MaterialPageRoute(
+                    builder: (_) => WholeStoryLiteraryReviewPage(
+                      index: widget.index, book: widget.book,
+                      plan: widget.draft.plan,
+                    ),
+                  ),
+                );
+              } : null,
+              icon: const Icon(Icons.fact_check_outlined),
+              label: const Text('Проверить всю логику сюжета через ИИ'),
+            ),
+            const Text('Необязательная независимая рецензия: полный '
+                'граф достижимых решений, два отдельных согласия, '
+                'сохранение результатов без повторной оплаты. '
+                'Не изменяет сюжет и не подтверждает литературный канон.'),
             if (_wholeGameplaySelection != null)
               ListTile(
                 title: Text('Выбрано из всех пакетов: ' +
