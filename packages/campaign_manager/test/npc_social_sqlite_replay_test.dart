@@ -19,6 +19,7 @@ Map<String, dynamic> _richNpcSocialFixture() {
   final provenance = fixture['provenance'] as Map<String, dynamic>;
   (blueprint['actors'] as List).add(_npc);
   (blueprint['facts'] as List).add(_fact);
+  (blueprint['items'] as List).add('map');
   final initial = blueprint['initial_state'] as Map<String, dynamic>;
   (initial['knowledge'] as Map<String, dynamic>)[_npc] = <String>[];
   final entry = (blueprint['scenes'] as List).first as Map<String, dynamic>;
@@ -26,9 +27,24 @@ Map<String, dynamic> _richNpcSocialFixture() {
       'Мария: «Я помню обещание!»\n'
       'Игрок: «Помню».';
   final choices = (entry['choices'] as List).cast<Map<String, dynamic>>();
-  (choices.firstWhere((e) => e['id'] == 'wait')['effects'] as List).add({
-    'op': 'learn_fact', 'id': _fact, 'actor': _npc,
-  });
+  (choices.firstWhere((e) => e['id'] == 'wait')['effects'] as List).addAll([
+    {'op': 'learn_fact', 'id': _fact, 'actor': _npc},
+    {'op': 'grant_item', 'id': 'map'},
+  ]);
+  choices.addAll([
+    {
+      'id': 'give_map', 'label': 'Передать карту Марии',
+      'next_scene_id': 'entry',
+      'conditions': [{'op': 'has_item', 'id': 'map'}],
+      'effects': [{'op': 'consume_item', 'id': 'map'}],
+    },
+    {
+      'id': 'return_map', 'label': 'Получить карту обратно',
+      'next_scene_id': 'entry',
+      'conditions': <Object>[],
+      'effects': [{'op': 'grant_item', 'id': 'map'}],
+    },
+  ]);
   // This path is deliberately NOT guarded by the old fact predicate.
   // Only the independently verified social rule may lock this decision.
   final origin = (provenance['scene_origins'] as List).first as Map;
@@ -41,8 +57,8 @@ Map<String, dynamic> _richNpcSocialFixture() {
   };
   provenance['presentation'] = {
     'hero': {'name': 'Игрок', 'description': 'Частная синтетическая проверка'},
-    'item_names': <String, String>{},
-    'item_descriptions': <String, String>{},
+    'item_names': {'map': 'Карта'},
+    'item_descriptions': {'map': 'Подтверждённый предмет'},
     'stat_names': <String, String>{},
     'fact_names': {_fact: 'Секрет'},
     'scene_names': {
@@ -80,7 +96,7 @@ Map<String, dynamic> _richNpcSocialFixture() {
     ],
   };
   provenance['npc_social'] = {
-    'format': RichNpcSocialContract.choiceGateFormat,
+    'format': RichNpcSocialContract.itemTransferFormat,
     'review_scope': 'user_declared_private_game_fiction',
     'source_fingerprint': blueprint['source_fingerprint'],
     'user_confirmed': true, 'literary_canon_verified': false,
@@ -108,6 +124,18 @@ Map<String, dynamic> _richNpcSocialFixture() {
         'source_quote_sha256': quote,
       },
     ],
+    'item_transfers': [
+      {
+        'scene_id': 'entry', 'choice_id': 'give_map',
+        'item_id': 'map', 'from_actor_id': 'player',
+        'to_actor_id': _npc, 'source_quote_sha256': quote,
+      },
+      {
+        'scene_id': 'entry', 'choice_id': 'return_map',
+        'item_id': 'map', 'from_actor_id': _npc,
+        'to_actor_id': 'player', 'source_quote_sha256': quote,
+      },
+    ],
   };
   return fixture;
 }
@@ -119,6 +147,7 @@ NpcSocialSnapshot _social(CampaignRecord campaign,
     rich.blueprint, engine.events.map((event) => event.toJson()),
     expectedSequence: engine.state.revision,
     expectedStateHash: engine.state.stateHash,
+    socialRulebook: rich.npcSocialRulebook,
   );
   return NpcSocialLedger.inspect(world, rich.npcSocialRulebook!);
 }
@@ -185,14 +214,25 @@ void main() {
           'promise_confirmed');
       expect(social.directedScore(_npc, 'player'), 7);
       expect(social.directedScore('player', _npc), 0);
+      expect(social.itemOwner('map'), 'player');
       expect(after.coordinator.choices
           .singleWhere((choice) => choice.id == 'help').enabled, true);
       expect(RichNpcDialogueKnowledge.redact(
         spoken, reviews, after.coordinator.state.knowledge,
         social: social,
       )[1].text, 'Я помню обещание!');
-      final socialHash = social.snapshotHash;
-      final stateHash = after.metadata.stateHash;
+      final gifted = original.commitChoice(
+        campaignId, actionId: 'give_map_to_npc', choiceId: 'give_map',
+        expectedRevision: 1,
+      );
+      expect(gifted.applied, true);
+      final afterGift = original.loadCampaign(campaignId);
+      final custody = _social(afterGift, rich);
+      expect(custody.itemOwner('map'), _npc);
+      expect(custody.itemsHeldBy(_npc), ['map']);
+      expect(afterGift.coordinator.state.inventory, isNot(contains('map')));
+      final socialHash = custody.snapshotHash;
+      final stateHash = afterGift.metadata.stateHash;
       final portable = original.exportPortable(campaignId);
       expect(portable, isNot(contains('Я помню обещание')));
       original.close();
@@ -205,21 +245,36 @@ void main() {
       expect(recovered.metadata.stateHash, stateHash);
       expect(socialAfterReopen.snapshotHash, socialHash);
       expect(socialAfterReopen.directedScore(_npc, 'player'), 7);
+      expect(socialAfterReopen.itemOwner('map'), _npc);
+      expect(reopened.commitChoice(campaignId,
+        actionId: 'counterfeit', choiceId: 'wait',
+        expectedRevision: 2).reason, 'condition_not_met:npc_item_custody');
+      expect(reopened.commitChoice(campaignId,
+        actionId: 'double_gift', choiceId: 'give_map',
+        expectedRevision: 2).applied, false);
       expect(RichNpcDialogueKnowledge.redact(
         spoken, reviews, recovered.coordinator.state.knowledge,
         social: socialAfterReopen,
       )[1].text, 'Я помню обещание!');
 
-      // A second identical choice with a different action ID cannot farm trust.
+      expect(reopened.commitChoice(campaignId,
+        actionId: 'return_gift', choiceId: 'return_map',
+        expectedRevision: 2).applied, true);
+      final back = _social(reopened.loadCampaign(campaignId), rich);
+      expect(back.itemOwner('map'), 'player');
+      expect(back.itemsHeldBy(_npc), isEmpty);
+      // A second identical choice cannot farm trust even after the gift
+      // returns. The existing item remains unique in the hero inventory.
       expect(reopened.commitChoice(campaignId,
         actionId: 'again', choiceId: 'wait',
-        expectedRevision: 1).applied, true);
+        expectedRevision: 3).applied, true);
       final repeated = _social(reopened.loadCampaign(campaignId), rich);
       expect(repeated.memoriesFor(_npc), hasLength(1));
       expect(repeated.directedScore(_npc, 'player'), 7);
+      expect(repeated.itemOwner('map'), 'player');
       expect(reopened.commitChoice(campaignId,
         actionId: 'help_later', choiceId: 'help',
-        expectedRevision: 2).applied, true);
+        expectedRevision: 4).applied, true);
       expect(reopened.loadCampaign(campaignId).coordinator.isTerminal, true);
       expect(_social(reopened.loadCampaign(alternateId), rich)
           .memoriesFor(_npc), isEmpty);
