@@ -545,6 +545,11 @@ class _NpcKnowledgeRulesPageState extends State<NpcKnowledgeRulesPage> {
         throw const FormatException('Есть факты без проверенной заметки');
       }
       final quotes = <String, String>{};
+      // The author must explicitly say whether a named NPC witnessed a
+      // committed action or merely heard a report. No model guesses this.
+      final socialKind = <String, String>{};
+      final socialMode = <String, String>{};
+      final socialDelta = <String, int>{};
       final actorsForTurn = <String, String>{};
       final prerequisites = <String, String>{};
       var consent = false;
@@ -553,6 +558,14 @@ class _NpcKnowledgeRulesPageState extends State<NpcKnowledgeRulesPage> {
         builder: (dialog) => StatefulBuilder(builder: (ctx, update) {
           final ready = consent &&
               quotes.length == grants.length &&
+              socialKind.length == grants.length &&
+              grants.every((rule) =>
+                socialKind[rule.id] == 'none' ||
+                (socialMode.containsKey(rule.id) &&
+                 socialDelta.containsKey(rule.id) &&
+                 !(socialMode[rule.id] == 'reported' &&
+                   (socialKind[rule.id] != 'rumorHeard' ||
+                    socialDelta[rule.id] != 0)))) &&
               actorsForTurn.length == dialogues.length &&
               prerequisites.length == dialogues.length;
           return AlertDialog(
@@ -592,6 +605,89 @@ class _NpcKnowledgeRulesPageState extends State<NpcKnowledgeRulesPage> {
                         }
                       },
                     ),
+                    const SizedBox(height: 8),
+                    DropdownButtonFormField<String>(
+                      key: Key('npc-build-social-kind-' + rule.id),
+                      isExpanded: true,
+                      initialValue: socialKind[rule.id],
+                      decoration: const InputDecoration(
+                        labelText: 'Что NPC действительно запомнит?',
+                        border: OutlineInputBorder(),
+                      ),
+                      items: const [
+                        DropdownMenuItem(
+                          value: 'none',
+                          child: Text('Не подтверждаю социальное событие')),
+                        DropdownMenuItem(
+                          value: 'witnessed', child: Text('Был очевидцем')),
+                        DropdownMenuItem(
+                          value: 'promiseReceived', child: Text('Услышал обещание')),
+                        DropdownMenuItem(
+                          value: 'promiseBroken', child: Text('Увидел нарушение обещания')),
+                        DropdownMenuItem(
+                          value: 'helped', child: Text('Получил помощь')),
+                        DropdownMenuItem(
+                          value: 'betrayed', child: Text('Стал свидетелем предательства')),
+                        DropdownMenuItem(
+                          value: 'rumorHeard', child: Text('Услышал слух')),
+                      ],
+                      onChanged: (kind) {
+                        if (kind != null) update(() {
+                          socialKind[rule.id] = kind;
+                          socialMode.remove(rule.id);
+                          socialDelta.remove(rule.id);
+                        });
+                      },
+                    ),
+                    if (socialKind[rule.id] != null &&
+                        socialKind[rule.id] != 'none') ...[
+                      const SizedBox(height: 8),
+                      DropdownButtonFormField<String>(
+                        key: Key('npc-build-social-witness-' + rule.id),
+                        initialValue: socialMode[rule.id],
+                        decoration: const InputDecoration(
+                          labelText: 'Откуда NPC знает об этом?',
+                          border: OutlineInputBorder(),
+                        ),
+                        items: const [
+                          DropdownMenuItem(value: 'present',
+                              child: Text('Лично присутствовал в сцене')),
+                          DropdownMenuItem(value: 'reported',
+                              child: Text('Узнал со слов других (только слух)')),
+                        ],
+                        onChanged: (mode) {
+                          if (mode != null) update(() {
+                            socialMode[rule.id] = mode;
+                            if (mode == 'reported') socialDelta[rule.id] = 0;
+                          });
+                        },
+                      ),
+                      if (socialMode[rule.id] != null) ...[
+                        const SizedBox(height: 8),
+                        DropdownButtonFormField<int>(
+                          key: Key('npc-build-social-relation-' + rule.id),
+                          initialValue: socialDelta[rule.id],
+                          decoration: const InputDecoration(
+                            labelText: 'Как изменится отношение NPC к герою?',
+                            border: OutlineInputBorder(),
+                          ),
+                          items: [
+                            const DropdownMenuItem(value: 0,
+                                child: Text('Не изменится')),
+                            if (socialMode[rule.id] == 'present') ...const [
+                              DropdownMenuItem(value: 10,
+                                  child: Text('Доверие +10')),
+                              DropdownMenuItem(value: -10,
+                                  child: Text('Доверие −10')),
+                            ],
+                          ],
+                          onChanged: (value) {
+                            if (value != null) update(() =>
+                                socialDelta[rule.id] = value);
+                          },
+                        ),
+                      ],
+                    ],
                     const SizedBox(height: 10),
                   ],
                   if (dialogues.isNotEmpty)
@@ -666,8 +762,8 @@ class _NpcKnowledgeRulesPageState extends State<NpcKnowledgeRulesPage> {
                     onChanged: (value) =>
                         update(() => consent = value == true),
                     controlAffinity: ListTileControlAffinity.leading,
-                    title: const Text('Я проверил факты и разрешаю '
-                        'создать личную RPG с NPC'),
+                    title: const Text('Я проверил источники, '
+                        'присутствие, события и реплики NPC для личной RPG'),
                     subtitle: const Text(
                         'ИИ не вызывается. Заметки NPC не публикуются. '
                         'Новая игра не изменяет существующие прохождения.'),
@@ -707,6 +803,59 @@ class _NpcKnowledgeRulesPageState extends State<NpcKnowledgeRulesPage> {
               required == 'none_required' ? <String>[] : <String>[required],
         });
       }
+      final socialWitnesses = <Map<String, dynamic>>[];
+      final socialRules = <Map<String, dynamic>>[];
+      final witnessModes = <String, String>{};
+      for (final rule in grants) {
+        final kind = socialKind[rule.id]!;
+        if (kind == 'none') continue;
+        final profile = widget.notebook.profiles.singleWhere(
+            (profile) => profile.dossierId == rule.dossierId);
+        final npc = profile.characterId;
+        final scene = sceneByChoice[rule.choiceId];
+        final mode = socialMode[rule.id]!;
+        final quote = quotes[rule.id]!;
+        final change = socialDelta[rule.id]!;
+        if (npc == null || scene == null) {
+          throw const FormatException('NPC без сцены или постоянного ID');
+        }
+        final witnessKey = scene + '|' + npc;
+        if (witnessModes.containsKey(witnessKey) &&
+            witnessModes[witnessKey] != mode) {
+          throw const FormatException(
+              'Один NPC не может одновременно отсутствовать и быть '
+              'очевидцем той же сцены. Исправьте утверждения.');
+        }
+        if (!witnessModes.containsKey(witnessKey)) {
+          witnessModes[witnessKey] = mode;
+          socialWitnesses.add({
+            'scene_id': scene,
+            'actor_id': npc,
+            'mode': mode,
+            'source_quote_sha256': quote,
+          });
+        }
+        socialRules.add({
+          'memory_id': rule.id,
+          'scene_id': scene,
+          'choice_id': rule.choiceId,
+          'observer_id': npc,
+          'kind': kind,
+          'related_actor_id': change == 0 ? null : 'player',
+          'relationship_delta': change,
+          'max_triggers': 1,
+          'source_quote_sha256': quote,
+        });
+      }
+      final socialReview = socialRules.isEmpty ? null : <String, dynamic>{
+        'format': RichNpcSocialContract.format,
+        'review_scope': 'user_declared_private_game_fiction',
+        'source_fingerprint': widget.index.sourceFingerprint,
+        'user_confirmed': true,
+        'literary_canon_verified': false,
+        'witnesses': socialWitnesses,
+        'rules': socialRules,
+      };
       final bytes = await compileReviewedNpcRichPrivateBookworldInWorker(
         widget.index, widget.graph, widget.catalog, widget.editorial,
         widget.scenario,
@@ -714,6 +863,7 @@ class _NpcKnowledgeRulesPageState extends State<NpcKnowledgeRulesPage> {
         npcDossiers: widget.dossiers,
         sourceQuoteByRuleId: quotes,
         userConfirmed: true,
+        reviewedNpcSocial: socialReview,
         reviewedDialogueTurns: spoken,
         reviewedSpeakerBindings: verifiedSpeakers,
       );
