@@ -155,6 +155,11 @@ jobs:
           test -s artifacts/bookworld/book_private_rich_dialogue_dart.bworld
           python3 -c "from pathlib import Path; from tools.bookworld.private_rich_bookworld import verify; p=Path('artifacts/bookworld/book_private_rich_dialogue_dart.bworld'); assert verify(p.read_bytes())['format_version'] == 3"
           (cd artifacts/bookworld && sha256sum book_private_rich_dialogue_dart.bworld >> SHA256SUMS.txt)
+          # NPC v3.1 source-reviewed private extension: exact Dart ZIP
+          # MUST pass the independent Python per-actor/quote/reachability gate.
+          test -s artifacts/bookworld/book_private_rich_npc_dart.bworld
+          python3 -c "from pathlib import Path; from tools.bookworld.private_rich_bookworld import verify; p=Path('artifacts/bookworld/book_private_rich_npc_dart.bworld'); result=verify(p.read_bytes()); assert result['format_version'] == 3 and result['rich_gameplay']"
+          (cd artifacts/bookworld && sha256sum book_private_rich_npc_dart.bworld >> SHA256SUMS.txt)
           # Independently verify the SAME Dart bytes with Python v3 review checks.
           test -s artifacts/bookworld/book_private_reviewed_dart.bworld
           python3 -c "from pathlib import Path; from tools.bookworld.private_rich_bookworld import verify; p=Path('artifacts/bookworld/book_private_reviewed_dart.bworld'); assert verify(p.read_bytes())['format_version'] == 3"
