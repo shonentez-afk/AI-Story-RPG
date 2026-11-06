@@ -26,7 +26,7 @@ class SceneDialogueScript {
   // Script is a UI projection of the actual signed scene text, not a new
   // world-state, NPC identity, proof of CANON or executable mini-language.
   static final RegExp _named = RegExp(
-    r'^([А-ЯЁA-Z][А-Яа-яЁёA-Za-z0-9 .-]{0,49}):[ \t]*(«[^»\n]{1,1200}»|"[^"\n]{1,1200}"|—[ \t]*[^\n]{1,1200})[.!?]?,
+    r'^([А-ЯЁA-Z][А-Яа-яЁёA-Za-z0-9 .-]{0,49}):[ \t]*(«[^»\n]{1,1200}»|"[^"\n]{1,1200}"|—[ \t]*[^\n]{1,1200})[.!?]?$',
     unicode: true,
   );
   static const maxTurns = 64;
