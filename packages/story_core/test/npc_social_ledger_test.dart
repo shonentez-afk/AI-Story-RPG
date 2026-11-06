@@ -374,6 +374,38 @@ void main() {
         .choiceLockReason('walk_market'), 'condition_not_met:npc_trust');
   });
 
+  test('circular NPC memories cannot deadlock two authored decisions', () {
+    final bp = _blueprint();
+    final rules = NpcSocialRulebook(
+      blueprintHash: bp.blueprintHash,
+      requireReviewedWitnesses: true,
+      witnesses: const [
+        NpcSceneWitness(
+          sceneId: 'gate', actorId: 'guard', mode: NpcWitnessMode.present),
+      ],
+      rules: const [
+        NpcSocialRule(
+          memoryId: 'before_inspect', sceneId: 'gate',
+          choiceId: 'inspect_gate', observerId: 'guard',
+          kind: NpcMemoryKind.witnessed),
+        NpcSocialRule(
+          memoryId: 'after_market', sceneId: 'gate',
+          choiceId: 'walk_market', observerId: 'guard',
+          kind: NpcMemoryKind.witnessed),
+      ],
+      choiceGates: const [
+        NpcSocialChoiceGate(
+          sceneId: 'gate', choiceId: 'inspect_gate', actorId: 'guard',
+          requiredMemoryId: 'after_market'),
+        NpcSocialChoiceGate(
+          sceneId: 'gate', choiceId: 'walk_market', actorId: 'guard',
+          requiredMemoryId: 'before_inspect'),
+      ],
+    );
+    expect(() => StoryWorld(bp, socialRulebook: rules),
+        throwsFormatException);
+  });
+
   test('NPC item custody is authoritative and event-sourced, no phantom gifts',
       () {
     final raw = jsonDecode(
