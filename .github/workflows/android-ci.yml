@@ -131,6 +131,10 @@ jobs:
           python3 -c "import json; from pathlib import Path; from tools.bookworld.private_bookworld import build; data=json.loads(Path('shared_schemas/fixtures/private_classic_sample.json').read_text(encoding='utf-8')); Path('artifacts/bookworld/book_private_sample.bworld').write_bytes(build(data['blueprint'],data['provenance'],data['source_index']))"
           python3 -m tools.bookworld.private_bookworld verify --input artifacts/bookworld/book_private_sample.bworld
           (cd artifacts/bookworld && sha256sum book_private_sample.bworld >> SHA256SUMS.txt)
+      - name: Build Python-authored source-reviewed NPC rich v3
+        run: |
+          python3 -c "from pathlib import Path; from tools.bookworld.tests.test_rich_npc_knowledge import reviewed_sample; from tools.bookworld.private_rich_bookworld import build, verify; bp, source, index = reviewed_sample(); out = Path('artifacts/bookworld/book_private_rich_npc_python.bworld'); out.write_bytes(build(bp, source, index)); assert verify(out.read_bytes())['format_version'] == 3"
+          (cd artifacts/bookworld && sha256sum book_private_rich_npc_python.bworld >> SHA256SUMS.txt)
       - name: Analyze and test native Dart BookWorld reader
         working-directory: packages/bookworld_format
         run: |
@@ -164,6 +168,9 @@ jobs:
           test -s artifacts/bookworld/book_private_reviewed_dart.bworld
           python3 -c "from pathlib import Path; from tools.bookworld.private_rich_bookworld import verify; p=Path('artifacts/bookworld/book_private_reviewed_dart.bworld'); assert verify(p.read_bytes())['format_version'] == 3"
           (cd artifacts/bookworld && sha256sum book_private_reviewed_dart.bworld >> SHA256SUMS.txt)
+      - name: Independently verify Python-created rich NPC BookWorld in Dart
+        working-directory: packages/bookworld_format
+        run: dart run example/verify_npc_rich.dart ../../artifacts/bookworld/book_private_rich_npc_python.bworld
       - name: Analyze and test transactional SQLite BookWorld campaigns
         working-directory: packages/campaign_manager
         run: |
