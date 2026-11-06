@@ -135,6 +135,35 @@ class BookwideActPlanner {
   static const defaultEventsPerPart = 12;
   static const maxParts = 4096;
 
+  /// Prefer the existing default boundaries. Only when that produces fewer
+  /// than two usable acts, split one sufficiently event-rich source segment
+  /// into two chronological text ranges. A one-chapter fairy tale is still
+  /// eligible for a source-locked multi-act DRAFT without a special title case.
+  ///
+  /// This operation neither invents events nor proves temporal/causal links.
+  /// A chapter with fewer than FOUR candidates cannot be split into two
+  /// independent two-event dilemmas and remains an explicit blocker.
+  static BookwideActPlan buildForMultiActDraft({
+    required BookSourceIndex index,
+    required NarrativeBookModel book,
+  }) {
+    final regular = build(index: index, book: book);
+    final eligible = regular.acts.where((a) => a.events.length >= 2).length;
+    if (eligible >= 2) return regular;
+    var largest = 0;
+    for (final act in regular.acts) {
+      if (act.events.length > largest) largest = act.events.length;
+    }
+    if (largest < 4) return regular;
+    // With fewer than two eligible default acts, the largest part has
+    // at most 12 events. Ceiling-half preserves two >=2 event segments.
+    final reducedPerPart = (largest + 1) ~/ 2;
+    final split = build(
+        index: index, book: book, eventsPerPart: reducedPerPart);
+    return split.acts.where((a) => a.events.length >= 2).length >= 2
+        ? split : regular;
+  }
+
   /// Assign EVERY source event to exactly one bounded act segment.
   /// Chapters with no suggestions are retained as explicit gaps.
   static BookwideActPlan build({
