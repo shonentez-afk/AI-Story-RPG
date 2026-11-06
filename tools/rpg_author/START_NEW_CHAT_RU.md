@@ -159,6 +159,16 @@
 
 **Это исследование, не реализованный функционал и не смена P0.** Сначала закрывать E6e и настоящую игру/QA. Main, Flutter, пакеты, BookWorld и общий CI остаются read-only до нового отдельного разрешения. Pin проверенного навыка E6d не менять без тестов.
 
+## Архитектурное решение E6g: какие чужие проекты используем и как подключим живой ИИ (2026-11-06)
+
+Сохранён проверенный обзор и согласованная схема: **[E6G_THIRD_PARTY_AND_AI_FREE_INTERACTION_DECISIONS_RU_2026-11-06.md](E6G_THIRD_PARTY_AND_AI_FREE_INTERACTION_DECISIONS_RU_2026-11-06.md)**.
+
+**Встроенный редактор** будущего: в том же Flutter Windows/Android, граф книги + граф сюжета, NPC persona/знания/темы, редактор code-only пиксельных сцен и лёгких анимаций. Конкретные чужие технологии: optional Mermaid-export, на spike выбрать `vyuh_node_flow` или `node_flow` (не обе); Flutter Canvas и позже при необходимости Flame. PixelForge/Sprite Forge использовать как идеи, а не JS runtime. Twine/Inky/Arcweave/Yarn/Dialogic как ориентиры редактора. AI Dungeon, Convai Narrative Design, AI Town, Rasa CALM, chasm как ориентиры контролируемых freeform NPC.
+
+**Уже сделано в main:** офлайн `FreeTextActionGate`, Z.ai `ZaiGameplayChoiceAdvisor` только для сопоставления с уже разрешёнными `choice_id`, отдельно проверяемые `npc_knowledge` правила. Это **НЕ** свободные реплики NPC. Будущие `SAY` (NPC ответ в рамках persona/verified knowledge, отдельная память), `LOOK` (только доступные факты), `DO/INTERACT` (только подтверждённые enabled choices). `STORY` не в текущем v3, отдельный эксперимент только после аудита. API opt-in, точный payload consent; нельзя тихо отправлять главы, журнал или скрытые знания. Все эффекты через `WorldLibraryGateway.choose` / story_core, не через LLM.
+
+**Статус: только документы, НЕ реализовано.** P0 по-прежнему E6e/настоящий E2E книги. Основное приложение, `main`, все `apps/packages/tools/bookworld` read-only; E6d pinned skill unchanged. Новых миграций E5 не делать.
+
 ## Начало нового чата
 
 1. Прочитать последнюю версию этого файла в рабочей ветке.
