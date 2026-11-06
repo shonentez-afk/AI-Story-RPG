@@ -70,6 +70,33 @@ class NpcSocialChoiceGate {
   };
 }
 
+/// One source-reviewed custody transfer. Player inventory still changes
+/// through the existing typed grant_item/consume_item effects. NPC custody
+/// is recomputed from the SAME hash-chained committed game actions.
+class NpcItemTransfer {
+  const NpcItemTransfer({
+    required this.sceneId,
+    required this.choiceId,
+    required this.itemId,
+    required this.fromActorId,
+    required this.toActorId,
+  });
+
+  final String sceneId;
+  final String choiceId;
+  final String itemId;
+  final String fromActorId;
+  final String toActorId;
+
+  Map<String, Object?> toJson() => {
+    'scene_id': sceneId,
+    'choice_id': choiceId,
+    'item_id': itemId,
+    'from_actor_id': fromActorId,
+    'to_actor_id': toActorId,
+  };
+}
+
 /// A declarative, source-reviewable event annotation. It has no runtime
 /// effect by itself; the optional relationship delta is a read-only
 /// projection, NOT a hidden world mutation or a new blueprint DSL operation.
@@ -116,15 +143,18 @@ class NpcSocialRulebook {
     required List<NpcSocialRule> rules,
     List<NpcSceneWitness> witnesses = const [],
     List<NpcSocialChoiceGate> choiceGates = const [],
+    List<NpcItemTransfer> itemTransfers = const [],
     this.requireReviewedWitnesses = false,
   }) : rules = List.unmodifiable(rules),
        witnesses = List.unmodifiable(witnesses),
-       choiceGates = List.unmodifiable(choiceGates);
+       choiceGates = List.unmodifiable(choiceGates),
+       itemTransfers = List.unmodifiable(itemTransfers);
 
   final String blueprintHash;
   final List<NpcSocialRule> rules;
   final List<NpcSceneWitness> witnesses;
   final List<NpcSocialChoiceGate> choiceGates;
+  final List<NpcItemTransfer> itemTransfers;
   /// Strict portable social rules must prove how each observer learned
   /// about the event. Old local preview rulebooks keep legacy semantics.
   final bool requireReviewedWitnesses;
@@ -136,8 +166,9 @@ class NpcSocialRulebook {
       throw const FormatException('NPC social rules not bound to blueprint');
     }
     if (witnesses.length > 512 || choiceGates.length > 128 ||
-        ((witnesses.isNotEmpty || choiceGates.isNotEmpty) &&
-         !requireReviewedWitnesses)) {
+        itemTransfers.length > 128 ||
+        ((witnesses.isNotEmpty || choiceGates.isNotEmpty ||
+          itemTransfers.isNotEmpty) && !requireReviewedWitnesses)) {
       throw const FormatException('NPC witness review must be explicit');
     }
     final presence = <String, NpcWitnessMode>{};
@@ -207,6 +238,46 @@ class NpcSocialRulebook {
       final identity = '${rule.observerId}|${rule.memoryId}';
       if (!seen.add(identity)) {
         throw const FormatException('Duplicate NPC event memory identity');
+      }
+    }
+    final transfers = <String>{};
+    for (final transfer in itemTransfers) {
+      jsonId(transfer.sceneId, 'npc.transfer.scene_id');
+      jsonId(transfer.choiceId, 'npc.transfer.choice_id');
+      jsonId(transfer.itemId, 'npc.transfer.item_id');
+      jsonId(transfer.fromActorId, 'npc.transfer.from_actor_id');
+      jsonId(transfer.toActorId, 'npc.transfer.to_actor_id');
+      final scene = blueprint.scenes[transfer.sceneId];
+      final choices = scene?.choices
+          .where((choice) => choice.id == transfer.choiceId).toList();
+      if (choices == null || choices.length != 1 ||
+          !blueprint.items.contains(transfer.itemId) ||
+          !blueprint.actors.contains(transfer.fromActorId) ||
+          !blueprint.actors.contains(transfer.toActorId) ||
+          transfer.fromActorId == transfer.toActorId ||
+          !transfers.add(
+              '${transfer.sceneId}|${transfer.choiceId}|${transfer.itemId}')) {
+        throw const FormatException('Invalid NPC item transfer reference');
+      }
+      final fromPlayer = transfer.fromActorId == 'player';
+      final toPlayer = transfer.toActorId == 'player';
+      if (fromPlayer == toPlayer) {
+        throw const FormatException('NPC transfer must involve the hero');
+      }
+      final npc = fromPlayer ? transfer.toActorId : transfer.fromActorId;
+      if ((blueprint.rightsStatus == 'private_adaptation' &&
+           !CharacterId.isValidNpc(npc)) ||
+          presence['${transfer.sceneId}|$npc'] != NpcWitnessMode.present) {
+        throw const FormatException(
+            'NPC item transfer requires approved personal presence');
+      }
+      usedWitnesses.add('${transfer.sceneId}|$npc');
+      final expectedEffect = fromPlayer ? 'consume_item' : 'grant_item';
+      if (choices.single.effects.where((effect) =>
+          effect.op == expectedEffect &&
+          effect.id == transfer.itemId).length != 1) {
+        throw const FormatException(
+            'NPC item custody does not match typed world effect');
       }
     }
     if (requireReviewedWitnesses &&
@@ -285,6 +356,13 @@ class NpcSocialRulebook {
                 .compareTo('${b['scene_id']}|${b['choice_id']}'));
       signed['choice_gates'] = gates;
     }
+    if (itemTransfers.isNotEmpty) {
+      final transfers = itemTransfers.map((rule) => rule.toJson()).toList()
+        ..sort((a, b) =>
+            ('${a['scene_id']}|${a['choice_id']}|${a['item_id']}')
+                .compareTo('${b['scene_id']}|${b['choice_id']}|${b['item_id']}'));
+      signed['item_transfers'] = transfers;
+    }
     return sha256.convert(utf8.encode(canonicalJson(signed))).toString();
   }
 }
@@ -322,9 +400,13 @@ class NpcSocialSnapshot {
     required this.worldStateHash,
     required this.eventHeadHash,
     required Set<String> actorIds,
+    required Set<String> itemIds,
+    required Map<String, String> itemOwners,
     required Map<String, List<NpcEventMemory>> memoryByActor,
     required Map<String, Map<String, int>> directedRelations,
   })  : _actorIds = Set<String>.unmodifiable(actorIds),
+        _itemIds = Set<String>.unmodifiable(itemIds),
+        _itemOwners = Map<String, String>.unmodifiable(itemOwners),
         _memoryByActor = Map.unmodifiable(
             memoryByActor.map((actor, memories) =>
                 MapEntry(actor, List<NpcEventMemory>.unmodifiable(memories)))),
@@ -337,6 +419,8 @@ class NpcSocialSnapshot {
   final String worldStateHash;
   final String? eventHeadHash;
   final Set<String> _actorIds;
+  final Set<String> _itemIds;
+  final Map<String, String> _itemOwners;
   final Map<String, List<NpcEventMemory>> _memoryByActor;
   final Map<String, Map<String, int>> _directedRelations;
 
@@ -358,6 +442,26 @@ class NpcSocialSnapshot {
   bool hasMemory(String actorId, String memoryId) {
     jsonId(memoryId, 'memory_id');
     return memoriesFor(actorId).any((memory) => memory.memoryId == memoryId);
+  }
+
+  /// Null means nobody currently possesses this item. Unknown catalog IDs
+  /// fail closed. Player ownership must equal the authoritative inventory.
+  String? itemOwner(String itemId) {
+    jsonId(itemId, 'item_id');
+    if (!_itemIds.contains(itemId)) {
+      throw const FormatException('Unknown item custody reference');
+    }
+    return _itemOwners[itemId];
+  }
+
+  List<String> itemsHeldBy(String actorId) {
+    jsonId(actorId, 'actor_id');
+    if (!_actorIds.contains(actorId)) {
+      throw const FormatException('Unknown item owner');
+    }
+    return List<String>.unmodifiable((_itemOwners.entries
+        .where((entry) => entry.value == actorId)
+        .map((entry) => entry.key).toList()..sort()));
   }
 
   /// A -> B is not B -> A. Neutral/unspecified relationships return 0.
@@ -426,12 +530,65 @@ class NpcSocialLedger {
       }
     }
     final events = world.events;
+
+    // Recompute custody from typed effects and actual committed decisions.
+    // A forged prose note cannot give an NPC an item. Every player transfer
+    // must agree with the player's exact inventory effects.
+    final owners = <String, String>{
+      for (final item in blueprint.initial.inventory) item: 'player',
+    };
+    final transferByAction = {
+      for (final transfer in rulebook.itemTransfers)
+        '${transfer.sceneId}|${transfer.choiceId}|${transfer.itemId}':
+            transfer,
+    };
+    for (final event in events) {
+      final choice = blueprint.scenes[event.sceneId]!.choices
+          .singleWhere((candidate) => candidate.id == event.choiceId);
+      for (final effect in choice.effects) {
+        if (effect.op != 'grant_item' && effect.op != 'consume_item') continue;
+        final itemId = effect.id!;
+        final transfer = transferByAction[
+            '${event.sceneId}|${event.choiceId}|$itemId'];
+        final current = owners[itemId];
+        if (effect.op == 'consume_item') {
+          if (current != 'player' ||
+              (transfer != null && transfer.fromActorId != 'player')) {
+            throw const FormatException('NPC custody spent an unowned item');
+          }
+          if (transfer != null) {
+            owners[itemId] = transfer.toActorId;
+          } else {
+            owners.remove(itemId);
+          }
+        } else {
+          if (transfer != null) {
+            if (transfer.toActorId != 'player' ||
+                current != transfer.fromActorId) {
+              throw const FormatException(
+                  'NPC custody returned an unowned item');
+            }
+          } else if (current != null && current != 'player') {
+            throw const FormatException(
+                'World item duplicated while carried by NPC');
+          }
+          owners[itemId] = 'player';
+        }
+      }
+    }
+    for (final item in blueprint.items) {
+      if ((owners[item] == 'player') != world.state.inventory.contains(item)) {
+        throw const FormatException('NPC custody conflicts with world inventory');
+      }
+    }
     return NpcSocialSnapshot._(
       blueprintHash: blueprint.blueprintHash,
       rulebookDigest: rulebook.digest,
       worldStateHash: world.state.stateHash,
       eventHeadHash: events.isEmpty ? null : events.last.hash,
       actorIds: blueprint.actors,
+      itemIds: blueprint.items,
+      itemOwners: owners,
       memoryByActor: memory,
       directedRelations: relations,
     );
