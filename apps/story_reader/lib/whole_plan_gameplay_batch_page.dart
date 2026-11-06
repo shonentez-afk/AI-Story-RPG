@@ -2,10 +2,26 @@ import 'package:flutter/material.dart';
 
 import 'book_source_index.dart';
 import 'gameplay_candidate_reachability.dart';
+import 'reviewed_gameplay_compiler.dart';
+import 'zai_source_locked_gameplay_candidates.dart';
 import 'narrative_book_model.dart';
 import 'story_plan.dart';
 import 'whole_plan_gameplay_candidate_batch.dart';
 import 'zai_semantic_preview.dart';
+
+/// A reviewed subset of the completed whole-book, multi-window candidates.
+/// Returning it to the parent DOES NOT install an effect or make a new game.
+class SelectedWholePlanGameplayCandidates {
+  const SelectedWholePlanGameplayCandidates({
+    required this.manifest,
+    required this.drafts,
+    required this.selectedUserReviewNotes,
+  });
+
+  final WholePlanGameplayBatchManifest manifest;
+  final List<GameplayCandidateDraft> drafts;
+  final Map<String, String> selectedUserReviewNotes;
+}
 
 /// Optional foreground UI. No GLM call until exact on-screen consent.
 /// Suggestions collected here NEVER edit a BookWorld or install a campaign.
@@ -37,6 +53,10 @@ class _WholePlanGameplayBatchPageState
   WholePlanGameplayBatchManifest? _manifest;
   WholePlanGameplayBatchProgress? _progress;
   GameplayReachabilityReport? _audit;
+  List<GameplayCandidateDraft> _drafts = const [];
+  final Set<String> _selected = {};
+  final Map<String, TextEditingController> _notes = {};
+  bool _confirmPrivateFiction = false;
   String? _error;
   bool _working = false;
   bool _loaded = false;
@@ -63,6 +83,9 @@ class _WholePlanGameplayBatchPageState
   @override
   void dispose() {
     _cancellation.cancel();
+    for (final c in _notes.values) {
+      c.dispose();
+    }
     super.dispose();
   }
 
@@ -81,6 +104,9 @@ class _WholePlanGameplayBatchPageState
       setState(() {
         _progress = progress;
         _audit = report;
+        if (progress.allProposalsCollected) {
+          _drafts = List.unmodifiable(all);
+        }
         _suggestions = all.fold<int>(
             0, (n, draft) => n + draft.candidates.length);
         _loaded = true;
@@ -124,6 +150,9 @@ class _WholePlanGameplayBatchPageState
       setState(() {
         _progress = progress;
         _audit = report;
+        if (progress.allProposalsCollected) {
+          _drafts = List.unmodifiable(all);
+        }
         _suggestions = all.fold<int>(
             0, (n, draft) => n + draft.candidates.length);
       });
@@ -140,6 +169,62 @@ class _WholePlanGameplayBatchPageState
           _consented = false;
         });
       }
+    }
+  }
+
+  void _selectForNextGame() {
+    final manifest = _manifest;
+    final status = _progress;
+    if (_working || manifest == null || status == null ||
+        !status.allProposalsCollected || !_confirmPrivateFiction ||
+        _selected.isEmpty || _selected.length > 6 ||
+        _drafts.length != manifest.totalBatches) return;
+
+    final notes = <String, String>{};
+    for (final id in _selected) {
+      final value = _notes[id]?.text.trim() ?? '';
+      if (value.length < 18 || value.length > 350) {
+        setState(() => _error = 'Каждый выбранный эффект требует '
+            'отдельного пояснения (от 18 до 350 символов).');
+        return;
+      }
+      notes[id] = value;
+    }
+    final selectedDrafts = [
+      for (final draft in _drafts)
+        GameplayCandidateDraft(
+          sourceFingerprint: draft.sourceFingerprint,
+          approvalDigest: draft.approvalDigest,
+          candidates: [
+            for (final candidate in draft.candidates)
+              if (_selected.contains(
+                  ReviewedGameplayCompiler.signature(candidate)))
+                candidate,
+          ],
+        ),
+    ];
+    try {
+      final audit = const GameplayCandidateReachabilityAuditor()
+          .auditAcrossBatches(
+        plan: manifest.plan, manifest: manifest, drafts: selectedDrafts,
+      );
+      if (!audit.hasNoRouteConflicts) {
+        final failure = audit.issues.first;
+        setState(() => _error = 'Выбранные игровые эффекты '
+            'противоречат маршруту: ' + failure.code +
+            ' / ' + failure.pathChoiceIds.join(' → '));
+        return;
+      }
+      // No game is modified: the parent must compile and ask the user
+      // to confirm the resulting exact-digest review in a SECOND dialog.
+      Navigator.of(context).pop(SelectedWholePlanGameplayCandidates(
+        manifest: manifest,
+        drafts: List.unmodifiable(_drafts),
+        selectedUserReviewNotes: Map.unmodifiable(notes),
+      ));
+    } catch (error) {
+      setState(() => _error = 'Нельзя передать эти предложения '
+          'в подготовку: ' + error.toString());
     }
   }
 
