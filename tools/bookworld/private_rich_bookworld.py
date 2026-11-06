@@ -128,8 +128,11 @@ def _presentation(meta, bp):
     expected = {"hero", "item_names", "item_descriptions",
                 "stat_names", "fact_names", "scene_names"}
     has_dialogues = type(meta) is dict and "scene_dialogues" in meta
+    has_npc_review = type(meta) is dict and "scene_dialogue_knowledge" in meta
     if has_dialogues:
         expected.add("scene_dialogues")
+    if has_npc_review:
+        expected.add("scene_dialogue_knowledge")
     _keys(meta, expected, "presentation")
     _keys(meta["hero"], {"name", "description"}, "hero")
     if not _txt(meta["hero"]["name"], 120) or \
@@ -151,6 +154,44 @@ def _presentation(meta, bp):
                 expected_dialogues[scene["id"]] = parsed
         if signed != expected_dialogues:
             fail("Signed v3 dialogue diverges from exact scene text")
+
+    npc_ids = set(bp["actors"]) - {"player"}
+    reviewed = meta.get("scene_dialogue_knowledge")
+    dialogue_scenes = meta.get("scene_dialogues", {})
+    if not npc_ids:
+        if has_npc_review:
+            fail("Unexpected NPC speaker review in player-only world")
+    elif not dialogue_scenes:
+        if reviewed not in (None, {}):
+            fail("NPC speaker review lacks signed scene")
+    else:
+        if type(reviewed) is not dict or set(reviewed) != set(dialogue_scenes):
+            fail("Incomplete reviewed NPC speaker scenes")
+        for scene_id, signed in dialogue_scenes.items():
+            spoken = {i: turn["speaker"] for i, turn in
+                      enumerate(signed["turns"]) if turn["speaker"] is not None}
+            entries = reviewed[scene_id]
+            if type(entries) is not list or len(entries) != len(spoken):
+                fail("NPC spoken lines are missing review")
+            seen = set()
+            for entry in entries:
+                _keys(entry, {"turn_index", "speaker", "actor_id",
+                              "required_fact_ids"}, "NPC spoken line")
+                index, actor, facts = (entry["turn_index"],
+                                       entry["actor_id"],
+                                       entry["required_fact_ids"])
+                if type(index) is not int or index not in spoken or \
+                        index in seen or entry["speaker"] != spoken[index] or \
+                        actor not in bp["actors"] or \
+                        (actor != "player" and actor not in npc_ids) or \
+                        type(facts) is not list or len(facts) > 16 or \
+                        any(type(fact) is not str or fact not in bp["facts"]
+                            for fact in facts) or \
+                        facts != sorted(set(facts)):
+                    fail("Tampered NPC dialogue identity or secret gate")
+                seen.add(index)
+            if seen != set(spoken):
+                fail("Incomplete reviewed NPC dialogue turns")
 
 
 def _check_rule(rule, bp, effect):
