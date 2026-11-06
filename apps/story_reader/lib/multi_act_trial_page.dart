@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:bookworld_format/bookworld_format.dart';
 
 import 'book_source_index.dart';
 import 'bookwide_act_planner.dart';
@@ -8,6 +9,8 @@ import 'multi_act_trial_compiler.dart';
 import 'source_locked_prose_preview_page.dart';
 import 'source_locked_prose_batch_page.dart';
 import 'reviewed_prose_scene_overlay.dart';
+import 'reviewed_gameplay_compiler.dart';
+import 'source_locked_gameplay_review_page.dart';
 import 'narrative_book_model.dart';
 import 'world_library_gateway.dart';
 import 'world_play_page.dart';
@@ -42,6 +45,7 @@ class _MultiActTrialPageState extends State<MultiActTrialPage> {
   bool _working = false;
   String? _error;
   final Map<String, ReviewedProseSceneApproval> _reviewedProse = {};
+  SelectedGameplayCandidates? _gameplaySelection;
 
   List<NarrativeEvent> get _reviewEvents {
     final ids = <String>{
@@ -55,9 +59,33 @@ class _MultiActTrialPageState extends State<MultiActTrialPage> {
     ]);
   }
 
+  Future<void> _chooseGameplay() async {
+    if (_working || !_reviewed || !_privateFiction ||
+        _enforceEarlierOutcome || !widget.draft.formalRulesPassed) return;
+    // M2h8d1 is deliberately bounded to SIX short, exact source excerpts.
+    // Larger multi-act source sets require a separate consented batch.
+    final sample = _reviewEvents.take(6).toList(growable: false);
+    if (sample.isEmpty) return;
+    final selection = await Navigator.of(context)
+        .push<SelectedGameplayCandidates>(MaterialPageRoute(
+      builder: (_) => SourceLockedGameplayReviewPage(
+        index: widget.index,
+        book: widget.book,
+        plan: widget.draft.plan,
+        exactEventIds: [for (final e in sample) e.id],
+      ),
+    ));
+    if (!mounted || selection == null) return;
+    setState(() {
+      _gameplaySelection = selection;
+      _error = null;
+    });
+  }
+
   Future<void> _start() async {
     if (!_reviewed || !_privateFiction || _working) return;
-    if (_enforceEarlierOutcome && _reviewedProse.isNotEmpty) {
+    if (_enforceEarlierOutcome &&
+        (_reviewedProse.isNotEmpty || _gameplaySelection != null)) {
       setState(() => _error = 'Подтверждённые художественные сцены '
           'относятся к прежней версии игрового плана. '
           'Снимите дополнительное правило или удалите '
@@ -108,9 +136,71 @@ class _MultiActTrialPageState extends State<MultiActTrialPage> {
       );
       if (!mounted || compiled.sourceFingerprint !=
           widget.index.sourceFingerprint) return;
-      final installed = await widget.gateway.install(compiled.archive);
-      if (installed.archiveHash != compiled.archiveSha256 ||
-          installed.bookworldId != compiled.bookworldId) {
+      var archive = compiled.archive;
+      if (_gameplaySelection != null) {
+        final selection = _gameplaySelection!;
+        final preview = ReviewedGameplayCompiler.preview(
+          currentRichBookworld: compiled.archive,
+          index: widget.index,
+          book: widget.book,
+          plan: widget.draft.plan,
+          context: selection.context,
+          proposals: selection.draft,
+          selectedUserReviewNotes: selection.selectedUserReviewNotes,
+        );
+        if (!mounted) return;
+        final approved = await showDialog<bool>(
+          context: context,
+          builder: (dialogContext) => AlertDialog(
+            title: const Text('Подтвердить игровые предметы'),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('Только частная игровая адаптация, '
+                      'не литературный канон. '
+                      'Существующие игры не изменяются.'),
+                  const SizedBox(height: 8),
+                  for (final effect in (preview.shownReview['effects'] as List))
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 4),
+                      child: Text((effect as Map)['label'].toString() +
+                          ': ' + effect['op'].toString() +
+                          ' / ' + effect['choice_id'].toString()),
+                    ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(false),
+                child: const Text('Отменить'),
+              ),
+              FilledButton(
+                key: const Key('multiact-trial-final-gameplay-approval'),
+                onPressed: () => Navigator.of(dialogContext).pop(true),
+                child: const Text('Подтверждаю частную игровую выдумку'),
+              ),
+            ],
+          ),
+        );
+        if (approved != true || !mounted) return;
+        archive = await ReviewedGameplayCompiler.compileAfterUserConfirmation(
+          preview: preview,
+          currentRichBookworld: compiled.archive,
+          index: widget.index,
+          explicitlyConfirmedPrivateGameFiction: true,
+          approvedReviewDigest: preview.approvalDigest,
+        );
+      }
+      final finalCheck = const RichPrivateBookworldImporter().inspect(archive);
+      if (finalCheck.sourceFingerprint != widget.index.sourceFingerprint) {
+        throw const FormatException('Чужая исходная редакция игрового мира');
+      }
+      final installed = await widget.gateway.install(archive);
+      if (installed.archiveHash != finalCheck.archiveSha256 ||
+          installed.bookworldId != finalCheck.bookworldId) {
         throw const FormatException(
             'Установленный мир отличается от проверенного пакета.');
       }
@@ -199,7 +289,8 @@ class _MultiActTrialPageState extends State<MultiActTrialPage> {
               key: const Key('multiact-trial-consequence'),
               contentPadding: EdgeInsets.zero,
               value: _enforceEarlierOutcome,
-              onChanged: valid && _reviewedProse.isEmpty
+              onChanged: valid && _reviewedProse.isEmpty &&
+                  _gameplaySelection == null
                   ? (v) => setState(() =>
                       _enforceEarlierOutcome = v == true)
                   : null,
@@ -289,6 +380,32 @@ class _MultiActTrialPageState extends State<MultiActTrialPage> {
               ),
             ],
             const SizedBox(height: 10),
+            OutlinedButton.icon(
+              key: const Key('multiact-trial-optional-gameplay'),
+              onPressed: valid && _reviewed && _privateFiction &&
+                  !_enforceEarlierOutcome ? _chooseGameplay : null,
+              icon: const Icon(Icons.inventory_2_outlined),
+              label: const Text('Добавить предметы и знания '
+                  '(необязательный запрос ИИ)'),
+            ),
+            const Text('Для одного запроса используются максимум '
+                'шесть проверенных отрывков. '
+                'Это НЕ анализ всего произведения.'),
+            if (_gameplaySelection != null)
+              ListTile(
+                title: Text('Выбрано игровых эффектов: ' +
+                    _gameplaySelection!.selectedUserReviewNotes.length
+                        .toString()),
+                subtitle: const Text('Не канон; влияние на игру '
+                    'проверяется перед созданием нового мира.'),
+                trailing: IconButton(
+                  key: const Key('multiact-trial-clear-gameplay'),
+                  tooltip: 'Убрать выбранные игровые эффекты',
+                  onPressed: _working ? null : () => setState(
+                      () => _gameplaySelection = null),
+                  icon: const Icon(Icons.close),
+                ),
+              ),
             FilledButton.icon(
               key: const Key('multiact-trial-start'),
               onPressed: valid && _reviewed && _privateFiction
