@@ -8,6 +8,8 @@ abstract class StoryRuntimeAdapter {
   List<WorldEvent> get events;
   bool get isTerminal;
   String get sceneId;
+  /// The exact current scene's verified narrative text, without UI rendering.
+  String get sceneText;
   List<RuntimeChoice> get choices;
 
   DecisionResult choose({
@@ -77,6 +79,9 @@ class StoryEngineCoordinator implements StoryRuntimeAdapter {
 
   @override
   String get sceneId => state.sceneId;
+
+  @override
+  String get sceneText => blueprint.scenes[sceneId]!.text;
 
   @override
   List<RuntimeChoice> get choices {
