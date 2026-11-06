@@ -123,6 +123,7 @@ class NpcSocialRulebook {
       presence['${witness.sceneId}|${witness.actorId}'] = witness.mode;
     }
     final seen = <String>{};
+    final usedWitnesses = <String>{};
     for (final rule in rules) {
       jsonId(rule.memoryId, 'npc.memory_id');
       jsonId(rule.sceneId, 'npc.scene_id');
@@ -169,11 +170,17 @@ class NpcSocialRulebook {
           throw const FormatException(
               'Second-hand rumor is not eyewitness proof or earned trust');
         }
+        usedWitnesses.add('${rule.sceneId}|${rule.observerId}');
       }
       final identity = '${rule.observerId}|${rule.memoryId}';
       if (!seen.add(identity)) {
         throw const FormatException('Duplicate NPC event memory identity');
       }
+    }
+    if (requireReviewedWitnesses &&
+        (presence.length != usedWitnesses.length ||
+         !usedWitnesses.containsAll(presence.keys))) {
+      throw const FormatException('Orphaned NPC witness evidence');
     }
   }
 
