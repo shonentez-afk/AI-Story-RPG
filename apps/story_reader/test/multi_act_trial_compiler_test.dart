@@ -20,6 +20,9 @@ import 'package:ai_story_reader/zai_whole_book_event_outline.dart';
 import 'package:bookworld_format/bookworld_format.dart';
 import 'package:campaign_manager/campaign_manager.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter/material.dart';
+import 'package:ai_story_reader/multi_act_trial_page.dart';
+import 'package:ai_story_reader/world_library_gateway.dart';
 
 BookSourceIndex _index({String suffix = ''}) =>
     BookSourceIndexer.index(ImportedBook(
@@ -508,6 +511,61 @@ void main() {
         from: _index(suffix: ' другой перевод')),
         throwsFormatException);
     expect(() => build([accepted, []]), throwsFormatException);
+  });
+
+
+  testWidgets('multi-act item proposal UI sends no request without consent; '
+      'extra cross-act rule disables incompatible choice preparation',
+      (tester) async {
+    final index = _index();
+    final book = await _analyze(index);
+    final input = _draft(index, book);
+    await tester.pumpWidget(MaterialApp(
+      home: MultiActTrialPage(
+        index: index, book: book, bookMap: input.map, draft: input.draft,
+        gateway: const DeviceWorldLibraryGateway(background: false),
+      ),
+    ));
+    final itemButton = find.byKey(
+        const Key('multiact-trial-optional-gameplay'));
+    expect(itemButton, findsOneWidget);
+    expect(tester.widget<OutlinedButton>(itemButton).onPressed, isNull);
+
+    final quotes = find.byKey(
+        const Key('multiact-trial-source-reviewed'));
+    await tester.ensureVisible(quotes);
+    await tester.tap(quotes);
+    await tester.pumpAndSettle();
+    final fiction = find.byKey(
+        const Key('multiact-trial-private-fiction'));
+    await tester.ensureVisible(fiction);
+    await tester.tap(fiction);
+    await tester.pumpAndSettle();
+
+    final crossAct = find.byKey(
+        const Key('multiact-trial-consequence'));
+    await tester.ensureVisible(crossAct);
+    await tester.tap(crossAct);
+    await tester.pumpAndSettle();
+    expect(tester.widget<OutlinedButton>(itemButton).onPressed, isNull);
+
+    await tester.ensureVisible(crossAct);
+    await tester.tap(crossAct);
+    await tester.pumpAndSettle();
+    expect(tester.widget<OutlinedButton>(itemButton).onPressed, isNotNull);
+    await tester.ensureVisible(itemButton);
+    await tester.tap(itemButton);
+    await tester.pumpAndSettle();
+    expect(find.text('Предметы и знания из книги'), findsOneWidget);
+    final request = find.byKey(
+        const Key('gameplay-source-request'));
+    expect(request, findsOneWidget);
+    expect(tester.widget<FilledButton>(request).onPressed, isNull);
+
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('multiact-trial-start')), findsOneWidget);
+    expect(find.byKey(const Key('multiact-trial-clear-gameplay')), findsNothing);
   });
 
 }
