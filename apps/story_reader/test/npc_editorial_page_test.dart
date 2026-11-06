@@ -149,6 +149,70 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('complete NPC card retains permanent ID through edit, '
+      'rename and reopening the book', (tester) async {
+    await tester.pumpWidget(screen());
+    await tester.pumpAndSettle();
+    await saveProfile(tester);
+    final first = NpcEditorialNotebook.decode(
+        index, dossiers, graph, catalog, editorial,
+        (await noteStore.read(index.sourceFingerprint))!);
+    final id = first.profiles.single.characterId;
+    expect(id, matches(RegExp(r'^npc_[a-f0-9]{32}$')));
+
+    final open = find.byKey(const Key('npc-edit-full-card'));
+    await tester.ensureVisible(open);
+    await tester.pumpAndSettle();
+    await tester.tap(open);
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Постоянный character_id: ' + id!),
+        findsOneWidget);
+    await tester.enterText(
+        find.byKey(const Key('npc-card-aliases')), 'Волк, Старый страж');
+    await tester.enterText(
+        find.byKey(const Key('npc-card-role')), 'Хранитель ворот');
+    final speech = find.byKey(const Key('npc-card-speech'));
+    await tester.ensureVisible(speech);
+    await tester.enterText(speech, 'Говорит медленно и коротко');
+    await tester.tap(find.byKey(const Key('npc-card-save')));
+    await tester.pumpAndSettle();
+    var stored = NpcEditorialNotebook.decode(
+        index, dossiers, graph, catalog, editorial,
+        (await noteStore.read(index.sourceFingerprint))!);
+    expect(stored.profiles.single.characterId, id);
+    expect(stored.profiles.single.card!.aliases, ['Волк', 'Старый страж']);
+    expect(stored.profiles.single.card!.speechStyle,
+        'Говорит медленно и коротко');
+    expect(stored.profiles.single.card!.role, 'Хранитель ворот');
+
+    await tester.ensureVisible(find.byKey(const Key('npc-edit-name')));
+    await tester.tap(find.byKey(const Key('npc-edit-name')));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+        find.byKey(const Key('npc-name-input')), 'Другой псевдоним');
+    await tester.tap(find.byKey(const Key('npc-confirm-name')));
+    await tester.pumpAndSettle();
+    stored = NpcEditorialNotebook.decode(
+        index, dossiers, graph, catalog, editorial,
+        (await noteStore.read(index.sourceFingerprint))!);
+    expect(stored.profiles.single.characterId, id);
+    expect(stored.profiles.single.displayName, 'Другой псевдоним');
+
+    await tester.pumpWidget(const MaterialApp(home: SizedBox()));
+    await tester.pumpAndSettle();
+    await tester.pumpWidget(screen());
+    await tester.pumpAndSettle();
+    final select = find.byKey(Key('npc-select-' + artem.id));
+    await tester.ensureVisible(select);
+    await tester.tap(select);
+    await tester.pumpAndSettle();
+    final showId = find.byKey(const Key('npc-character-id'));
+    await tester.ensureVisible(showId);
+    expect(tester.widget<SelectableText>(showId).data, contains(id));
+    expect(find.text('Роль: Хранитель ворот'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('failed write does not publish optimistic NPC profile',
       (tester) async {
     await tester.pumpWidget(screen());

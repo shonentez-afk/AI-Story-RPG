@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'book_isolate_workers.dart';
 import 'book_source_index.dart';
 import 'npc_editorial_notebook.dart';
+import 'npc_character_card.dart';
 import 'npc_knowledge_rules_page.dart';
 import 'npc_continuity_audit.dart';
 import 'npc_continuity_panel.dart';
@@ -210,7 +211,7 @@ class _NpcEditorialPageState extends State<NpcEditorialPage> {
       setState(() {
         _notebook = next;
         _continuity = audit;
-        _notice = 'Заметки NPC сохранены только для этой книги.';
+        _notice = 'Карточка NPC сохранена только для этой книги.';
       });
       return true;
     } catch (error) {
@@ -309,12 +310,114 @@ class _NpcEditorialPageState extends State<NpcEditorialPage> {
       ),
     );
     if (!mounted || name == null) return;
-    await _persist(_notebook!.putProfile(NpcDraftProfile(
-      dossierId: initial.dossierId,
-      mentionIds: initial.mentionIds,
-      displayName: name,
-      notes: initial.notes,
-    )));
+    await _persist(_notebook!.putProfile(
+        initial.copyWith(displayName: name)));
+  }
+
+  /// Editing presentation cannot rotate the opaque character ID or grant
+  /// runtime knowledge. The same existing atomic NPC checkpoint is used.
+  Future<void> _editCharacterCard(SourceCharacterDossier dossier) async {
+    if (_busy || _notebook == null) return;
+    final profile = _profileFor(dossier.id);
+    if (profile == null) return;
+    final old = profile.card ?? NpcCharacterCard.fresh();
+    var aliases = old.aliases.join(', ');
+    var role = old.role;
+    var biography = old.biography;
+    var appearance = old.appearance;
+    var personality = old.personality;
+    var speechStyle = old.speechStyle;
+    var motivation = old.motivation;
+    var goals = old.goals;
+    var portrait = old.portraitAssetId;
+    Widget field(String key, String label, String value,
+        ValueChanged<String> update, {int maxLength = 400, int maxLines = 2}) =>
+        Padding(
+          padding: const EdgeInsets.only(bottom: 10),
+          child: TextFormField(
+            key: Key(key),
+            initialValue: value,
+            maxLength: maxLength,
+            maxLines: maxLines,
+            onChanged: update,
+            decoration: InputDecoration(
+              labelText: label, border: const OutlineInputBorder(),
+            ),
+          ),
+        );
+    final next = await showDialog<NpcCharacterCard>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Полная карточка NPC'),
+        content: SizedBox(
+          width: 560,
+          child: SingleChildScrollView(child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Постоянный character_id: ' + old.characterId,
+                  key: const Key('npc-character-id-editor')),
+              const SizedBox(height: 8),
+              const Text('Личная адаптация, не доказанный канон. '
+                  'Сведения не отправляются ИИ и не наделяют NPC '
+                  'игровыми знаниями или предметами.'),
+              const SizedBox(height: 10),
+              field('npc-card-aliases', 'Псевдонимы через запятую',
+                  aliases, (v) => aliases = v, maxLength: 500),
+              field('npc-card-role', 'Роль в адаптации',
+                  role, (v) => role = v, maxLength: 160),
+              field('npc-card-biography', 'Биография и прошлое',
+                  biography, (v) => biography = v, maxLength: 1200,
+                  maxLines: 3),
+              field('npc-card-appearance', 'Внешность и приметы',
+                  appearance, (v) => appearance = v, maxLength: 600),
+              field('npc-card-personality', 'Характер и привычки',
+                  personality, (v) => personality = v, maxLength: 600),
+              field('npc-card-speech', 'Манера речи',
+                  speechStyle, (v) => speechStyle = v),
+              field('npc-card-motivation', 'Мотивация',
+                  motivation, (v) => motivation = v, maxLength: 600),
+              field('npc-card-goals', 'Цели и ограничения',
+                  goals, (v) => goals = v, maxLength: 600),
+              field('npc-card-portrait', 'Ключ локального портрета',
+                  portrait, (v) => portrait = v, maxLength: 64),
+              const Text('Связи с NPC и подтверждённые цитаты '
+                  'ведутся ниже как отдельные заметки. Игровые знания '
+                  'открываются только по проверенным правилам событий.'),
+            ],
+          )),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Отмена'),
+          ),
+          FilledButton(
+            key: const Key('npc-card-save'),
+            onPressed: () {
+              final names = aliases.split(',')
+                  .map((name) => name.trim())
+                  .where((name) => name.isNotEmpty)
+                  .toList();
+              Navigator.pop(ctx, old.copyWith(
+                aliases: names,
+                role: role.trim(),
+                biography: biography.trim(),
+                appearance: appearance.trim(),
+                personality: personality.trim(),
+                speechStyle: speechStyle.trim(),
+                motivation: motivation.trim(),
+                goals: goals.trim(),
+                portraitAssetId: portrait.trim(),
+              ));
+            },
+            child: const Text('Сохранить карточку'),
+          ),
+        ],
+      ),
+    );
+    if (!mounted || next == null) return;
+    await _persist(_notebook!.putProfile(profile.copyWith(card: next)));
   }
 
   Future<void> _removeProfile(SourceCharacterDossier dossier) async {
@@ -493,15 +596,10 @@ class _NpcEditorialPageState extends State<NpcEditorialPage> {
           NpcEditorialNotebook.groupDigest(_dossiers!.dossiers.firstWhere(
               (group) => group.id == proposal.targetId)),
     );
-    final updated = NpcDraftProfile(
-      dossierId: profile.dossierId,
-      mentionIds: profile.mentionIds,
-      displayName: profile.displayName,
-      notes: [
-        for (final old in profile.notes) if (old.id != note.id) old,
-        note,
-      ],
-    );
+    final updated = profile.copyWith(notes: [
+      for (final old in profile.notes) if (old.id != note.id) old,
+      note,
+    ]);
     await _persist(_notebook!.putProfile(updated));
   }
 
@@ -513,13 +611,9 @@ class _NpcEditorialPageState extends State<NpcEditorialPage> {
     if (!yes || !mounted) return;
     final profile = _profileFor(dossier.id);
     if (profile == null) return;
-    await _persist(_notebook!.putProfile(NpcDraftProfile(
-      dossierId: profile.dossierId, mentionIds: profile.mentionIds,
-      displayName: profile.displayName,
-      notes: [
-        for (final item in profile.notes) if (item.id != note.id) item,
-      ],
-    )));
+    await _persist(_notebook!.putProfile(profile.copyWith(notes: [
+      for (final item in profile.notes) if (item.id != note.id) item,
+    ])));
   }
 
   Widget _noteCard(SourceCharacterDossier dossier, NpcDraftNote note) {
@@ -595,8 +689,42 @@ class _NpcEditorialPageState extends State<NpcEditorialPage> {
             label: const Text('Создать авторскую карточку NPC'),
           )
         else ...[
-          Text('Имя адаптации: ${profile.displayName}'),
+          Text('Имя адаптации: ' + profile.displayName),
+          if (profile.characterId != null)
+            SelectableText('character_id: ' + profile.characterId!,
+                key: const Key('npc-character-id'))
+          else
+            const Text('Постоянный character_id ещё не создан. '
+                'Откройте полную карточку для назначения.'),
+          if (profile.card != null) ...[
+            if (profile.card!.aliases.isNotEmpty)
+              Text('Прозвища: ' + profile.card!.aliases.join(' / ')),
+            if (profile.card!.role.isNotEmpty)
+              Text('Роль: ' + profile.card!.role),
+            if (profile.card!.biography.isNotEmpty)
+              Text('Биография: ' + profile.card!.biography),
+            if (profile.card!.appearance.isNotEmpty)
+              Text('Внешность: ' + profile.card!.appearance),
+            if (profile.card!.personality.isNotEmpty)
+              Text('Характер: ' + profile.card!.personality),
+            if (profile.card!.speechStyle.isNotEmpty)
+              Text('Манера речи: ' + profile.card!.speechStyle),
+            if (profile.card!.motivation.isNotEmpty)
+              Text('Мотивация: ' + profile.card!.motivation),
+            if (profile.card!.goals.isNotEmpty)
+              Text('Цели: ' + profile.card!.goals),
+            if (profile.card!.portraitAssetId.isNotEmpty)
+              Text('Локальный портрет: ' + profile.card!.portraitAssetId),
+          ],
+          const Text('Текущие знания и отношения определяются '
+              'правилами игры, а не текстом этой карточки.'),
           Wrap(spacing: 8, runSpacing: 8, children: [
+            OutlinedButton.icon(
+              key: const Key('npc-edit-full-card'),
+              onPressed: _busy ? null : () => _editCharacterCard(dossier),
+              icon: const Icon(Icons.badge_outlined),
+              label: const Text('Полная карточка NPC'),
+            ),
             OutlinedButton.icon(
               key: const Key('npc-edit-name'),
               onPressed: _busy ? null : () => _editName(dossier),
