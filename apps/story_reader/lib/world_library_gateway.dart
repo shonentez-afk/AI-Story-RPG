@@ -90,6 +90,8 @@ class WorldGameView {
     this.statNames = const {}, this.factNames = const {},
     this.sceneNames = const {},
     this.sceneDialogueTurns,
+    this.npcItemOwners = const {},
+    this.npcDisplayNames = const {},
   });
 
   final String campaignId;
@@ -114,6 +116,10 @@ class WorldGameView {
   final Map<String, String> sceneNames;
   /// Exact, importer-verified speaker turns. Null for older worlds or prose.
   final List<RichDialogueTurn>? sceneDialogueTurns;
+  /// Item -> NPC character_id, derived only from verified committed events.
+  final Map<String, String> npcItemOwners;
+  /// Source-reviewed signed speakers where available; not guessed from names.
+  final Map<String, String> npcDisplayNames;
 }
 
 class WorldChoiceResult {
@@ -246,6 +252,23 @@ class DeviceWorldLibraryGateway implements WorldLibraryGateway {
     final stats = names('stat_names');
     final facts = names('fact_names');
     final scenes = names('scene_names');
+    final npcDisplayNames = <String, String>{};
+    final allReviewedSpeakers = presentation['scene_dialogue_knowledge'];
+    if (allReviewedSpeakers is Map<String, dynamic>) {
+      for (final turns in allReviewedSpeakers.values) {
+        if (turns is! List) continue;
+        for (final entry in turns) {
+          if (entry is! Map) continue;
+          final actor = entry['actor_id'];
+          final speaker = entry['speaker'];
+          if (actor is String && actor != 'player' &&
+              blueprint.actors.contains(actor) &&
+              speaker is String && speaker.trim().isNotEmpty) {
+            npcDisplayNames.putIfAbsent(actor, () => speaker);
+          }
+        }
+      }
+    }
     // No separate NPC identity or gameplay is trusted here. The v3 importer
     // has already compared each projection to the exact signed scene text.
     // Recheck the currently displayed scene so nothing else can override it.
@@ -277,7 +300,9 @@ class DeviceWorldLibraryGateway implements WorldLibraryGateway {
     // Journal is reconstructed from the committed, replay-verified event log.
     // Actual before/after deltas keep even idempotent effects from being
     // misrepresented as newly acquired items or facts.
-    final playback = presentation.isNotEmpty ? StoryWorld(blueprint) : null;
+    final playback = presentation.isNotEmpty
+        ? StoryWorld(blueprint, socialRulebook: socialRules)
+        : null;
     final journal = <WorldEventView>[];
     for (final event in coordinator.events) {
       final scene = blueprint.scenes[event.sceneId]!;
@@ -295,11 +320,21 @@ class DeviceWorldLibraryGateway implements WorldLibraryGateway {
           throw const FormatException('Журнал игры не совпадает с сохранением');
         }
         final after = playback.state;
+        final reviewedTransfers = socialRules?.itemTransfers.where(
+          (transfer) => transfer.sceneId == event.sceneId &&
+              transfer.choiceId == event.choiceId).toList() ??
+            <NpcItemTransfer>[];
         for (final id in (after.inventory.difference(before.inventory).toList()..sort())) {
-          changes.add('Получено: ' + (items[id] ?? id));
+          final returned = reviewedTransfers.where((transfer) =>
+              transfer.itemId == id && transfer.toActorId == 'player').toList();
+          changes.add((returned.isNotEmpty
+              ? 'Получено от персонажа: ' : 'Получено: ') + (items[id] ?? id));
         }
         for (final id in (before.inventory.difference(after.inventory).toList()..sort())) {
-          changes.add('Использовано: ' + (items[id] ?? id));
+          final given = reviewedTransfers.where((transfer) =>
+              transfer.itemId == id && transfer.fromActorId == 'player').toList();
+          changes.add((given.isNotEmpty
+              ? 'Передано персонажу: ' : 'Использовано: ') + (items[id] ?? id));
         }
         for (final id in (after.stats.keys.toList()..sort())) {
           final amount = after.stats[id]! - before.stats[id]!;
@@ -359,6 +394,14 @@ class DeviceWorldLibraryGateway implements WorldLibraryGateway {
       factNames: facts,
       sceneNames: scenes,
       sceneDialogueTurns: signedTurns,
+      npcItemOwners: Map.unmodifiable({
+        if (social != null)
+          for (final item in blueprint.items)
+            if (social.itemOwner(item) != null &&
+                social.itemOwner(item) != 'player')
+              item: social.itemOwner(item)!,
+      }),
+      npcDisplayNames: Map.unmodifiable(npcDisplayNames),
     );
   }
 
