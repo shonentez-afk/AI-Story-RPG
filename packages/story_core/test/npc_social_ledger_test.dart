@@ -42,6 +42,9 @@ void main() {
     expect(initial.memoriesFor('guard'), isEmpty);
     expect(initial.directedScore('guard', 'player'), 0);
     expect(initial.directedScore('player', 'guard'), 0);
+    expect(() => initial.memoriesFor('unknown_actor'), throwsFormatException);
+    expect(() => initial.directedScore('guard', 'unknown_actor'),
+        throwsFormatException);
 
     final blocked = world.apply(
       actionId: 'blocked', choiceId: 'enter_hall');
