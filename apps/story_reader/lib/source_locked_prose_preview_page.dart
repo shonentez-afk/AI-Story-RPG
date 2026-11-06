@@ -8,6 +8,7 @@ import 'zai_semantic_preview.dart';
 import 'zai_source_locked_prose_preview.dart';
 import 'reviewed_prose_scene_overlay.dart';
 import 'source_locked_prose_audit_page.dart';
+import 'source_locked_dialogue_speaker_audit.dart';
 
 /// Advanced, OPT-IN preview. Never generates in initState, never installs an
 /// AI scene into BookWorld, and never replaces an existing SQLite campaign.
@@ -221,6 +222,17 @@ class _SourceLockedProsePreviewPageState
     }
     final current = snapshot;
     final selected = current?.situation;
+    // Local, zero-POST warning about named speaker source presence.
+    // Never infer identity or NPC knowledge from matching labels alone.
+    final speakerAudit = _draft != null && selected != null &&
+            _draft!.situationId == selected.id &&
+            _draft!.sourceFingerprint == widget.book.sourceFingerprint
+        ? SourceLockedDialogueSpeakerAudit.inspect(
+            approvedSceneText: _draft!.text,
+            sceneChapterIndex: selected.chapterIndex,
+            sourceCharacters: widget.book.characters,
+          )
+        : null;
     return Scaffold(
       appBar: AppBar(title: const Text('Художественный черновик сцены')),
       body: SafeArea(
@@ -347,6 +359,24 @@ class _SourceLockedProsePreviewPageState
                     key: const Key('prose-scene-draft-text')),
                 const SizedBox(height: 8),
                 Text('Что остаётся проверить: ' + _draft!.uncertainty),
+                if (speakerAudit != null &&
+                    speakerAudit.hasStructuredDialogue) ...[
+                  const SizedBox(height: 12),
+                  const Text('Говорящие и источники — локальная проверка',
+                      key: Key('prose-scene-speaker-audit')),
+                  for (final evidence in speakerAudit.speakers)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 6),
+                      child: Text(evidence.speaker + ': ' +
+                          evidence.description,
+                          key: Key('prose-scene-speaker-' +
+                              evidence.speaker)),
+                    ),
+                  const SizedBox(height: 6),
+                  const Text('Наличие имени в книге не доказывает '
+                      'принадлежность реплики, знания персонажа или '
+                      'литературный канон. Примечания не передаются ИИ.'),
+                ],
                 const SizedBox(height: 8),
                 OutlinedButton.icon(
                   key: const Key('prose-scene-open-literary-audit'),
