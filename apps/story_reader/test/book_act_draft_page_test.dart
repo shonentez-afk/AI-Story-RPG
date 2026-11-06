@@ -113,10 +113,13 @@ void main() {
     await tester.pumpWidget(page());
     await tester.pumpAndSettle();
     expect(gateway.calls, 0);
+    final prepare = find.byKey(const Key('act-draft-prepare-remaining'));
+    // The progress label and CTA are below two cards in a lazy ListView.
+    await tester.scrollUntilVisible(prepare, 130,
+        scrollable: find.byType(Scrollable).first);
+    await tester.pumpAndSettle();
     expect(find.byKey(const Key('act-draft-batch-progress')),
         findsOneWidget);
-
-    final prepare = find.byKey(const Key('act-draft-prepare-remaining'));
     await tester.ensureVisible(prepare);
     await tester.pumpAndSettle();
     await tester.tap(prepare);
