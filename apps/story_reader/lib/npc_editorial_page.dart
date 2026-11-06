@@ -506,7 +506,10 @@ class _NpcEditorialPageState extends State<NpcEditorialPage> {
                   else
                     DropdownButtonFormField<String>(
                       key: const Key('npc-note-target'),
-                      initialValue: targetId,
+                      // Legacy source-only target may lack a permanent card;
+                      // never crash the picker or silently reassign it.
+                      initialValue: targets.any((d) => d.id == targetId)
+                          ? targetId : null,
                       isExpanded: true,
                       decoration: const InputDecoration(
                           labelText: 'Кому относится связь',
