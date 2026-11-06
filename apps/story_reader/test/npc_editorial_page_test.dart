@@ -158,87 +158,7 @@ void main() {
         index, dossiers, graph, catalog, editorial,
         (await noteStore.read(index.sourceFingerprint))!);
     final id = first.profiles.single.characterId;
-    expect(id, matches(RegExp(r'^npc_[a-f0-9]{32}
-      (tester) async {
-    await tester.pumpWidget(screen());
-    await tester.pumpAndSettle();
-    noteStore.failNextWrite = true;
-    await selectArtem(tester);
-    await tester.ensureVisible(find.byKey(const Key('npc-create-profile')));
-    await tester.tap(find.byKey(const Key('npc-create-profile')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('npc-confirm-name')));
-    await tester.pumpAndSettle();
-    expect(find.textContaining('Изменение не сохранено'), findsOneWidget);
-    expect(await noteStore.read(index.sourceFingerprint), isNull);
-    expect(find.byKey(const Key('npc-create-profile')), findsOneWidget);
-    expect(tester.takeException(), isNull);
-  });
-
-  testWidgets('stale SAME decision blocks old NPC edits without erasing data',
-      (tester) async {
-    await tester.pumpWidget(screen());
-    await tester.pumpAndSettle();
-    await saveProfile(tester);
-    final raw = (await noteStore.read(index.sourceFingerprint))!;
-    final alias = relations.hints.firstWhere((edge) =>
-        edge.kind == IdentityHintKind.explicitAlias &&
-        (edge.firstId == artem.id || edge.secondId == artem.id));
-    final decided = relations.decide(
-        index, graph, alias.id, IdentityDecision.same);
-    await relationStore.write(index.sourceFingerprint, decided.encode());
-    await tester.pumpWidget(const MaterialApp(home: SizedBox()));
-    await tester.pumpAndSettle();
-    await tester.pumpWidget(screen());
-    await tester.pumpAndSettle();
-    expect(find.textContaining('Редактор NPC заблокирован'), findsOneWidget);
-    expect(find.byKey(const Key('npc-create-profile')), findsNothing);
-    expect(await noteStore.read(index.sourceFingerprint), raw);
-    expect(tester.takeException(), isNull);
-  });
-
-  testWidgets('corrupt record stays intact until explicit confirmed reset',
-      (tester) async {
-    await noteStore.write(index.sourceFingerprint, '{"invalid":true}');
-    await tester.pumpWidget(screen());
-    await tester.pumpAndSettle();
-    expect(find.byKey(const Key('npc-retry-load')), findsOneWidget);
-    expect(find.textContaining('Редактор NPC заблокирован'), findsOneWidget);
-    await tester.tap(find.byKey(const Key('npc-reset-only')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Отмена'));
-    await tester.pumpAndSettle();
-    expect(await noteStore.read(index.sourceFingerprint), '{"invalid":true}');
-    await tester.tap(find.byKey(const Key('npc-reset-only')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Подтвердить'));
-    await tester.pumpAndSettle();
-    expect(await noteStore.read(index.sourceFingerprint), isNull);
-    expect(find.byKey(const Key('npc-search')), findsOneWidget);
-    expect(tester.takeException(), isNull);
-  });
-  testWidgets('broken independent scene draft warns without erasing NPC',
-      (tester) async {
-    final initial = NpcEditorialNotebook.empty(index).putProfile(
-        NpcEditorialNotebook.freshProfile(artem));
-    final raw = initial.encode();
-    await noteStore.write(index.sourceFingerprint, raw);
-    await multiStore.write(index.sourceFingerprint, '{"broken":true}');
-    await tester.pumpWidget(screen());
-    await tester.pumpAndSettle();
-    expect(find.byKey(const Key('npc-search')), findsOneWidget);
-    await tester.ensureVisible(
-        find.byKey(const Key('npc-continuity-panel')));
-    await tester.tap(find.byKey(const Key('npc-continuity-panel')));
-    await tester.pumpAndSettle();
-    expect(find.textContaining('Черновик сцен не проверен'), findsOneWidget);
-    expect(await noteStore.read(index.sourceFingerprint), raw);
-    expect(await multiStore.read(index.sourceFingerprint), '{"broken":true}');
-    expect(tester.takeException(), isNull);
-  });
-
-}
-)));
+    expect(id, matches(RegExp(r'^npc_[a-f0-9]{32}$')));
 
     final open = find.byKey(const Key('npc-edit-full-card'));
     await tester.ensureVisible(open);
@@ -288,8 +208,7 @@ void main() {
     await tester.pumpAndSettle();
     final showId = find.byKey(const Key('npc-character-id'));
     await tester.ensureVisible(showId);
-    expect(tester.widget<SelectableText>(showId).data,
-        contains(id));
+    expect(tester.widget<SelectableText>(showId).data, contains(id));
     expect(find.text('Роль: Хранитель ворот'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
