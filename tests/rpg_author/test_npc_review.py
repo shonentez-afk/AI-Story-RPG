@@ -110,6 +110,7 @@ class ReviewedSocialV5Tests(unittest.TestCase):
             self.assertEqual(blueprint["initial_state"]["knowledge"][ACTOR], [])
             self.assertEqual(prov["npc_social"]["life_transitions"][0]["next_state"], "absent")
         plain_overlay = deepcopy(self.overlay)
+        del plain_overlay["facts"][FACT]
         plain_overlay["choices"]["take_rope"]["effects"] = [
             effect for effect in plain_overlay["choices"]["take_rope"]["effects"]
             if effect.get("actor", "player") == "player"]
