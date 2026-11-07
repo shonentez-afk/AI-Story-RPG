@@ -21,6 +21,24 @@ typedef NoteOption = ({
 });
 typedef ChoiceOption = ({DraftScene scene, DraftChoice choice});
 
+/// Optional item review in the EXISTING NPC build dialog (no second editor).
+/// Typed gameplay IDs are derived internally from source+name+character_id.
+class _BookItemReviewDraft {
+  _BookItemReviewDraft(this.index);
+  final int index;
+  String name = '';
+  String description = '';
+  String? actorId;
+  String? acquireChoice;
+  String? acquireQuote;
+  String? giveChoice;
+  String? giveQuote;
+  String? returnChoice;
+  String? returnQuote;
+  bool witnessed = false;
+}
+
+
 /// Manual, private rule authoring. No implicit AI consent or note publication.
 class NpcKnowledgeRulesPage extends StatefulWidget {
   const NpcKnowledgeRulesPage({
@@ -593,13 +611,36 @@ class _NpcKnowledgeRulesPageState extends State<NpcKnowledgeRulesPage> {
       final prerequisites = <String, String>{};
       final socialMemoryForTurn = <String, String>{};
       final socialTrustForTurn = <String, int>{};
+      final itemDrafts = <_BookItemReviewDraft>[];
+      var nextItemIndex = 1;
       var consent = false;
       final accepted = await showDialog<bool>(
         context: context,
         builder: (dialog) => StatefulBuilder(builder: (ctx, update) {
           final targets = choiceGateTarget.values
               .where((target) => target != 'none_required').toList();
-          final ready = consent &&
+          bool citedChoice(String? choiceId, String? quote) =>
+              choiceId != null && quote != null &&
+              gateCandidates[choiceId]?.quotes.any(
+                  (candidate) => candidate.digest == quote) == true;
+          final namedItems = itemDrafts.map((d) => d.name.trim()).toList();
+          final itemsReady = itemDrafts.length <= 8 &&
+              namedItems.length == namedItems.toSet().length &&
+              itemDrafts.every((d) =>
+                d.witnessed &&
+                d.name.trim().length >= 2 && d.name.trim().length <= 90 &&
+                d.description.trim().isNotEmpty &&
+                d.description.trim().length <= 240 &&
+                d.actorId != null && profiles.containsKey(d.actorId) &&
+                citedChoice(d.acquireChoice, d.acquireQuote) &&
+                citedChoice(d.giveChoice, d.giveQuote) &&
+                d.acquireChoice != d.giveChoice &&
+                d.returnChoice != null &&
+                (d.returnChoice == 'none_required' ||
+                 (d.returnChoice != d.giveChoice &&
+                  d.returnChoice != d.acquireChoice &&
+                  citedChoice(d.returnChoice, d.returnQuote))));
+          final ready = consent && itemsReady &&
               quotes.length == grants.length &&
               targets.length == targets.toSet().length &&
               choiceGateTarget.entries.every((entry) =>
@@ -954,6 +995,236 @@ class _NpcKnowledgeRulesPageState extends State<NpcKnowledgeRulesPage> {
                     ),
                     const SizedBox(height: 8),
                   ],
+                  const Divider(height: 24),
+                  const Text('Предметы истории (необязательно)',
+                      style: TextStyle(fontWeight: FontWeight.bold)),
+                  const Text('Добавляйте только реальные предметы книги. '
+                      'Укажите, каким выбором герой получает вещь, '
+                      'каким передаёт NPC и, при наличии, каким получает '
+                      'обратно. Для каждого действия нужна отдельная '
+                      'подтверждённая цитата. ИИ предметы не выдумывает.'),
+                  const SizedBox(height: 8),
+                  for (final item in itemDrafts) ...[
+                    const Divider(),
+                    Row(children: [
+                      Expanded(child: Text('Предмет ' +
+                          item.index.toString())),
+                      IconButton(
+                        key: Key('npc-item-remove-' +
+                            item.index.toString()),
+                        tooltip: 'Убрать предмет из сборки',
+                        icon: const Icon(Icons.close),
+                        onPressed: () => update(() =>
+                            itemDrafts.remove(item)),
+                      ),
+                    ]),
+                    TextFormField(
+                      key: Key('npc-item-name-' + item.index.toString()),
+                      initialValue: item.name,
+                      maxLength: 90,
+                      decoration: const InputDecoration(
+                        labelText: 'Название предмета из книги',
+                        border: OutlineInputBorder()),
+                      onChanged: (value) => update(() => item.name = value),
+                    ),
+                    TextFormField(
+                      key: Key('npc-item-description-' +
+                          item.index.toString()),
+                      initialValue: item.description,
+                      maxLength: 240,
+                      decoration: const InputDecoration(
+                        labelText: 'Краткое описание предмета',
+                        border: OutlineInputBorder()),
+                      onChanged: (value) =>
+                          update(() => item.description = value),
+                    ),
+                    DropdownButtonFormField<String>(
+                      key: Key('npc-item-actor-' + item.index.toString()),
+                      initialValue: item.actorId,
+                      isExpanded: true,
+                      decoration: const InputDecoration(
+                        labelText: 'Кому герой может передать предмет',
+                        border: OutlineInputBorder()),
+                      items: [
+                        for (final entry in profiles.entries)
+                          DropdownMenuItem(
+                            value: entry.key,
+                            child: Text(entry.value,
+                                overflow: TextOverflow.ellipsis)),
+                      ],
+                      onChanged: (value) {
+                        if (value != null) update(() =>
+                            item.actorId = value);
+                      },
+                    ),
+                    const SizedBox(height: 8),
+                    DropdownButtonFormField<String>(
+                      key: Key('npc-item-acquire-' + item.index.toString()),
+                      initialValue: item.acquireChoice,
+                      isExpanded: true,
+                      decoration: const InputDecoration(
+                        labelText: 'Решение: герой получает предмет',
+                        border: OutlineInputBorder()),
+                      items: [
+                        for (final entry in gateCandidates.entries)
+                          DropdownMenuItem(
+                            value: entry.key,
+                            child: Text(entry.value.label,
+                                overflow: TextOverflow.ellipsis)),
+                      ],
+                      onChanged: (value) {
+                        if (value != null) update(() {
+                          item.acquireChoice = value;
+                          item.acquireQuote = null;
+                        });
+                      },
+                    ),
+                    if (item.acquireChoice != null) ...[
+                      const SizedBox(height: 6),
+                      DropdownButtonFormField<String>(
+                        key: Key('npc-item-acquire-quote-' +
+                            item.index.toString()),
+                        initialValue: item.acquireQuote,
+                        isExpanded: true,
+                        decoration: const InputDecoration(
+                          labelText: 'Цитата: откуда предмет у героя',
+                          border: OutlineInputBorder()),
+                        items: [
+                          for (final quote in
+                              gateCandidates[item.acquireChoice]!.quotes)
+                            DropdownMenuItem(
+                              value: quote.digest,
+                              child: Text(quote.caption,
+                                  overflow: TextOverflow.ellipsis)),
+                        ],
+                        onChanged: (value) {
+                          if (value != null) update(() =>
+                              item.acquireQuote = value);
+                        },
+                      ),
+                    ],
+                    const SizedBox(height: 8),
+                    DropdownButtonFormField<String>(
+                      key: Key('npc-item-give-' + item.index.toString()),
+                      initialValue: item.giveChoice,
+                      isExpanded: true,
+                      decoration: const InputDecoration(
+                        labelText: 'Решение: герой передаёт вещь NPC',
+                        border: OutlineInputBorder()),
+                      items: [
+                        for (final entry in gateCandidates.entries)
+                          if (entry.key != item.acquireChoice)
+                            DropdownMenuItem(
+                              value: entry.key,
+                              child: Text(entry.value.label,
+                                  overflow: TextOverflow.ellipsis)),
+                      ],
+                      onChanged: (value) {
+                        if (value != null) update(() {
+                          item.giveChoice = value;
+                          item.giveQuote = null;
+                        });
+                      },
+                    ),
+                    if (item.giveChoice != null) ...[
+                      const SizedBox(height: 6),
+                      DropdownButtonFormField<String>(
+                        key: Key('npc-item-give-quote-' +
+                            item.index.toString()),
+                        initialValue: item.giveQuote,
+                        isExpanded: true,
+                        decoration: const InputDecoration(
+                          labelText: 'Цитата: NPC получает вещь',
+                          border: OutlineInputBorder()),
+                        items: [
+                          for (final quote in
+                              gateCandidates[item.giveChoice]!.quotes)
+                            DropdownMenuItem(
+                              value: quote.digest,
+                              child: Text(quote.caption,
+                                  overflow: TextOverflow.ellipsis)),
+                        ],
+                        onChanged: (value) {
+                          if (value != null) update(() =>
+                              item.giveQuote = value);
+                        },
+                      ),
+                    ],
+                    const SizedBox(height: 8),
+                    DropdownButtonFormField<String>(
+                      key: Key('npc-item-return-' + item.index.toString()),
+                      initialValue: item.returnChoice,
+                      isExpanded: true,
+                      decoration: const InputDecoration(
+                        labelText: 'Решение: NPC возвращает вещь',
+                        border: OutlineInputBorder()),
+                      items: [
+                        const DropdownMenuItem(
+                          value: 'none_required',
+                          child: Text('Без возврата')),
+                        for (final entry in gateCandidates.entries)
+                          if (entry.key != item.acquireChoice &&
+                              entry.key != item.giveChoice)
+                            DropdownMenuItem(
+                              value: entry.key,
+                              child: Text(entry.value.label,
+                                  overflow: TextOverflow.ellipsis)),
+                      ],
+                      onChanged: (value) {
+                        if (value != null) update(() {
+                          item.returnChoice = value;
+                          item.returnQuote = null;
+                        });
+                      },
+                    ),
+                    if (item.returnChoice != null &&
+                        item.returnChoice != 'none_required') ...[
+                      const SizedBox(height: 6),
+                      DropdownButtonFormField<String>(
+                        key: Key('npc-item-return-quote-' +
+                            item.index.toString()),
+                        initialValue: item.returnQuote,
+                        isExpanded: true,
+                        decoration: const InputDecoration(
+                          labelText: 'Цитата: NPC возвращает вещь',
+                          border: OutlineInputBorder()),
+                        items: [
+                          for (final quote in
+                              gateCandidates[item.returnChoice]!.quotes)
+                            DropdownMenuItem(
+                              value: quote.digest,
+                              child: Text(quote.caption,
+                                  overflow: TextOverflow.ellipsis)),
+                        ],
+                        onChanged: (value) {
+                          if (value != null) update(() =>
+                              item.returnQuote = value);
+                        },
+                      ),
+                    ],
+                    CheckboxListTile(
+                      key: Key('npc-item-witness-' +
+                          item.index.toString()),
+                      value: item.witnessed,
+                      controlAffinity: ListTileControlAffinity.leading,
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text('Проверено: выбранный NPC лично '
+                          'присутствует при передаче и возврате вещи'),
+                      subtitle: const Text('Нужна проверка по тексту; '
+                          'совпадение имён не доказывает присутствие.'),
+                      onChanged: (value) => update(() =>
+                          item.witnessed = value == true),
+                    ),
+                  ],
+                  OutlinedButton.icon(
+                    key: const Key('npc-item-add'),
+                    icon: const Icon(Icons.add),
+                    onPressed: itemDrafts.length >= 8 ? null : () =>
+                        update(() => itemDrafts.add(
+                            _BookItemReviewDraft(nextItemIndex++))),
+                    label: const Text('Добавить предмет из книги'),
+                  ),
+                  const SizedBox(height: 12),
                   CheckboxListTile(
                     key: const Key('npc-build-consent'),
                     contentPadding: EdgeInsets.zero,
@@ -1086,6 +1357,25 @@ class _NpcKnowledgeRulesPageState extends State<NpcKnowledgeRulesPage> {
         if (reviewedChoiceGates.isNotEmpty)
           'choice_gates': reviewedChoiceGates,
       };
+      final reviewedItems = <Map<String, dynamic>>[
+        for (final item in itemDrafts)
+          {
+            'item_name': item.name.trim(),
+            'item_description': item.description.trim(),
+            'actor_id': item.actorId,
+            'acquire_choice_id': item.acquireChoice,
+            'acquire_quote_sha256': item.acquireQuote,
+            'give_choice_id': item.giveChoice,
+            'give_quote_sha256': item.giveQuote,
+            'return_choice_id':
+                item.returnChoice == 'none_required'
+                    ? null : item.returnChoice,
+            'return_quote_sha256':
+                item.returnChoice == 'none_required'
+                    ? null : item.returnQuote,
+            'personally_witnessed': item.witnessed,
+          },
+      ];
       final bytes = await compileReviewedNpcRichPrivateBookworldInWorker(
         widget.index, widget.graph, widget.catalog, widget.editorial,
         widget.scenario,
@@ -1094,6 +1384,7 @@ class _NpcKnowledgeRulesPageState extends State<NpcKnowledgeRulesPage> {
         sourceQuoteByRuleId: quotes,
         userConfirmed: true,
         reviewedNpcSocial: socialReview,
+        reviewedBookItems: reviewedItems,
         reviewedDialogueTurns: spoken,
         reviewedSpeakerBindings: verifiedSpeakers,
       );
