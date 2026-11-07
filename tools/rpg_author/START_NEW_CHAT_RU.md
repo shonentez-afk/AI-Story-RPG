@@ -1,3 +1,52 @@
+# AI Story RPG — АКТУАЛЬНЫЙ HANDOFF внешнего автора E6f
+
+**Дата:** 7 ноября 2026. **Читать прежде исторических блоков ниже.** Единственная текущая ветка внешнего Python автора: [feature/external-rpg-author-e6f-npc-social-v5-20261107](https://github.com/shonentez-afk/AI-Story-RPG/tree/feature/external-rpg-author-e6f-npc-social-v5-20261107). E6e и E6d — сохранённая история, **не продолжать их старые base refs как текущий код**.
+
+## 1. Базовая версия и подтверждённая совместимость
+
+- **Главная программа:** main SHA [81fb75b77f11b8f82cafa1e7604afa9fe9bbb678](https://github.com/shonentez-afk/AI-Story-RPG/commit/81fb75b77f11b8f82cafa1e7604afa9fe9bbb678). PR #132 **MERGED**: NPC social v1–v5 (свидетельства, память, доверие, choice gates, выдача/передача предметов, уход/возврат/гибель NPC, signed dialogues, SQLite replay). **.bworld по-прежнему format_version=3 с четырьмя ZIP entries**, npc_social_witness_v5 — расширение, не .bworld v5.
+- **Генератор:** версия **0.3.0a4**, проверенный исполняемый SHA **2d6b94e001d7e049af765ebb1ef7469b6b30a8bd**. [Exact-head GitHub Actions #42341605734](https://github.com/shonentez-afk/AI-Story-RPG/actions/runs/42341605734): **author-tests SUCCESS** и **dart-parity SUCCESS**, включая авторский NPC v5 архив, реальный Dart importer, SQLite restart/fork/portable save и предметную передачу с уходом NPC. Коммиты после этого SHA только документация с [skip ci]; не считать их новым отдельным кодовым CI.
+- **Проверенная инструкция по E6f:** [E6F_MAIN_NPC_SOCIAL_V5_COMPATIBILITY_RU_2026-11-07.md](E6F_MAIN_NPC_SOCIAL_V5_COMPATIBILITY_RU_2026-11-07.md). Она содержит поля приватного npc_review.json, source-locked правила и команды.
+- **Встроенный ChatGPT-навык НЕ обновлялся:** его bootstrap всё ещё прикреплён к E6d SHA 9849c22d18e2761b49766b0c213b4a3fb3fe053b (0.3.0a2). Никаких утверждений, что новое E6f автоматически загружается из установленного навыка. Отдельная процедура обновления только после проверки версии.
+- **PR #133** по полной книге и выбору роли был **OPEN DRAFT**, а не принятой частью main при последней проверке. Сверить HEAD перед дальнейшим кодом; только принятый контракт можно сделать новым pin.
+- **Граница:** этот чат пишет **только tools/rpg_author и tests/rpg_author** в отдельную feature branch. Из main/apps/packages/tools/bookworld/native CI только читать. Пользовательские FB2, контрольные точки, частные NPC review, авторские цитаты и API ключи **не в public GitHub**.
+
+## 2. Как изменён авторский процесс
+
+Старый полностью player-only E6e путь **не сломан**. Новое **необязательное** входное дополнение --npc-review = приватный source-bound review для стабильных character_id и exact actor-scoped NPC grants + social v1–v5. Authoring source, StoryPlan SHA, enrichment SHA связываются со всеми NPC-данными. Нельзя делать самостоятельный вывод о присутствии, вещах, secret, true-canon, жизни или доверии по нейросетевой реплике.
+
+Новые поддерживаемые пути:
+
+    python3 -m tools.rpg_author doctor
+    python3 -m tools.rpg_author build --project /private/project --enrichment /private/enrichment.json --npc-review /private/npc_review.json --output /private/game.bworld
+    python3 -m tools.rpg_author verify --input /private/game.bworld --attribution /private/game.attribution.json
+    python3 -m tools.rpg_author gameplay-audit --project /private/project --enrichment /private/enrichment.json --npc-review /private/npc_review.json --strict
+
+При закрытии игры с литературным отчётом и диалогами:
+
+    python3 -m tools.rpg_author finalize --project /private/project --enrichment /private/enrichment.json --npc-review /private/npc_review.json --review /private/review.json --output /private/game.bworld --dialogues /private/dialogues.json --question-inventory /private/question_inventory.json
+
+Если интерактивных вопросов **действительно** нет, --no-interactive-questions заменяет последние два аргумента. Не перезаписывать уже собранные файлы, не выводить из слова модели подтверждённый WorldEvent и не объявлять статус USER_READY без реальной книги и реальных устройств.
+
+## 3. Согласование с большим планом
+
+1. Главный нормативный план: [AI_STORY_RPG_COMPLETE_GAME_UNIFIED_SPEC_RU.md](AI_STORY_RPG_COMPLETE_GAME_UNIFIED_SPEC_RU.md) — конечная цель «полная книга → один готовый game.bworld → offline Android/Windows», сценарий, NPC, диалоги, визуал, редактор.
+2. Проверенные источники/архитектура: [ENGINE_BEST_PRACTICES_INTEGRATION_PLAN_RU_2026-11-07.md](ENGINE_BEST_PRACTICES_INTEGRATION_PLAN_RU_2026-11-07.md).
+3. Нормативная реализация трёх панелей: [GAME_PANELS_IMPLEMENTATION_PLAN_RU_2026-11-07.md](GAME_PANELS_IMPLEMENTATION_PLAN_RU_2026-11-07.md), ссылки [GAME_PANELS_REFERENCE_AUDIT_RU_2026-11-07.md](GAME_PANELS_REFERENCE_AUDIT_RU_2026-11-07.md). Свериться с PR #132: часть native item custody/NPC life уже реализована, но UI-P0 и полная игровая авторская адаптация не объявлены готовыми.
+4. Документ текущего кода: [E6F_MAIN_NPC_SOCIAL_V5_COMPATIBILITY_RU_2026-11-07.md](E6F_MAIN_NPC_SOCIAL_V5_COMPATIBILITY_RU_2026-11-07.md); историческая E6e финализация: [E6E_FINALIZATION_RU_2026-11-07.md](E6E_FINALIZATION_RU_2026-11-07.md).
+
+**Сохранять общую приоритетность:** P0 закончить реальную адаптацию полной книги; P0 вместе с основным чатом NPC social и UI с реальными сохранениями; P1 дополнительные quests/skills/vNext только при необходимости книги; P2 визуал, редактор, свободный ИИ после E2E. Не заводить микропиары по отдельным полям.
+
+## 4. Что делать после передачи
+
+- Перед новой правкой повторно проверить main/PR #133/contract hash. Следующую E6 синхронизацию делать по принятому exact main, не копировать/угадывать API из Draft. На contract_drift остановиться, а не обновлять SHA вслепую.
+- Для **настоящей** книги навык должен отдельно пройти полный анализ персонажей/событий/мест/предметов/обязательств, create source-linked NPC review с сохраняемыми character_id, мотивами и подтверждёнными фактами; собрать и независимо проверить две реальные сюжетные ветви (CANON/ALTER_FATE по принятым режимам), затем выполнить E6e/E6f finalization. Это ещё не завершено и не проверено физическими устройствами.
+- Старые E5 проекты отсутствуют; не разрабатывать миграцию. Приоритет — один рабочий game.bworld, а не ещё один план.
+
+---
+
+## ИСТОРИЧЕСКАЯ ПЕРЕДАЧА E6e/E6d — старые статусы могут быть неактуальны
+
 # AI Story RPG — актуальная передача нового чата (E6e + генеральный план)
 
 **Дата актуализации: 7 ноября 2026.** Для продолжения работ читать **этот верхний раздел**. Ниже после разделителя лежит история E6d/старых main-PR: её старые статусы OPEN DRAFT/CI_PENDING и указание «начать finalize» **не являются текущими задачами**.
