@@ -1,5 +1,15 @@
 # AI Story RPG — актуальный статус 2026-11-07
 
+## 2026-11-07 — проверка *всей игры* на достижимость финалов и тупики
+
+**Новый функциональный пакет в PR #133 ожидает exact-head CI.** Последний принятый код `5011b3515334a051b17feabce2067a92a217f85e`: [CI #950](https://github.com/shonentez-afk/AI-Story-RPG/actions/runs/42363370976) **SUCCESS** (Python, Dart, M1.7, 654 Flutter PASS / 2 SKIP, Windows и Android), [M0 #1035](https://github.com/shonentez-afk/AI-Story-RPG/actions/runs/42363370979) **SUCCESS**.
+
+**Новая задача реализована в коде, но ещё не принята CI:** `StoryCampaignCausalAudit.inspect` в чистом `story_core` обходит *реальные* `StoryWorld.apply` состояния всех игровых развилок, доказывает достижимые финалы и исполнимые выборы, находит nonterminal softlock с коротким хэшированным маршрутом и причинами заблокированных кнопок, различает `playable / blocked / inconclusive`. Старый NPC-поиск использует **тот же** ключ причинного состояния из `causal_state_signature.dart`. `CompiledCampaignCausalGate.verify` после строгого импорта rich-v3 подключён в короткий `StoryPlanTrialCompiler` и `MultiActTrialCompiler` **перед установкой**: неисполнимую или непроверенную игру нельзя объявить готовой. Новые engine и Flutter-тесты написаны. Только структура и правила, никакой оценки художественной истины и никаких изменений ZIP/schema/Python/E6d.
+
+Подробный контракт, испытания и ограничения: [docs/P0_WHOLE_CAMPAIGN_EXECUTABLE_ROUTES_RU_2026-11-07.md](docs/P0_WHOLE_CAMPAIGN_EXECUTABLE_ROUTES_RU_2026-11-07.md). **Дальше:** проверка source-event coverage и неразрывных сюжетных переходов всей книги, затем реальный end-to-end с двумя приватными русскими FB2 и GLM. Приёмка 1.0 issue #118 остаётся OPEN, PR #133 Draft, `main` не трогать.
+
+
+
 ## 2026-11-07 — P0 двигатель: реальные причинные маршруты NPC
 
 **Новый связанный пакет в PR #133 ожидает exact-HEAD CI; не объявлять PASS заранее.** Последний подтверждённый кодовый baseline `a45fa886`, [CI #949](https://github.com/shonentez-afk/AI-Story-RPG/actions/runs/42361497532) SUCCESS (654 Flutter PASS/2 SKIP, Python/Dart/M1.7/SQLite, Windows portable, Android APK), [M0 #1034](https://github.com/shonentez-afk/AI-Story-RPG/actions/runs/42361497406) SUCCESS.

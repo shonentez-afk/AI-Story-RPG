@@ -5,6 +5,7 @@ import 'bookwide_act_planner.dart';
 import 'bookwide_storyplan_composer.dart';
 import 'bookwide_source_encounters.dart';
 import 'branch_continuity_auditor.dart';
+import 'compiled_campaign_causal_gate.dart';
 import 'source_world_time_auditor.dart';
 import 'source_bound_bridge_auditor.dart';
 import 'cross_act_consequence_gate.dart';
@@ -433,6 +434,13 @@ class MultiActTrialCompiler {
       throw const FormatException(
           'Частный многоактовый пакет не прошёл независимую проверку.');
     }
+    // Final pass on the EXACT independently imported world, not on a
+    // convenient graph of StoryPlan situations. Reject reachable softlocks
+    // and structurally connected but impossible endings before installation.
+    CompiledCampaignCausalGate.verify(
+      blueprint: inspected.blueprint,
+      socialRules: inspected.npcSocialRulebook,
+    );
     return StoryPlanTrialCompilation(
       archive: archive,
       sourceFingerprint: index.sourceFingerprint,

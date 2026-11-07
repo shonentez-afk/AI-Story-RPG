@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'package:bookworld_format/bookworld_format.dart';
 
 import 'book_source_index.dart';
+import 'compiled_campaign_causal_gate.dart';
 import 'intermediate_story_blueprint.dart';
 import 'native_private_bookworld_compiler.dart';
 import 'narrative_book_model.dart';
@@ -217,6 +218,12 @@ class StoryPlanTrialCompiler {
       throw const FormatException(
           'Пакет пробной RPG не прошёл независимую проверку.');
     }
+    // Short trials must also be executable through actual core actions;
+    // a terminal shown by the draft graph is not automatically reachable.
+    CompiledCampaignCausalGate.verify(
+      blueprint: inspected.blueprint,
+      socialRules: inspected.npcSocialRulebook,
+    );
     return StoryPlanTrialCompilation(
       archive: archive,
       sourceFingerprint: index.sourceFingerprint,

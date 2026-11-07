@@ -1,4 +1,5 @@
 import 'blueprint.dart';
+import 'causal_state_signature.dart';
 import 'codec.dart';
 import 'engine.dart';
 import 'npc_social_ledger.dart';
@@ -105,66 +106,12 @@ class StoryCausalRouteAudit {
     final visited = <String>{};
     var head = 0;
     var limited = false;
-    // Time can be relevant only to explicit time conditions. Collapse
-    // monotonically increasing tick once all thresholds are passed.
-    final timeGates = [
-      for (final scene in blueprint.scenes.values)
-        for (final choice in scene.choices)
-          for (final condition in choice.conditions)
-            if (condition.op == 'tick_at_least') condition.amount!,
-    ];
-    final latestTimeGate = timeGates.isEmpty
-        ? 0 : timeGates.reduce((a, b) => a > b ? a : b);
-    final npcActors = blueprint.actors.where((actor) =>
-        actor != 'player').toList()..sort();
-    final itemIds = blueprint.items.toList()..sort();
-
-    String stateKey(StoryWorld world) {
-      final state = world.state;
-      final priorSeen = requiredPriorChoiceId != null &&
-          world.events.any((event) =>
-              event.choiceId == requiredPriorChoiceId);
-      Map<String, Object?>? socialState;
-      if (socialRulebook != null) {
-        final social = NpcSocialLedger.inspect(world, socialRulebook);
-        socialState = {
-          'memories': {
-            for (final actor in npcActors)
-              actor: [
-                for (final memory in social.memoriesFor(actor))
-                  memory.memoryId,
-              ]..sort(),
-          },
-          'trust': {
-            for (final actor in npcActors)
-              actor: social.directedScore(actor, 'player'),
-          },
-          'life': {
-            for (final actor in npcActors)
-              actor: social.lifeState(actor).name,
-          },
-          'custody': {
-            for (final item in itemIds) item: social.itemOwner(item),
-          },
-        };
-      }
-      return canonicalJson({
-        'scene': state.sceneId,
-        'time': latestTimeGate == 0
-            ? 0
-            : (state.tick > latestTimeGate ? latestTimeGate : state.tick),
-        'stats': state.stats,
-        'flags': state.flags,
-        'inventory': state.inventory.toList()..sort(),
-        'knowledge': {
-          for (final actor in blueprint.actors)
-            actor: (state.knowledge[actor] ?? const <String>{})
-                .toList()..sort(),
-        },
-        'prior': priorSeen,
-        if (socialState != null) 'social': socialState,
-      });
-    }
+    // Campaign and individual NPC proofs share identical game-state
+    // equivalence. Never merge routes on scene ID alone.
+    final signature = CausalStateSignature(blueprint, socialRulebook);
+    String stateKey(StoryWorld world) => signature.of(
+      world, requiredPriorChoiceId: requiredPriorChoiceId,
+    );
 
     visited.add(stateKey(start));
     while (head < queue.length) {
