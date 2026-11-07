@@ -182,16 +182,19 @@ Future<void> _reveal(WidgetTester tester, Finder target) async {
       reason: 'The intended control must be inside the real phone viewport');
 }
 
-/// Real tap and real isolate/file work. Completion is the expected visible
-/// result, NOT the absence of a lazily unbuilt/offscreen progress indicator.
+/// Let actual file/isolate work run AND advance the widget frame clock.
+/// A real-time delay alone does not drive a FakeAsync route animation.
+/// Completion requires the intended result; a progress indicator may be
+/// offscreen or intentionally animated beneath a confirmation dialog.
 Future<void> _tapLocalWork(WidgetTester tester, Finder target,
     {required bool Function() ready}) async {
   await _reveal(tester, target);
   final completed = await tester.runAsync<bool>(() async {
     await tester.tap(target);
+    await tester.pump(); // Start any route ticker before advancing its clock.
     for (var i = 0; i < 400; i++) {
       await Future<void>.delayed(const Duration(milliseconds: 20));
-      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 20));
       if (ready()) return true;
     }
     return false;
@@ -408,15 +411,23 @@ void main() {
     await _reveal(tester, consent);
     expect(tester.widget<CheckboxListTile>(consent).value, false);
     expect(tester.widget<FilledButton>(find.byKey(const Key('npc-consequences-accept'))).onPressed, isNull);
-    final cancel = find.text('Отмена').last;
-    await _reveal(tester, cancel);
-    await tester.tap(cancel);
-    await tester.pump(const Duration(milliseconds: 300));
+    final cancel = find.descendant(of: find.byType(AlertDialog),
+        matching: find.widgetWithText(TextButton, 'Отмена'));
+    await _tapLocalWork(tester, cancel,
+      ready: () => find.byType(AlertDialog).evaluate().isEmpty &&
+          restore.evaluate().isNotEmpty &&
+          tester.widget<OutlinedButton>(restore).onPressed != null);
     expect(find.byType(AlertDialog), findsNothing);
+    // Cancellation dismisses only the modal, not the chosen authoring data;
+    // it must not accept effects, install a game or make a cloud request.
+    await _reveal(tester, state);
+    expect(tester.widget<Text>(state).data, contains('Восстановлено эффектов: 2'));
     expect(await NpcCampaignConsequenceStore(repository: repo).recordHash(f.source), saved.recordHash);
+    expect(gateway.calls, 0); expect(transport.calls, 0);
     await _tapLocalWork(tester, restore,
       ready: () => find.byType(AlertDialog).evaluate().isNotEmpty);
     await _reveal(tester, consent);
+    expect(tester.widget<CheckboxListTile>(consent).value, false);
     await tester.tap(consent); await tester.pump();
     expect(tester.widget<CheckboxListTile>(consent).value, true);
     await _tapLocalWork(tester, find.byKey(const Key('npc-consequences-accept')),
