@@ -1,5 +1,21 @@
 # AI Story RPG — START_NEW_CHAT_RU
 
+## 2026-11-07 — функциональная синхронизация интерфейса с NPC-движком
+
+**Новый пакет ожидает exact-head CI, не объявлять его принятым заранее.** Последний проверенный baseline: `d7d7539464a6702997c03db9fdbf5012036a5fbf`, [CI #947](https://github.com/shonentez-afk/AI-Story-RPG/actions/runs/42359369386) SUCCESS (647 Flutter PASS, 2 SKIP; M1.7, Python/Dart, Windows/Android), [M0 #1032](https://github.com/shonentez-afk/AI-Story-RPG/actions/runs/42359369396) SUCCESS.
+
+**Аудит интерфейса выявил отставание:** NPC directed trust/memory было не видно отдельной карточкой, выборы ответов героя уже существовали в signed rich-v3, но не имели пользовательской формы подготовки. Исходный ручной NPC build находится в очень длинном AlertDialog (>1700 строк исходника экрана); проход готовых диалогов и кнопки выбора уже были.
+
+**Исправления данного пакета:**
+
+- `NpcDialogueResponsesReviewPage` — новый шаг *в том же авторском мастере*, после успешной строгой первой сборки/импорта rich-v3, но **до установки игры**. Отбирает только допустимые source-reviewed многовариантные NPC-сцены; позволяет выбрать одну/несколько сцен, permanent `character_id` собеседника, точный подтверждённый source quote и собственный текст каждого существующего `choice_id`; показывает проверяемый игровой исход (ветку, вещь/факт/флаг, event-derived memory/trust). Требует весь набор вариантов и отдельное подтверждение. `RichNpcDialogueResponses.propose` выдаёт привязанный к SHA blueprint/social digest; штатный worker компилирует и повторно импортирует точный новый rich-v3. Явная кнопка Skip собирает базовый world, системный Back отменяет сборку.
+- `WorldPlayPage` и `GameQuickBar`: четвёртая вкладка **NPC** доступна только если встречены NPC; показывает **только** replay-derived отношения NPC→player, число/вид памяти, подтверждённый lifeState. Не раскрывает будущих имён и скрытые знания; pilot game сохраняет старую тройку вкладок. Никаких model/story state writes из UI.
+- UI тесты `npc_dialogue_responses_review_page_test.dart` (сцены/собеседники/цитаты/полные ответы/согласие, skip и узкий Android), `world_npc_relationship_panel_test.dart` (показ подтверждённого отношения, no NPC before encounter, 320px). Исторический event-replay, независимый ZIP parser Dart/Python и все движковые эффекты без изменений.
+
+Актуальный аудит с честными ограничениями: [docs/P0_ENGINE_UI_GAP_AUDIT_RU_2026-11-07.md](docs/P0_ENGINE_UI_GAP_AUDIT_RU_2026-11-07.md). **Не сделано:** полный визуальный аудит живого APK/Windows (не видели фактический рендер на устройстве), удобные отдельные шаги для остальных частей гигантского NPC-диалога, автоплан всех причинных NPC-сцен полной книги, CANON/ALTER_FATE, 2 реальных FB2 и финальная приёмка #118. PR #133 остаётся Draft, main/E6d не менять.
+
+
+
 ## 2026-11-07 — P0 NPC: ответы игрока внутри разговора и реальные последствия (PR #133)
 
 **Реализация нового функционального пакета, ожидает exact-HEAD CI.** До изменения проверенная база: `a1be713`, [CI #945](https://github.com/shonentez-afk/AI-Story-RPG/actions/runs/42356760768) SUCCESS, M0 #1030 SUCCESS, Flutter 643 PASS/2 SKIP, Android/Windows PASS. Последний `489a413` — только документация, [skip ci].

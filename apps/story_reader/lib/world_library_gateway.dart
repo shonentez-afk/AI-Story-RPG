@@ -111,6 +111,25 @@ class WorldEventView {
   final List<String> changes;
 }
 
+/// Read-only, replay-derived NPC state. A displayed name never proves a
+/// personality, a future event, or access to an unpublished book secret.
+class NpcRelationView {
+  const NpcRelationView({
+    required this.actorId, required this.displayName,
+    required this.directedScore, required this.memoryCount,
+    required this.memoryKinds, this.lifeState,
+  });
+
+  final String actorId;
+  final String displayName;
+  /// A signed action changed NPC -> player, not player -> NPC.
+  final int directedScore;
+  final int memoryCount;
+  final Map<String, int> memoryKinds;
+  /// Null if the signed world has no lifecycle events for this actor.
+  final String? lifeState;
+}
+
 class WorldGameView {
   const WorldGameView({
     required this.campaignId, required this.worldTitle,
@@ -127,6 +146,7 @@ class WorldGameView {
     this.npcItemOwners = const {},
     this.npcDisplayNames = const {},
     this.npcLifeStates = const {},
+    this.npcRelations = const [],
   });
 
   final String campaignId;
@@ -157,6 +177,9 @@ class WorldGameView {
   final Map<String, String> npcDisplayNames;
   /// Event-replayed NPC life states only for worlds with v5 annotations.
   final Map<String, String> npcLifeStates;
+  /// Only already-met actors with signed NPC witness/event evidence.
+  /// Derived from the committed SQLite event chain, never cloud prose.
+  final List<NpcRelationView> npcRelations;
 }
 
 class WorldChoiceResult {
@@ -330,6 +353,47 @@ class DeviceWorldLibraryGateway implements WorldLibraryGateway {
           social: social, committedEvents: coordinator.events,
           sceneId: current.id);
     }
+    // Do not list unencountered cast members from future signed chapters.
+    // An NPC is visible here only after a committed memory event, or when
+    // its actual, knowledge-verified spoken turn is visible right now.
+    final visibleSpeakers = <String>{};
+    if (hasReviewedNpcTurns && signedTurns != null) {
+      for (final raw in guards[current.id] as List) {
+        if (raw is! Map || raw['actor_id'] is! String ||
+            raw['turn_index'] is! int) continue;
+        final i = raw['turn_index'] as int;
+        if (i >= 0 && i < signedTurns.length &&
+            signedTurns[i].speaker == raw['speaker'] &&
+            signedTurns[i].text != RichNpcDialogueKnowledge.unavailableLine &&
+            raw['actor_id'] != 'player') {
+          visibleSpeakers.add(raw['actor_id'] as String);
+        }
+      }
+    }
+    final npcRelations = <NpcRelationView>[];
+    if (social != null && socialRules != null) {
+      final actors = blueprint.actors.where((id) => id != 'player').toList()
+        ..sort();
+      for (final actor in actors) {
+        final memories = social.memoriesFor(actor);
+        if (memories.isEmpty && !visibleSpeakers.contains(actor)) continue;
+        final kinds = <String, int>{};
+        for (final memory in memories) {
+          kinds.update(memory.kind.name, (count) => count + 1,
+              ifAbsent: () => 1);
+        }
+        final hasLifeReview = socialRules.lifeTransitions
+            .any((change) => change.actorId == actor);
+        npcRelations.add(NpcRelationView(
+          actorId: actor,
+          displayName: npcDisplayNames[actor] ?? 'Персонаж истории',
+          directedScore: social.directedScore(actor, 'player'),
+          memoryCount: memories.length,
+          memoryKinds: Map.unmodifiable(kinds),
+          lifeState: hasLifeReview ? social.lifeState(actor).name : null,
+        ));
+      }
+    }
     final hero = presentation['hero'];
     final heroName = hero is Map<String, dynamic> ? hero['name'] as String? : null;
     final heroDescription =
@@ -495,6 +559,7 @@ class DeviceWorldLibraryGateway implements WorldLibraryGateway {
               item: social.itemOwner(item)!,
       }),
       npcDisplayNames: Map.unmodifiable(npcDisplayNames),
+      npcRelations: List.unmodifiable(npcRelations),
       npcLifeStates: Map.unmodifiable({
         if (social != null && socialRules != null)
           for (final actor in socialRules.lifeTransitions
