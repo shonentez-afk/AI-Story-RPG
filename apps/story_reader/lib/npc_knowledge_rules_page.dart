@@ -1109,9 +1109,10 @@ class _NpcKnowledgeRulesPageState extends State<NpcKnowledgeRulesPage> {
                                   overflow: TextOverflow.ellipsis)),
                         ],
                         onChanged: (value) {
-                          if (value != null) update(() =>
-                              item.acquireQuote = value);
-                          item.witnessed = false;
+                          if (value != null) update(() {
+                            item.acquireQuote = value;
+                            item.witnessed = false;
+                          });
                         },
                       ),
                     ],
@@ -1162,9 +1163,10 @@ class _NpcKnowledgeRulesPageState extends State<NpcKnowledgeRulesPage> {
                                   overflow: TextOverflow.ellipsis)),
                         ],
                         onChanged: (value) {
-                          if (value != null) update(() =>
-                              item.giveQuote = value);
-                          item.witnessed = false;
+                          if (value != null) update(() {
+                            item.giveQuote = value;
+                            item.witnessed = false;
+                          });
                         },
                       ),
                     ],
@@ -1216,9 +1218,10 @@ class _NpcKnowledgeRulesPageState extends State<NpcKnowledgeRulesPage> {
                                   overflow: TextOverflow.ellipsis)),
                         ],
                         onChanged: (value) {
-                          if (value != null) update(() =>
-                              item.returnQuote = value);
-                          item.witnessed = false;
+                          if (value != null) update(() {
+                            item.returnQuote = value;
+                            item.witnessed = false;
+                          });
                         },
                       ),
                     ],
