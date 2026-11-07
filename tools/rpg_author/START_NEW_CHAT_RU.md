@@ -1,3 +1,5 @@
+**Дополнительный UX-аудит (7 ноября 2026):** [GAME_PANELS_REFERENCE_AUDIT_RU_2026-11-07.md](GAME_PANELS_REFERENCE_AUDIT_RU_2026-11-07.md) — проверенные Narrat, RPG Maker MZ, Quest, Ren'Py, Dialogic, AI Dungeon, Ink/Yarn/Twine и существующие Flutter панели `Герой / Предметы / Журнал`. Предлагаемые изменения UI — только рекомендации для основного чата; код приложения и versioned формат в нашей E6e-ветке не менялись. Не превращать новую технику UI в блокер подготовки полноценной игры из книги.
+
 ## Подтверждённый CI для E6e (7 ноября 2026)
 
 **Последний проверенный коммит КОДА:** `bfa4190afec7c0f5e00c70e357898a9660c05450`, внешний генератор `0.3.0a3`. [GitHub Actions run #42297819582](https://github.com/shonentez-afk/AI-Story-RPG/actions/runs/42297819582): **SUCCESS**, оба задания **author-tests SUCCESS** и **dart-parity SUCCESS** на этом же SHA. В составе author-tests прошли новые E6e unit + synthetic end-to-end tests и старые E6d/regression. Проверка pin/application-contract выполнена без отключения. Здесь после зелёного CI добавлена только запись документации с `[skip ci]` — не выдавать её SHA за отдельный проверенный исполняемый код.
