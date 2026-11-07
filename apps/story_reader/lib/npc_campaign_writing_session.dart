@@ -6,6 +6,7 @@ import 'package:story_core/story_core.dart' show canonicalJson;
 import 'package:crypto/crypto.dart';
 import 'package:path_provider/path_provider.dart';
 
+import 'npc_inventory_writing_context.dart';
 import 'source_analysis_checkpoint_repository.dart';
 import 'whole_book_npc_campaign.dart';
 
@@ -86,6 +87,10 @@ class NpcWritingSession {
   bool get canInstallDirectly => false;
   bool get cloudConsent => false;
   bool get literaryCanon => false;
+  String get snapshotDigest => npcWritingHash({
+    'catalog': catalogDigest, 'revision': revision,
+    'edits': edits.map((id, edit) => MapEntry(id, edit.toJson())),
+  });
 }
 
 class NpcWritingStore {
@@ -173,13 +178,21 @@ class NpcWritingStore {
 
   Future<NpcWritingSession> save(NpcWritingCatalog catalog, {
     required Iterable<NpcWritingEdit> edits, required int expectedRevision,
+    String? expectedSnapshotDigest,
+    Future<void> Function()? beforeWrite,
   }) {
     final snapshot = List<NpcWritingEdit>.unmodifiable(edits);
     validateEdits(catalog, snapshot);
     return _locked(catalog.storageKey, () async {
+      // Revalidate a model response AFTER acquiring this writing lock. This
+      // does not claim a transaction over separate hero/effect files.
+      if (beforeWrite != null) await beforeWrite();
       final before = await load(catalog);
-      if (before.revision != expectedRevision) throw const FormatException(
-          'Черновик изменён в другом окне. Перечитайте сохранённую версию перед записью.');
+      if (before.revision != expectedRevision ||
+          (expectedSnapshotDigest != null && before.snapshotDigest != expectedSnapshotDigest)) {
+        throw const FormatException('Черновик изменён в другом окне. '
+            'Перечитайте сохранённую версию перед записью.');
+      }
       final ordered = [...snapshot]..sort((a, b) => a.id.compareTo(b.id));
       final payload = {
         'format': _format, 'source': catalog.source.index.sourceFingerprint,
@@ -199,32 +212,35 @@ class NpcWritingStore {
   }
 }
 
-/// A resume contains only blank selected conversations. Hero data is shown
-/// inside the exact consented bytes, and cannot be supplied by model output.
+/// Only blank selected conversations are transmitted. The typed inventory
+/// report is included in BOTH the shown bytes and the approval digest.
 class NpcWritingRequest {
   NpcWritingRequest._(this.catalogDigest, this.revision, this.batches,
-      this.approvalDigest, this.candidateCount);
+      this.approvalDigest, this.candidateCount, this.inventoryContext);
   final String catalogDigest, approvalDigest;
   final int revision, candidateCount;
   final List<String> batches;
+  final NpcInventoryWritingContext? inventoryContext;
   int get requestCount => batches.length;
   int get maximumAttempts => requestCount * 3;
   String get shownText => batches.map((b) =>
       const JsonEncoder.withIndent('  ').convert(jsonDecode(b))).join('\n\n');
 
   static NpcWritingRequest prepare(NpcWritingCatalog catalog,
-      NpcWritingSession session, {int perRequest = 3}) {
+      NpcWritingSession session, {int perRequest = 3,
+      NpcInventoryWritingContext? inventoryContext}) {
     if (session.catalogDigest != catalog.digest || perRequest < 1 || perRequest > 4) {
       throw const FormatException('Неверная редакция подготовки NPC.');
     }
+    inventoryContext?.validateSource(catalog.source);
     NpcWritingStore.validateEdits(catalog, session.edits.values);
     final pending = session.edits.values.where((e) => e.isBlank).toList()
       ..sort((a, b) => a.id.compareTo(b.id));
     if (pending.isEmpty) throw const FormatException('Нет пустых разговоров для ИИ. '
         'Готовые и вручную изменённые реплики сохранены.');
     final batches = <String>[];
-    for (var offset = 0; offset < pending.length; offset += perRequest) {
-      final rows = pending.skip(offset).take(perRequest).map((edit) {
+    String encode(List<NpcWritingEdit> edits) {
+      final rows = edits.map((edit) {
         final c = catalog.candidates[edit.id]!;
         return <String, dynamic>{
           'candidate_id': c.id, 'actor_id': c.role.characterId, 'speaker': c.role.displayName,
@@ -232,6 +248,7 @@ class NpcWritingRequest {
           'response_chapter': c.responseEvent.source.chapterIndex,
           'first_quote': c.firstEvent.source.quote, 'response_quote': c.responseEvent.source.quote,
           'requires_episodes': edit.dependencies,
+          if (inventoryContext != null) 'player_inventory_routes': inventoryContext.forConversation(c),
           'game_rule': 'The NPC remembers only this approved private game meeting; '
               'do not invent source truth, objects, secrets, actions or new actors.',
         };
@@ -240,18 +257,31 @@ class NpcWritingRequest {
         'format': 'ai_story_npc_writing_request_v1',
         'status': 'UNTRUSTED_PRIVATE_GAME_FICTION',
         if (catalog.source.selectedHeroRole != null) 'player_role': catalog.source.heroCloudContext,
+        if (inventoryContext != null) 'inventory_context': inventoryContext.cloudHeader,
         'conversations': rows,
       };
       payload['batch_id'] = npcWritingHash({'catalog': catalog.digest, 'payload': payload});
-      final encoded = canonicalJson(payload);
+      return canonicalJson(payload);
+    }
+    for (var offset = 0; offset < pending.length;) {
+      var count = pending.length - offset < perRequest ? pending.length - offset : perRequest;
+      var encoded = encode(pending.skip(offset).take(count).toList());
+      // Never silently omit inventory or a conversation to meet a limit.
+      // Split into more explicitly shown requests instead.
+      while (utf8.encode(encoded).length > 10 * 1024 && count > 1) {
+        count--;
+        encoded = encode(pending.skip(offset).take(count).toList());
+      }
       if (utf8.encode(encoded).length > 10 * 1024) {
         throw const FormatException('Передаваемые фрагменты превышают лимит запроса.');
       }
       batches.add(encoded);
+      offset += count;
     }
     final immutable = List<String>.unmodifiable(batches);
     return NpcWritingRequest._(catalog.digest, session.revision, immutable,
       npcWritingHash({'format': 'npc_writing_consent_v1',
-        'catalog': catalog.digest, 'revision': session.revision, 'batches': immutable}), pending.length);
+        'catalog': catalog.digest, 'revision': session.revision, 'batches': immutable}),
+      pending.length, inventoryContext);
   }
 }

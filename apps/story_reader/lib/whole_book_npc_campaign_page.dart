@@ -11,6 +11,8 @@ import 'npc_campaign_consequence_store.dart';
 import 'npc_campaign_consequences.dart';
 import 'npc_campaign_hero_selection.dart';
 import 'npc_campaign_writing_session.dart';
+import 'npc_inventory_writing_context.dart';
+import 'npc_writing_consent_dialog.dart';
 import 'reviewed_hero_role.dart';
 import 'story_plan_trial_compiler.dart';
 import 'whole_book_npc_campaign.dart';
@@ -166,6 +168,14 @@ class _WholeBookNpcCampaignPageState extends State<WholeBookNpcCampaignPage>
     'hero': _hero.revision, 'role': _source!.heroReviewDigest,
     'catalog': _catalog!.digest, 'writing': _session!.revision,
     'effects': _effectDraft!.recordHash,
+    'accepted_effects': _consequences?.approvalDigest,
+  });
+
+  /// Own writing revisions may advance after each saved model batch. The
+  /// source/hero/effect snapshot must remain the one shown before sending.
+  String get _writingContextRevision => npcWritingHash({
+    'hero': _hero.revision, 'role': _source!.heroReviewDigest,
+    'catalog': _catalog!.digest, 'effects': _effectDraft!.recordHash,
     'accepted_effects': _consequences?.approvalDigest,
   });
 
@@ -490,50 +500,48 @@ class _WholeBookNpcCampaignPageState extends State<WholeBookNpcCampaignPage>
   }
 
   Future<void> _generate() async {
-    if (_working || _storageBlocked || _heroBlocked || !_effectsReady || _catalog == null || _session == null) return;
-    setState(() { _working = true; _error = null; _invalidate(); });
+    if (_working || _storageBlocked || _heroBlocked || !_effectsReady ||
+        !_quotesReviewed || !_privateFiction || _catalog == null || _session == null) return;
+    final token = ZaiPreviewCancellation();
+    setState(() { _working = true; _error = null; _cancellation = token; _invalidate(); });
     try {
       await _flush();
       await _checkAuthorRevision();
+      token.check();
       if (!mounted) return;
-      final request = NpcWritingRequest.prepare(_catalog!, _session!);
-      var checked = false;
-      final consent = await showDialog<bool>(context: context, builder: (ctx) =>
-        StatefulBuilder(builder: (ctx, refresh) => AlertDialog(
-          title: const Text('Передать показанные фрагменты в Z.ai?'),
-          content: SizedBox(width: 600, child: SingleChildScrollView(child: Column(
-            mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text('Герой: ${_source!.heroName}. Новых разговоров: ${request.candidateCount}. '
-                  'Запросов: ${request.requestCount}, с повторами — не более ${request.maximumAttempts}. '
-                  'Готовые и ручные реплики не пересылаются. Применяются условия вашего аккаунта Z.ai.'),
-              const Text('Показанная роль героя не даёт ему знаний других NPC. '
-                  'ИИ пишет черновик, но не меняет личности, правила и согласия.'),
-              if (_consequences != null) const Text('Выбранные игровые эффекты не означают, '
-                  'что герой уже получил предмет. Генератор реплик получает только '
-                  'показанный контекст; соответствие текста последствиям проверьте отдельно.'),
-              ExpansionTile(title: const Text('Точные данные для отправки'),
-                children: [SelectableText(request.shownText)]),
-              CheckboxListTile(key: const Key('npc-writing-cloud-consent'), value: checked,
-                title: const Text('Разрешаю отправить эти цитаты, роль героя и личности'),
-                onChanged: (value) => refresh(() => checked = value == true)),
-            ]))),
-          actions: [TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Отмена')),
-            FilledButton(key: const Key('npc-writing-cloud-send'),
-              onPressed: checked ? () => Navigator.pop(ctx, true) : null,
-              child: const Text('Подготовить черновики'))],
-        )),
-      );
+      final catalog = _catalog!;
+      final fixedRevision = _writingContextRevision;
+      final blank = _session!.edits.values.where((edit) => edit.isBlank).toList();
+      if (blank.isEmpty) throw const FormatException('Нет пустых разговоров для ИИ. '
+          'Готовые и ручные реплики сохранены; проверьте их смысл после изменения предметов.');
+      final inventory = await NpcInventoryWritingContext.prepare(
+        source: _source!, reviewedArchive: _archiveForNpc(),
+        conversations: blank.map((edit) => catalog.candidates[edit.id]!));
+      token.check();
+      Future<void> guard(NpcWritingSession expected) async {
+        token.check();
+        if (!mounted || !_quotesReviewed || !_privateFiction || !_effectsReady ||
+            _session?.snapshotDigest != expected.snapshotDigest) {
+          throw const FormatException('Авторская редакция закрыта или изменена; отправка остановлена.');
+        }
+        await _checkAuthorRevision();
+        token.check();
+        if (!mounted || _writingContextRevision != fixedRevision ||
+            _session?.snapshotDigest != expected.snapshotDigest) {
+          throw const FormatException('После согласия изменились герой, предметы или реплики.');
+        }
+        inventory.assertCurrent(source: _source!, reviewedArchive: _archiveForNpc());
+      }
+      await guard(_session!);
+      final request = NpcWritingRequest.prepare(catalog, _session!, inventoryContext: inventory);
+      if (!mounted) return;
+      final consent = await showDialog<bool>(context: context, builder: (_) =>
+          NpcWritingConsentDialog(request: request, heroName: _source!.heroName));
       if (consent != true || !mounted) return;
-      final freshRoles = await _checkAuthorRevision();
-      final fresh = NpcWritingCatalog(source: _source!, candidates:
-          BookwideNpcCampaignAuthoring.discover(source: _source!, currentReviewedRoles: freshRoles));
-      if (fresh.digest != _catalog!.digest) throw const FormatException(
-          'После просмотра изменились герой или NPC. Отправка отменена.');
-      _cancellation = ZaiPreviewCancellation();
-      if (mounted) setState(() {});
-      await _writer.generate(catalog: fresh, store: _store, request: request,
+      await guard(_session!);
+      await _writer.generate(catalog: catalog, store: _store, request: request,
         approvedDigest: request.approvalDigest, explicitCloudConsent: true,
-        cancellation: _cancellation,
+        cancellation: token, verifyAuthorRevision: guard,
         onSaved: (saved) async { if (mounted) setState(() => _restore(saved)); });
     } catch (error) { if (mounted) setState(() => _error = error.toString()); }
     finally { _cancellation = null; if (mounted) setState(() => _working = false); }
@@ -713,7 +721,8 @@ class _WholeBookNpcCampaignPageState extends State<WholeBookNpcCampaignPage>
                 onPressed: !_working && !_storageBlocked ? () => unawaited(_flush().catchError((Object _) {})) : null,
                 child: const Text('Сохранить черновик')),
               OutlinedButton(key: const Key('npc-writing-generate'),
-                onPressed: !_working && !_storageBlocked && !_heroBlocked && _effectsReady && _edits.isNotEmpty ? _generate : null,
+                onPressed: !_working && !_storageBlocked && !_heroBlocked && _effectsReady &&
+                    _quotesReviewed && _privateFiction && _edits.isNotEmpty ? _generate : null,
                 child: const Text('Подготовить пустые диалоги через ИИ'))]),
             for (final candidate in _candidates) _conversation(candidate),
             OutlinedButton(key: const Key('whole-npc-review-package'),
@@ -735,7 +744,7 @@ class _WholeBookNpcCampaignPageState extends State<WholeBookNpcCampaignPage>
           if (_working) ...[
             const LinearProgressIndicator(),
             Text(_cancellation == null ? 'Проверяются герой, сценарий и сохранение.'
-                : 'ИИ готовит реплики. Каждый готовый пакет сохраняется.'),
+                : 'Проверяется контекст и готовятся реплики. Каждый готовый пакет сохраняется.'),
             if (_cancellation != null) TextButton(key: const Key('npc-writing-cancel'),
               onPressed: () => _cancellation?.cancel(), child: const Text('Остановить новые запросы'))],
           if (_error != null) SelectableText(_error!, key: const Key('whole-npc-error'),
