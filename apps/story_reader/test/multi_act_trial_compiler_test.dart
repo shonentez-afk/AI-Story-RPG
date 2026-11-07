@@ -1080,6 +1080,155 @@ void main() {
   });
 
 
+  test('all FOUR acts share reviewed gameplay consequences in real '
+      'BookWorld with SQLite replay and no retroactive permissions', () async {
+    final index = BookSourceIndexer.index(ImportedBook(
+      title: 'Четыре связанных игровых акта',
+      author: 'Тест игрового решения и его последствий',
+      chapters: [
+        for (var n = 1; n <= 4; n++)
+          List.filled(5, 'Часть $n. Путник увидел старинное кольцо '
+              'рядом с воротами и услышал просьбу. '
+              'После дороги ему предложили новое условие. ').join(' '),
+      ],
+    ));
+    final book = await _analyze(index);
+    final map = BookwideActPlanner.build(index: index, book: book);
+    final draft = BookwideStoryPlanComposer.compose(
+      index: index, book: book, bookMap: map,
+      actProposals: [for (var i = 0; i < 4; i++) _proposal(book, i)],
+    );
+    expect(() => CrossActConsequenceGate.applyReviewedActChain(
+      index: index, book: book, bookMap: map, draft: draft,
+      userConfirmedFictionalContinuity: false,
+    ), throwsFormatException);
+    final continuity = CrossActConsequenceGate.applyReviewedActChain(
+      index: index, book: book, bookMap: map, draft: draft,
+      userConfirmedFictionalContinuity: true,
+    );
+    expect(continuity.hasEnforcedContinuity, true);
+    expect(continuity.impacts, hasLength(3));
+    expect(continuity.impacts.every((rule) =>
+        rule.allowedEarlierOutcomeStates > 0 &&
+        rule.blockedOppositeOutcomeStates > 0), true);
+    expect(continuity.audit.counterexamples, isEmpty);
+    for (var i = 2; i <= 4; i++) {
+      final entry = continuity.plan.situations.singleWhere(
+          (scene) => scene.id == 'act_${i}_turning_point');
+      final accept = entry.decisions.singleWhere(
+          (choice) => choice.id == 'act_${i}_accept_offer');
+      expect(accept.requires,
+          contains('act_${i - 1}_original_outcome'));
+      expect(entry.decisions.singleWhere(
+          (choice) => choice.id == 'act_${i}_refuse_offer')
+          .requires, isNot(contains('act_${i - 1}_original_outcome')));
+    }
+    expect(continuity.coverage.referencedEvents, 8);
+    final compilation = await MultiActTrialCompiler.compile(
+      index: index, book: book, bookMap: map, draft: draft,
+      continuity: continuity,
+      sourceEventIdsReviewedByUser: {
+        for (final part in draft.parts)
+          ...[part.setupEventId, part.outcomeEventId],
+      },
+      privateUseConfirmed: true, fictionalTrialAcknowledged: true,
+      heroName: 'Путник',
+    );
+    final verified = const RichPrivateBookworldImporter()
+        .inspect(compilation.archive);
+    expect(verified.presentation['hero'], containsPair('name', 'Путник'));
+    expect(compilation.sceneCount, 28);
+    expect(compilation.sourceQuoteCount, 8);
+    expect(compilation.isFullBookAdaptation, false);
+    final folder = await Directory.systemTemp.createTemp(
+        'bookwide-continuity-');
+    try {
+      var db = BookworldCampaignStore.openPrivateDirectory(folder.path);
+      late String refusalId;
+      try {
+        final installed = db.installBookworld(compilation.archive);
+        refusalId = db.createCampaign(installed.archiveHash);
+        var revision = 0;
+        void step(String choiceId) {
+          final before = db.loadCampaign(refusalId).coordinator;
+          expect(before.choices.any((c) =>
+              c.id == choiceId && c.enabled), true,
+              reason: 'choice $choiceId at revision $revision');
+          final result = db.commitChoice(refusalId,
+              actionId: 'linked_' + revision.toString(),
+              choiceId: choiceId,
+              expectedRevision: revision);
+          expect(result.applied, true);
+          revision++;
+        }
+        for (var act = 1; act <= 3; act++) {
+          for (final choice in [
+            'act_${act}_refuse_offer',
+            'act_${act}_explore',
+            'act_${act}_use_discovery',
+            'act_${act}_end_alternative',
+            'act_${act}_continue_alternative',
+          ]) {
+            step(choice);
+          }
+          final next = act + 1;
+          final nextScene = db.loadCampaign(refusalId).coordinator;
+          expect(nextScene.sceneId, 'act_${next}_turning_point');
+          expect(nextScene.choices.singleWhere(
+              (c) => c.id == 'act_${next}_accept_offer')
+              .enabled, false);
+          expect(nextScene.choices.singleWhere(
+              (c) => c.id == 'act_${next}_refuse_offer')
+              .enabled, true);
+        }
+        // Last-act original ending cannot be taken after three refusals.
+        for (final choice in [
+          'act_4_refuse_offer', 'act_4_explore',
+          'act_4_use_discovery', 'act_4_end_alternative',
+        ]) {
+          step(choice);
+        }
+        expect(db.loadCampaign(refusalId).coordinator.isTerminal, true);
+        expect(db.loadCampaign(refusalId).metadata.revision, revision);
+      } finally {
+        db.close();
+      }
+      db = BookworldCampaignStore.openPrivateDirectory(folder.path);
+      try {
+        expect(db.loadCampaign(refusalId).coordinator.isTerminal, true);
+        expect(db.loadCampaign(refusalId).metadata.revision, 19);
+        // A replayed campaign does NOT regain restricted choices.
+        final newId = db.createCampaign(verified.archiveSha256);
+        var revision = 0;
+        for (var act = 1; act <= 3; act++) {
+          for (final choice in [
+            'act_${act}_accept_offer', 'act_${act}_honor_condition',
+            'act_${act}_continue_original',
+          ]) {
+            final result = db.commitChoice(newId,
+                actionId: 'original_' + revision.toString(),
+                choiceId: choice, expectedRevision: revision);
+            expect(result.applied, true);
+            revision++;
+          }
+          expect(db.loadCampaign(newId).coordinator.choices.any((c) =>
+              c.id == 'act_${act + 1}_accept_offer' && c.enabled), true);
+        }
+        expect(db.commitChoice(newId, actionId: 'fourth_accept',
+            choiceId: 'act_4_accept_offer',
+            expectedRevision: revision).applied, true);
+        expect(db.commitChoice(newId, actionId: 'fourth_finish',
+            choiceId: 'act_4_honor_condition',
+            expectedRevision: revision + 1).applied, true);
+        expect(db.loadCampaign(newId).coordinator.isTerminal, true);
+      } finally {
+        db.close();
+      }
+    } finally {
+      await folder.delete(recursive: true);
+    }
+  });
+
   test('four source-anchored acts create MORE THAN one six-citation GLM '
       'window with no loss of late-book references', () async {
     final index = BookSourceIndexer.index(ImportedBook(

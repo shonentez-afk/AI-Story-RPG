@@ -1,5 +1,9 @@
 # AI Story RPG — актуальный статус 2026-11-07
 
+**Новый функциональный инкремент PR #133:** `CrossActConsequenceGate.applyReviewedActChain` обеспечивает реальную причинную связку ВСЕХ соседних актов. От принятого либо отвергнутого решения зависит доступность предложения следующей части; меняются именно `StoryPlan` conditions и `StoryWorld` choices, а не UI-надпись. Источник проверяется, фиктивная причинность явно подтверждается пользователем; совместимость существующих без галочки не меняется. E2E для 4 актов с двумя маршрутами и реальным SQLite добавлен, результат нового exact-head CI ещё проверить. Это не готовый CANON и не автоматическая целая книга. E6d отложен.
+
+
+
 ## Подтверждено
 
 - **PR #132 MERGED**, [merge SHA `81fb75b`](https://github.com/shonentez-afk/AI-Story-RPG/commit/81fb75b77f11b8f82cafa1e7604afa9fe9bbb678). Уже в `main`: независимое ядро NPC memories/trust/choices, предметы, event-sourced статус (present/absent/dead), проверяемые source citations, private rich-v3 `npc_social` v1–v5, replay/SQLite и интерфейс.

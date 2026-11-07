@@ -1,5 +1,9 @@
 # AI Story RPG — START_NEW_CHAT (обновлено 2026-11-07)
 
+**НОВОЕ В PR #133 — реальная цепочка исходов для всех актов.** `CrossActConsequenceGate.applyReviewedActChain` теперь накладывает `n-1` **настоящих игровых** условий на все соседние акты, а не только 1→2. Согласие — прежний существующий чекбокс в форме `MultiActTrialPage`, уточнено «для КАЖДОГО перехода», source-review и закодированные флаги обязательны. Прежний основной сценарий по умолчанию не меняется; нельзя молча объявлять это каноном книги. Добавлен E2E-тест с 4 актами, двумя маршрутами и SQLite replay. **Кодовая приёмка нового HEAD ещё требует exact CI.** См. `docs/P0_BOOKWIDE_AUTHOR_PATH_RU_2026-11-07.md`. E6d не трогать.
+
+
+
 ## Где сейчас
 
 **PR #132 MERGED в main**, merge `81fb75b77f11b8f82cafa1e7604afa9fe9bbb678`. До merge точный кодовый HEAD `a10af190b06cfc7b30b0a2ff888eb5441bde9f82` прошёл [CI #920](https://github.com/shonentez-afk/AI-Story-RPG/actions/runs/42331504767) и [M0 #1005](https://github.com/shonentez-afk/AI-Story-RPG/actions/runs/42331505079). Python/Dart/Flutter/native ZIP/SQLite/Windows/Android green; артефакты APK и Windows ZIP. После merge запущены [CI main](https://github.com/shonentez-afk/AI-Story-RPG/actions/runs/42333580182) и [M0 main](https://github.com/shonentez-afk/AI-Story-RPG/actions/runs/42333580205): **проверять актуальный статус прежде, чем заявлять принятие релиза**. Это тестовое приложение, а не полноценная RPG 1.0. E6d НЕ согласовывать сейчас по требованию пользователя; её `contract_drift` не является критерием готовности основной программы.

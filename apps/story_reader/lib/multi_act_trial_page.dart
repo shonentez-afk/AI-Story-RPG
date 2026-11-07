@@ -145,29 +145,12 @@ class _MultiActTrialPageState extends State<MultiActTrialPage> {
     try {
       CrossActContinuityDraft? continuity;
       if (_enforceEarlierOutcome) {
-        final earlier = widget.draft.parts.first;
-        final later = widget.draft.parts[1];
-        continuity = CrossActConsequenceGate.apply(
+        continuity = CrossActConsequenceGate.applyReviewedActChain(
           index: widget.index,
           book: widget.book,
           bookMap: widget.bookMap,
           draft: widget.draft,
-          rules: [
-            CrossActConsequenceRule(
-              id: 'player_reviewed_fictional_rule',
-              earlierActId: earlier.actId,
-              laterActId: later.actId,
-              earlierSourceEventId: earlier.outcomeEventId,
-              laterSourceEventId: later.setupEventId,
-              laterDecisionId: 'act_2_accept_offer',
-              priorOutcome: CrossActPriorOutcome.original,
-              mode: CrossActRuleMode.requiresPriorOutcome,
-              reviewedAsGameFiction: true,
-              privateReviewReason: 'Пользователь отдельно подтвердил '
-                  'выдуманное правило: второй акт допускает принятие '
-                  'условия только после исхода первого акта.',
-            ),
-          ],
+          userConfirmedFictionalContinuity: true,
         );
       }
       final compiled = await MultiActTrialCompiler.compile(
@@ -402,11 +385,14 @@ class _MultiActTrialPageState extends State<MultiActTrialPage> {
                   ? (v) => setState(() =>
                       _enforceEarlierOutcome = v == true)
                   : null,
-              title: const Text('Дополнительное вымышленное правило: '
-                  'во втором акте принять условие можно только '
-                  'после соответствующего исхода первого акта'),
-              subtitle: const Text('Реально меняет доступные действия. '
-                  'Это игровая адаптация, не установленный факт книги.'),
+              title: const Text('Согласен с вымышленными последствиями '
+                  'между КАЖДЫМИ соседними актами книги'),
+              subtitle: Text('Во всех ' +
+                  (widget.draft.parts.length - 1).toString() +
+                  ' переходах принять условие следующего акта можно '
+                  'только после исходного решения предыдущего. '
+                  'Отказ остаётся возможным. Изменяет выборы, '
+                  'сохраняется в игре, но не доказывает канон.'),
             ),
             ExpansionTile(
               key: const Key('multiact-trial-prose-preview-expansion'),

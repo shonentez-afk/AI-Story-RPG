@@ -98,6 +98,53 @@ class CrossActConsequenceGate {
   static final RegExp _control =
       RegExp(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]');
 
+  /// Apply one EXPLICITLY APPROVED fictional consequence to EVERY adjacent
+  /// book act, not just act 1 -> 2. A later acceptance needs the previous
+  /// original outcome; the refusal path remains playable. Crucially, these
+  /// are GAME-FICTION rules, never inferred from text order or model output.
+  ///
+  /// The existing [apply] verifies exact source event IDs, chapter/act order,
+  /// reachable original/alternative branches and actual changed availability
+  /// for each boundary. No new engine, flags or separate save schema.
+  static CrossActContinuityDraft applyReviewedActChain({
+    required BookSourceIndex index,
+    required NarrativeBookModel book,
+    required BookwideActPlan bookMap,
+    required MultiActStoryPlanDraft draft,
+    required bool userConfirmedFictionalContinuity,
+  }) {
+    if (!userConfirmedFictionalContinuity || draft.parts.length < 2) {
+      throw const FormatException(
+          'Подтвердите вымышленную зависимость всех частей книги.');
+    }
+    return apply(
+      index: index,
+      book: book,
+      bookMap: bookMap,
+      draft: draft,
+      rules: [
+        for (var i = 1; i < draft.parts.length; i++)
+          CrossActConsequenceRule(
+            id: 'reviewed_bookwide_link_' + i.toString(),
+            earlierActId: draft.parts[i - 1].actId,
+            laterActId: draft.parts[i].actId,
+            earlierSourceEventId: draft.parts[i - 1].outcomeEventId,
+            laterSourceEventId: draft.parts[i].setupEventId,
+            laterDecisionId: 'act_' + (i + 1).toString() + '_accept_offer',
+            priorOutcome: CrossActPriorOutcome.original,
+            mode: CrossActRuleMode.requiresPriorOutcome,
+            reviewedAsGameFiction: true,
+            privateReviewReason:
+                'Пользователь подтвердил отдельное игровое допущение '
+                'для перехода между актами ' + i.toString() + ' и ' +
+                (i + 1).toString() + ': согласие со следующим условием '
+                'требует первоначального исхода предыдущей части. '
+                'Это не установленная причинность исходной книги.',
+          ),
+      ],
+    );
+  }
+
   static CrossActContinuityDraft apply({
     required BookSourceIndex index,
     required NarrativeBookModel book,
