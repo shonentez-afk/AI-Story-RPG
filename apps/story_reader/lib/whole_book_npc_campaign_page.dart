@@ -95,8 +95,8 @@ class _WholeBookNpcCampaignPageState extends State<WholeBookNpcCampaignPage>
     _cancellation?.cancel();
     _saveTimer?.cancel();
     if (_dirty && !_storageBlocked) {
-      // Capture field values before disposing controllers; repository writes
-      // do not retain Widget/Context or implicitly authorize cloud calls.
+      // Values are captured before controllers are disposed. This local
+      // operation never authorizes a cloud request or a campaign install.
       unawaited(_flush().catchError((Object _) {}));
     }
     for (final edit in _edits.values) { edit.dispose(); }
@@ -158,7 +158,7 @@ class _WholeBookNpcCampaignPageState extends State<WholeBookNpcCampaignPage>
       setState(() => _allowLeave = true);
       await WidgetsBinding.instance.endOfFrame;
       if (mounted) Navigator.of(context).pop();
-    } catch (_) { /* Error is displayed; never discard an unsaved editor. */ }
+    } catch (_) { /* Keep the unsaved editor and display its error. */ }
   }
 
   Future<void> _prepare() async {
@@ -228,6 +228,10 @@ class _WholeBookNpcCampaignPageState extends State<WholeBookNpcCampaignPage>
 
   Future<void> _generate() async {
     if (_working || _storageBlocked || _catalog == null || _session == null) return;
+    // Acquire the UI lock BEFORE awaiting storage or opening the consent
+    // dialog. Double taps cannot open two authorizations or unlock fields
+    // while an earlier batch still owns their pending draft revision.
+    setState(() { _working = true; _error = null; _invalidate(); });
     try {
       await _flush();
       if (!mounted) return;
@@ -261,13 +265,13 @@ class _WholeBookNpcCampaignPageState extends State<WholeBookNpcCampaignPage>
         )),
       );
       if (consent != true || !mounted) return;
-      setState(() { _working = true; _error = null; _invalidate(); });
       final freshRoles = await _roleCatalog.load(widget.index);
       final fresh = NpcWritingCatalog(source: _source!, candidates:
           BookwideNpcCampaignAuthoring.discover(source: _source!, currentReviewedRoles: freshRoles));
       if (fresh.digest != _catalog!.digest) throw const FormatException(
           'После просмотра изменились карточки NPC. Отправка отменена.');
       _cancellation = ZaiPreviewCancellation();
+      if (mounted) setState(() {});
       await _writer.generate(
         catalog: fresh, store: _store, request: request,
         approvedDigest: request.approvalDigest, explicitCloudConsent: true,
@@ -275,8 +279,6 @@ class _WholeBookNpcCampaignPageState extends State<WholeBookNpcCampaignPage>
         onSaved: (saved) async { if (mounted) setState(() => _restore(saved)); },
       );
     } catch (error) {
-      // Completed batches remain durable even if a later network operation
-      // failed. Do not erase manual text or resurrect a persisted approval.
       if (mounted) setState(() => _error = error.toString());
     } finally {
       _cancellation = null;
@@ -286,6 +288,7 @@ class _WholeBookNpcCampaignPageState extends State<WholeBookNpcCampaignPage>
 
   Future<void> _review() async {
     if (_working || _base == null || _source == null || _storageBlocked) return;
+    setState(() { _working = true; _error = null; });
     try {
       await _flush();
       final edits = _snapshot();
@@ -297,6 +300,7 @@ class _WholeBookNpcCampaignPageState extends State<WholeBookNpcCampaignPage>
       );
       if (mounted) setState(() { _approval = review; _campaignConfirmed = false; _error = null; });
     } catch (error) { if (mounted) setState(() => _error = error.toString()); }
+    finally { if (mounted) setState(() => _working = false); }
   }
 
   Future<void> _start() async {
@@ -439,7 +443,7 @@ class _WholeBookNpcCampaignPageState extends State<WholeBookNpcCampaignPage>
               onChanged: _working ? null : (value) => setState(() => _campaignConfirmed = value == true)),
             FilledButton.icon(key: const Key('whole-npc-start'),
               onPressed: !_working && _campaignConfirmed && _quotesReviewed && _privateFiction ? _start : null,
-              icon: const Icon(Icons.play_arrow), child: const Text('Собрать и начать новую кампанию')),
+              icon: const Icon(Icons.play_arrow), label: const Text('Собрать и начать новую кампанию')),
           ],
           if (_working) ...[
             const LinearProgressIndicator(),

@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:bookworld_format/bookworld_format.dart' show canonicalJson;
+import 'package:story_core/story_core.dart' show canonicalJson;
 import 'package:crypto/crypto.dart';
 import 'package:path_provider/path_provider.dart';
 
