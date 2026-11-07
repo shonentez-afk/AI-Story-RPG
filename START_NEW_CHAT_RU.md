@@ -1,8 +1,22 @@
 # AI Story RPG — START_NEW_CHAT_RU
 
+## Контрольный пункт 2026-11-07: интерфейс NPC синхронизирован с движком
+
+**Подтверждённый кодовый SHA:** `a45fa8869ba064d6129ced346f6fadab639a1dac` ([commit](https://github.com/shonentez-afk/AI-Story-RPG/commit/a45fa8869ba064d6129ced346f6fadab639a1dac)); [CI #949](https://github.com/shonentez-afk/AI-Story-RPG/actions/runs/42361497532) — Python SUCCESS, Dart SUCCESS, M1.7/SQLite/standalone SUCCESS, Flutter analyze SUCCESS, **654 PASS / 2 SKIP** (приватные FB2 отсутствуют в публичном CI), Windows portable **SUCCESS**, **Android APK: SUCCESS**. [M0 #1034](https://github.com/shonentez-afk/AI-Story-RPG/actions/runs/42361497406) **SUCCESS**. Не объявлять полный CI SUCCESS, пока Android не завершится.
+
+**Что вошло одним функциональным пакетом (PR #133 Draft):** после строгой базовой сборки .bworld открыт факультативный экран `NpcDialogueResponsesReviewPage` для source-reviewed NPC-разговоров: выбор нескольких сцен, постоянного `character_id`, источниковой цитаты и текста **всех** игровых ответов героя. Для каждого варианта показаны реальные typed/world-event последствия. Принятие — только через `RichNpcDialogueResponses.propose/accept` и **повторную строгую сборку/импорт** того же формата. Отдельный Skip ставит неизменённый базовый мир; системный Back отменяет сборку. Z.ai не вызывается и сохранения не мутируются.
+
+В `WorldPlayPage` теперь есть четвёртая вкладка **NPC** для персонажей с подтверждённой встречей: направленное отношение NPC→герой, количество и типы event-memory, lifeState если подписан; всё получено из SQLite replay, не из текстовых реплик ИИ. Для неизвестных будущих NPC вкладка не раскрывает имена; старый пилот сохраняет три кнопки.
+
+**UI дефект CI #948 закрыт** в тестовом коммите `a45fa88`: две ошибки теста были в off-screen нажатиях `skip` и первом переключателе на 320dp, т.к. Flutter ListView создаёт элементы лениво. Новые тесты действительно скроллят страницу и нажимают реальные controls; Flutter #949 654 PASS / 2 SKIP. Не отключали тесты, не изменяли двигательные проверки и формат.
+
+**Что НЕ сделано:** визуальный QA живого Windows/Android на физическом устройстве и анализ скриншотов (только исходники + widget tests), пошаговая форма первоначальных знаний/предметов/диалогов NPC с черновиками (текущий большой AlertDialog неудобен), понятный переход «Играть по книге» vs «Подготовить к RPG», полноценная автоматическая мотивационно-каузальная адаптация всей книги и CANON/ALTER_FATE, две реальные частные FB2 и выпуск 1.0 (#118). Внешняя E6d ветка по договорённости не меняется; её отдельный `contract_drift` не блокирует этот main-app функциональный пакет. `main` не изменять; PR #133 оставить Draft. Документационный коммит — `[skip ci]`, точный проверенный кодовый SHA остаётся `a45fa8869ba064d6129ced346f6fadab639a1dac`.
+
+
+
 ## 2026-11-07 — функциональная синхронизация интерфейса с NPC-движком
 
-**Новый пакет ожидает exact-head CI, не объявлять его принятым заранее.** Последний проверенный baseline: `d7d7539464a6702997c03db9fdbf5012036a5fbf`, [CI #947](https://github.com/shonentez-afk/AI-Story-RPG/actions/runs/42359369386) SUCCESS (647 Flutter PASS, 2 SKIP; M1.7, Python/Dart, Windows/Android), [M0 #1032](https://github.com/shonentez-afk/AI-Story-RPG/actions/runs/42359369396) SUCCESS.
+**Историческая запись до проверки #949; подтверждённые результаты указаны в контрольном пункте выше.** Последний проверенный baseline: `d7d7539464a6702997c03db9fdbf5012036a5fbf`, [CI #947](https://github.com/shonentez-afk/AI-Story-RPG/actions/runs/42359369386) SUCCESS (647 Flutter PASS, 2 SKIP; M1.7, Python/Dart, Windows/Android), [M0 #1032](https://github.com/shonentez-afk/AI-Story-RPG/actions/runs/42359369396) SUCCESS.
 
 **Аудит интерфейса выявил отставание:** NPC directed trust/memory было не видно отдельной карточкой, выборы ответов героя уже существовали в signed rich-v3, но не имели пользовательской формы подготовки. Исходный ручной NPC build находится в очень длинном AlertDialog (>1700 строк исходника экрана); проход готовых диалогов и кнопки выбора уже были.
 
