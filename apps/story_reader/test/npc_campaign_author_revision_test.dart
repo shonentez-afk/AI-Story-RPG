@@ -199,7 +199,8 @@ Future<void> _tapLocalWork(WidgetTester tester, Finder target,
     }
     return false;
   });
-  expect(completed, true, reason: 'Local authoring operation did not finish');
+  expect(completed, true, reason: 'Local authoring operation did not finish. '
+      'Visible diagnostics: ${tester.widgetList<SelectableText>(find.byType(SelectableText)).map((w) => w.data).join(' | ')}');
   // A confirmation dialog can intentionally keep the editor busy. Avoid an
   // unbounded pumpAndSettle while its background indicator is animated.
   await tester.pump(const Duration(milliseconds: 300));
@@ -437,20 +438,31 @@ void main() {
     expect(tester.widget<Text>(state).data, 'Включено игровых эффектов: 2.');
     final review = find.byKey(const Key('whole-npc-review-package'));
     final approval = find.byKey(const Key('whole-npc-final-approval'));
+    final error = find.byKey(const Key('whole-npc-error'));
+    // Completion is visible on the control we just pressed. The new consent
+    // row is further DOWN the lazy ListView and need not be built yet.
     await _tapLocalWork(tester, review,
-      ready: () => approval.evaluate().isNotEmpty);
+      ready: () => review.evaluate().isNotEmpty &&
+          tester.widget<OutlinedButton>(review).onPressed != null);
+    expect(error, findsNothing,
+      reason: tester.widgetList<SelectableText>(error).map((w) => w.data).join());
     await _reveal(tester, approval);
+    expect(error, findsNothing,
+      reason: tester.widgetList<SelectableText>(error).map((w) => w.data).join());
     expect(tester.widget<CheckboxListTile>(approval).value, false);
     final other = NpcCampaignConsequenceStore(repository: repo);
     await other.clear(source: f.source, originalArchive: f.base, roles: f.roles,
       expected: await f.load(other), confirmed: true);
     await tester.tap(approval); await tester.pump();
     expect(tester.widget<CheckboxListTile>(approval).value, true);
-    final error = find.byKey(const Key('whole-npc-error'));
-    await _tapLocalWork(tester, find.byKey(const Key('whole-npc-start')),
-      ready: () => error.evaluate().isNotEmpty);
+    final start = find.byKey(const Key('whole-npc-start'));
+    await _tapLocalWork(tester, start,
+      ready: () => error.evaluate().isNotEmpty || start.evaluate().isEmpty);
+    // A caught stale-review error removes the old approval. Reveal the error
+    // normally, rather than requiring an offscreen lazy child during polling.
     await _reveal(tester, error);
     expect(tester.widget<SelectableText>(error).data, contains('Последствия изменены в другом окне'));
+    expect(find.byKey(const Key('whole-npc-final-approval')), findsNothing);
     expect(gateway.calls, 0); expect(transport.calls, 0);
     expect(tester.takeException(), isNull);
   });
