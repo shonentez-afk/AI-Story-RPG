@@ -154,7 +154,7 @@ class RichNpcDialogueKnowledge {
                   (ref['visible_after_chapter'] as int) <= fromChapter) ||
               // The required knowledge must actually be taught to this
               // permanent NPC actor by the committed prior choice.
-              !(facts as List).every((fact) => producer!.effects.any(
+              !facts.every((fact) => producer!.effects.any(
                   (effect) => effect.op == 'learn_fact' &&
                       effect.id == fact && effect.actor == actor))) {
             throw const FormatException(
