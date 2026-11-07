@@ -113,7 +113,10 @@ def _enrich(blueprint, story, index, enrichment, *, npc_review=None):
         "scene_names": enrichment["scene_names"],
     }
     rich._blueprint(result)
-    rich._presentation(presentation, result)
+    # NPC speaker/social checks must run only after the signed provenance
+    # review has been attached; player-only v3 keeps the original validation.
+    if npc_review is None:
+        rich._presentation(presentation, result)
     return result, presentation
 
 
