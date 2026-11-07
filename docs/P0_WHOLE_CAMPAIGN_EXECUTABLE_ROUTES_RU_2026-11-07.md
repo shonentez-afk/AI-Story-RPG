@@ -1,6 +1,22 @@
 # P0 — исполнимые концовки, выборы и тупики многоактной RPG
 
-Дата: 2026-11-07. Ветка `feature/p0-bookwide-gameplay-readiness-20261107`, PR #133 Draft. Предыдущий кодовый baseline: `5011b3515334a051b17feabce2067a92a217f85e`, основной [CI #950](https://github.com/shonentez-afk/AI-Story-RPG/actions/runs/42363370976) **SUCCESS**, [M0 #1035](https://github.com/shonentez-afk/AI-Story-RPG/actions/runs/42363370979) **SUCCESS**. **Этот новый пакет ожидает отдельный exact-head CI**; не объявлять новый код проверенным до завершения.
+## 2026-11-07 — P0 приёмка проверки игровой кампании
+
+**Подтверждённый кодовый HEAD:** `2c6560bd13b10cd644033950c26c6439ba9ed68f` ([commit](https://github.com/shonentez-afk/AI-Story-RPG/commit/2c6560bd13b10cd644033950c26c6439ba9ed68f)), [основной CI #951](https://github.com/shonentez-afk/AI-Story-RPG/actions/runs/42364986753) **SUCCESS**: Python PASS, Dart PASS, M1.7 + строгий импорт .bworld + SQLite PASS, Flutter analyze PASS, **658 Flutter PASS / 2 SKIP** (отсутствующие приватные FB2 в публичном CI), [Windows portable](https://github.com/shonentez-afk/AI-Story-RPG/actions/runs/42364986753/artifacts/13571179356) SUCCESS, [Android debug APK](https://github.com/shonentez-afk/AI-Story-RPG/actions/runs/42364986753/artifacts/13571840021) SUCCESS. [M0 #1036](https://github.com/shonentez-afk/AI-Story-RPG/actions/runs/42364986992) **SUCCESS**. Эти результаты относятся к **кодовой** версии `2c6560bd`, а следующие документационные коммиты используют `[skip ci]`; не путать.
+
+**Принятый функциональный пакет:** `StoryCampaignCausalAudit.inspect` обходит реальные `StoryWorld.apply` состояния всех доступных ветвей, подтверждает исполнимые маршруты к финалам и выбору, выдаёт replayable hash-chained события и находит короткие контрмаршруты к неоконечным сценам **без доступного действия**, с фактическими причинами блокировок. Статусы `playable/blocked/inconclusive` не смешиваются. Общий `CausalStateSignature` применяется и к предыдущей проверке причинных реплик NPC. `CompiledCampaignCausalGate.verify` после независимого импорта rich-v3 вызывается в обоих существующих компиляторах коротких и многоактных пробных RPG, до установки. Старые легальные игры прошли Flutter-регрессию, намеренно неиграбельные отклоняются. Никаких изменений rich-v3/Python/SQLite runtime и E6d.
+
+**Известные границы, не выдавать за закрытые:**
+- Текущий `trap` — сцена без *единого разрешённого* хода. **Замкнутый цикл с разрешёнными ходами, но вообще без пути к финалу** пока отдельно не классифицируется — нужен анализ SCC/обратной достижимости по уже исследованному графу состояний.
+- `choiceWitnesses` содержит доказательства доступных решений, а `requiredChoiceIds` умеет задавать обязательные конкретные решения. Но текущий рабочий компилятор **по умолчанию** требует все концовки и отсутствие безвыходных состояний; обязательность *каждого* source-backed решения из текста пока не подключена. Не объявлять полный coverage книги готовым.
+- Поиск ограничен по состояниям/ходам (стандартно 8192/256); неполная проверка возвращает `inconclusive` и не разрешает автоматически устанавливать игру. Для романов потребуется поактное композиционное доказательство, а не бесконечное расширение поиска.
+- Остался предел `BookwideSourceEncounters.maxReviewedEvents = 48`, не реализован автоматически связанный сценарий **всей книги**, семантическая оценка соответствия канону, две реальные приватные русские FB2 с GLM и ручной запуск на устройствах. Issue #118 OPEN. PR #133 Draft, `main` не менять.
+
+**Следующий связанный функциональный пакет:** (1) устранить недоказанные тупики-циклы через SCC/liveness, не ломая добровольные повторяемые действия с выходом; (2) связать `BookwideActPlanner.compareWithStoryPlan`, `BookwideSourceEncounters` и `CampaignCausalReport.choiceWitnesses` для доказанного покрытия подтверждённых событий/решений, снять лимит 48 через актные boundary contracts; (3) реальные 2 FB2 + GLM, затем финальная приёмка сценария и UX. Внешний E6d другой чат — не редактировать. Документ: [P0 WHOLE CAMPAIGN](docs/P0_WHOLE_CAMPAIGN_EXECUTABLE_ROUTES_RU_2026-11-07.md).
+
+
+
+Дата: 2026-11-07. Ветка `feature/p0-bookwide-gameplay-readiness-20261107`, PR #133 Draft. Предыдущий кодовый baseline: `5011b3515334a051b17feabce2067a92a217f85e`, основной [CI #950](https://github.com/shonentez-afk/AI-Story-RPG/actions/runs/42363370976) **SUCCESS**, [M0 #1035](https://github.com/shonentez-afk/AI-Story-RPG/actions/runs/42363370979) **SUCCESS**. **Историческая запись до запуска CI; пакет принят exact-code CI #951, см. контрольный пункт выше.**
 
 ## Какая ошибка устранена
 
