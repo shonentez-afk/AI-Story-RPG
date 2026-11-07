@@ -1478,12 +1478,49 @@ void main() {
           e.source.chapterIndex == i).source.quote;
       expect(scene.text, contains(quote));
     }
+    // This is not merely a citation slide: the encounter's real choice
+    // can receive an explicitly reviewed, source-bound typed item effect.
+    // No model call occurs and a skip does NOT acquire the item.
+    final inspectChoice = sourceContext.choices.singleWhere(
+        (c) => c.choiceId == 'act_1_examine_source');
+    final optionalItem = GameplayCandidate(
+      kind: 'item', id: 'travel_token', label: 'памятный знак',
+      op: 'grant_item',
+      sceneId: inspectChoice.sceneId, choiceId: inspectChoice.choiceId,
+      sourceEventId: inspectChoice.sourceEventId,
+      uncertainty: 'Владение предметом — отдельное игровое допущение.',
+    );
+    final candidates = GameplayCandidateDraft(
+      sourceFingerprint: sourceContext.sourceFingerprint,
+      approvalDigest: sourceContext.approvalDigest,
+      candidates: [optionalItem],
+    );
+    final approval = ReviewedGameplayCompiler.preview(
+      currentRichBookworld: compiled.archive,
+      index: index, book: book, plan: augmented,
+      context: sourceContext, proposals: candidates,
+      selectedUserReviewNotes: {
+        ReviewedGameplayCompiler.signature(optionalItem):
+          'Одобряю выдачу памятного знака при изучении отрывка '
+          'как частную выдумку, а не факт текста книги.',
+      },
+    );
+    final withItem = await ReviewedGameplayCompiler
+        .compileAfterUserConfirmation(
+      preview: approval, currentRichBookworld: compiled.archive,
+      index: index, explicitlyConfirmedPrivateGameFiction: true,
+      approvedReviewDigest: approval.approvalDigest,
+    );
+    expect(const RichPrivateBookworldImporter()
+        .inspect(withItem).presentation['item_names'],
+        containsPair('travel_token', 'памятный знак'));
+
     final temp = await Directory.systemTemp.createTemp('source-encounter-');
     try {
       var store = BookworldCampaignStore.openPrivateDirectory(temp.path);
       late String id;
       try {
-        final installed = store.installBookworld(compiled.archive);
+        final installed = store.installBookworld(withItem);
         id = store.createCampaign(installed.archiveHash);
         expect(store.loadCampaign(id).coordinator.sceneId,
             'act_1_source_encounter');
@@ -1503,6 +1540,8 @@ void main() {
         }
         expect(store.loadCampaign(id).coordinator.isTerminal, true);
         expect(store.loadCampaign(id).metadata.revision, 7);
+        expect(store.loadCampaign(id).coordinator.state.inventory,
+            contains('travel_token'));
       } finally {
         store.close();
       }
@@ -1511,6 +1550,8 @@ void main() {
         final restored = store.loadCampaign(id);
         expect(restored.metadata.revision, 7);
         expect(restored.coordinator.isTerminal, true);
+        expect(restored.coordinator.state.inventory,
+            contains('travel_token'));
         expect(restored.coordinator.events.map((e) => e.choiceId), containsAll([
           'act_1_examine_source', 'act_2_pass_source',
         ]));
