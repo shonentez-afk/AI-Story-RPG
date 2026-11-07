@@ -56,6 +56,16 @@ def parser():
     dialogue.add_argument("--attribution", type=Path)
     dialogue.add_argument("--output", type=Path)
     dialogue.add_argument("--strict", action="store_true")
+    final = commands.add_parser("finalize", help="E6e: fail-closed private v3 build and QA report")
+    final.add_argument("--project", required=True, type=Path)
+    final.add_argument("--enrichment", required=True, type=Path)
+    final.add_argument("--review", required=True, type=Path)
+    final.add_argument("--output", required=True, type=Path)
+    final.add_argument("--report", type=Path)
+    final.add_argument("--dialogues", type=Path)
+    final.add_argument("--question-inventory", type=Path)
+    final.add_argument("--no-interactive-questions", action="store_true",
+                       help="Explicit author declaration; absence not independently proven")
     bundle = commands.add_parser("verify-bundle", help="Check package and sidecar SHA binding")
     bundle.add_argument("--input", required=True, type=Path)
     bundle.add_argument("--attribution", required=True, type=Path)
@@ -120,6 +130,13 @@ def main(argv=None) -> int:
                 require(not out.exists(), "output_exists", "Report cannot overwrite another file")
                 atomic_write(out, canonical(result))
                 result["report_output"] = str(out)
+        elif name == "finalize":
+            from .finalize import finalize
+            result = finalize(args.project, args.enrichment, args.review,
+                              args.output, dialogues=args.dialogues,
+                              question_inventory_path=args.question_inventory,
+                              no_interactive_questions=args.no_interactive_questions,
+                              report_path=args.report)
         elif name == "build-legacy":
             from .legacy_package import build_legacy
             result = build_legacy(args.project, args.output,
@@ -145,6 +162,8 @@ def main(argv=None) -> int:
             except (BookworldError, KeyError, TypeError, ValueError) as exc:
                 raise AuthoringError("invalid_package", str(exc)) from exc
         print(json.dumps(result, ensure_ascii=False, indent=2, allow_nan=False))
+        if name == "finalize" and result["status"] == "rejected":
+            return 3
         if name in ("gameplay-audit", "dialogue-audit") and args.strict and result["warning_count"]:
             return 3
         return 0
