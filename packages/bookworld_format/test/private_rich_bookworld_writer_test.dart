@@ -448,7 +448,7 @@ void main() {
     // Same destination, two real routes: direct talk never teaches a secret.
     (((entry['choices'] as List)[1] as Map)['conditions'] as List).clear();
     final meeting = (bp['scenes'] as List)[1] as Map<String, dynamic>;
-    meeting['text'] = 'Мария: «Теперь я знаю тайну.»\\n'
+    meeting['text'] = 'Мария: «Теперь я знаю тайну.»\n'
         'Игрок: «Расскажи мне.»';
     final prov = _asObject(data['provenance']);
     final source = (prov['scene_origins'] as List).first as Map;

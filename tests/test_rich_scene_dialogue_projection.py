@@ -72,7 +72,7 @@ class RichDialogueProjectionTests(unittest.TestCase):
                 choice["effects"].append({
                     "op": "learn_fact", "id": "npc_secret", "actor": npc
                 })
-        body = 'Мария: «Теперь знаю тайну.»\\nИгрок: «Слушаю.»'
+        body = 'Мария: «Теперь знаю тайну.»\nИгрок: «Слушаю.»'
         bp["scenes"][1]["text"] = body
         first = sample["provenance"]["scene_origins"][0]
         quote = first["source_refs"][0]["quote_sha256"]

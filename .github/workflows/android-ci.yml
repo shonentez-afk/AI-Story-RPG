@@ -32,6 +32,8 @@ jobs:
         working-directory: experiments/m0_engine_comparison
       - name: Android host security regression
         run: python3 -m unittest discover -s tools/tests -v
+      - name: Independent source-bound NPC dialogue regression
+        run: python3 -m unittest discover -s tests -p 'test_rich_scene_dialogue_projection.py' -v
 
   dart-sdk:
     name: Dart engine and scenario tests
