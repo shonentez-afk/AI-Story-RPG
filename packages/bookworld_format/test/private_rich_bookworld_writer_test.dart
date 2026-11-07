@@ -251,6 +251,7 @@ void main() {
   });
 
   test('reviewed NPC item ownership is portable and replay protected', () {
+    for (final authored in [false, true]) {
     final data = _npcRichSample();
     final bp = _asObject(data['blueprint']);
     (bp['items'] as List).add('map');
@@ -288,7 +289,9 @@ void main() {
     final origin = (prov['scene_origins'] as List).first as Map;
     final quote = (origin['source_refs'] as List).first['quote_sha256'] as String;
     prov['npc_social'] = {
-      'format': RichNpcSocialContract.itemTransferFormat,
+      'format': authored
+          ? RichNpcSocialContract.authoredItemFormat
+          : RichNpcSocialContract.itemTransferFormat,
       'review_scope': 'user_declared_private_game_fiction',
       'source_fingerprint': bp['source_fingerprint'],
       'user_confirmed': true,
@@ -309,6 +312,13 @@ void main() {
         },
       ],
       'choice_gates': <Map<String, Object?>>[],
+      if (authored)
+        'item_grants': [
+          {
+            'scene_id': 'entry', 'choice_id': 'wait',
+            'item_id': 'map', 'source_quote_sha256': quote,
+          },
+        ],
       'item_transfers': [
         {
           'scene_id': 'entry', 'choice_id': 'give_map',
@@ -355,10 +365,12 @@ void main() {
     );
     expect(NpcSocialLedger.inspect(replayed, rules).snapshotHash,
         NpcSocialLedger.inspect(world, rules).snapshotHash);
-    final output = File(
-      '../../artifacts/bookworld/book_private_rich_items_dart.bworld');
+    final output = File(authored
+        ? '../../artifacts/bookworld/book_private_rich_items_authored_dart.bworld'
+        : '../../artifacts/bookworld/book_private_rich_items_dart.bworld');
     output.parent.createSync(recursive: true);
     output.writeAsBytesSync(archive, flush: true);
+    }
   });
 
   test('explicit private NPC v3 roundtrip uses source-reviewed fact grants', () {

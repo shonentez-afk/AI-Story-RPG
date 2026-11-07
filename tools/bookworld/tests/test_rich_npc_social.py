@@ -108,6 +108,17 @@ def item_social_sample():
     ]
     return bp, prov, index
 
+def authored_item_social_sample():
+    bp, prov, index = item_social_sample()
+    origin = prov["scene_origins"][0]
+    quote = origin["source_refs"][0]["quote_sha256"]
+    prov["npc_social"]["format"] = rich.NPC_SOCIAL_AUTHOR_ITEM_FORMAT
+    prov["npc_social"]["item_grants"] = [{
+        "scene_id": "entry", "choice_id": "wait",
+        "item_id": "map", "source_quote_sha256": quote,
+    }]
+    return bp, prov, index
+
 
 class RichNpcSocialTests(unittest.TestCase):
     def test_bounded_source_review_writer_verifier_old_format_parity(self):
@@ -237,6 +248,38 @@ class RichNpcSocialTests(unittest.TestCase):
         })
         with self.assertRaises(legacy.BookworldError):
             rich.build(bp, prov, index)
+
+    def test_native_item_creation_is_source_reviewed_not_minted(self):
+        bp, prov, index = authored_item_social_sample()
+        archive = rich.build(bp, prov, index)
+        self.assertEqual(rich.verify(archive)["format_version"], 3)
+        self.assertEqual(archive, rich.build(bp, prov, index))
+        for change in ("absent_grant", "invented_item", "unseen_quote",
+                       "other_choice", "duplicate_grant", "unreviewed_mint",
+                       "before_acquisition", "initial_inventory"):
+            with self.subTest(change=change):
+                bp, prov, index = authored_item_social_sample()
+                grants = prov["npc_social"]["item_grants"]
+                if change == "absent_grant":
+                    grants.clear()
+                elif change == "invented_item":
+                    grants[0]["item_id"] = "fake_item"
+                elif change == "unseen_quote":
+                    grants[0]["source_quote_sha256"] = "f" * 64
+                elif change == "other_choice":
+                    grants[0]["choice_id"] = "give_map"
+                elif change == "duplicate_grant":
+                    grants.append(deepcopy(grants[0]))
+                elif change == "unreviewed_mint":
+                    next(c for c in bp["scenes"][0]["choices"]
+                         if c["id"] == "help")["effects"].append(
+                             {"op": "grant_item", "id": "map"})
+                elif change == "before_acquisition":
+                    grants[0]["choice_id"] = "return_map"
+                elif change == "initial_inventory":
+                    bp["initial_state"]["inventory"].append("map")
+                with self.assertRaises(legacy.BookworldError):
+                    rich.build(bp, prov, index)
 
     def test_owned_npc_item_transfers_are_portable_and_source_locked(self):
         bp, prov, index = item_social_sample()
