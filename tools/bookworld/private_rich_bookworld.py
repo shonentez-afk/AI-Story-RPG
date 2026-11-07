@@ -14,6 +14,7 @@ import io
 import stat
 import zipfile
 import hashlib
+import json
 import re
 
 from tools.bookworld import bookworld as legacy
