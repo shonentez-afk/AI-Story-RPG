@@ -4,7 +4,7 @@ import 'dart:typed_data';
 import 'package:bookworld_format/bookworld_format.dart';
 import 'package:bookworld_format/reviewed_npc_campaign_bookworld_writer.dart';
 import 'package:crypto/crypto.dart';
-import 'package:flutter/foundation.dart';
+import 'package:flutter/foundation.dart' show compute;
 import 'package:story_core/story_core.dart';
 
 import 'book_source_index.dart';
