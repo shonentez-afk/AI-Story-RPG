@@ -169,6 +169,12 @@ void main() {
     expect(compilation.canDistributePublicly, false);
     expect(compilation.sceneCount, 14);
     expect(compilation.sourceQuoteCount, 4);
+    expect(compilation.sourceEventsTotal, book.events.length);
+    expect(compilation.sourceEventsRepresented, input.draft.coverage.referencedEvents);
+    expect(compilation.unrepresentedSourceEventIds,
+        input.draft.coverage.eventIdsStillUnrepresented);
+    expect(compilation.selectedHeroLabel, 'Игрок');
+    expect(compilation.isFullBookAdaptation, false);
     final inspected = const RichPrivateBookworldImporter().inspect(
         compilation.archive);
     expect(inspected.sourceFingerprint, index.sourceFingerprint);
@@ -258,6 +264,33 @@ void main() {
       }
     } finally {
       await dir.delete(recursive: true);
+    }
+  });
+
+  test('selected player label is written to rich v3 and rejects invalid '
+      'names without changing the story actor', () async {
+    final index = _index();
+    final book = await _analyze(index);
+    final input = _draft(index, book);
+    final named = await MultiActTrialCompiler.compile(
+      index: index, book: book, bookMap: input.map, draft: input.draft,
+      sourceEventIdsReviewedByUser: input.eventIds,
+      privateUseConfirmed: true, fictionalTrialAcknowledged: true,
+      heroName: 'Путешественник',
+    );
+    final rich = const RichPrivateBookworldImporter().inspect(named.archive);
+    expect(rich.presentation['hero'], containsPair('name', 'Путешественник'));
+    expect(rich.blueprint.actors, contains('player'));
+    expect(named.selectedHeroLabel, 'Путешественник');
+    expect(named.sourceEventsTotal, book.events.length);
+    expect(named.isFullBookAdaptation, false);
+    for (final bad in ['', ' Неверное имя', 'x' * 91, 'Имя\nчужое']) {
+      await expectLater(MultiActTrialCompiler.compile(
+        index: index, book: book, bookMap: input.map, draft: input.draft,
+        sourceEventIdsReviewedByUser: input.eventIds,
+        privateUseConfirmed: true, fictionalTrialAcknowledged: true,
+        heroName: bad,
+      ), throwsFormatException);
     }
   });
 
@@ -776,6 +809,9 @@ void main() {
       ),
     ));
 
+    expect(find.byKey(const Key('multiact-source-coverage')), findsOneWidget);
+    expect(find.byKey(const Key('multiact-available-mode')), findsOneWidget);
+    expect(find.byKey(const Key('multiact-hero-label')), findsOneWidget);
     // Scroll the PRIMARY page ListView, not an ExpansionTile or nested
     // ListTile scrollable. Controls below the viewport are lazily built.
     final scrollable = find.byType(Scrollable).first;

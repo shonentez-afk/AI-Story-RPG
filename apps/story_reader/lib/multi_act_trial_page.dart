@@ -48,6 +48,8 @@ class _MultiActTrialPageState extends State<MultiActTrialPage> {
   bool _privateFiction = false;
   bool _enforceEarlierOutcome = false;
   bool _working = false;
+  /// Signed player label only; this does not mint an NPC character_id.
+  String _heroName = 'Игрок';
   String? _error;
   final Map<String, ReviewedProseSceneApproval> _reviewedProse = {};
   SelectedGameplayCandidates? _gameplaySelection;
@@ -182,6 +184,7 @@ class _MultiActTrialPageState extends State<MultiActTrialPage> {
         privateUseConfirmed: _privateFiction,
         fictionalTrialAcknowledged: _privateFiction,
         reviewedProse: _reviewedProse.values.toList(growable: false),
+        heroName: _heroName,
       );
       if (!mounted || compiled.sourceFingerprint !=
           widget.index.sourceFingerprint) return;
@@ -289,9 +292,14 @@ class _MultiActTrialPageState extends State<MultiActTrialPage> {
   Widget build(BuildContext context) {
     final events = _reviewEvents;
     final count = widget.draft.parts.length;
+    final activePlan = _recheckedRepair?.draft ?? widget.draft.plan;
+    final coverage = BookwideActPlanner.compareWithStoryPlan(
+        bookMap: widget.bookMap, book: widget.book, story: activePlan);
+    final validHero = _heroName.isNotEmpty &&
+        _heroName.trim() == _heroName && _heroName.length <= 90 &&
+        !RegExp(r'[\x00-\x1f\x7f]').hasMatch(_heroName);
     final valid = count >= 2 && events.length == count * 2 &&
-        widget.draft.formalRulesPassed &&
-        !_working;
+        widget.draft.formalRulesPassed && validHero && !_working;
     return Scaffold(
       appBar: AppBar(title: const Text('Пробная игра по частям книги')),
       body: SafeArea(
@@ -311,6 +319,37 @@ class _MultiActTrialPageState extends State<MultiActTrialPage> {
                 'Между частями используются придуманные переходы; '
                 'диалоги и знания персонажей ещё не сверены с оригиналом. '
                 'После компиляции игра работает офлайн.'),
+            const SizedBox(height: 8),
+            Text('Покрытие книги: обнаружено ' +
+                coverage.allEvents.toString() + ' событий; '
+                'учтено в игровых сценах ' +
+                coverage.referencedEvents.toString() + '; '
+                'не представлено ' +
+                coverage.eventIdsStillUnrepresented.length.toString() +
+                '. Глав без игрового представления: ' +
+                coverage.chaptersNotCovered.length.toString() + '.',
+                key: const Key('multiact-source-coverage')),
+            const SizedBox(height: 8),
+            const Text('Даже полное покрытие цитатами ещё не доказывает '
+                'литературную причинность, знания персонажей и '
+                'готовность полной игры.'),
+            const SizedBox(height: 8),
+            const Text('Сейчас доступен только пробный ALTER_FATE. '
+                'CANON не включаем до подтверждения событий и причинности.',
+                key: Key('multiact-available-mode')),
+            const SizedBox(height: 8),
+            TextFormField(
+              key: const Key('multiact-hero-label'),
+              initialValue: _heroName,
+              maxLength: 90,
+              decoration: const InputDecoration(
+                labelText: 'Имя героя в игровой версии',
+                helperText: 'Это только подпись игрока, '
+                    'а не подтверждённая роль персонажа книги',
+                border: OutlineInputBorder(),
+              ),
+              onChanged: (value) => setState(() => _heroName = value),
+            ),
             const SizedBox(height: 8),
             const Text('Проверьте все исходные отрывки:'),
             for (final event in events)

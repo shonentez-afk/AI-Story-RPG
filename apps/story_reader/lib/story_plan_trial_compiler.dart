@@ -23,11 +23,25 @@ class StoryPlanTrialCompilation {
     required this.archiveSha256,
     required this.sceneCount,
     required this.sourceQuoteCount,
+    this.sourceEventsTotal = 0,
+    this.sourceEventsRepresented = 0,
+    this.unrepresentedSourceEventIds = const [],
+    this.uncoveredSourceChapters = const [],
+    this.selectedHeroLabel = 'Игрок',
   });
 
   final Uint8List archive;
   final String sourceFingerprint, bookworldId, archiveSha256;
   final int sceneCount, sourceQuoteCount;
+  /// Computed from this exact book/plan during compilation, NOT model claims.
+  final int sourceEventsTotal, sourceEventsRepresented;
+  final List<String> unrepresentedSourceEventIds;
+  final List<int> uncoveredSourceChapters;
+  /// User-approved display label for the player actor (not a verified NPC).
+  final String selectedHeroLabel;
+  bool get hasAllSourceEventsRepresented =>
+      sourceEventsTotal > 0 && sourceEventsRepresented == sourceEventsTotal &&
+      unrepresentedSourceEventIds.isEmpty && uncoveredSourceChapters.isEmpty;
   bool get isFullBookAdaptation => false;
   bool get sourceMeaningIsVerified => false;
   bool get isPrivateTrial => true;

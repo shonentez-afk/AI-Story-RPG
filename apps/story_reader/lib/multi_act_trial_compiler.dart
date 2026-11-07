@@ -36,8 +36,16 @@ class MultiActTrialCompiler {
     required Set<String> sourceEventIdsReviewedByUser,
     required bool privateUseConfirmed,
     required bool fictionalTrialAcknowledged,
+    /// UI-only name of the player protagonist; never guesses an NPC identity.
+    String heroName = 'Игрок',
     List<ReviewedProseSceneApproval> reviewedProse = const [],
   }) async {
+    if (heroName.isEmpty || heroName.length > 90 ||
+        heroName.trim() != heroName ||
+        RegExp(r'[\x00-\x1f\x7f]').hasMatch(heroName)) {
+      throw const FormatException(
+          'Имя героя должно быть подтверждено и не длиннее 90 символов.');
+    }
     if (!privateUseConfirmed || !fictionalTrialAcknowledged) {
       throw const FormatException(
           'Подтвердите частный характер игры и то, что '
@@ -346,6 +354,7 @@ class MultiActTrialCompiler {
     // format. No forced/fabricated items, stats, knowledge or cloud calls.
     final archive = await compileReviewedRichPrivateBookworldInWorker(
         index, evidence, catalog, editorial, intermediate,
+        heroName: heroName,
         sceneTitles: {
           for (final scene in plan.situations) scene.id: scene.goal,
         });
@@ -354,7 +363,9 @@ class MultiActTrialCompiler {
         inspected.requiresNetwork ||
         inspected.canDistributePublicly ||
         inspected.blueprint.scenes.length != scenes.length ||
-        inspected.blueprint.scenes.length < 14) {
+        inspected.blueprint.scenes.length < 14 ||
+        inspected.presentation['hero'] is! Map ||
+        (inspected.presentation['hero'] as Map)['name'] != heroName) {
       throw const FormatException(
           'Частный многоактовый пакет не прошёл независимую проверку.');
     }
@@ -365,6 +376,13 @@ class MultiActTrialCompiler {
       archiveSha256: inspected.archiveSha256,
       sceneCount: inspected.blueprint.scenes.length,
       sourceQuoteCount: expected.length,
+      sourceEventsTotal: coverage.allEvents,
+      sourceEventsRepresented: coverage.referencedEvents,
+      unrepresentedSourceEventIds:
+          List.unmodifiable(coverage.eventIdsStillUnrepresented),
+      uncoveredSourceChapters:
+          List.unmodifiable(coverage.chaptersNotCovered),
+      selectedHeroLabel: heroName,
     );
   }
 }
