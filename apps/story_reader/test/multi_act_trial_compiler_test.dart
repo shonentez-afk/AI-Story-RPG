@@ -1377,7 +1377,10 @@ void main() {
     await tester.pumpAndSettle();
     expect(tester.widget<CheckboxListTile>(reviewed).value, true);
     final expand = find.byKey(const Key('multiact-source-encounters'));
-    await tester.scrollUntilVisible(expand, -120, scrollable: scroll);
+    // This tile must be BELOW the AppBar to receive the actual pointer:
+    // a negative delta placed its centre at y=19 on a 600px test viewport.
+    await tester.scrollUntilVisible(expand, 200, scrollable: scroll);
+    await tester.pumpAndSettle();
     await tester.tap(expand);
     await tester.pumpAndSettle();
     final choice = find.byKey(Key('multiact-extra-' + event.id));
