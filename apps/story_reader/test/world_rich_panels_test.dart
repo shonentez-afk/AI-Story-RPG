@@ -1,6 +1,7 @@
 import 'package:ai_story_reader/world_library_gateway.dart';
 import 'package:ai_story_reader/world_play_page.dart';
 import 'package:flutter/material.dart';
+import 'package:story_core/story_core.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -54,6 +55,84 @@ class _RichViewGateway implements WorldLibraryGateway {
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+
+  test('knowledge-gated response hides secret button label until '
+      'all actor knowledge and role conditions are satisfied', () {
+    final signed = BlueprintChoice.fromJson({
+      'id': 'answer_npc',
+      'label': 'Раскрыть собеседнику секрет из книги',
+      'next_scene_id': 'next',
+      'conditions': [
+        {
+          'op': 'flag_is',
+          'id': 'player_is_npc_0123456789abcdef0123456789abcdef',
+          'value': true,
+        },
+        {'op': 'knows_fact', 'id': 'hero_read_123', 'actor': 'player'},
+      ],
+      'effects': <Object>[],
+    });
+    const hidden = 'Реплика скрыта до выполнения условий';
+
+    // Even if the role gate fails FIRST, a later knows_fact gate makes
+    // the signed dialogue response sensitive and its text must not leak.
+    final noRoleOrFact = WorldChoiceView.fromVerifiedRules(
+      signedChoice: signed,
+      lockReason: 'condition_not_met:flag_is',
+      verifiedKnowledge: {'player': <String>{}},
+    );
+    expect(noRoleOrFact.enabled, false);
+    expect(noRoleOrFact.label, hidden);
+    expect(noRoleOrFact.label, isNot(contains('секрет')));
+
+    final noFact = WorldChoiceView.fromVerifiedRules(
+      signedChoice: signed,
+      lockReason: 'condition_not_met:knows_fact',
+      verifiedKnowledge: {'player': <String>{}},
+    );
+    expect(noFact.label, hidden);
+
+    // Knowledge exists, but another precondition is still false:
+    // do not disclose the line to the wrong playable character.
+    final wrongRole = WorldChoiceView.fromVerifiedRules(
+      signedChoice: signed,
+      lockReason: 'condition_not_met:flag_is',
+      verifiedKnowledge: {'player': <String>{'hero_read_123'}},
+    );
+    expect(wrongRole.label, hidden);
+
+    final ready = WorldChoiceView.fromVerifiedRules(
+      signedChoice: signed,
+      lockReason: null,
+      verifiedKnowledge: {'player': <String>{'hero_read_123'}},
+    );
+    expect(ready.enabled, true);
+    expect(ready.label, 'Раскрыть собеседнику секрет из книги');
+
+    // Fail closed if a buggy adapter claims an unread fact's response
+    // is enabled. Don't let an inconsistent engine projection reach UI.
+    expect(() => WorldChoiceView.fromVerifiedRules(
+      signedChoice: signed,
+      lockReason: null,
+      verifiedKnowledge: {'player': <String>{}},
+    ), throwsFormatException);
+  });
+
+  test('ordinary item-gated choices keep the existing UX', () {
+    final signed = BlueprintChoice.fromJson({
+      'id': 'use_lamp', 'label': 'Использовать фонарь',
+      'next_scene_id': 'next',
+      'conditions': [{'op': 'has_item', 'id': 'lamp'}],
+      'effects': <Object>[],
+    });
+    final locked = WorldChoiceView.fromVerifiedRules(
+      signedChoice: signed, lockReason: 'condition_not_met:has_item',
+      verifiedKnowledge: {'player': <String>{}},
+    );
+    expect(locked.label, signed.label);
+    expect(locked.enabled, false);
+  });
 
   testWidgets('rich hero panel shows actual profile and stats', (tester) async {
     SharedPreferences.setMockInitialValues({});

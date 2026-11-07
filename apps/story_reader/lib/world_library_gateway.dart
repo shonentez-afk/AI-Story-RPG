@@ -61,6 +61,35 @@ class WorldChoiceView {
   final String label;
   final String? lockReason;
   bool get enabled => lockReason == null;
+
+  /// Game mechanics own the lock. The view must never reveal an unreached
+  /// knowledge-gated reply through its button label or accessibility text.
+  /// Check all conditions against the exact SQLite-replayed actor knowledge,
+  /// even if the engine first reports a different missing condition.
+  static WorldChoiceView fromVerifiedRules({
+    required BlueprintChoice signedChoice,
+    required String? lockReason,
+    required Map<String, Set<String>> verifiedKnowledge,
+  }) {
+    final knowledgeSensitive = signedChoice.conditions
+        .any((rule) => rule.op == 'knows_fact');
+    final missing = signedChoice.conditions.any((rule) =>
+        rule.op == 'knows_fact' &&
+        !(verifiedKnowledge[rule.actor]?.contains(rule.id) ?? false));
+    if (missing && lockReason == null) {
+      throw const FormatException(
+          'Проверка знания расходится с доступностью решения.');
+    }
+    return WorldChoiceView(
+      id: signedChoice.id,
+      // If another gate (identity, presence, a flag, or time) is still
+      // closed, don't reveal a knowledge-sensitive reply prematurely.
+      label: knowledgeSensitive && lockReason != null
+          ? 'Реплика скрыта до выполнения условий'
+          : signedChoice.label,
+      lockReason: lockReason,
+    );
+  }
 }
 
 class WorldEventView {
@@ -403,9 +432,11 @@ class DeviceWorldLibraryGateway implements WorldLibraryGateway {
         (state.knowledge['player'] ?? <String>{}).toList()..sort(),
       ),
       choices: List.unmodifiable(coordinator.choices.map(
-        (choice) => WorldChoiceView(
-          id: choice.id, label: choice.label,
+        (choice) => WorldChoiceView.fromVerifiedRules(
+          signedChoice: current.choices.singleWhere(
+              (signed) => signed.id == choice.id),
           lockReason: choice.lockReason,
+          verifiedKnowledge: state.knowledge,
         ),
       )),
       journal: List.unmodifiable(journal),
