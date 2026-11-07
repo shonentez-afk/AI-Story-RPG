@@ -109,7 +109,11 @@ class ReviewedSocialV5Tests(unittest.TestCase):
             self.assertEqual(blueprint["actors"], ["player", ACTOR])
             self.assertEqual(blueprint["initial_state"]["knowledge"][ACTOR], [])
             self.assertEqual(prov["npc_social"]["life_transitions"][0]["next_state"], "absent")
-        plain, _ = compile_rich_from_project(self.root, self.overlay)
+        plain_overlay = deepcopy(self.overlay)
+        plain_overlay["choices"]["take_rope"]["effects"] = [
+            effect for effect in plain_overlay["choices"]["take_rope"]["effects"]
+            if effect.get("actor", "player") == "player"]
+        plain, _ = compile_rich_from_project(self.root, plain_overlay)
         with zipfile.ZipFile(io.BytesIO(plain)) as z:
             old_identity = json.loads(z.read("scenario/blueprint.json"))["book_id"]
         self.assertNotEqual(old_identity, blueprint["book_id"])
