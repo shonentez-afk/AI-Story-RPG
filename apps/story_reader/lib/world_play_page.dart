@@ -619,7 +619,9 @@ class _WorldInfoSheet extends StatelessWidget {
         if (view.knownFacts.isEmpty) 'Открыто сведений: 0',
       ],
       GamePanel.inventory => [
-        if (view.inventory.isEmpty) 'У героя сейчас нет предметов',
+        if (view.inventory.isEmpty)
+          view.npcItemOwners.isEmpty
+              ? 'Предметов пока нет' : 'У героя сейчас нет предметов',
         if (view.inventory.isNotEmpty) 'У героя:',
         for (final id in view.inventory)
           (view.itemNames[id] ?? id) +
