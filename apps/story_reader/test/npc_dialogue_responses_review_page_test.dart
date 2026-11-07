@@ -172,8 +172,21 @@ void main() {
     await tester.tap(find.text('Войти'));
     await tester.pumpAndSettle();
     final skip = find.byKey(const Key('npc-reply-skip'));
-    await tester.scrollUntilVisible(skip, 280,
-        scrollable: find.byType(Scrollable).first);
+    final scrolling = find.byType(Scrollable).first;
+    await tester.scrollUntilVisible(skip, 180, scrollable: scrolling);
+    // scrollUntilVisible only guarantees the lazily built element exists:
+    // on a short page its center can still be below the root viewport.
+    // Finish the scroll using a real drag, then tap the physical button.
+    await tester.ensureVisible(skip);
+    await tester.pumpAndSettle();
+    if (tester.getCenter(skip).dy >=
+        tester.view.physicalSize.height / tester.view.devicePixelRatio - 24) {
+      await tester.drag(scrolling, const Offset(0, -170));
+      await tester.pumpAndSettle();
+    }
+    expect(tester.getCenter(skip).dy,
+        lessThan(tester.view.physicalSize.height /
+            tester.view.devicePixelRatio - 24));
     await tester.tap(skip);
     await tester.pumpAndSettle();
     expect(result?.skipped, true);
@@ -201,6 +214,18 @@ void main() {
     ));
     await tester.pumpAndSettle();
     final entry = find.byKey(const Key('npc-reply-select-entry'));
+    final scrolling = find.byType(Scrollable).first;
+    // The intro becomes taller at 160% text scale. The first source
+    // scene is built lazily and must be reached by real user scrolling.
+    await tester.scrollUntilVisible(entry, 140, scrollable: scrolling);
+    await tester.ensureVisible(entry);
+    await tester.pumpAndSettle();
+    if (tester.getCenter(entry).dy >=
+        tester.view.physicalSize.height / tester.view.devicePixelRatio - 24) {
+      await tester.drag(scrolling, const Offset(0, -140));
+      await tester.pumpAndSettle();
+    }
+    expect(entry, findsOneWidget);
     await tester.tap(entry);
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
