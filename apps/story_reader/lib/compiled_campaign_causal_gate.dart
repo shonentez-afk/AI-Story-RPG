@@ -35,6 +35,15 @@ class CompiledCampaignCausalGate {
         trap.choiceLockReasons.keys.join(', ') + '.',
       );
     }
+    if (report.cycles.isNotEmpty) {
+      final cycle = report.cycles.first;
+      throw FormatException(
+        'Замкнутый сюжетный цикл без пути к финалу: сцена ' +
+        cycle.sceneId + ', вход после ' +
+        cycle.entryEvents.map((event) => event.choiceId).join(' → ') +
+        ', повторяемые решения ' + cycle.cycleChoiceIds.join(' → ') + '.',
+      );
+    }
     if (report.status == CampaignCausalStatus.inconclusive) {
       throw FormatException(
         'Не удалось проверить все причинные ветви в установленном '

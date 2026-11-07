@@ -62,6 +62,36 @@ StoryBlueprint fixture({
   return StoryBlueprint.fromJson(raw);
 }
 
+StoryBlueprint cyclicFixture({bool hasExit = false, bool twoScenes = false}) {
+  final document = jsonDecode(File(
+      '../../shared_schemas/fixtures/private_classic_sample.json')
+      .readAsStringSync()) as Map<String, dynamic>;
+  final raw = document['blueprint'] as Map<String, dynamic>;
+  final scenes = raw['scenes'] as List;
+  final choices = (scenes.first as Map<String, dynamic>)['choices'] as List;
+  (choices[0] as Map<String, dynamic>)['next_scene_id'] = 'loop_a';
+  Map<String, Object> step(String id, String destination) => {
+    'id': id, 'label': 'Продолжить путь', 'next_scene_id': destination,
+    'conditions': <dynamic>[], 'effects': <dynamic>[],
+  };
+  scenes.add({
+    'id': 'loop_a', 'text': 'Дорога снова ведёт к развилке.',
+    'terminal': false,
+    'choices': [
+      step('cycle_a', twoScenes ? 'loop_b' : 'loop_a'),
+      if (hasExit) step('cycle_exit', 'canon_end'),
+    ],
+  });
+  if (twoScenes) {
+    scenes.add({
+      'id': 'loop_b', 'text': 'Герой оказался у прежних ворот.',
+      'terminal': false,
+      'choices': [step('cycle_b', 'loop_a')],
+    });
+  }
+  return StoryBlueprint.fromJson(raw);
+}
+
 NpcSocialRulebook reviewedSocial(StoryBlueprint blueprint) =>
     NpcSocialRulebook(
       blueprintHash: blueprint.blueprintHash,
@@ -163,6 +193,61 @@ void main() {
     expect(() => trap.choiceLockReasons.clear(),
         throwsUnsupportedError);
     expect(() => trap.events.clear(), throwsUnsupportedError);
+  });
+
+  test('a reachable self-loop with no terminal escape is a replayable cycle',
+      () {
+    final bp = cyclicFixture();
+    final report = StoryCampaignCausalAudit.inspect(blueprint: bp);
+    expect(report.status, CampaignCausalStatus.blocked);
+    expect(report.exhaustive, isTrue);
+    expect(report.traps, isEmpty);
+    expect(report.cycleCount, 1);
+    final cycle = report.cycles.single;
+    expect(cycle.sceneId, 'loop_a');
+    expect(cycle.entryEvents.map((e) => e.choiceId), ['wait']);
+    expect(cycle.cycleChoiceIds, ['cycle_a']);
+    final entryWorld = StoryWorld.replay(bp,
+      cycle.entryEvents.map((event) => event.toJson()),
+      expectedSequence: cycle.entryEvents.length,
+      expectedStateHash: cycle.stateHash,
+    );
+    expect(entryWorld.state.sceneId, 'loop_a');
+    final repeated = StoryWorld.replay(bp,
+      cycle.events.map((event) => event.toJson()),
+      expectedSequence: cycle.events.length,
+      expectedStateHash: cycle.events.last.afterStateHash,
+    );
+    expect(repeated.state.sceneId, 'loop_a');
+    expect(() => cycle.cycleChoiceIds.clear(), throwsUnsupportedError);
+  });
+
+  test('two-node closed SCC is rejected even though both actions are legal',
+      () {
+    final report = StoryCampaignCausalAudit.inspect(
+        blueprint: cyclicFixture(twoScenes: true));
+    expect(report.status, CampaignCausalStatus.blocked);
+    expect(report.trapCount, 0);
+    expect(report.cycleCount, 1);
+    expect(report.cycles.single.cycleChoiceIds,
+        ['cycle_a', 'cycle_b']);
+  });
+
+  test('voluntary repeat with a real ending is not a nonescaping cycle', () {
+    final report = StoryCampaignCausalAudit.inspect(
+        blueprint: cyclicFixture(hasExit: true));
+    expect(report.status, CampaignCausalStatus.playable);
+    expect(report.cycleCount, 0);
+    expect(report.trapCount, 0);
+    expect(report.choiceWitnesses.keys, contains('cycle_exit'));
+  });
+
+  test('bounded exploration cannot falsely prove a closed cycle', () {
+    final report = StoryCampaignCausalAudit.inspect(
+        blueprint: cyclicFixture(), maxMoves: 1);
+    expect(report.status, CampaignCausalStatus.inconclusive);
+    expect(report.cycleCount, 0);
+    expect(report.exhaustive, isFalse);
   });
 
   test('state and depth budgets do NOT classify unknown endings as blocked',

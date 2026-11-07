@@ -8,6 +8,8 @@ import 'package:story_core/story_core.dart';
 StoryBlueprint _scenario({
   bool unreachableEnding = false,
   bool hasSoftlock = false,
+  bool hasClosedCycle = false,
+  bool cycleHasExit = false,
 }) {
   final data = jsonDecode(File(
       '../../shared_schemas/fixtures/private_classic_sample.json')
@@ -36,6 +38,25 @@ StoryBlueprint _scenario({
           ],
           'effects': <dynamic>[],
         },
+      ],
+    });
+  }
+  if (hasClosedCycle) {
+    (choices[0] as Map)['next_scene_id'] = 'closed_loop';
+    (raw['scenes'] as List).add({
+      'id': 'closed_loop', 'text': 'Повторяющийся путь.',
+      'terminal': false, 'choices': [
+        {
+          'id': 'repeat', 'label': 'Ходить по кругу',
+          'next_scene_id': 'closed_loop',
+          'conditions': <dynamic>[], 'effects': <dynamic>[],
+        },
+        if (cycleHasExit)
+          {
+            'id': 'leave_loop', 'label': 'Выйти к развязке',
+            'next_scene_id': 'canon_end',
+            'conditions': <dynamic>[], 'effects': <dynamic>[],
+          },
       ],
     });
   }
@@ -75,6 +96,22 @@ void main() {
       (e) => e.message, 'message',
       contains('sealed'),
     )));
+  });
+
+  test('compiler refuses a runnable but nonterminating story loop', () {
+    expect(() => CompiledCampaignCausalGate.verify(
+      blueprint: _scenario(hasClosedCycle: true),
+    ), throwsA(isA<FormatException>().having(
+      (e) => e.message, 'message', contains('цикл'),
+    )));
+  });
+
+  test('compiler permits voluntary loops when escape to a finale exists', () {
+    final report = CompiledCampaignCausalGate.verify(
+      blueprint: _scenario(hasClosedCycle: true, cycleHasExit: true),
+    );
+    expect(report.playable, isTrue);
+    expect(report.cycles, isEmpty);
   });
 
   test('incomplete bounded audit never installs an unverified campaign',
