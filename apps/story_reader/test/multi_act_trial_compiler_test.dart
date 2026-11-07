@@ -334,6 +334,14 @@ void main() {
     expect(rolePlan.initialFlags,
         isNot(contains(ReviewedHeroSourceAction.observedFlag)));
     expect(rolePlan.validate(book).isStructurallySound, true);
+    // Supplementary role-specific observe uses the very same source event;
+    // the playable source witness must remain the ordinary examine action.
+    final witnessed = BookwideSourceEncounters
+        .executableChoicesForReviewedEvents(
+          plan: rolePlan, reviewedEventIds: extraIds,
+        );
+    expect(witnessed[extraA.id], 'act_1_examine_source');
+    expect(witnessed[extraB.id], 'act_1_examine_source_2');
     final anchor = rolePlan.situations.firstWhere(
         (s) => s.id == opportunity.observeSceneId);
     final following = rolePlan.situations.firstWhere(

@@ -26,16 +26,23 @@ class BookwideSourceEncounters {
     for (final scene in plan.situations) {
       if (!reviewedEventIds.contains(scene.sourceEventId) ||
           scene.route != StoryRoute.canonicalProposal) continue;
-      for (final decision in scene.decisions) {
-        if (decision.sourceEventId != scene.sourceEventId ||
-            decision.route != StoryRoute.adaptationFiction) continue;
-        final eventId = scene.sourceEventId!;
-        if (result.containsKey(eventId)) {
-          throw const FormatException(
-              'Один исходный эпизод связан с несколькими игровыми действиями.');
-        }
-        result[eventId] = decision.id;
+      // Optional character-bound actions (hero_observe, etc.) can use
+      // the SAME quoted event. Require the original source-examine action
+      // as a stable playable witness without rejecting these lawful extras.
+      final baseChoiceId = scene.id.replaceFirst(
+          '_source_encounter', '_examine_source');
+      if (baseChoiceId == scene.id) continue;
+      final base = scene.decisions.where((decision) =>
+          decision.id == baseChoiceId &&
+          decision.sourceEventId == scene.sourceEventId &&
+          decision.route == StoryRoute.adaptationFiction).toList();
+      final eventId = scene.sourceEventId!;
+      if (base.length != 1 || result.containsKey(eventId)) {
+        throw const FormatException(
+            'Событие книги должно иметь одно исходное действие '
+            'изучения даже при дополнительных ролевых вариантах.');
       }
+      result[eventId] = base.single.id;
     }
     if (result.length != reviewedEventIds.length ||
         !result.keys.toSet().containsAll(reviewedEventIds) ||
