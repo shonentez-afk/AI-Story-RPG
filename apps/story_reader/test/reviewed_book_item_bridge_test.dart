@@ -119,11 +119,11 @@ void main() {
         case 'not_witnessed':
           first['personally_witnessed'] = false;
         case 'wrong_actor':
-          first['actor_id'] = 'npc_' + 'a' * 32;
+          first['actor_id'] = 'npc_' + List.filled(32, 'a').join();
         case 'unknown_choice':
           first['acquire_choice_id'] = 'not_in_book';
         case 'unknown_quote':
-          first['give_quote_sha256'] = 'f' * 64;
+          first['give_quote_sha256'] = List.filled(64, 'f').join();
         case 'duplicate_choice':
           first['give_choice_id'] = 'wait';
         case 'wrong_chapter':
