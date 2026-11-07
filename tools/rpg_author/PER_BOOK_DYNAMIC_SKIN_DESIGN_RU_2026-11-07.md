@@ -45,6 +45,24 @@
 
 **Проверка именно этой инварианты:** без исходных растровых файлов и сети скин открывает все UI слоты; изменённый style_seed перестраивает только рисунок; Text/RichText поддерживает кириллицу и scale 100–200%; voice-over/screen reader, focus/keyboard, hitbox, reduce motion, orientation, Windows DPI 150%; никакой decorative overlay не перекрывает текст/кнопки; offline build/reopen даёт один и тот же внешний вид при неизменном seed. Любой неизвестный opcode → безопасный штатный UI.
 
+## 2.2. Шрифты книги — автоматическая типографика, не изображение букв
+
+**Решение:** каждая книга получает собственную типографическую тему из того же StyleBible, что pixel recipes и весь UI. Но основной текст нельзя превращать в пиксельные картинки, самодельный TTF или Canvas-подмену реального Flutter Text: это сломает выбор текста, русскую кириллицу, переносы, масштабирование и доступность. Генератор не генерирует новые font-файлы и не распространяет чужие шрифты с каждой книгой.
+
+**Четыре обязательные роли:**
+1. **body / prose:** длинный повествовательный текст; мягкий, проверенный, полноценный кириллический Noto Serif или Noto Sans / одобренный аналог, сохранение настроек читателя. Никогда не использовать декоративный pixel font для целой главы.
+2. **dialogue / choices:** реплики, имена говорящих и варианты выбора; обычное читаемое начертание, небольшой стилистический акцент на имени, поддержка кириллицы и длинных фраз.
+3. **ui / controls:** все три вкладки, инвентарь, журнал, сохранения, кнопки и подсказки; максимально читабельный Noto Sans / системный fallback, допускается согласованная толщина/spacing.
+4. **display / ornament:** заголовок книги, главы, финала, краткие лейблы и буквицы; могут использовать Cormorant Garamond, Russo One или Pixelify Sans с кириллицей. Буквицы и рамочные украшения допустимо рисовать теми же procedural pixel primitives, что сцены, **но не весь текст**.
+
+**Конкретный начальный курируемый набор (проверены GitHub Google Fonts METADATA.pb, licence OFL, subsets cyrillic):** [Noto Serif](https://github.com/google/fonts/blob/main/ofl/notoserif/METADATA.pb), [Noto Sans](https://github.com/google/fonts/blob/main/ofl/notosans/METADATA.pb), [Cormorant Garamond](https://github.com/google/fonts/blob/main/ofl/cormorantgaramond/METADATA.pb), [Russo One](https://github.com/google/fonts/blob/main/ofl/russoone/METADATA.pb), [Pixelify Sans](https://github.com/google/fonts/blob/main/ofl/pixelifysans/METADATA.pb). Лицензия SIL OFL 1.1 в метаданных, но при реализации отдельно фиксировать точную версию семейства, весь текст OFL/NOTICE, font coverage, font-size/license impact. Не копировать/выкладывать файлы шрифтов в эту ветку. Рекомендуется установить ограниченную коллекцию в само Flutter-приложение **один раз** (с лицензиями), а в будущем game.bworld хранить только проверенные family_id/role/weight/spacing. Это сохраняет автономность и не раздувает каждую игру дубликатами TTF.
+
+**Подбор по теме:** сказка — Noto Serif body + Cormorant Garamond display; детектив — Noto Serif или Noto Sans body + контрастный строгий display; научная фантастика — Noto Sans body/ui + Russo One display; ретро-пиксели — Noto Sans body/dialogue + Pixelify Sans только для заголовков/коротких игровых надписей. Достаточно 1–2 семейства на книгу плюс безопасный UI fallback; уникальность возникает из сочетания начертания, размера, межстрочного интервала, буквицы, рамок, цвета и орнамента. Не генерировать совершенно новый алфавит на каждую книгу: стоимость QA несоразмерна пользе.
+
+**Схема (предложение, НЕ поддерживается текущим rich-v3):** typography_roles.body_family_id, dialogue_family_id, ui_family_id, display_family_id, heading_weight, tracking_range, readable_line_height, decorated_initial_style, fallback_family_id; все font IDs — allowlist, никаких внешних URL или произвольных файлов. Токены независимы от GameState/WorldEvents, не влияют на сохранения; одинаковый StyleBible даёт один набор ролей. Пользователь всегда может вернуть обычный шрифт и переопределить размер/интервал; доступный шрифт важнее художественного стиля.
+
+**Обязательная приёмка:** покрытие букв русского языка (включая Ё/ё), кавычек, тире, цифр, редких имен, смешанной латиницы; автоматический glyph-coverage тест с возвратом к Noto/system fallback; 100–200% text scale на Android, Windows DPI 150%, portrait/landscape, 2–3 говорящих, длинное название и очень короткие кнопки; screen-reader/selectable text; отсутствие сети и обновления приложения при открытии конкретной книги. При невозможности использовать выбранный display font интерфейс должен автоматически перейти на доступный семейный fallback, без пропавших символов или квадратиков.
+
 ## 3. Все тематические области
 
 | Элемент | Меняется по книге | Никогда не менять через theme |
