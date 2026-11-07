@@ -7,6 +7,7 @@ import 'book_source_index.dart';
 import 'intermediate_story_blueprint.dart';
 import 'npc_editorial_notebook.dart';
 import 'npc_knowledge_rulebook.dart';
+import 'reviewed_book_item_bridge.dart';
 import 'source_character_dossiers.dart';
 import 'source_evidence_graph.dart';
 import 'source_semantic_catalog.dart';
@@ -31,6 +32,7 @@ class NpcKnowledgeRichWorldBridge {
     required Map<String, String> sourceQuoteByRuleId,
     required bool userConfirmed,
     Map<String, dynamic>? reviewedNpcSocial,
+    List<Map<String, dynamic>> reviewedBookItems = const [],
     Map<String, List<Map<String, dynamic>>> reviewedDialogueTurns = const {},
     Map<String, String> reviewedSpeakerBindings = const {},
     String heroName = 'Игрок',
@@ -55,6 +57,16 @@ class NpcKnowledgeRichWorldBridge {
         heroDescription.trim().isEmpty || heroDescription.length > 1200) {
       throw const FormatException('Чужой источник, права или герой');
     }
+    // Exactly the accepted world, enhanced only by manually cited
+    // typed acquisition/transfer choices. The helper checks each quote and
+    // updates the PRIVATE world ID to avoid reusing previous campaigns.
+    final itemReview = ReviewedBookItemBridge.apply(
+      blueprint: blueprint,
+      provenance: provenance,
+      npcSocial: reviewedNpcSocial,
+      reviewedItems: reviewedBookItems,
+    );
+    final effectiveSocial = itemReview.social;
     final world = StoryBlueprint.fromJson(blueprint);
     final npcs = world.actors.difference({'player'});
     if (npcs.isEmpty || npcs.length > 15 ||
@@ -197,10 +209,10 @@ class NpcKnowledgeRichWorldBridge {
         }
       }
     }
-    final socialRules = reviewedNpcSocial == null ? null :
+    final socialRules = effectiveSocial == null ? null :
         RichNpcSocialContract.inspect(
-          {...provenance, 'npc_social': reviewedNpcSocial},
-          {'npc_social_format': reviewedNpcSocial['format']},
+          {...provenance, 'npc_social': effectiveSocial},
+          {'npc_social_format': effectiveSocial['format']},
           world,
         );
     RichNpcDialogueKnowledge.validate(
@@ -212,7 +224,8 @@ class NpcKnowledgeRichWorldBridge {
     final facts = world.facts.toList()..sort();
     result['presentation'] = {
       'hero': {'name': heroName.trim(), 'description': heroDescription.trim()},
-      'item_names': <String, String>{}, 'item_descriptions': <String, String>{},
+      'item_names': itemReview.names,
+      'item_descriptions': itemReview.descriptions,
       'stat_names': <String, String>{},
       // Never serialize the private original note or secret text.
       'fact_names': {
@@ -224,11 +237,11 @@ class NpcKnowledgeRichWorldBridge {
       if (reviewedDialogueTurns.isNotEmpty)
         'scene_dialogue_knowledge': reviewedDialogueTurns,
     };
-    if (reviewedNpcSocial != null) {
-      // The model/presentation are already assembled at this point.
-      // Never invent the author's presence, rumor or consent flags.
+    if (effectiveSocial != null) {
+      // No inferred presence/consent: each authored item action has an
+      // explicit source quote and user-confirmed NPC participant.
       result['npc_social'] =
-          jsonDecode(jsonEncode(reviewedNpcSocial));
+          jsonDecode(jsonEncode(effectiveSocial));
       // All quotes, actions and actor identities were preflight checked.
       // The strict ZIP writer and importer independently repeat this check.
     }
