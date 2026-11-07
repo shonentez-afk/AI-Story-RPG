@@ -47,6 +47,8 @@ def parser():
                          help="Optional matching attribution sidecar for --bworld")
     quality.add_argument("--output", type=Path,
                          help="Write a private, immutable JSON report outside the repository")
+    quality.add_argument("--npc-review", type=Path,
+                         help="Private source-bound NPC review for project pre-audit")
     quality.add_argument("--strict", action="store_true",
                          help="Exit 3 when any mechanical quality warning remains")
     dialogue = commands.add_parser("dialogue-audit", help="E6c: read-only NPC question and answer QA")
@@ -112,14 +114,16 @@ def main(argv=None) -> int:
             from .gameplay_quality import audit_archive, audit_project
             from .common import atomic_write, canonical, outside_repository, require
             if args.bworld is not None:
-                require(args.project is None and args.enrichment is None, "invalid_args",
+                require(args.project is None and args.enrichment is None and
+                        args.npc_review is None, "invalid_args",
                         "Use --bworld OR --project with --enrichment")
                 result = audit_archive(args.bworld, args.attribution)
             else:
                 require(args.project is not None and args.enrichment is not None
                         and args.attribution is None, "invalid_args",
                         "Provide --project and --enrichment, or --bworld")
-                result = audit_project(args.project, args.enrichment)
+                result = audit_project(args.project, args.enrichment,
+                                       npc_review_path=args.npc_review)
             if args.output is not None:
                 out = outside_repository(args.output)
                 require(not out.exists(), "output_exists", "Report cannot overwrite an existing file")
