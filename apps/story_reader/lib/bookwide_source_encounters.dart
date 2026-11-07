@@ -14,6 +14,39 @@ import 'story_plan.dart';
 class BookwideSourceEncounters {
   const BookwideSourceEncounters._();
 
+  /// Demand a source-locked REAL action witness for every separately
+  /// approved interactive event. A citation in a scene is not a playable
+  /// choice. This remains independent of any model's literary judgement.
+  static Map<String, String> executableChoicesForReviewedEvents({
+    required StoryPlan plan,
+    required Set<String> reviewedEventIds,
+  }) {
+    final result = <String, String>{};
+    if (reviewedEventIds.isEmpty) return const {};
+    for (final scene in plan.situations) {
+      if (!reviewedEventIds.contains(scene.sourceEventId) ||
+          scene.route != StoryRoute.canonicalProposal) continue;
+      for (final decision in scene.decisions) {
+        if (decision.sourceEventId != scene.sourceEventId ||
+            decision.route != StoryRoute.adaptationFiction) continue;
+        final eventId = scene.sourceEventId!;
+        if (result.containsKey(eventId)) {
+          throw const FormatException(
+              'Один исходный эпизод связан с несколькими игровыми действиями.');
+        }
+        result[eventId] = decision.id;
+      }
+    }
+    if (result.length != reviewedEventIds.length ||
+        !result.keys.toSet().containsAll(reviewedEventIds) ||
+        result.values.toSet().length != result.length) {
+      throw const FormatException(
+          'Не каждому подтверждённому событию соответствует '
+          'единственное проверяемое игровое решение.');
+    }
+    return Map<String, String>.unmodifiable(result);
+  }
+
   // Source observations must stay bounded by the SAME StoryPlan/BookWorld
   // runtime and finite-state audit as the rest of the game.
   static const maxReviewedEvents = 48;

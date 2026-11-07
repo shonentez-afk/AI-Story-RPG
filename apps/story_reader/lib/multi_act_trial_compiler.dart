@@ -437,10 +437,24 @@ class MultiActTrialCompiler {
     // Final pass on the EXACT independently imported world, not on a
     // convenient graph of StoryPlan situations. Reject reachable softlocks
     // and structurally connected but impossible endings before installation.
-    CompiledCampaignCausalGate.verify(
+    final sourceEventChoices =
+        BookwideSourceEncounters.executableChoicesForReviewedEvents(
+      plan: plan, reviewedEventIds: reviewedInteractiveEventIds,
+    );
+    final campaignReport = CompiledCampaignCausalGate.verify(
       blueprint: inspected.blueprint,
       socialRules: inspected.npcSocialRulebook,
+      requiredChoiceIds: sourceEventChoices.values,
     );
+    // The imported package has to prove the reviewed actions were actually
+    // committed on real replayable paths. Text coverage alone is insufficient.
+    for (final entry in sourceEventChoices.entries) {
+      if (!campaignReport.choiceWitnesses.containsKey(entry.value)) {
+        throw FormatException(
+            'Событие книги не имеет исполнимого игрового решения: ' +
+            entry.key);
+      }
+    }
     return StoryPlanTrialCompilation(
       archive: archive,
       sourceFingerprint: index.sourceFingerprint,

@@ -1833,6 +1833,18 @@ void main() {
     expect(augmented.situations.length,
         ready.draft.plan.situations.length + 4);
     expect(augmented.validate(book).isStructurallySound, true);
+    final actionable =
+        BookwideSourceEncounters.executableChoicesForReviewedEvents(
+      plan: augmented, reviewedEventIds: extras,
+    );
+    expect(actionable.keys.toSet(), extras);
+    expect(actionable.values, containsAll([
+      'act_1_examine_source', 'act_1_examine_source_2',
+      'act_2_examine_source', 'act_2_examine_source_2',
+    ]));
+    expect(() => BookwideSourceEncounters.executableChoicesForReviewedEvents(
+      plan: ready.draft.plan, reviewedEventIds: extras,
+    ), throwsFormatException);
     final sourceChoices = augmented.situations
         .singleWhere((s) => s.id == 'act_1_source_encounter').decisions;
     expect(sourceChoices.map((d) => d.id), [
@@ -1898,6 +1910,16 @@ void main() {
     final verified = const RichPrivateBookworldImporter()
         .inspect(compiled.archive);
     expect(verified.canDistributePublicly, false);
+    final playable = StoryCampaignCausalAudit.inspect(
+      blueprint: verified.blueprint,
+      requiredChoiceIds: actionable.values,
+    );
+    expect(playable.status, CampaignCausalStatus.playable);
+    for (final entry in actionable.entries) {
+      expect(playable.choiceWitnesses[entry.value], isNotEmpty);
+      expect(playable.choiceWitnesses[entry.value]!.last.choiceId,
+          entry.value);
+    }
     for (var i = 0; i < 2; i++) {
       final selected = book.events.where((e) => extras.contains(e.id) &&
           e.source.chapterIndex == i).toList();
