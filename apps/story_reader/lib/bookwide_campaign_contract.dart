@@ -119,7 +119,10 @@ class BookwideCampaignContract {
         ('original', 'alternate'), ('alternate', 'original'),
       ]) {
         final node = scenes[prefix + kind + '_ending'];
-        final id = prefix + 'continue_' + kind;
+        // The scene is alternate_ending, but its historical choice ID
+        // is continue_alternative; keep existing saves and route witnesses.
+        final id = prefix + (kind == 'original'
+            ? 'continue_original' : 'continue_alternative');
         final choices = node?.decisions.where((d) => d.id == id).toList();
         if (node == null || node.terminal ||
             choices == null || choices.length != 1) {
