@@ -1,5 +1,17 @@
 # AI Story RPG — актуальный статус 2026-11-07
 
+## ПОДТВЕРЖДЁННЫЙ КОНТРОЛЬНЫЙ ПУНКТ — 2026-11-07
+
+**Последний проверенный КОД:** `fb15a1ee7ce3bfbbe8aaa2a15273be812a5bcf87` в [PR #133](https://github.com/shonentez-afk/AI-Story-RPG/pull/133). [AI Story RPG CI #937](https://github.com/shonentez-afk/AI-Story-RPG/actions/runs/42343416675) — **SUCCESS** на ТОЧНОМ кодовом SHA: Flutter analyze, **635 widget тестов PASS, 2 SKIP**, Python, Dart, M1.7, Windows portable, Android APK. [M0 #1022](https://github.com/shonentez-afk/AI-Story-RPG/actions/runs/42343416691) — **SUCCESS** на том же SHA. Публикация тестового GitHub release в PR ожидаемо SKIPPED; это НЕ ошибка сборки.
+
+**Доступные артефакты CI #937:** `AI-Story-RPG-Windows-portable` (artifact ID `13562822537`, не истёк); `AI-Story-RPG-Android-debug` (artifact ID `13562299704`, не истёк); `AI-Story-RPG-BookWorld-demo` и `AI-Story-RPG-Grimm-Frog-Prince-FB2` (публичный QA-пример). Для Android артефакт Actions является ZIP-обёрткой для собранного APK; не путать с готовым APK-файлом напрямую.
+
+**Что реально работает в том же движке:** выбранный герой по постоянному source-reviewed `character_id` → игровой identity flag `player_is_npc_<id>` → при отдельном ручном согласии и наличии двух последовательных source-encounter с точным цитатным упоминанием доступна `_hero_observe`, а затем `_hero_recall` только после `hero_source_observed`. Смена героя/отрывка снимает прежние подтверждения; нейтральные выборы работают независимо; нет придуманного канона, секретов NPC или выдуманного владения вещами. Действия, журнал и state replay проверены из SQLite после закрытия/повторного открытия.
+
+**НЕ путать с закрытием проекта:** PR #133 остаётся **Draft**, в `main` не переносить до общего функционального пакета и приёмки #118. Дальше — проверяемые начальные знания героя, роль-зависимые реплики и диалоги, причинная адаптация всей книги, реальные CANON/ALTER_FATE, полный FB2/GLM и Win/Android E2E. E6d ведёт другой чат, **не трогать**. Не делать отдельный PR на мелкие поля/экраны; соблюдать единый функциональный пакет. Если следующий коммит меняет ТОЛЬКО эти документы с `[skip ci]`, проверенный кодовый SHA по-прежнему `fb15a1e`, а новый документальный HEAD сам по себе НЕ имеет нового CI.
+
+
+
 ## P0 — ролевые игровые действия по подтверждённым цитатам (2026-11-07)
 
 **Проверенная база:** [CI #936](https://github.com/shonentez-afk/AI-Story-RPG/actions/runs/42341576311) на `abfb5a509beb5d45aacc13ce80b29fee36f86ef8` — **SUCCESS** во ВСЕХ задачах: Flutter analyze/widget, Dart core, Python, M1.7, Windows portable, Android debug; [M0 #1021](https://github.com/shonentez-afk/AI-Story-RPG/actions/runs/42341576327) — SUCCESS. PR #133 **Draft**, не сливать до полного функционального пакета.
