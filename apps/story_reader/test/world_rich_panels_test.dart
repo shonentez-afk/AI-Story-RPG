@@ -20,7 +20,10 @@ class _RichViewGateway implements WorldLibraryGateway {
     isTerminal: true,
     stats: {'courage': 4, 'insight': 1},
     inventory: [],
-    flags: {'rope': true},
+    flags: {
+      'rope': true,
+      'player_is_npc_0123456789abcdef0123456789abcdef': true,
+    },
     knownFacts: ['rescue_fact'],
     choices: [],
     journal: [
@@ -61,6 +64,12 @@ void main() {
     await tester.tap(find.text('Герой'));
     await tester.pumpAndSettle();
     expect(find.text('Герой: Лена'), findsOneWidget);
+    expect(find.text('Роль: проверенная карточка персонажа'),
+        findsOneWidget);
+    expect(find.textContaining('Постоянный ID: npc_01234567'),
+        findsOneWidget);
+    expect(find.textContaining('Знания и секреты NPC не присваиваются'),
+        findsOneWidget);
     expect(find.text('Смелость: 4'), findsOneWidget);
     expect(find.text('Наблюдательность: 1'), findsOneWidget);
     expect(find.textContaining('Мальчик спасён у реки'), findsWidgets);

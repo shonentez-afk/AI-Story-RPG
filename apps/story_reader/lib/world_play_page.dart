@@ -596,6 +596,18 @@ class _WorldInfoSheet extends StatelessWidget {
   final GamePanel panel;
   final WorldGameView view;
 
+  // The v3 runtime still uses the actor key 'player'. Only a user-reviewed
+  // source-linked NPC role may set a permanent player_is_npc_<id> flag.
+  // Never invent one from the display name, dialogue or knownFacts.
+  static final RegExp _roleFlag = RegExp(
+      r'^player_is_npc_[0-9a-f]{32}$');
+  String? get _selectedHeroCharacterId {
+    final entries = view.flags.entries.where(
+        (e) => e.value && _roleFlag.hasMatch(e.key)).toList();
+    if (entries.length != 1) return null;
+    return entries.single.key.substring('player_is_'.length);
+  }
+
   @override
   Widget build(BuildContext context) {
     final heading = switch (panel) {
@@ -607,6 +619,13 @@ class _WorldInfoSheet extends StatelessWidget {
       GamePanel.character => [
         if (view.heroName != null) 'Герой: ' + view.heroName!,
         if (view.heroDescription != null) view.heroDescription!,
+        if (_selectedHeroCharacterId != null)
+          'Роль: проверенная карточка персонажа',
+        if (_selectedHeroCharacterId != null)
+          'Постоянный ID: ' +
+              _selectedHeroCharacterId!.substring(0, 12) + '…',
+        if (_selectedHeroCharacterId != null)
+          'Знания и секреты NPC не присваиваются автоматически.',
         if (view.stats.isEmpty) 'Характеристики не заданы',
         for (final stat in view.stats.entries)
           (view.statNames[stat.key] ?? _statLabel(stat.key)) +

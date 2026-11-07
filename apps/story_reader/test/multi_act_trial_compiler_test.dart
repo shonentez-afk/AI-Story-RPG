@@ -169,10 +169,13 @@ void main() {
       title: 'Два акта с подтвержденным героем',
       author: 'Игровой тест личности',
       chapters: [
-        List.filled(5, 'Артем увидел ворота и нашёл ключ. '
-            'Артем услышал предложение от путника. ').join(' '),
-        List.filled(5, 'Мария ждала у ворот. '
-            'Артем выбрал другую дорогу и вернулся. ').join(' '),
+        // Reuse an ALREADY PROVEN local extraction pattern from the
+        // npc_editorial_notebook_test fixture. Arbitrary name mentions
+        // without a supported source pattern must NOT mint identities.
+        List.filled(5, 'Артем по прозвищу Волк открыл дверь. '
+            'Дверь была закрыта. ').join(' '),
+        List.filled(5, 'Мария по прозвищу Лиса увидела дом. '
+            'Дверь была открыта. ').join(' '),
       ],
     ));
     final book = await _analyze(index);
@@ -918,37 +921,43 @@ void main() {
     // ListTile scrollable. Controls below the viewport are lazily built.
     final scrollable = find.byType(Scrollable).first;
     final quotes = find.byKey(const Key('multiact-trial-source-reviewed'));
-    await tester.scrollUntilVisible(quotes, 110, scrollable: scrollable);
+    await tester.scrollUntilVisible(quotes, 250, scrollable: scrollable);
+    await tester.pumpAndSettle();
     await tester.tap(quotes);
     await tester.pumpAndSettle();
+    expect(tester.widget<CheckboxListTile>(quotes).value, true);
     final fiction = find.byKey(const Key('multiact-trial-private-fiction'));
-    await tester.scrollUntilVisible(fiction, 110, scrollable: scrollable);
+    await tester.scrollUntilVisible(fiction, 250, scrollable: scrollable);
+    await tester.pumpAndSettle();
     await tester.tap(fiction);
     await tester.pumpAndSettle();
+    expect(tester.widget<CheckboxListTile>(fiction).value, true);
 
     final crossAct = find.byKey(const Key('multiact-trial-consequence'));
-    await tester.scrollUntilVisible(crossAct, 110, scrollable: scrollable);
+    await tester.scrollUntilVisible(crossAct, 250, scrollable: scrollable);
+    await tester.pumpAndSettle();
     await tester.tap(crossAct);
     await tester.pumpAndSettle();
+    expect(tester.widget<CheckboxListTile>(crossAct).value, true);
     final itemButton = find.byKey(
         const Key('multiact-trial-optional-gameplay'));
-    await tester.scrollUntilVisible(itemButton, 110, scrollable: scrollable);
+    await tester.scrollUntilVisible(itemButton, 250, scrollable: scrollable);
     await tester.pumpAndSettle();
     expect(tester.widget<OutlinedButton>(itemButton).onPressed, isNotNull);
     final batchButton =
         find.byKey(const Key('multiact-trial-whole-gameplay-batch'));
-    await tester.scrollUntilVisible(batchButton, 110,
+    await tester.scrollUntilVisible(batchButton, 250,
         scrollable: scrollable);
     await tester.pumpAndSettle();
     expect(tester.widget<OutlinedButton>(batchButton).onPressed, isNotNull);
     final literaryButton =
         find.byKey(const Key('multiact-trial-whole-literary-review'));
-    await tester.scrollUntilVisible(literaryButton, 110,
+    await tester.scrollUntilVisible(literaryButton, 250,
         scrollable: scrollable);
     await tester.pumpAndSettle();
     expect(tester.widget<OutlinedButton>(literaryButton).onPressed, isNull);
 
-    await tester.scrollUntilVisible(itemButton, -110,
+    await tester.scrollUntilVisible(itemButton, 240,
         scrollable: scrollable);
     await tester.pumpAndSettle();
     await tester.tap(itemButton);
@@ -1502,7 +1511,9 @@ void main() {
     expect(tester.widget<CheckboxListTile>(secondChoice).value, true);
     await reveal(choice, down: false);
     expect(tester.widget<CheckboxListTile>(choice).value, true);
-    await reveal(reviewed, down: false);
+    // Source approval appears AFTER the expanded encounter cards. Scroll
+    // DOWN in the primary ListView; scrolling upward can never build it.
+    await reveal(reviewed, down: true);
     expect(tester.widget<CheckboxListTile>(reviewed).value, false);
     final coverage = find.byKey(const Key('multiact-source-coverage'));
     await reveal(coverage, down: false);
