@@ -7,9 +7,11 @@ import 'package:ai_story_reader/book_source_index.dart';
 import 'package:ai_story_reader/bookwide_act_planner.dart';
 import 'package:ai_story_reader/bookwide_storyplan_composer.dart';
 import 'package:ai_story_reader/narrative_book_model.dart';
+import 'package:ai_story_reader/npc_campaign_consequences.dart';
 import 'package:ai_story_reader/npc_campaign_hero_selection.dart';
 import 'package:ai_story_reader/npc_campaign_writing_session.dart';
 import 'package:ai_story_reader/npc_editorial_notebook.dart';
+import 'package:ai_story_reader/reviewed_gameplay_compiler.dart';
 import 'package:ai_story_reader/reviewed_hero_role.dart';
 import 'package:ai_story_reader/reviewed_hero_source_action.dart';
 import 'package:ai_story_reader/source_analysis_checkpoint_repository.dart';
@@ -22,10 +24,12 @@ import 'package:ai_story_reader/source_semantic_provider.dart';
 import 'package:ai_story_reader/story_plan_dilemma_generator.dart';
 import 'package:ai_story_reader/whole_book_npc_campaign.dart';
 import 'package:ai_story_reader/whole_book_npc_campaign_page.dart';
+import 'package:ai_story_reader/whole_plan_gameplay_candidate_batch.dart';
 import 'package:ai_story_reader/world_library_gateway.dart';
 import 'package:ai_story_reader/zai_auto_whole_book_analysis.dart';
 import 'package:ai_story_reader/zai_npc_campaign_writing.dart';
 import 'package:ai_story_reader/zai_semantic_preview.dart';
+import 'package:ai_story_reader/zai_source_locked_gameplay_candidates.dart';
 import 'package:ai_story_reader/zai_whole_book_event_outline.dart';
 import 'package:bookworld_format/bookworld_format.dart';
 import 'package:bookworld_format/reviewed_npc_campaign_bookworld_writer.dart';
@@ -52,7 +56,7 @@ Future<_Fixture> _fixture() async {
   final index = BookSourceIndexer.index(ImportedBook(
     title: 'Герой, две встречи и сохранённая память', author: 'Синтетическая приёмка',
     chapters: [for (final name in names)
-      List.filled(7, 'Начало пути. ').join() + '$name встретил путника у ворот и показал дорогу. ' +
+      List.filled(7, 'Начало пути. ').join() + '$name нашёл ключ у ворот и показал дорогу. ' +
           List.filled(12, 'Путник продолжил путешествие. ').join()],
   ));
   final manifest = ZaiWholeBookConsentManifest.fromIndex(index);
@@ -147,6 +151,36 @@ class _UnusedGateway implements WorldLibraryGateway {
   @override dynamic noSuchMethod(Invocation invocation) {
     calls++; throw StateError('Opening or changing hero must not install a game');
   }
+}
+
+(WholePlanGameplayBatchManifest, List<GameplayCandidateDraft>, Map<String, String>)
+    _itemProposal(WholeBookNpcSourcePlan source, {bool includeGrant = true}) {
+  final manifest = WholePlanGameplayBatchManifest.fromPlan(
+      index: source.index, book: source.book, plan: source.plan, maxNewRequestsPerRun: 2);
+  final drafts = <GameplayCandidateDraft>[];
+  final notes = <String, String>{};
+  for (final context in manifest.contexts) {
+    final candidates = <GameplayCandidate>[];
+    for (final choice in context.choices) {
+      if ((includeGrant && choice.choiceId == 'act_1_accept_offer') ||
+          choice.choiceId == 'act_1_honor_condition') {
+        final candidate = GameplayCandidate(
+          kind: 'item', id: 'source_key', label: 'ключ',
+          op: choice.choiceId == 'act_1_accept_offer' ? 'grant_item' : 'consume_item',
+          sceneId: choice.sceneId, choiceId: choice.choiceId,
+          sourceEventId: choice.sourceEventId,
+          uncertainty: 'Цитата подтверждает слово, не игровое владение ключом.',
+        );
+        candidates.add(candidate);
+        notes[ReviewedGameplayCompiler.signature(candidate)] =
+            'Одобряю получение и расходование как частное игровое правило, не канон.';
+      }
+    }
+    drafts.add(GameplayCandidateDraft(sourceFingerprint: context.sourceFingerprint,
+        approvalDigest: context.approvalDigest, candidates: candidates));
+  }
+  expect(notes.length, includeGrant ? 2 : 1);
+  return (manifest, drafts, notes);
 }
 
 void main() {
@@ -343,13 +377,153 @@ void main() {
     final selector = find.byType(DropdownButtonFormField<String>);
     await tester.ensureVisible(selector);
     await tester.tap(selector); await tester.pumpAndSettle();
-    await tester.tap(find.text('Мария').last); await tester.pumpAndSettle();
-    expect(find.text('Герой: Мария'), findsOneWidget);
-    expect((await heroStore.load(f.free, f.roles)).role!.displayName, 'Мария');
+    await tester.tap(find.text('Мария').hitTestable().last);
+    await tester.pumpAndSettle();
+    // Verify the REAL saved role before inspecting a lazily built ListView
+    // header. ensureVisible(selector) may have scrolled that header away.
+    final saved = await heroStore.load(f.free, f.roles);
+    expect(saved.role!.displayName, 'Мария');
+    expect(saved.revision, 2);
+    final header = find.byKey(const Key('whole-npc-current-hero'));
+    await tester.scrollUntilVisible(header, -160,
+        scrollable: find.byType(Scrollable).first);
+    await tester.pumpAndSettle();
+    expect(tester.widget<Text>(header).data, 'Герой: Мария');
     final consent = find.byKey(const Key('whole-npc-quotes-reviewed'));
     await tester.scrollUntilVisible(consent, 160, scrollable: find.byType(Scrollable).first);
     expect(tester.widget<CheckboxListTile>(consent).value, false);
     expect(transport.sent, isEmpty); expect(gateway.calls, 0);
     expect(tester.takeException(), isNull);
+  });
+
+  test('one selected hero, acquired and consumed source item, two NPCs and '
+      'all old routes survive strict ZIP, hash replay and mid-item SQLite restart', () async {
+    final source = f.select(f.hero, actions: true);
+    final base = await source.compileBase(approvedPlanDigest: source.planDigest,
+        approvedHeroDigest: source.heroReviewDigest,
+        allShownQuotesReviewed: true, privateFictionConfirmed: true);
+    final (manifest, proposals, notes) = _itemProposal(source);
+    final preview = NpcCampaignConsequences.preview(source: source,
+        originalArchive: base.archive, currentReviewedRoles: f.roles,
+        manifest: manifest, proposals: proposals, selectedUserReviewNotes: notes);
+    expect(preview.effectCount, 2);
+    final variant = await NpcCampaignConsequences.accept(source: source,
+        preview: preview, originalArchive: base.archive, freshReviewedRoles: f.roles,
+        approvedDigest: preview.approvalDigest, explicitlyConfirmedPrivateFiction: true);
+    expect(variant.isInstalled, false);
+    final enriched = variant.archiveFor(source: source, originalArchive: base.archive);
+    final candidates = f.candidates(source);
+    final drafts = [for (var i = 0; i < candidates.length; i++) NpcCampaignDialogueDraft(
+      candidateId: candidates[i].id, playerLine: 'Расскажи о дороге у ворот.',
+      npcLine: 'Я помню нашу встречу у ворот и показанную дорогу.',
+      requiresCandidateIds: [if (i > 0) candidates[i - 1].id],
+    )];
+    final before = BookwideNpcCampaignAuthoring.review(source: source,
+        verifiedBaseArchive: base.archive, currentReviewedRoles: f.roles, selectedDrafts: drafts);
+    final approval = BookwideNpcCampaignAuthoring.review(source: source,
+        verifiedBaseArchive: enriched, currentReviewedRoles: f.roles, selectedDrafts: drafts);
+    expect(approval.approvalDigest, isNot(before.approvalDigest));
+    final built = await BookwideNpcCampaignAuthoring.compile(source: source, approval: approval,
+        freshReviewedRoles: f.roles, approvedDigest: approval.approvalDigest,
+        explicitlyConfirmedPrivateFiction: true);
+    final game = const RichPrivateBookworldImporter().inspect(built.archive);
+    source.verifyArchiveHero(game);
+    expect(game.blueprint.items, {'source_key'});
+    expect(game.presentation['item_names'], containsPair('source_key', 'ключ'));
+    expect(game.blueprint.actors.length, 3);
+    expect(game.requiresNetwork, false);
+    final opportunity = ReviewedHeroSourceAction.find(index: source.index,
+        book: source.book, plan: source.plan, role: f.hero)!;
+    final observe = '${opportunity.observeSceneId}_hero_observe';
+    final recall = '${opportunity.recallSceneId}_hero_recall';
+    final skipped = StoryWorld(game.blueprint, socialRulebook: game.npcSocialRulebook);
+    for (final id in [observe, recall, 'act_1_refuse_offer']) {
+      expect(skipped.apply(actionId: 'skip_${skipped.state.revision}', choiceId: id).applied, true);
+    }
+    expect(skipped.state.inventory, isEmpty);
+    expect(skipped.apply(actionId: 'no_key', choiceId: 'act_1_honor_condition').applied, false);
+    final path = <String>[observe, recall, 'act_1_accept_offer', 'act_1_honor_condition', 'act_1_continue_original'];
+    for (var i = 0; i < candidates.length; i++) {
+      path.addAll([ReviewedNpcCampaignBookworldWriter.meetChoiceId(candidates[i].id),
+        ReviewedNpcCampaignBookworldWriter.replyChoiceId(candidates[i].id),
+        'act_${i + 2}_accept_offer', 'act_${i + 2}_honor_condition']);
+      if (i < candidates.length - 1) path.add('act_${i + 2}_continue_original');
+    }
+    final world = StoryWorld(game.blueprint, socialRulebook: game.npcSocialRulebook);
+    for (var i = 0; i < path.length; i++) {
+      expect(world.apply(actionId: 'combined_$i', choiceId: path[i], expectedRevision: i).applied,
+          true, reason: path[i]);
+      if (i == 2) expect(world.state.inventory, {'source_key'});
+      if (i >= 3) expect(world.state.inventory, isEmpty);
+      expect(world.state.knowledge['player'], isEmpty);
+    }
+    expect(world.isTerminal, true);
+    final replayed = StoryWorld.replay(game.blueprint, world.events.map((e) => e.toJson()),
+        expectedSequence: world.state.revision, expectedStateHash: world.state.stateHash,
+        socialRulebook: game.npcSocialRulebook);
+    expect(replayed.state.stateHash, world.state.stateHash);
+    final folder = await Directory.systemTemp.createTemp('hero_items_npcs_');
+    try {
+      var db = BookworldCampaignStore.openPrivateDirectory(folder.path);
+      late String campaign;
+      try {
+        final installed = db.installBookworld(built.archive);
+        campaign = db.createCampaign(installed.archiveHash);
+        for (var i = 0; i < 3; i++) {
+          expect(db.commitChoice(campaign, actionId: 'before_$i',
+              choiceId: path[i], expectedRevision: i).applied, true);
+        }
+        expect(db.loadCampaign(campaign).coordinator.state.inventory, {'source_key'});
+      } finally { db.close(); }
+      db = BookworldCampaignStore.openPrivateDirectory(folder.path);
+      try {
+        final restored = db.loadCampaign(campaign).coordinator.state;
+        expect(restored.inventory, {'source_key'});
+        expect(restored.flags[f.hero.playerIdentityFlag], true);
+        for (var i = 3; i < path.length; i++) {
+          expect(db.commitChoice(campaign, actionId: 'after_$i',
+              choiceId: path[i], expectedRevision: i).applied, true);
+        }
+        expect(db.loadCampaign(campaign).coordinator.isTerminal, true);
+        expect(db.loadCampaign(campaign).coordinator.state.inventory, isEmpty);
+        expect(db.exportPortable(campaign), isNotEmpty);
+      } finally { db.close(); }
+    } finally { await folder.delete(recursive: true); }
+  });
+
+  test('consequences reject unearned consumption, stale hero, modified base '
+      'and missing consent; external bytes cannot mutate the approved variant', () async {
+    final source = f.select(f.hero);
+    final base = await source.compileBase(approvedPlanDigest: source.planDigest,
+        approvedHeroDigest: source.heroReviewDigest,
+        allShownQuotesReviewed: true, privateFictionConfirmed: true);
+    final (badManifest, badDrafts, badNotes) = _itemProposal(source, includeGrant: false);
+    expect(() => NpcCampaignConsequences.preview(source: source, originalArchive: base.archive,
+        currentReviewedRoles: f.roles, manifest: badManifest, proposals: badDrafts,
+        selectedUserReviewNotes: badNotes), throwsFormatException);
+    final (manifest, proposals, notes) = _itemProposal(source);
+    final preview = NpcCampaignConsequences.preview(source: source,
+        originalArchive: base.archive, currentReviewedRoles: f.roles, manifest: manifest,
+        proposals: proposals, selectedUserReviewNotes: notes);
+    await expectLater(NpcCampaignConsequences.accept(source: source, preview: preview,
+        originalArchive: base.archive, freshReviewedRoles: f.roles,
+        approvedDigest: preview.approvalDigest, explicitlyConfirmedPrivateFiction: false), throwsFormatException);
+    final other = f.select(f.roles.singleWhere((r) => r.displayName == 'Мария'));
+    await expectLater(NpcCampaignConsequences.accept(source: other, preview: preview,
+        originalArchive: base.archive, freshReviewedRoles: f.roles,
+        approvedDigest: preview.approvalDigest, explicitlyConfirmedPrivateFiction: true), throwsFormatException);
+    await expectLater(NpcCampaignConsequences.accept(source: source, preview: preview,
+        originalArchive: base.archive, freshReviewedRoles: const [],
+        approvedDigest: preview.approvalDigest, explicitlyConfirmedPrivateFiction: true), throwsFormatException);
+    final variant = await NpcCampaignConsequences.accept(source: source, preview: preview,
+        originalArchive: base.archive, freshReviewedRoles: f.roles,
+        approvedDigest: preview.approvalDigest, explicitlyConfirmedPrivateFiction: true);
+    final copy = variant.archiveFor(source: source, originalArchive: base.archive);
+    copy[0] ^= 1;
+    expect(() => variant.archiveFor(source: source, originalArchive: copy), throwsFormatException);
+    expect(() => variant.archiveFor(source: other, originalArchive: base.archive), throwsFormatException);
+    final untouched = variant.archiveFor(source: source, originalArchive: base.archive);
+    expect(const RichPrivateBookworldImporter().inspect(untouched).blueprint.items, {'source_key'});
+    expect(const RichPrivateBookworldImporter().inspect(base.archive).blueprint.items, isEmpty);
   });
 }

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 
@@ -6,17 +7,19 @@ import 'book_source_index.dart';
 import 'bookwide_act_planner.dart';
 import 'bookwide_storyplan_composer.dart';
 import 'narrative_book_model.dart';
+import 'npc_campaign_consequences.dart';
 import 'npc_campaign_hero_selection.dart';
 import 'npc_campaign_writing_session.dart';
 import 'reviewed_hero_role.dart';
 import 'story_plan_trial_compiler.dart';
 import 'whole_book_npc_campaign.dart';
+import 'whole_plan_gameplay_batch_page.dart';
 import 'world_library_gateway.dart';
 import 'world_play_page.dart';
 import 'zai_npc_campaign_writing.dart';
 import 'zai_semantic_preview.dart';
 
-/// One source/hero/NPC/AI/review/install workflow; no request on opening.
+/// One source/hero/consequences/NPC/review/install workflow; no POST on opening.
 class WholeBookNpcCampaignPage extends StatefulWidget {
   const WholeBookNpcCampaignPage({
     super.key, required this.index, required this.book, required this.bookMap,
@@ -53,6 +56,7 @@ class _WholeBookNpcCampaignPageState extends State<WholeBookNpcCampaignPage>
     with WidgetsBindingObserver {
   WholeBookNpcSourcePlan? _source;
   StoryPlanTrialCompilation? _base;
+  NpcCampaignConsequences? _consequences;
   List<ReviewedHeroRole> _roles = const [];
   List<BookwideNpcConversationCandidate> _candidates = const [];
   final _edits = <String, _ConversationEdit>{};
@@ -139,12 +143,12 @@ class _WholeBookNpcCampaignPageState extends State<WholeBookNpcCampaignPage>
     _session = session; _dirty = false; _invalidate();
   }
 
-  /// Called only after all pending writes complete. A role change selects
-  /// another draft address; it never relabels or deletes existing writings.
+  /// A role change selects another draft address; it deletes no saved work.
   void _switchSource(WholeBookNpcSourcePlan source) {
     _saveTimer?.cancel();
     for (final edit in _edits.values) { edit.dispose(); }
     _edits.clear(); _source = source; _base = null; _catalog = null; _session = null;
+    _consequences = null;
     _candidates = const []; _dirty = false; _storageBlocked = false;
     _editGeneration++; _quotesReviewed = false; _privateFiction = false; _invalidate();
   }
@@ -259,11 +263,92 @@ class _WholeBookNpcCampaignPageState extends State<WholeBookNpcCampaignPage>
         allShownQuotesReviewed: _quotesReviewed, privateFictionConfirmed: _privateFiction);
       if (!mounted) return;
       setState(() {
-        _base = base; _roles = roles; _hero = savedHero; _rolesLoaded = true;
+        _base = base; _consequences = null;
+        _roles = roles; _hero = savedHero; _rolesLoaded = true;
         _candidates = candidates; _storageBlocked = false; _restore(saved);
       });
     } catch (error) { if (mounted) setState(() => _error = error.toString()); }
     finally { if (mounted) setState(() => _working = false); }
+  }
+
+  Uint8List _archiveForNpc() => _consequences?.archiveFor(
+      source: _source!, originalArchive: _base!.archive) ?? _base!.archive;
+
+  Future<void> _editConsequences() async {
+    final source = _source, base = _base;
+    if (_working || source == null || base == null || _heroBlocked || _storageBlocked) return;
+    setState(() { _working = true; _error = null; _invalidate(); });
+    try {
+      await _flush();
+      source.verifyCurrentHero(await _roleCatalog.load(widget.index));
+      if (!mounted) return;
+      // Reuse the existing whole-plan source/effect authoring and its explicit
+      // cloud consent. Cancelling here leaves the previous local variant intact.
+      final selected = await Navigator.of(context).push<SelectedWholePlanGameplayCandidates>(
+        MaterialPageRoute(builder: (_) => WholePlanGameplayBatchPage(
+          index: source.index, book: source.book, plan: source.plan)),
+      );
+      if (selected == null || !mounted) return;
+      final freshRoles = await _roleCatalog.load(widget.index);
+      final preview = NpcCampaignConsequences.preview(
+        source: source, originalArchive: base.archive,
+        currentReviewedRoles: freshRoles, manifest: selected.manifest,
+        proposals: selected.drafts, selectedUserReviewNotes: selected.selectedUserReviewNotes,
+      );
+      if (!mounted) return;
+      var checked = false;
+      final confirmed = await showDialog<bool>(context: context, builder: (ctx) =>
+        StatefulBuilder(builder: (ctx, refresh) => AlertDialog(
+          title: const Text('Включить последствия в эту NPC-кампанию?'),
+          content: SizedBox(width: 600, child: SingleChildScrollView(child: Column(
+            mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Герой: ${source.heroName}. Игровых эффектов: ${preview.effectCount}.'),
+              const Text('Предмет появляется только после соответствующего действия, '
+                  'а использование проверяет владение. Это частная игровая версия, '
+                  'не доказательство канона. Игра ещё не устанавливается.'),
+              for (final raw in preview.shownReview['effects'] as List)
+                ListTile(
+                  title: Text('${raw['label']} — ${switch (raw['op']) {
+                    'grant_item' => 'получить предмет',
+                    'consume_item' => 'использовать предмет',
+                    'learn_fact' => 'узнать игровой факт',
+                    _ => raw['op'].toString(),
+                  }}'),
+                  subtitle: Text('Сцена: ${raw['scene_id']}\n'
+                      'Решение: ${raw['choice_id']}\n${raw['review_note']}'),
+                ),
+              CheckboxListTile(key: const Key('npc-consequences-consent'), value: checked,
+                title: const Text('Подтверждаю показанные эффекты и перепроверю реплики'),
+                onChanged: (value) => refresh(() => checked = value == true)),
+            ],
+          ))),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Отмена')),
+            FilledButton(key: const Key('npc-consequences-accept'),
+              onPressed: checked ? () => Navigator.pop(ctx, true) : null,
+              child: const Text('Проверить и включить')),
+          ],
+        )),
+      );
+      if (confirmed != true || !mounted) return;
+      final accepted = await NpcCampaignConsequences.accept(
+        source: source, preview: preview, originalArchive: base.archive,
+        freshReviewedRoles: await _roleCatalog.load(widget.index),
+        approvedDigest: preview.approvalDigest,
+        explicitlyConfirmedPrivateFiction: true,
+      );
+      if (!mounted) return;
+      setState(() { _consequences = accepted; _invalidate(); _error = null; });
+    } catch (error) {
+      if (mounted) setState(() => _error =
+          'Последствия не изменены: $error. Реплики и сохранённые игры остались.');
+    } finally { if (mounted) setState(() => _working = false); }
+  }
+
+  void _clearConsequences() {
+    if (_working) return;
+    setState(() { _consequences = null; _invalidate(); _error = null; });
   }
 
   void _toggle(BookwideNpcConversationCandidate c, bool selected) {
@@ -319,6 +404,9 @@ class _WholeBookNpcCampaignPageState extends State<WholeBookNpcCampaignPage>
                   'Готовые и ручные реплики не пересылаются. Применяются условия вашего аккаунта Z.ai.'),
               const Text('Показанная роль героя не даёт ему знаний других NPC. '
                   'ИИ пишет черновик, но не меняет личности, правила и согласия.'),
+              if (_consequences != null) const Text('Выбранные игровые эффекты не означают, '
+                  'что герой уже получил предмет. Генератор реплик получает только '
+                  'показанный контекст; соответствие текста последствиям проверьте отдельно.'),
               ExpansionTile(title: const Text('Точные данные для отправки'),
                 children: [SelectableText(request.shownText)]),
               CheckboxListTile(key: const Key('npc-writing-cloud-consent'), value: checked,
@@ -357,7 +445,7 @@ class _WholeBookNpcCampaignPageState extends State<WholeBookNpcCampaignPage>
           'Заполните обе реплики каждого выбранного разговора или снимите выбор.');
       final fresh = await _roleCatalog.load(widget.index);
       final review = BookwideNpcCampaignAuthoring.review(source: _source!,
-        verifiedBaseArchive: _base!.archive, currentReviewedRoles: fresh,
+        verifiedBaseArchive: _archiveForNpc(), currentReviewedRoles: fresh,
         selectedDrafts: edits.map((e) => e.toDraft()).toList());
       if (mounted) setState(() { _roles = fresh; _approval = review; _campaignConfirmed = false; });
     } catch (error) { if (mounted) setState(() => _error = error.toString()); }
@@ -371,9 +459,15 @@ class _WholeBookNpcCampaignPageState extends State<WholeBookNpcCampaignPage>
     setState(() { _working = true; _error = null; });
     try {
       await _flush();
+      final freshRoles = await _roleCatalog.load(widget.index);
+      final current = BookwideNpcCampaignAuthoring.review(source: source,
+        verifiedBaseArchive: _archiveForNpc(), currentReviewedRoles: freshRoles,
+        selectedDrafts: approval.selectedDrafts);
+      if (current.approvalDigest != approval.approvalDigest) throw const FormatException(
+          'После одобрения изменились предметы, герой или NPC. Проверьте весь пакет заново.');
       final built = await BookwideNpcCampaignAuthoring.compile(source: source, approval: approval,
-        freshReviewedRoles: await _roleCatalog.load(widget.index),
-        approvedDigest: approval.approvalDigest, explicitlyConfirmedPrivateFiction: _campaignConfirmed);
+        freshReviewedRoles: freshRoles, approvedDigest: approval.approvalDigest,
+        explicitlyConfirmedPrivateFiction: _campaignConfirmed);
       if (!mounted) return;
       final installed = await widget.gateway.install(built.archive);
       if (installed.archiveHash != built.archiveSha256) throw const FormatException('Установленный мир отличается от проверенного.');
@@ -476,6 +570,23 @@ class _WholeBookNpcCampaignPageState extends State<WholeBookNpcCampaignPage>
               icon: const Icon(Icons.groups_outlined), label: const Text('Открыть или восстановить редактор разговоров')),
           ],
           if (_base != null) ...[
+            Card(child: Padding(padding: const EdgeInsets.all(12), child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                Text(_consequences == null ? 'Предметы и игровые последствия не добавлены.'
+                    : 'Включено игровых эффектов: ${_consequences!.effectCount}.',
+                    key: const Key('npc-consequences-state')),
+                const Text('Используется тот же сценарий героя. Реплики сохраняются отдельно; '
+                    'после изменения эффектов проверьте их смысл. При повторном входе '
+                    'предметы нужно выбрать и подтвердить заново, сохранённые предложения остаются.'),
+                Wrap(spacing: 8, children: [
+                  OutlinedButton.icon(key: const Key('npc-consequences-edit'),
+                    onPressed: !_working && !_storageBlocked && !_heroBlocked ? _editConsequences : null,
+                    icon: const Icon(Icons.inventory_2_outlined), label: const Text('Предметы и последствия')),
+                  if (_consequences != null) TextButton(key: const Key('npc-consequences-clear'),
+                    onPressed: _working ? null : _clearConsequences, child: const Text('Без этих эффектов')),
+                ]),
+              ],
+            ))),
             Text('Возможных разговоров: ${_candidates.length}; выбрано: ${_edits.length}.'),
             Text(_dirty ? 'Изменения ещё сохраняются…' : 'Черновик сохранён локально. Согласия не восстанавливаются.',
                 key: const Key('npc-writing-save-state')),
@@ -493,7 +604,8 @@ class _WholeBookNpcCampaignPageState extends State<WholeBookNpcCampaignPage>
           ],
           if (_approval != null) ...[
             Text('Герой: ${source!.heroName}. ${_approval!.actorCount} NPC, ${_approval!.episodeCount} разговоров. '
-                'Все игровые пути будут проверены при сборке.'),
+                'Игровых эффектов: ${_consequences?.effectCount ?? 0}. '
+                'Все пути проверяются вместе перед установкой.'),
             CheckboxListTile(key: const Key('whole-npc-final-approval'), value: _campaignConfirmed,
               title: const Text('Одобряю именно эту роль, реплики, личности и условия'),
               onChanged: _working ? null : (v) => setState(() => _campaignConfirmed = v == true)),
