@@ -11,6 +11,13 @@
     "packages/story_core/lib/src/blueprint.dart": "d90ccbcb07ee6ef57ead57c9918068b39ab551060cd97b2153fdbeebd9449cbb",
     "tools/bookworld/private_rich_bookworld.py": "095490d16a28063080a71d71150d1d25f99e51710b390738159863c9aa7e926c",
     "packages/bookworld_format/lib/private_rich_bookworld.dart": "8c9e446e58628497fd01be191c68005c51102e6854954dba9cc8b0c0d075fabf",
-    "packages/bookworld_format/lib/private_bookworld_writer.dart": "98bd97a060873afdd5fff24689c0c8a80d54dd3465e3b074d06c94882e97267f"
+    "packages/bookworld_format/lib/private_bookworld_writer.dart": "98bd97a060873afdd5fff24689c0c8a80d54dd3465e3b074d06c94882e97267f",
+    "packages/bookworld_format/lib/npc_social_contract.dart": "ef61702c281913519879f598695c752f71cac80e13fbe1c58be72c247caf3017",
+    "packages/bookworld_format/lib/npc_dialogue_knowledge.dart": "8e105ead69a8820ea5a822f6781ab972d48b38b9367155c40091f3636f6926f0",
+    "packages/story_core/lib/src/npc_social_ledger.dart": "f0c98766c8c04277202c20da9f1af4da65bd55ac4a470225579fc65fc379d2f2",
+    "packages/story_core/lib/src/engine.dart": "f3ffef0a28034ea0c16143a6e17ec5d0c2e53606ff2a5c78efacc245fcfe1d04",
+    "packages/campaign_manager/lib/campaign_manager.dart": "bbd879a479b331ead5fcb257cf0b7d558704b2bb848f6e42673c498f646f1929",
+    "apps/story_reader/lib/world_library_gateway.dart": "c584c85f97992b4af4300d7bd20dfd880f207638782ddc2bb682fd9728c837f5",
+    "packages/story_runtime_adapter/lib/story_runtime_adapter.dart": "879bc1bde9d58562fd6c3fc465a0c4c0c4594d2193f77e3fa58be6aebf50d053"
   }
 }
