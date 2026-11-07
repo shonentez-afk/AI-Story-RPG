@@ -313,6 +313,12 @@
 **Three display modes:** text — вообще без render loop; pixels_static — готовая композиция; pixels_animated — композиция + cosmetic cues. Режим переключается в любой момент без изменения revision, inventory, journal и save. При ошибке рисунка/недоступном archetype — явный текстовый fallback, без падения игры и без демонстрации скрытых предметов. На первом полном доказательстве: пруд, принцесса, лягушонок, золотой мяч, две ветви и диалог — все рисуется **кодом** и перезапускается одинаково на Windows/Android.
 
 
+### 8.1. Автоматический тематический UI-скин для каждой книги — один стиль с пиксельными сценами
+
+**Новое нормативное требование:** вместе с Visual Director вводится **Per-Book Skin Director**: по всей проверенной книге и одному Style Bible выпускает собственные цвета, орнаменты, текстовую рамку, speaker nameplates/диалоговые окна, семантические иконки, стили кнопок, три вкладки Герой/Предметы/Журнал, меню/загрузку/сохранение и финальный экран. **UI и пиксельные сцены используют общие palette/materials/style_seed**, а не две несогласованные стилистики. Подробный специфицированный конвейер, схема, каталог slots и QA: [PER_BOOK_DYNAMIC_SKIN_DESIGN_RU_2026-11-07.md](PER_BOOK_DYNAMIC_SKIN_DESIGN_RU_2026-11-07.md).
+
+Один готовый game.bworld должен открываться офлайн на Windows/Android без пересборки APK. Данные темы косметические и **не изменяют** narrative facts/WorldEvents/SQLite, inventory, знания NPC или действие выбора. Генератор не пишет Flutter/Dart/JS-код и не загружает обязательные PNG; проверенный Flutter renderer рисует whitelisted recipes/примитивы. **При каждой новой книге свой скин**, но при повторном открытии той же игры стиль стабилен. Отдельная явная регенерация — новая косметическая revision без изменения сюжетного состояния. Системные настройки контраста, выбора light/sepia/dark/OLED и размера русского текста всегда имеют приоритет над тематическим декором. Для старого rich-v3 нужен default UI, так как в нём строго четыре ZIP-записи; отдельную theme capability добавлять только в подтверждённый vNext.
+
 ## 9. Формат одного ГОТОВОГО .bworld: целевая новая версия
 
 **Текущий v3 не подходит для хранения полного набора данных** из §5–8: его пути/JSON жестко фиксированы. Решение — явное версионирование **BookWorld v4 (условное проектное название, ещё не реализовано)**, параллельно сохраняя импорт старых v3. Не менять v3 скрыто и не навязывать пользователю внешние JSON.
@@ -342,6 +348,10 @@ game.bworld
 │   ограничения scope, persona/knowledge/allowed actions, privacy metadata
 ├── visuals/recipes.json
 │   процедурные актёры, декорации, seeds, палитры, poses, cues, fallback
+├── visuals/style_bible.json
+│   одна проверенная палитра/жанр/мотивы для сцен и всего UI
+├── ui/skin.json
+│   ограниченные косметические recipes, semantic icons, text/dialogue/panels
 └── quality/report.json
     проверенные версии тестов/охват, ссылки на ревью, оставшиеся риски
 ```
@@ -462,6 +472,7 @@ game.bworld
 | Диалоги | Все обязательные offline реплики и вопросы подписаны speaker/turn IDs, доступны в нужное время, one-shot и requires_fact проверены, пропущенных тем нет |
 | AI | Без API проход возможен; с API restricted context и consent, unknown choice/маскировка ключа/spoiler injection не дают world effect; retry/429/timeout/cancel протестированы |
 | Пиксели | Обязательные сцены программно воспроизводятся без PNG/сети, actor appearance seed стабилен, motion optional/reduced, никаких визуальных спойлеров |
+| Персональный скин книги (P2) | В одном Style Bible согласованы пиксельные сцены, окно текста, диалоговые рамки, кнопки, иконки, меню, Герой/Предметы/Журнал; не раскрывает секретов, полный русский текст читается при Android/Windows 150% DPI, contrast/fallback/reduce motion протестированы, старый v3 открывается стандартно |
 | Формат | Один .bworld принимают Python verifier и Dart importer, всех членов и JSON схемы/hashes достаточно, недопустимые данные отклоняются, старый v3 продолжает импортироваться |
 | Сохранения | Два и более маршрута, restore после закрытия во время жеста, independent campaigns, portable saves без задвоенных действий |
 | Устройства | Важно отдельно проверять настоящий Windows и Android UI/performance/память/клавиатуру/scale, а не только сборку APK и synthetic widgets |
@@ -480,7 +491,7 @@ game.bworld
 | **P0-UI — без задержки релиза** | По существующему WorldGameView сделать одну качественную read-only карточную реализацию «Герой/Предметы/Журнал»; P0 device QA/сохранения и одна согласованная приёмка | Квестовая база, ownership, XP, полная история реплик |
 | **P1** | Навык автоматически создаёт единый BookEvidenceGraph, полные NPC cards, готовые offline диалоги, interactions/visual plans и строгий QA; проверка на синтетических и приватных настоящих историях | Ручной редактор |
 | **P1-GAME — после P0** | Один versioned gameplay contract: source-backed quest/obligations, по необходимости item quantity/ownership/transfer и deterministic skills → Python/Dart/SQLite/replay/Flutter tabs в одном пакете; только при наличии механик в книге | 1.0 офлайн text-v3, старый importer и завершённое чтение |
-| **P2** | Новый один self-contained .bworld (условно v4) с Python writer/verifier + Dart importer и Canvas procedural renderer, три display modes и короткие анимации. **Готовую визуальную игру можно импортировать сразу** | Сложные AI диалоги, редактор |
+| **P2** | Один self-contained .bworld vNext с Python writer/verifier + Dart importer, Canvas procedural pixel renderer **и индивидуальным per-book UI SkinPack**: окно текста, диалоги, тематические иконки/кнопки, меню, три вкладки, загрузка/сохранения, короткие анимации. **Готовая стилизованная игра импортируется сразу**, штатная тема остаётся fallback | Сложные AI диалоги, редактор |
 | **P3** | BYOK AI_NPC SAY/LOOK/DO/INTERACT и отдельная локальная conversation memory, contexts/consent/action gate; **без изменения offline полноты** | Случайная генерация новых ветвей |
 | **P4** | Необязательный встроенный Windows/Android редактор графов, персонажей, диалогов, внешности и анимаций, QA и экспорт новой версии | Основной запуск готовой игры |
 | **P5 при спросе** | Больше жанровых форм и лёгких анимаций, Flame при измеренной необходимости, офлайн LLM и отдельный экспериментальный проверяемый Story/Improvisation | Базовый функционал |
@@ -506,6 +517,8 @@ game.bworld
 https://github.com/shonentez-afk/AI-Story-RPG — main `959c8134f4ef20cd00dd4039d8d131638f502f60` (срез 2026-11-06): `tools/rpg_author/`, `tools/bookworld/private_rich_bookworld.py`, `packages/bookworld_format/lib/private_rich_bookworld.dart`, `packages/story_core/lib/`, `packages/story_runtime_adapter/lib/`, `packages/campaign_manager/lib/`, `apps/story_reader/lib/`, `docs/PROJECT_COMPLETION_GATE_RU_2026-11-06.md` и Issue #118.
 
 **Сторонние источники:** первичные URL для каждой технологии и её предложенного применения перечислены в §4; Key docs: Yarn line IDs https://www.yarnspinner.dev/docs/unreal/06-localisation-and-assets/ ; Convai sections/triggers https://docs.convai.com/api-docs/convai-playground/character-customization/narrative-design ; Rasa flow control https://rasa.com/faq/rasa-playground ; AI Dungeon Context/Story Cards https://help.aidungeon.com/faq/story-cards ; Character Card V2 https://github.com/malfoyslastname/character-card-spec-v2/blob/main/spec_v2.md ; Flame GameWidget https://docs.flame-engine.org/latest/flame/game_widget.html ; Dart CustomPainter https://api.flutter.dev/flutter/rendering/CustomPainter-class.html .
+
+**Индивидуальный skin для каждой книги (новое нормативное приложение P2):** [PER_BOOK_DYNAMIC_SKIN_DESIGN_RU_2026-11-07.md](PER_BOOK_DYNAMIC_SKIN_DESIGN_RU_2026-11-07.md). Отдельная theme capability только в будущем явно версионированном архиве; уже принятый rich-v3 не менять молча.
 
 **Согласованные игровые панели (новое нормативное приложение):** [GAME_PANELS_IMPLEMENTATION_PLAN_RU_2026-11-07.md](GAME_PANELS_IMPLEMENTATION_PLAN_RU_2026-11-07.md) (11 разделов: Hero/Items/Journal, event replay, quests, NPC, vNext, Flutter, QA и пакеты P0/P1) и [GAME_PANELS_REFERENCE_AUDIT_RU_2026-11-07.md](GAME_PANELS_REFERENCE_AUDIT_RU_2026-11-07.md) (проверенные чужие UX/модули и реальные границы текущего UI). Эти ссылки являются частью **этого же**, а не новым отдельным планом.
 
