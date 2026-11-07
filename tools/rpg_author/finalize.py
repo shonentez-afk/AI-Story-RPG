@@ -117,7 +117,8 @@ def finalize(project: Path, enrichment: Path, review: Path, output: Path,
              *, dialogues: Path | None = None,
              question_inventory_path: Path | None = None,
              no_interactive_questions: bool = False,
-             report_path: Path | None = None) -> dict:
+             report_path: Path | None = None,
+             npc_review_path: Path | None = None) -> dict:
     """All applicable checks must pass before creating a user-facing archive."""
     root = outside_repository(project)
     output = outside_repository(output)
@@ -160,6 +161,8 @@ def finalize(project: Path, enrichment: Path, review: Path, output: Path,
                 "source_validation_failed", "StoryPlan source validation failed")
         overlay = read_json(enrichment)
         review_data = read_json(review)
+        npc_review = (read_json(outside_repository(npc_review_path))
+                      if npc_review_path is not None else None)
         summary["inputs_sha256"] = {
             "source_fingerprint": index["source_fingerprint"],
             "story_sha256": digest(canonical(story)),
@@ -167,15 +170,25 @@ def finalize(project: Path, enrichment: Path, review: Path, output: Path,
             "review_sha256": digest(canonical(review_data)),
             "toolchain_sha256": state["toolchain_sha256"],
         }
+        if npc_review is not None:
+            from .npc_review import validate_review
+            actors = validate_review(npc_review, story, index, overlay)
+            summary["inputs_sha256"]["npc_review_sha256"] = digest(canonical(npc_review))
+            summary["stages"]["npc_review"] = {
+                "status": "source_bound_private_review_native_contract_required",
+                "actor_count": len(actors),
+                "social_format": npc_review["npc_social"]["format"],
+                "literary_canon_verified": False}
         summary["stages"]["literary_review"] = review_coverage(story, overlay, review_data)
 
-        game = audit_project(root, enrichment)
+        game = audit_project(root, enrichment, npc_review_path=npc_review_path)
         summary["stages"]["gameplay"] = {
             "warning_count": game["warning_count"], "status": game["status"]}
         require(game["warning_count"] == 0, "gameplay_warnings",
                 "Resolve all gameplay warnings before finalization")
 
-        blueprint, _ = _enrich(candidate_blueprint(story, index), story, index, overlay)
+        blueprint, _ = _enrich(candidate_blueprint(story, index), story, index, overlay,
+                               npc_review=npc_review)
         if no_interactive_questions:
             summary["stages"]["dialogues"] = {
                 "status": "not_applicable_author_declared_no_interactive_questions",
@@ -190,7 +203,8 @@ def finalize(project: Path, enrichment: Path, review: Path, output: Path,
             require(checked["warning_count"] == 0, "dialogue_warnings",
                     "Resolve all dialogue warnings before finalization")
 
-        built = build_rich(root, enrichment, output)
+        built = build_rich(root, enrichment, output,
+                           npc_review_path=npc_review_path)
         summary["archive_sha256"] = built["archive_sha256"]
         verified = verify_rich_bundle(output, sidecar)
         require(verified["archive_sha256"] == built["archive_sha256"],
