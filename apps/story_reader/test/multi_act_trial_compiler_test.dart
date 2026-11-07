@@ -44,6 +44,7 @@ import 'package:ai_story_reader/zai_semantic_preview.dart';
 import 'package:ai_story_reader/zai_whole_book_event_outline.dart';
 import 'package:bookworld_format/bookworld_format.dart';
 import 'package:campaign_manager/campaign_manager.dart';
+import 'package:story_core/story_core.dart' show StoryCampaignCausalAudit, CampaignCausalStatus;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter/material.dart';
 import 'package:ai_story_reader/multi_act_trial_page.dart';
