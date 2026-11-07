@@ -22,6 +22,25 @@ enum NpcMemoryKind {
 /// Reviewed source citations live in bookworld_format, not in story_core.
 enum NpcWitnessMode { present, reported }
 
+/// Projected exclusively from committed events. Death cannot be reversed.
+enum NpcLifeState { present, absent, dead }
+
+class NpcLifeTransition {
+  const NpcLifeTransition({
+    required this.sceneId, required this.choiceId,
+    required this.actorId, required this.nextState,
+  });
+  final String sceneId;
+  final String choiceId;
+  final String actorId;
+  final NpcLifeState nextState;
+
+  Map<String, Object?> toJson() => {
+    'scene_id': sceneId, 'choice_id': choiceId,
+    'actor_id': actorId, 'next_state': nextState.name,
+  };
+}
+
 /// Presence in a precise scene, approved by the private author. This is
 /// NOT inferred from a character's name or from their appearance in prose.
 class NpcSceneWitness {
@@ -144,17 +163,20 @@ class NpcSocialRulebook {
     List<NpcSceneWitness> witnesses = const [],
     List<NpcSocialChoiceGate> choiceGates = const [],
     List<NpcItemTransfer> itemTransfers = const [],
+    List<NpcLifeTransition> lifeTransitions = const [],
     this.requireReviewedWitnesses = false,
   }) : rules = List.unmodifiable(rules),
        witnesses = List.unmodifiable(witnesses),
        choiceGates = List.unmodifiable(choiceGates),
-       itemTransfers = List.unmodifiable(itemTransfers);
+       itemTransfers = List.unmodifiable(itemTransfers),
+       lifeTransitions = List.unmodifiable(lifeTransitions);
 
   final String blueprintHash;
   final List<NpcSocialRule> rules;
   final List<NpcSceneWitness> witnesses;
   final List<NpcSocialChoiceGate> choiceGates;
   final List<NpcItemTransfer> itemTransfers;
+  final List<NpcLifeTransition> lifeTransitions;
   /// Strict portable social rules must prove how each observer learned
   /// about the event. Old local preview rulebooks keep legacy semantics.
   final bool requireReviewedWitnesses;
@@ -166,9 +188,10 @@ class NpcSocialRulebook {
       throw const FormatException('NPC social rules not bound to blueprint');
     }
     if (witnesses.length > 512 || choiceGates.length > 128 ||
-        itemTransfers.length > 128 ||
+        itemTransfers.length > 128 || lifeTransitions.length > 128 ||
         ((witnesses.isNotEmpty || choiceGates.isNotEmpty ||
-          itemTransfers.isNotEmpty) && !requireReviewedWitnesses)) {
+          itemTransfers.isNotEmpty || lifeTransitions.isNotEmpty) &&
+         !requireReviewedWitnesses)) {
       throw const FormatException('NPC witness review must be explicit');
     }
     final presence = <String, NpcWitnessMode>{};
@@ -238,6 +261,22 @@ class NpcSocialRulebook {
       final identity = '${rule.observerId}|${rule.memoryId}';
       if (!seen.add(identity)) {
         throw const FormatException('Duplicate NPC event memory identity');
+      }
+    }
+    final lifeActions = <String>{};
+    for (final change in lifeTransitions) {
+      jsonId(change.sceneId, 'npc.life.scene_id');
+      jsonId(change.choiceId, 'npc.life.choice_id');
+      jsonId(change.actorId, 'npc.life.actor_id');
+      final scene = blueprint.scenes[change.sceneId];
+      if (scene == null ||
+          !scene.choices.any((choice) => choice.id == change.choiceId) ||
+          !blueprint.actors.contains(change.actorId) ||
+          change.actorId == 'player' ||
+          (blueprint.rightsStatus == 'private_adaptation' &&
+              !CharacterId.isValidNpc(change.actorId)) ||
+          !lifeActions.add('${change.sceneId}|${change.choiceId}|${change.actorId}')) {
+        throw const FormatException('Invalid or duplicate NPC life event');
       }
     }
     final transfers = <String>{};
@@ -391,6 +430,13 @@ class NpcSocialRulebook {
                 .compareTo('${b['scene_id']}|${b['choice_id']}|${b['item_id']}'));
       signed['item_transfers'] = transfers;
     }
+    if (lifeTransitions.isNotEmpty) {
+      final changes = lifeTransitions.map((change) => change.toJson()).toList()
+        ..sort((a, b) =>
+            ('${a['scene_id']}|${a['choice_id']}|${a['actor_id']}')
+                .compareTo('${b['scene_id']}|${b['choice_id']}|${b['actor_id']}'));
+      signed['life_transitions'] = changes;
+    }
     return sha256.convert(utf8.encode(canonicalJson(signed))).toString();
   }
 }
@@ -430,11 +476,13 @@ class NpcSocialSnapshot {
     required Set<String> actorIds,
     required Set<String> itemIds,
     required Map<String, String> itemOwners,
+    required Map<String, NpcLifeState> lifeByActor,
     required Map<String, List<NpcEventMemory>> memoryByActor,
     required Map<String, Map<String, int>> directedRelations,
   })  : _actorIds = Set<String>.unmodifiable(actorIds),
         _itemIds = Set<String>.unmodifiable(itemIds),
         _itemOwners = Map<String, String>.unmodifiable(itemOwners),
+        _lifeByActor = Map<String, NpcLifeState>.unmodifiable(lifeByActor),
         _memoryByActor = Map.unmodifiable(
             memoryByActor.map((actor, memories) =>
                 MapEntry(actor, List<NpcEventMemory>.unmodifiable(memories)))),
@@ -449,6 +497,7 @@ class NpcSocialSnapshot {
   final Set<String> _actorIds;
   final Set<String> _itemIds;
   final Map<String, String> _itemOwners;
+  final Map<String, NpcLifeState> _lifeByActor;
   final Map<String, List<NpcEventMemory>> _memoryByActor;
   final Map<String, Map<String, int>> _directedRelations;
 
@@ -470,6 +519,16 @@ class NpcSocialSnapshot {
   bool hasMemory(String actorId, String memoryId) {
     jsonId(memoryId, 'memory_id');
     return memoriesFor(actorId).any((memory) => memory.memoryId == memoryId);
+  }
+
+  /// Unknown actors fail closed; old archives default NPCs to available.
+  NpcLifeState lifeState(String actorId) {
+    jsonId(actorId, 'npc_life_actor_id');
+    if (!_actorIds.contains(actorId)) {
+      throw const FormatException('Unknown NPC life actor');
+    }
+    return actorId == 'player' ? NpcLifeState.present :
+        (_lifeByActor[actorId] ?? NpcLifeState.present);
   }
 
   /// Null means nobody currently possesses this item. Unknown catalog IDs
@@ -524,7 +583,40 @@ class NpcSocialLedger {
     };
     final triggersByRule = <String, int>{};
     final relations = <String, Map<String, int>>{};
+    final life = <String, NpcLifeState>{
+      for (final actor in blueprint.actors)
+        if (actor != 'player') actor: NpcLifeState.present,
+    };
+    final lifeByChoice = <String, List<NpcLifeTransition>>{};
+    for (final change in rulebook.lifeTransitions) {
+      lifeByChoice.putIfAbsent('${change.sceneId}|${change.choiceId}',
+          () => <NpcLifeTransition>[]).add(change);
+    }
     for (final event in world.events) {
+      final key = '${event.sceneId}|${event.choiceId}';
+      if (rulebook.lifeTransitions.isNotEmpty) {
+        for (final rule in byChoice[key] ?? <NpcSocialRule>[]) {
+          if (rule.observerId != 'player' &&
+              witnessModes['${event.sceneId}|${rule.observerId}'] ==
+                  NpcWitnessMode.present &&
+              life[rule.observerId] != NpcLifeState.present) {
+            throw const FormatException('Absent/dead NPC witnessed an event');
+          }
+        }
+        for (final change in lifeByChoice[key] ?? <NpcLifeTransition>[]) {
+          final previous = life[change.actorId]!;
+          final valid = switch (change.nextState) {
+            NpcLifeState.absent => previous == NpcLifeState.present,
+            NpcLifeState.present => previous == NpcLifeState.absent,
+            NpcLifeState.dead => previous != NpcLifeState.dead,
+          };
+          if (!valid) {
+            throw const FormatException(
+                'NPC life transition contradicts committed event history');
+          }
+          life[change.actorId] = change.nextState;
+        }
+      }
       for (final rule in byChoice[
               '${event.sceneId}|${event.choiceId}'] ??
           <NpcSocialRule>[]) {
@@ -617,6 +709,7 @@ class NpcSocialLedger {
       actorIds: blueprint.actors,
       itemIds: blueprint.items,
       itemOwners: owners,
+      lifeByActor: life,
       memoryByActor: memory,
       directedRelations: relations,
     );

@@ -273,6 +273,9 @@ class StoryWorld {
           continue;
         }
         final social = NpcSocialLedger.inspect(this, socialRulebook!);
+        if (social.lifeState(gate.actorId) != NpcLifeState.present) {
+          return 'condition_not_met:npc_unavailable';
+        }
         if (gate.requiredMemoryId != null &&
             !social.hasMemory(gate.actorId, gate.requiredMemoryId!)) {
           return 'condition_not_met:npc_memory';
@@ -290,6 +293,11 @@ class StoryWorld {
           transfer.sceneId == _state.sceneId &&
           transfer.choiceId == choiceId).toList();
       for (final transfer in matching) {
+        final npc = transfer.fromActorId == 'player'
+            ? transfer.toActorId : transfer.fromActorId;
+        if (custody.lifeState(npc) != NpcLifeState.present) {
+          return 'condition_not_met:npc_unavailable';
+        }
         if (custody.itemOwner(transfer.itemId) != transfer.fromActorId) {
           return 'condition_not_met:npc_item_owner';
         }
@@ -304,6 +312,34 @@ class StoryWorld {
           if (actualOwner != null && actualOwner != 'player') {
             return 'condition_not_met:npc_item_custody';
           }
+        }
+      }
+    }
+    if (socialRulebook != null && socialRulebook!.lifeTransitions.isNotEmpty) {
+      final social = NpcSocialLedger.inspect(this, socialRulebook!);
+      final rules = socialRulebook!;
+      for (final change in rules.lifeTransitions) {
+        if (change.sceneId != _state.sceneId ||
+            change.choiceId != choiceId) continue;
+        final previous = social.lifeState(change.actorId);
+        final allowed = switch (change.nextState) {
+          NpcLifeState.absent => previous == NpcLifeState.present,
+          NpcLifeState.present => previous == NpcLifeState.absent,
+          NpcLifeState.dead => previous != NpcLifeState.dead,
+        };
+        if (!allowed) return 'condition_not_met:npc_life_transition';
+      }
+      for (final rule in rules.rules) {
+        if (rule.sceneId != _state.sceneId ||
+            rule.choiceId != choiceId ||
+            rule.observerId == 'player') continue;
+        final witnessed = rules.witnesses.any((w) =>
+            w.sceneId == _state.sceneId &&
+            w.actorId == rule.observerId &&
+            w.mode == NpcWitnessMode.present);
+        if (witnessed &&
+            social.lifeState(rule.observerId) != NpcLifeState.present) {
+          return 'condition_not_met:npc_unavailable';
         }
       }
     }
@@ -394,7 +430,9 @@ class StoryWorld {
       beforeStateHash: _state.stateHash,
       afterStateHash: nextState.stateHash,
     );
-    if (socialRulebook != null && socialRulebook!.itemTransfers.isNotEmpty) {
+    if (socialRulebook != null &&
+        (socialRulebook!.itemTransfers.isNotEmpty ||
+         socialRulebook!.lifeTransitions.isNotEmpty)) {
       // Pre-commit verification must never let a partial transfer reach the
       // durable SQLite event chain. No world state is published on failure.
       final draft = fork();

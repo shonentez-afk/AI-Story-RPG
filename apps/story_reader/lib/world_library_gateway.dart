@@ -92,6 +92,7 @@ class WorldGameView {
     this.sceneDialogueTurns,
     this.npcItemOwners = const {},
     this.npcDisplayNames = const {},
+    this.npcLifeStates = const {},
   });
 
   final String campaignId;
@@ -120,6 +121,8 @@ class WorldGameView {
   final Map<String, String> npcItemOwners;
   /// Source-reviewed signed speakers where available; not guessed from names.
   final Map<String, String> npcDisplayNames;
+  /// Event-replayed NPC life states only for worlds with v5 annotations.
+  final Map<String, String> npcLifeStates;
 }
 
 class WorldChoiceResult {
@@ -311,6 +314,9 @@ class DeviceWorldLibraryGateway implements WorldLibraryGateway {
       final changes = <String>[];
       if (playback != null) {
         final before = playback.state;
+        final beforeLife = socialRules != null &&
+            socialRules.lifeTransitions.isNotEmpty
+            ? NpcSocialLedger.inspect(playback, socialRules) : null;
         final committed = playback.apply(
           actionId: event.actionId,
           choiceId: event.choiceId,
@@ -320,6 +326,23 @@ class DeviceWorldLibraryGateway implements WorldLibraryGateway {
           throw const FormatException('Журнал игры не совпадает с сохранением');
         }
         final after = playback.state;
+        if (beforeLife != null) {
+          final afterLife = NpcSocialLedger.inspect(playback, socialRules!);
+          for (final actor in socialRules.lifeTransitions
+              .map((event) => event.actorId).toSet()) {
+            final previous = beforeLife.lifeState(actor);
+            final current = afterLife.lifeState(actor);
+            if (previous != current) {
+              final label = npcDisplayNames[actor] ?? actor;
+              final stateLabel = switch (current) {
+                NpcLifeState.present => 'вернулся',
+                NpcLifeState.absent => 'ушёл',
+                NpcLifeState.dead => 'погиб',
+              };
+              changes.add('$label: $stateLabel');
+            }
+          }
+        }
         final reviewedTransfers = socialRules?.itemTransfers.where(
           (transfer) => transfer.sceneId == event.sceneId &&
               transfer.choiceId == event.choiceId).toList() ??
@@ -402,6 +425,12 @@ class DeviceWorldLibraryGateway implements WorldLibraryGateway {
               item: social.itemOwner(item)!,
       }),
       npcDisplayNames: Map.unmodifiable(npcDisplayNames),
+      npcLifeStates: Map.unmodifiable({
+        if (social != null && socialRules != null)
+          for (final actor in socialRules.lifeTransitions
+              .map((event) => event.actorId).toSet())
+            actor: social.lifeState(actor).name,
+      }),
     );
   }
 

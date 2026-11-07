@@ -155,7 +155,11 @@ class RichNpcDialogueKnowledge {
             final known = knowledge[actor] ?? const <String>{};
             final memoryId = review['required_social_memory_id'];
             final threshold = review['minimum_trust_to_player'];
-            final allowed = required.every((fact) => known.contains(fact)) &&
+            // Never reveal words from absent or dead NPCs in UI/history.
+            final present = actor == 'player' || social == null ||
+                social.lifeState(actor) == NpcLifeState.present;
+            final allowed = present &&
+                required.every((fact) => known.contains(fact)) &&
                 (memoryId == null ||
                  (memoryId is String && social != null &&
                   social.hasMemory(actor, memoryId))) &&

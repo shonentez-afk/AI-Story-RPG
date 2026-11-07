@@ -29,6 +29,7 @@ NPC_SOCIAL_FORMAT = "ai_story_npc_social_witness_v1"
 NPC_SOCIAL_GATE_FORMAT = "ai_story_npc_social_witness_v2"
 NPC_SOCIAL_ITEM_FORMAT = "ai_story_npc_social_witness_v3"
 NPC_SOCIAL_AUTHOR_ITEM_FORMAT = "ai_story_npc_social_witness_v4"
+NPC_SOCIAL_LIFE_FORMAT = "ai_story_npc_social_witness_v5"
 
 
 def fail(message: str):
@@ -590,8 +591,10 @@ def _npc_social(prov, bp):
     reviewed = prov.get("npc_social")
     if reviewed is None:
         return
+    life_format = (type(reviewed) is dict and
+                   reviewed.get("format") == NPC_SOCIAL_LIFE_FORMAT)
     authored_item = (type(reviewed) is dict and
-                     reviewed.get("format") == NPC_SOCIAL_AUTHOR_ITEM_FORMAT)
+                     reviewed.get("format") == NPC_SOCIAL_AUTHOR_ITEM_FORMAT) or life_format
     item_format = (type(reviewed) is dict and
                    reviewed.get("format") == NPC_SOCIAL_ITEM_FORMAT) or authored_item
     gate_format = (type(reviewed) is dict and
@@ -601,10 +604,12 @@ def _npc_social(prov, bp):
                      "witnesses", "rules"} |
           ({"choice_gates"} if gate_format else set()) |
           ({"item_transfers"} if item_format else set()) |
-          ({"item_grants"} if authored_item else set()), "NPC social")
+          ({"item_grants"} if authored_item else set()) |
+          ({"life_transitions"} if life_format else set()), "NPC social")
     if reviewed["format"] not in (
             NPC_SOCIAL_FORMAT, NPC_SOCIAL_GATE_FORMAT,
-            NPC_SOCIAL_ITEM_FORMAT, NPC_SOCIAL_AUTHOR_ITEM_FORMAT) or \
+            NPC_SOCIAL_ITEM_FORMAT, NPC_SOCIAL_AUTHOR_ITEM_FORMAT,
+            NPC_SOCIAL_LIFE_FORMAT) or \
             reviewed["review_scope"] != "user_declared_private_game_fiction" or \
             reviewed["source_fingerprint"] != bp["source_fingerprint"] or \
             reviewed["user_confirmed"] is not True or \
@@ -612,7 +617,8 @@ def _npc_social(prov, bp):
         fail("NPC social review is not authorized for this private source")
     witnesses, rules = reviewed["witnesses"], reviewed["rules"]
     if type(witnesses) is not list or type(rules) is not list or \
-            not 1 <= len(witnesses) <= 128 or not 1 <= len(rules) <= 128:
+            not (0 if life_format else 1) <= len(witnesses) <= 128 or \
+            not (0 if life_format else 1) <= len(rules) <= 128:
         fail("Missing or oversized NPC social declarations")
     origin = {item["scene_id"]: item
               for item in prov["scene_origins"]}
@@ -690,7 +696,8 @@ def _npc_social(prov, bp):
         used.add((scene, actor))
     if item_format:
         transfers = reviewed["item_transfers"]
-        if type(transfers) is not list or not 1 <= len(transfers) <= 128:
+        if type(transfers) is not list or \
+                not (0 if life_format else 1) <= len(transfers) <= 128:
             fail("Invalid NPC item custody review list")
         seen_transfers = set()
         for transfer in transfers:
@@ -730,7 +737,9 @@ def _npc_social(prov, bp):
 
     if authored_item:
         grants = reviewed["item_grants"]
-        if type(grants) is not list or not 1 <= len(grants) <= 16:
+        if type(grants) is not list or \
+                not (0 if life_format else 1) <= len(grants) <= 16 or \
+                (life_format and not grants and reviewed["item_transfers"]):
             fail("Native item acquisition needs reviewed sources")
         origins = origin
         acquired = {}
@@ -777,6 +786,29 @@ def _npc_social(prov, bp):
                     (acq_scene, acq_choice) == (
                         transfer["scene_id"], transfer["choice_id"]):
                 fail("NPC item transferred before its source acquisition")
+
+    if life_format:
+        transitions = reviewed["life_transitions"]
+        if type(transitions) is not list or not 1 <= len(transitions) <= 128:
+            fail("Missing or oversized NPC life transitions")
+        seen_life = set()
+        for transition in transitions:
+            _keys(transition, {"scene_id", "choice_id", "actor_id",
+                               "next_state", "source_quote_sha256"},
+                  "NPC life transition")
+            scene, choice, actor = (transition["scene_id"],
+                                    transition["choice_id"],
+                                    transition["actor_id"])
+            if not all(_id(v) for v in (scene, choice, actor)) or \
+                    scene not in scenes or actor not in actors or \
+                    not re.fullmatch(r"npc_[0-9a-f]{32}", actor) or \
+                    transition["next_state"] not in ("present", "absent", "dead") or \
+                    not any(c["id"] == choice
+                            for c in scenes[scene]["choices"]) or \
+                    (scene, choice, actor) in seen_life:
+                fail("Invalid or duplicate NPC life event")
+            citation(scene, transition["source_quote_sha256"])
+            seen_life.add((scene, choice, actor))
 
     if gate_format:
         gates = reviewed["choice_gates"]

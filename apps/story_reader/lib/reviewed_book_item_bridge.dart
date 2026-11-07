@@ -99,7 +99,12 @@ class ReviewedBookItemBridge {
       throw const FormatException(
           'Нельзя смешивать предметы с чужой/другой проверкой NPC');
     }
-    social['format'] = RichNpcSocialContract.authoredItemFormat;
+    // A manually confirmed lifecycle must survive adding a cited item.
+    // Never downgrade a v5 review back to the v4 item-only capability.
+    final hasLife = social['format'] == RichNpcSocialContract.lifeEventFormat;
+    social['format'] = hasLife
+        ? RichNpcSocialContract.lifeEventFormat
+        : RichNpcSocialContract.authoredItemFormat;
     social.putIfAbsent('choice_gates', () => <Map<String, dynamic>>[]);
     social['item_transfers'] = <Map<String, dynamic>>[];
     social['item_grants'] = <Map<String, dynamic>>[];

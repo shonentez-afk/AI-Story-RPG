@@ -374,6 +374,94 @@ void main() {
         .choiceLockReason('walk_market'), 'condition_not_met:npc_trust');
   });
 
+  test('NPC departure/return/death are event-sourced, guarded and replayed', () {
+    final bp = _blueprint();
+    final rules = NpcSocialRulebook(
+      blueprintHash: bp.blueprintHash,
+      requireReviewedWitnesses: true,
+      witnesses: const [
+        NpcSceneWitness(
+          sceneId: 'gate', actorId: 'guard', mode: NpcWitnessMode.present),
+      ],
+      rules: const [
+        NpcSocialRule(
+          memoryId: 'saw_departure', sceneId: 'gate',
+          choiceId: 'inspect_gate', observerId: 'guard',
+          kind: NpcMemoryKind.witnessed),
+      ],
+      choiceGates: const [
+        NpcSocialChoiceGate(
+          sceneId: 'gate', choiceId: 'enter_hall', actorId: 'guard',
+          requiredMemoryId: 'saw_departure'),
+      ],
+      lifeTransitions: const [
+        NpcLifeTransition(
+          sceneId: 'gate', choiceId: 'inspect_gate',
+          actorId: 'guard', nextState: NpcLifeState.absent),
+        NpcLifeTransition(
+          sceneId: 'market', choiceId: 'return_gate',
+          actorId: 'guard', nextState: NpcLifeState.present),
+        NpcLifeTransition(
+          sceneId: 'market', choiceId: 'buy_map',
+          actorId: 'guard', nextState: NpcLifeState.dead),
+      ],
+    );
+    final world = StoryWorld(bp, socialRulebook: rules);
+    expect(NpcSocialLedger.inspect(world, rules).lifeState('guard'),
+        NpcLifeState.present);
+    expect(world.choiceLockReason('enter_hall'),
+        'condition_not_met:npc_memory');
+    expect(world.apply(actionId: 'depart', choiceId: 'inspect_gate').applied,
+        isTrue);
+    final absent = NpcSocialLedger.inspect(world, rules);
+    expect(absent.lifeState('guard'), NpcLifeState.absent);
+    expect(world.choiceLockReason('enter_hall'),
+        'condition_not_met:npc_unavailable');
+    final oldHead = world.events.last.hash;
+    expect(world.apply(actionId: 'depart_again', choiceId: 'inspect_gate')
+        .status, DecisionStatus.denied);
+    expect(world.events.last.hash, oldHead);
+    expect(world.apply(actionId: 'go_to_market', choiceId: 'walk_market')
+        .applied, isTrue);
+    final branch = world.fork();
+    expect(world.apply(actionId: 'returned', choiceId: 'return_gate').applied,
+        isTrue);
+    expect(NpcSocialLedger.inspect(world, rules).lifeState('guard'),
+        NpcLifeState.present);
+    expect(world.choiceLockReason('enter_hall'), isNull);
+    expect(world.apply(actionId: 'market_again', choiceId: 'walk_market')
+        .applied, isTrue);
+    expect(world.choiceLockReason('return_gate'),
+        'condition_not_met:npc_life_transition');
+    expect(world.apply(actionId: 'death', choiceId: 'buy_map').applied,
+        isTrue);
+    expect(NpcSocialLedger.inspect(world, rules).lifeState('guard'),
+        NpcLifeState.dead);
+    expect(world.choiceLockReason('enter_hall'),
+        'condition_not_met:npc_unavailable');
+    final checkpoint = world.events.map((e) => e.toJson()).toList();
+    final replayed = StoryWorld.replay(bp, checkpoint,
+      socialRulebook: rules, expectedSequence: world.state.revision,
+      expectedStateHash: world.state.stateHash);
+    expect(NpcSocialLedger.inspect(replayed, rules).snapshotHash,
+        NpcSocialLedger.inspect(world, rules).snapshotHash);
+    expect(replayed.apply(actionId: 'visit_again', choiceId: 'walk_market')
+        .applied, isTrue);
+    expect(replayed.choiceLockReason('return_gate'),
+        'condition_not_met:npc_life_transition');
+    expect(replayed.choiceLockReason('buy_map'),
+        'condition_not_met:npc_life_transition');
+    // An alternative branch has its OWN event history; return is valid there.
+    expect(branch.apply(actionId: 'different_return', choiceId: 'return_gate')
+        .applied, isTrue);
+    expect(NpcSocialLedger.inspect(branch, rules).lifeState('guard'),
+        NpcLifeState.present);
+    expect(() => StoryWorld.replay(bp, checkpoint,
+        expectedSequence: world.state.revision,
+        expectedStateHash: world.state.stateHash),
+        returnsNormally); // Old, unguarded replay does not imply verified NPC state.
+  });
+
   test('circular NPC memories cannot deadlock two authored decisions', () {
     final bp = _blueprint();
     final rules = NpcSocialRulebook(

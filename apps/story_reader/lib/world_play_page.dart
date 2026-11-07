@@ -617,6 +617,16 @@ class _WorldInfoSheet extends StatelessWidget {
               view.knownFacts
                   .map((id) => view.factNames[id] ?? id).join(', '),
         if (view.knownFacts.isEmpty) 'Открыто сведений: 0',
+        if (view.npcLifeStates.isNotEmpty)
+          'Персонажи (подтверждённые событиями):',
+        for (final entry in view.npcLifeStates.entries)
+          (view.npcDisplayNames[entry.key] ?? entry.key) + ': ' +
+              switch (entry.value) {
+                'present' => 'доступен',
+                'absent' => 'отсутствует',
+                'dead' => 'погиб',
+                _ => 'состояние неизвестно',
+              },
       ],
       GamePanel.inventory => [
         if (view.inventory.isEmpty)

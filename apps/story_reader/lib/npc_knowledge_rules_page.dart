@@ -39,6 +39,16 @@ class _BookItemReviewDraft {
 }
 
 
+/// Source-reviewed lifecycle action, never inferred from free prose.
+class _NpcLifeReviewDraft {
+  _NpcLifeReviewDraft(this.index);
+  final int index;
+  String? actorId;
+  String? choiceId;
+  String? quote;
+  String? nextState;
+}
+
 /// Manual, private rule authoring. No implicit AI consent or note publication.
 class NpcKnowledgeRulesPage extends StatefulWidget {
   const NpcKnowledgeRulesPage({
@@ -613,6 +623,8 @@ class _NpcKnowledgeRulesPageState extends State<NpcKnowledgeRulesPage> {
       final socialTrustForTurn = <String, int>{};
       final itemDrafts = <_BookItemReviewDraft>[];
       var nextItemIndex = 1;
+      final lifeDrafts = <_NpcLifeReviewDraft>[];
+      var nextLifeIndex = 1;
       var consent = false;
       final accepted = await showDialog<bool>(
         context: context,
@@ -640,7 +652,15 @@ class _NpcKnowledgeRulesPageState extends State<NpcKnowledgeRulesPage> {
                  (d.returnChoice != d.giveChoice &&
                   d.returnChoice != d.acquireChoice &&
                   citedChoice(d.returnChoice, d.returnQuote))));
-          final ready = consent && itemsReady &&
+          final lifeKeys = lifeDrafts.map((e) =>
+              '${e.choiceId}|${e.actorId}').toList();
+          final lifeReady = lifeDrafts.length <= 16 &&
+              lifeKeys.toSet().length == lifeKeys.length &&
+              lifeDrafts.every((e) =>
+                  e.actorId != null && profiles.containsKey(e.actorId) &&
+                  const ['present', 'absent', 'dead'].contains(e.nextState) &&
+                  citedChoice(e.choiceId, e.quote));
+          final ready = consent && itemsReady && lifeReady &&
               quotes.length == grants.length &&
               targets.length == targets.toSet().length &&
               choiceGateTarget.entries.every((entry) =>
@@ -995,6 +1015,101 @@ class _NpcKnowledgeRulesPageState extends State<NpcKnowledgeRulesPage> {
                     ),
                     const SizedBox(height: 8),
                   ],
+                  const Divider(height: 24),
+                  const Text('События жизни NPC (необязательно)',
+                      style: TextStyle(fontWeight: FontWeight.bold)),
+                  const Text('Событие меняет состояние NPC после выбора. '
+                      'Гибель необратима. Для каждого события нужна цитата.'),
+                  for (final life in lifeDrafts) ...[
+                    Row(children: [
+                      Expanded(child: Text('Событие ' +
+                          life.index.toString())),
+                      IconButton(
+                        key: Key('npc-life-remove-' + life.index.toString()),
+                        tooltip: 'Удалить событие',
+                        icon: const Icon(Icons.close),
+                        onPressed: () => update(() => lifeDrafts.remove(life)),
+                      ),
+                    ]),
+                    DropdownButtonFormField<String>(
+                      key: Key('npc-life-actor-' + life.index.toString()),
+                      initialValue: life.actorId,
+                      isExpanded: true,
+                      decoration: const InputDecoration(
+                          labelText: 'Персонаж', border: OutlineInputBorder()),
+                      items: [
+                        for (final entry in profiles.entries)
+                          DropdownMenuItem(value: entry.key,
+                              child: Text(entry.value,
+                                  overflow: TextOverflow.ellipsis)),
+                      ],
+                      onChanged: (value) => update(() => life.actorId = value),
+                    ),
+                    DropdownButtonFormField<String>(
+                      key: Key('npc-life-state-' + life.index.toString()),
+                      initialValue: life.nextState,
+                      decoration: const InputDecoration(
+                          labelText: 'Состояние после решения',
+                          border: OutlineInputBorder()),
+                      items: const [
+                        DropdownMenuItem(value: 'absent',
+                            child: Text('Ушёл / отсутствует')),
+                        DropdownMenuItem(value: 'present',
+                            child: Text('Вернулся')),
+                        DropdownMenuItem(value: 'dead',
+                            child: Text('Погиб (необратимо)')),
+                      ],
+                      onChanged: (value) => update(() => life.nextState = value),
+                    ),
+                    DropdownButtonFormField<String>(
+                      key: Key('npc-life-choice-' + life.index.toString()),
+                      initialValue: life.choiceId,
+                      isExpanded: true,
+                      decoration: const InputDecoration(
+                          labelText: 'После игрового выбора',
+                          border: OutlineInputBorder()),
+                      items: [
+                        for (final entry in gateCandidates.entries)
+                          DropdownMenuItem(
+                            value: entry.key,
+                            child: Text(entry.value.label,
+                                overflow: TextOverflow.ellipsis)),
+                      ],
+                      onChanged: (value) => update(() {
+                        life.choiceId = value;
+                        life.quote = null;
+                      }),
+                    ),
+                    if (life.choiceId != null &&
+                        gateCandidates.containsKey(life.choiceId))
+                      DropdownButtonFormField<String>(
+                        key: Key('npc-life-quote-' +
+                            life.index.toString() + '-' + life.choiceId!),
+                        initialValue: life.quote,
+                        isExpanded: true,
+                        decoration: const InputDecoration(
+                            labelText: 'Цитата этого события',
+                            border: OutlineInputBorder()),
+                        items: [
+                          for (final quote in
+                              gateCandidates[life.choiceId]!.quotes)
+                            DropdownMenuItem(
+                              value: quote.digest,
+                              child: Text(quote.caption,
+                                  overflow: TextOverflow.ellipsis)),
+                        ],
+                        onChanged: (value) => update(() => life.quote = value),
+                      ),
+                    const SizedBox(height: 8),
+                  ],
+                  if (lifeDrafts.length < 16)
+                    TextButton.icon(
+                      key: const Key('npc-life-add'),
+                      onPressed: () => update(() => lifeDrafts.add(
+                          _NpcLifeReviewDraft(nextLifeIndex++))),
+                      icon: const Icon(Icons.add),
+                      label: const Text('Добавить событие жизни NPC'),
+                    ),
                   const Divider(height: 24),
                   const Text('Предметы истории (необязательно)',
                       style: TextStyle(fontWeight: FontWeight.bold)),
@@ -1367,18 +1482,35 @@ class _NpcKnowledgeRulesPageState extends State<NpcKnowledgeRulesPage> {
           'source_quote_sha256': quote,
         });
       }
-      final socialReview = socialRules.isEmpty ? null : <String, dynamic>{
-        'format': reviewedChoiceGates.isEmpty
-            ? RichNpcSocialContract.format
-            : RichNpcSocialContract.choiceGateFormat,
+      final socialReview =
+          socialRules.isEmpty && lifeDrafts.isEmpty ? null : <String, dynamic>{
+        'format': lifeDrafts.isNotEmpty
+            ? RichNpcSocialContract.lifeEventFormat
+            : reviewedChoiceGates.isEmpty
+                ? RichNpcSocialContract.format
+                : RichNpcSocialContract.choiceGateFormat,
         'review_scope': 'user_declared_private_game_fiction',
         'source_fingerprint': widget.index.sourceFingerprint,
         'user_confirmed': true,
         'literary_canon_verified': false,
         'witnesses': socialWitnesses,
         'rules': socialRules,
-        if (reviewedChoiceGates.isNotEmpty)
+        if (reviewedChoiceGates.isNotEmpty || lifeDrafts.isNotEmpty)
           'choice_gates': reviewedChoiceGates,
+        if (lifeDrafts.isNotEmpty) ...{
+          'item_transfers': <Map<String, dynamic>>[],
+          'item_grants': <Map<String, dynamic>>[],
+          'life_transitions': [
+            for (final event in lifeDrafts)
+              {
+                'scene_id': gateCandidates[event.choiceId]!.sceneId,
+                'choice_id': event.choiceId,
+                'actor_id': event.actorId,
+                'next_state': event.nextState,
+                'source_quote_sha256': event.quote,
+              },
+          ],
+        },
       };
       final reviewedItems = <Map<String, dynamic>>[
         for (final item in itemDrafts)

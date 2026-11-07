@@ -121,6 +121,45 @@ def authored_item_social_sample():
 
 
 class RichNpcSocialTests(unittest.TestCase):
+    def test_v5_source_approved_life_events_and_negative_contracts(self):
+        bp, prov, source = social_sample()
+        social = prov["npc_social"]
+        quote = prov["scene_origins"][0]["source_refs"][0]["quote_sha256"]
+        social["format"] = rich.NPC_SOCIAL_LIFE_FORMAT
+        social["item_transfers"] = []
+        social["item_grants"] = []
+        social["life_transitions"] = [{
+            "scene_id": "entry", "choice_id": "wait",
+            "actor_id": NPC, "next_state": "absent",
+            "source_quote_sha256": quote,
+        }]
+        archive = rich.build(bp, prov, source)
+        self.assertEqual(rich.verify(archive)["format_version"], 3)
+        self.assertEqual(archive, rich.build(bp, prov, source))
+        for field, value in (
+                ("next_state", "revived"),
+                ("actor_id", "player"),
+                ("choice_id", "missing"),
+                ("source_quote_sha256", "f" * 64)):
+            alt_bp, alt_prov, alt_source = deepcopy((bp, prov, source))
+            alt_prov["npc_social"]["life_transitions"][0][field] = value
+            with self.subTest(field=field), self.assertRaises(
+                    legacy.BookworldError):
+                rich.build(alt_bp, alt_prov, alt_source)
+        alt_bp, alt_prov, alt_source = deepcopy((bp, prov, source))
+        alt_prov["npc_social"]["life_transitions"] *= 2
+        with self.assertRaises(legacy.BookworldError):
+            rich.build(alt_bp, alt_prov, alt_source)
+        alt_bp, alt_prov, alt_source = deepcopy((bp, prov, source))
+        alt_prov["npc_social"]["life_transitions"] = []
+        with self.assertRaises(legacy.BookworldError):
+            rich.build(alt_bp, alt_prov, alt_source)
+        # The source review does not silently upgrade an old version.
+        alt_bp, alt_prov, alt_source = deepcopy((bp, prov, source))
+        alt_prov["npc_social"]["format"] = rich.NPC_SOCIAL_AUTHOR_ITEM_FORMAT
+        with self.assertRaises(legacy.BookworldError):
+            rich.build(alt_bp, alt_prov, alt_source)
+
     def test_bounded_source_review_writer_verifier_old_format_parity(self):
         bp, prov, source = social_sample()
         archive = rich.build(bp, prov, source)

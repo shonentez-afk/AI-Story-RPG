@@ -97,6 +97,63 @@ void main() {
   const writer = RichPrivateBookworldWriter();
   const importer = RichPrivateBookworldImporter();
 
+  test('source-reviewed v5 NPC lifecycle is portable and event-replayed', () {
+    final data = _npcRichSample();
+    final bp = _asObject(data['blueprint']);
+    final prov = _asObject(data['provenance']);
+    final npc = 'npc_' + List.filled(32, 'c').join();
+    final origin = (prov['scene_origins'] as List).first as Map;
+    final quote = (origin['source_refs'] as List).first['quote_sha256'];
+    prov['npc_social'] = {
+      'format': RichNpcSocialContract.lifeEventFormat,
+      'review_scope': 'user_declared_private_game_fiction',
+      'source_fingerprint': bp['source_fingerprint'],
+      'user_confirmed': true,
+      'literary_canon_verified': false,
+      'witnesses': <Map<String, Object?>>[],
+      'rules': <Map<String, Object?>>[],
+      'choice_gates': <Map<String, Object?>>[],
+      'item_transfers': <Map<String, Object?>>[],
+      'item_grants': <Map<String, Object?>>[],
+      'life_transitions': [{
+        'scene_id': 'entry', 'choice_id': 'wait',
+        'actor_id': npc, 'next_state': 'absent',
+        'source_quote_sha256': quote,
+      }],
+    };
+    data['provenance'] = prov;
+    Uint8List build() => writer.build(
+      blueprint: _asObject(data['blueprint']),
+      provenance: _asObject(data['provenance']),
+      sourceIndex: _asObject(data['source_index']),
+    );
+    final bytes = build();
+    expect(build(), bytes);
+    final worldData = importer.inspect(bytes);
+    final rules = worldData.npcSocialRulebook!;
+    expect(rules.lifeTransitions.single.nextState, NpcLifeState.absent);
+    final world = StoryWorld(worldData.blueprint, socialRulebook: rules);
+    expect(NpcSocialLedger.inspect(world, rules).lifeState(npc),
+        NpcLifeState.present);
+    expect(world.apply(actionId: 'depart', choiceId: 'wait').applied, isTrue);
+    expect(NpcSocialLedger.inspect(world, rules).lifeState(npc),
+        NpcLifeState.absent);
+    expect(world.choiceLockReason('wait'),
+        'condition_not_met:npc_life_transition');
+    final reopened = StoryWorld.replay(worldData.blueprint,
+        world.events.map((event) => event.toJson()),
+        socialRulebook: rules, expectedSequence: world.state.revision,
+        expectedStateHash: world.state.stateHash);
+    expect(NpcSocialLedger.inspect(reopened, rules).snapshotHash,
+        NpcSocialLedger.inspect(world, rules).snapshotHash);
+    final forged = jsonDecode(jsonEncode(prov)) as Map<String, dynamic>;
+    ((forged['npc_social'] as Map)['life_transitions'] as List).first
+        ['next_state'] = 'resurrected';
+    expect(() => writer.build(blueprint: bp, provenance: forged,
+        sourceIndex: _asObject(data['source_index'])),
+        throwsFormatException);
+  });
+
   test('private social memories require source-locked NPC witnesses and replay',
       () {
     final data = _npcRichSample();

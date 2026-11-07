@@ -16,6 +16,8 @@ class RichNpcSocialContract {
   /// V4 adds a confirmed, same-source acquisition event before a transfer:
   /// the built-in book author must not mint items from arbitrary prose.
   static const authoredItemFormat = 'ai_story_npc_social_witness_v4';
+  /// V5: event-sourced departure, return and irreversible death of NPCs.
+  static const lifeEventFormat = 'ai_story_npc_social_witness_v5';
   static final _sha = RegExp(r'^[0-9a-f]{64}$');
   static final _id = RegExp(r'^[a-z][a-z0-9_]{0,63}$');
 
@@ -67,7 +69,8 @@ class RichNpcSocialContract {
     final marker = manifest['npc_social_format'];
     if (raw == null && marker == null) return null;
     if ((marker != format && marker != choiceGateFormat &&
-         marker != itemTransferFormat && marker != authoredItemFormat) ||
+         marker != itemTransferFormat && marker != authoredItemFormat &&
+         marker != lifeEventFormat) ||
         raw is! Map<String, dynamic> ||
         blueprint.rightsStatus != 'private_adaptation') {
       throw const FormatException('NPC social version/capability mismatch');
@@ -77,10 +80,13 @@ class RichNpcSocialContract {
       'user_confirmed', 'literary_canon_verified', 'witnesses', 'rules',
       if (marker == choiceGateFormat ||
           marker == itemTransferFormat ||
-          marker == authoredItemFormat) 'choice_gates',
+          marker == authoredItemFormat ||
+          marker == lifeEventFormat) 'choice_gates',
       if (marker == itemTransferFormat ||
-          marker == authoredItemFormat) 'item_transfers',
-      if (marker == authoredItemFormat) 'item_grants',
+          marker == authoredItemFormat ||
+          marker == lifeEventFormat) 'item_transfers',
+      if (marker == authoredItemFormat || marker == lifeEventFormat) 'item_grants',
+      if (marker == lifeEventFormat) 'life_transitions',
     }, 'source review');
     if (raw['format'] != marker ||
         raw['review_scope'] != 'user_declared_private_game_fiction' ||
@@ -92,8 +98,10 @@ class RichNpcSocialContract {
     final rawWitnesses = raw['witnesses'];
     final rawRules = raw['rules'];
     if (rawWitnesses is! List || rawRules is! List ||
-        rawWitnesses.isEmpty || rawWitnesses.length > 128 ||
-        rawRules.isEmpty || rawRules.length > 128) {
+        (rawWitnesses.isEmpty && marker != lifeEventFormat) ||
+        rawWitnesses.length > 128 ||
+        (rawRules.isEmpty && marker != lifeEventFormat) ||
+        rawRules.length > 128) {
       throw const FormatException('NPC social review must be bounded');
     }
     final sourceOrigins = source['scene_origins'];
@@ -181,7 +189,7 @@ class RichNpcSocialContract {
     final choiceGates = <NpcSocialChoiceGate>[];
     if (marker == choiceGateFormat ||
         marker == itemTransferFormat ||
-        marker == authoredItemFormat) {
+        marker == authoredItemFormat || marker == lifeEventFormat) {
       final rawGates = raw['choice_gates'];
       if (rawGates is! List ||
           (marker == choiceGateFormat && rawGates.isEmpty) ||
@@ -241,9 +249,11 @@ class RichNpcSocialContract {
       }
     }
     final itemTransfers = <NpcItemTransfer>[];
-    if (marker == itemTransferFormat || marker == authoredItemFormat) {
+    if (marker == itemTransferFormat || marker == authoredItemFormat ||
+        marker == lifeEventFormat) {
       final rawTransfers = raw['item_transfers'];
-      if (rawTransfers is! List || rawTransfers.isEmpty ||
+      if (rawTransfers is! List ||
+          (rawTransfers.isEmpty && marker != lifeEventFormat) ||
           rawTransfers.length > 128) {
         throw const FormatException('Invalid reviewed NPC item transfers');
       }
@@ -270,9 +280,13 @@ class RichNpcSocialContract {
         ));
       }
     }
-    if (marker == authoredItemFormat) {
+    if (marker == authoredItemFormat || marker == lifeEventFormat) {
       final authored = raw['item_grants'];
-      if (authored is! List || authored.isEmpty || authored.length > 16) {
+      if (authored is! List ||
+          (authored.isEmpty && marker != lifeEventFormat) ||
+          authored.length > 16 ||
+          (marker == lifeEventFormat &&
+           authored.isEmpty && itemTransfers.isNotEmpty)) {
         throw const FormatException('Missing source-approved item acquisition');
       }
       final acquired = <String, (String, String)>{};
@@ -342,12 +356,48 @@ class RichNpcSocialContract {
         }
       }
     }
+    // Source-locked life events. The action becomes real only when its
+    // hash-chained WorldEvent is committed; an editorial note cannot kill.
+    final lifeTransitions = <NpcLifeTransition>[];
+    if (marker == lifeEventFormat) {
+      final entries = raw['life_transitions'];
+      if (entries is! List || entries.isEmpty || entries.length > 128) {
+        throw const FormatException('Missing NPC life transitions');
+      }
+      for (final entry in entries) {
+        if (entry is! Map<String, dynamic>) {
+          throw const FormatException('Malformed NPC life transition');
+        }
+        _fields(entry, {
+          'scene_id', 'choice_id', 'actor_id',
+          'next_state', 'source_quote_sha256',
+        }, 'life transition');
+        final scene = _checkedId(entry['scene_id'], 'life scene');
+        final choice = _checkedId(entry['choice_id'], 'life choice');
+        final actor = _checkedId(entry['actor_id'], 'life actor');
+        if (!_cited(scene,
+            _checkedQuote(entry['source_quote_sha256']), origins)) {
+          throw const FormatException('NPC life event lacks cited source');
+        }
+        final next = switch (entry['next_state']) {
+          'present' => NpcLifeState.present,
+          'absent' => NpcLifeState.absent,
+          'dead' => NpcLifeState.dead,
+          _ => throw const FormatException('Unknown NPC life state'),
+        };
+        lifeTransitions.add(NpcLifeTransition(
+          sceneId: scene, choiceId: choice, actorId: actor,
+          nextState: next,
+        ));
+      }
+    }
     final book = NpcSocialRulebook(
       blueprintHash: blueprint.blueprintHash,
       witnesses: witnesses,
       rules: rules,
       choiceGates: choiceGates,
       itemTransfers: itemTransfers,
+      lifeTransitions: lifeTransitions,
       requireReviewedWitnesses: true,
     );
     book.validate(blueprint);
