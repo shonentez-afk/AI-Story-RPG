@@ -317,6 +317,11 @@ void main() {
     final generate = find.byKey(const Key('npc-dialogue-cloud-generate'));
     expect(find.byKey(const Key('npc-dialogue-cloud-payload')),
         findsOneWidget);
+    // ListView lazily builds offscreen children: scroll to the real consent
+    // controls before testing them. A missing offscreen button is not a
+    // failed safety gate or a valid indication of user consent.
+    await tester.scrollUntilVisible(
+      generate, 320, scrollable: find.byType(Scrollable).first);
     expect(tester.widget<FilledButton>(generate).onPressed, isNull);
     expect(net.bodies, isEmpty);
     await tester.ensureVisible(consent);
@@ -326,8 +331,10 @@ void main() {
     await tester.ensureVisible(generate);
     await tester.tap(generate);
     await tester.pumpAndSettle();
-    expect(find.byKey(const Key('npc-dialogue-cloud-draft')),
-        findsOneWidget);
+    final draftFinder = find.byKey(const Key('npc-dialogue-cloud-draft'));
+    await tester.scrollUntilVisible(
+      draftFinder, 320, scrollable: find.byType(Scrollable).first);
+    expect(draftFinder, findsOneWidget);
     expect(find.textContaining('НЕ установлен в игру'), findsOneWidget);
     expect(net.bodies, hasLength(1));
   });
