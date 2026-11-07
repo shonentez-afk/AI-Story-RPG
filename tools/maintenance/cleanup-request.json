@@ -1,0 +1,9 @@
+{
+  "request": "2026-11-08-owner-requested-storage-cleanup",
+  "repository": "shonentez-afk/AI-Story-RPG",
+  "keep_complete_test_releases": 3,
+  "keep_successful_artifact_copies_per_active_branch": 2,
+  "preserve": ["main", "open PR branches", "active runs", "unknown report artifacts", "CI 979", "CI 975", "latest successful external author checks"],
+  "delete_tags_only_with_obsolete_test_release_and_reachable_commit": true,
+  "schedule": null
+}
