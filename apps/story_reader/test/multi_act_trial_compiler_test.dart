@@ -1358,10 +1358,12 @@ void main() {
       'and enters the existing multi-act editor, never a new page',
       (tester) async {
     final index = _index();
-    final book = await _analyze(index, eventsPerChapter: 3);
+    final book = await _analyze(index, eventsPerChapter: 4);
     final input = _draft(index, book);
-    final event = book.events.where((e) =>
-        e.source.chapterIndex == 0).toList()[1];
+    final chapterEvents = book.events.where((e) =>
+        e.source.chapterIndex == 0).toList();
+    final event = chapterEvents[1];
+    final secondEvent = chapterEvents[2];
     await tester.pumpWidget(MaterialApp(home: MultiActTrialPage(
       index: index, book: book, bookMap: input.map,
       draft: input.draft,
@@ -1369,7 +1371,8 @@ void main() {
     )));
     final scroll = find.byType(Scrollable).first;
     final reviewed = find.byKey(const Key('multiact-trial-source-reviewed'));
-    await tester.scrollUntilVisible(reviewed, 100, scrollable: scroll);
+    await tester.scrollUntilVisible(reviewed, 250, scrollable: scroll);
+    await tester.pumpAndSettle();
     await tester.tap(reviewed);
     await tester.pumpAndSettle();
     expect(tester.widget<CheckboxListTile>(reviewed).value, true);
@@ -1378,19 +1381,34 @@ void main() {
     await tester.tap(expand);
     await tester.pumpAndSettle();
     final choice = find.byKey(Key('multiact-extra-' + event.id));
-    await tester.scrollUntilVisible(choice, 95, scrollable: scroll);
+    await tester.scrollUntilVisible(choice, 250, scrollable: scroll);
     await tester.tap(choice);
     await tester.pumpAndSettle();
-    await tester.scrollUntilVisible(reviewed, 110, scrollable: scroll);
+    final secondChoice = find.byKey(Key('multiact-extra-' + secondEvent.id));
+    await tester.scrollUntilVisible(secondChoice, 250, scrollable: scroll);
+    await tester.tap(secondChoice);
+    await tester.pumpAndSettle();
+    expect(tester.widget<CheckboxListTile>(choice).value, true);
+    expect(tester.widget<CheckboxListTile>(secondChoice).value, true);
+    await tester.scrollUntilVisible(reviewed, 250, scrollable: scroll);
     expect(tester.widget<CheckboxListTile>(reviewed).value, false);
     final coverage = find.byKey(const Key('multiact-source-coverage'));
     await tester.scrollUntilVisible(coverage, -100, scrollable: scroll);
-    expect(tester.widget<Text>(coverage).data, contains('не представлено 1'));
+    expect(tester.widget<Text>(coverage).data, contains('не представлено 2'));
+    // One tap includes all available events in the 2 x 4 proposal test;
+    // it still requires a NEW source approval before compilation.
+    final bulk = find.byKey(
+        const Key('multiact-select-all-encounters'));
+    await tester.scrollUntilVisible(bulk, 240, scrollable: scroll);
+    await tester.tap(bulk);
+    await tester.pumpAndSettle();
+    expect(tester.widget<Text>(coverage).data, contains('не представлено 0'));
+    expect(tester.widget<CheckboxListTile>(reviewed).value, false);
     expect(find.byType(MultiActTrialPage), findsOneWidget);
   });
 
-  test('two additional source events become real investigate/skip '
-      'choices in rich-v3, locked to human review and saved in SQLite',
+  test('FOUR additional source events form two consecutive encounters '
+      'per act, with typed item, independent review and SQLite replay',
       () async {
     // "ключ" occurs in every possible 60-character citation, so a typed
     // item effect remains source-locked rather than inventing an item label.
@@ -1402,19 +1420,20 @@ void main() {
         List.filled(16, 'Героя ожидал ключ на тропе. ').join(' '),
       ],
     ));
-    final book = await _analyze(index, eventsPerChapter: 3);
-    expect(book.events, hasLength(6));
+    final book = await _analyze(index, eventsPerChapter: 4);
+    expect(book.events, hasLength(8));
     final ready = _draft(index, book);
     final extras = <String>{
       for (var chapter = 0; chapter < 2; chapter++)
-        book.events.where((e) => e.source.chapterIndex == chapter)
-            .toList()[1].id,
+        for (final e in book.events.where(
+            (e) => e.source.chapterIndex == chapter).skip(1).take(2))
+          e.id,
     };
-    expect(ready.draft.coverage.eventIdsStillUnrepresented, hasLength(2));
+    expect(ready.draft.coverage.eventIdsStillUnrepresented, hasLength(4));
     for (var i = 0; i < 2; i++) {
       expect(BookwideSourceEncounters.eligibleForAct(
         index: index, bookMap: ready.map, draft: ready.draft,
-        partIndex: i), hasLength(1));
+        partIndex: i), hasLength(2));
     }
     StoryPlan attach(Set<String> ids, {bool approved = true}) =>
         BookwideSourceEncounters.attach(
@@ -1430,13 +1449,26 @@ void main() {
     final augmented = attach(extras);
     expect(augmented.entrySituationId, 'act_1_source_encounter');
     expect(augmented.situations.length,
-        ready.draft.plan.situations.length + 2);
+        ready.draft.plan.situations.length + 4);
     expect(augmented.validate(book).isStructurallySound, true);
     final sourceChoices = augmented.situations
         .singleWhere((s) => s.id == 'act_1_source_encounter').decisions;
     expect(sourceChoices.map((d) => d.id), [
       'act_1_examine_source', 'act_1_pass_source',
     ]);
+    expect(sourceChoices.map((d) => d.nextSituationId).toSet(),
+        {'act_1_source_encounter_2'});
+    expect(augmented.situations.singleWhere(
+        (s) => s.id == 'act_1_source_encounter_2')
+        .decisions.map((d) => d.nextSituationId).toSet(),
+        {'act_1_turning_point'});
+    expect(augmented.situations.singleWhere(
+        (s) => s.id == 'act_2_source_encounter')
+        .decisions.map((d) => d.nextSituationId).toSet(),
+        {'act_2_source_encounter_2'});
+    // Order of an input SET cannot change a signed gameplay plan.
+    expect(attach(extras.toList().reversed.toSet()).encode(),
+        augmented.encode());
     final fromOriginal = augmented.situations
         .singleWhere((s) => s.id == 'act_1_original_ending');
     final fromOther = augmented.situations
@@ -1456,14 +1488,18 @@ void main() {
       index: index, book: book, plan: augmented,
       exactEventIds: extras.toList(),
     );
-    expect(sourceContext.choices.map((c) => c.choiceId),
-        contains('act_1_examine_source'));
+    expect(sourceContext.choices.map((c) => c.choiceId), containsAll([
+      'act_1_examine_source', 'act_1_examine_source_2',
+      'act_2_examine_source', 'act_2_examine_source_2',
+    ]));
+    expect(sourceContext.choices.any(
+        (c) => c.choiceId.contains('_pass_source')), false);
 
     await expectLater(MultiActTrialCompiler.compile(
       index: index, book: book, bookMap: ready.map, draft: ready.draft,
       continuity: ready.continuity,
       reviewedInteractiveEventIds: extras,
-      sourceEventIdsReviewedByUser: ready.eventIds, // not both new quotes!
+      sourceEventIdsReviewedByUser: ready.eventIds, // extra quotes not approved
       privateUseConfirmed: true, fictionalTrialAcknowledged: true,
     ), throwsFormatException);
     final compiled = await MultiActTrialCompiler.compile(
@@ -1473,19 +1509,22 @@ void main() {
       sourceEventIdsReviewedByUser: {...ready.eventIds, ...extras},
       privateUseConfirmed: true, fictionalTrialAcknowledged: true,
     );
-    expect(compiled.sceneCount, ready.draft.plan.situations.length + 2);
-    expect(compiled.sourceQuoteCount, 6);
-    expect(compiled.sourceEventsRepresented, 6);
+    expect(compiled.sceneCount, ready.draft.plan.situations.length + 4);
+    expect(compiled.sourceQuoteCount, 8);
+    expect(compiled.sourceEventsRepresented, 8);
     expect(compiled.isFullBookAdaptation, false);
     final verified = const RichPrivateBookworldImporter()
         .inspect(compiled.archive);
     expect(verified.canDistributePublicly, false);
     for (var i = 0; i < 2; i++) {
-      final scene = verified.blueprint.scenes[
-          'act_${i + 1}_source_encounter']!;
-      final quote = book.events.firstWhere((e) => extras.contains(e.id) &&
-          e.source.chapterIndex == i).source.quote;
-      expect(scene.text, contains(quote));
+      final selected = book.events.where((e) => extras.contains(e.id) &&
+          e.source.chapterIndex == i).toList();
+      for (var j = 0; j < 2; j++) {
+        final suffix = j == 0 ? '' : '_2';
+        final scene = verified.blueprint.scenes[
+            'act_${i + 1}_source_encounter$suffix']!;
+        expect(scene.text, contains(selected[j].source.quote));
+      }
     }
     // This is not merely a citation slide: the encounter's real choice
     // can receive an explicitly reviewed, source-bound typed item effect.
@@ -1530,18 +1569,26 @@ void main() {
     final temp = await Directory.systemTemp.createTemp('source-encounter-');
     try {
       var store = BookworldCampaignStore.openPrivateDirectory(temp.path);
-      late String id;
+      late String id, skippedId;
       try {
         final installed = store.installBookworld(withItem);
         id = store.createCampaign(installed.archiveHash);
+        skippedId = store.createCampaign(installed.archiveHash);
+        expect(store.commitChoice(skippedId, actionId: 'skip_review',
+            choiceId: 'act_1_pass_source',
+            expectedRevision: 0).applied, true);
+        expect(store.loadCampaign(skippedId).coordinator.sceneId,
+            'act_1_source_encounter_2');
+        expect(store.loadCampaign(skippedId).coordinator.state.inventory,
+            isNot(contains('travel_token')));
         expect(store.loadCampaign(id).coordinator.sceneId,
             'act_1_source_encounter');
         var revision = 0;
         for (final decision in [
-          'act_1_examine_source',
+          'act_1_examine_source', 'act_1_pass_source_2',
           'act_1_accept_offer', 'act_1_honor_condition',
           'act_1_continue_original',
-          'act_2_pass_source',
+          'act_2_pass_source', 'act_2_examine_source_2',
           'act_2_accept_offer', 'act_2_honor_condition',
         ]) {
           final result = store.commitChoice(id,
@@ -1551,7 +1598,7 @@ void main() {
           revision++;
         }
         expect(store.loadCampaign(id).coordinator.isTerminal, true);
-        expect(store.loadCampaign(id).metadata.revision, 7);
+        expect(store.loadCampaign(id).metadata.revision, 9);
         expect(store.loadCampaign(id).coordinator.state.inventory,
             contains('travel_token'));
       } finally {
@@ -1560,13 +1607,19 @@ void main() {
       store = BookworldCampaignStore.openPrivateDirectory(temp.path);
       try {
         final restored = store.loadCampaign(id);
-        expect(restored.metadata.revision, 7);
+        expect(restored.metadata.revision, 9);
         expect(restored.coordinator.isTerminal, true);
         expect(restored.coordinator.state.inventory,
             contains('travel_token'));
         expect(restored.coordinator.events.map((e) => e.choiceId), containsAll([
-          'act_1_examine_source', 'act_2_pass_source',
+          'act_1_examine_source', 'act_1_pass_source_2',
+          'act_2_pass_source', 'act_2_examine_source_2',
         ]));
+        final skipped = store.loadCampaign(skippedId);
+        expect(skipped.metadata.revision, 1);
+        expect(skipped.coordinator.sceneId, 'act_1_source_encounter_2');
+        expect(skipped.coordinator.state.inventory,
+            isNot(contains('travel_token')));
       } finally {
         store.close();
       }

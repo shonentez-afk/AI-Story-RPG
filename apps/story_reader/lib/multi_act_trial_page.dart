@@ -94,23 +94,69 @@ class _MultiActTrialPageState extends State<MultiActTrialPage> {
         userConfirmedPrivateAdaptation: true,
       );
 
-  void _changeEncounter(int act, String eventId, bool choose) {
+  /// A single source/plan revision invalidates prior quotes, model digests
+  /// and gameplay item/fact consent. A newly selected batch is NOT approved.
+  void _setEncounters(Set<String> next, {int omitted = 0}) {
+    if (next.length == _interactiveEvents.length &&
+        _interactiveEvents.containsAll(next)) return;
     setState(() {
-      for (final event in BookwideSourceEncounters.eligibleForAct(
-          index: widget.index, bookMap: widget.bookMap,
-          draft: widget.draft, partIndex: act)) {
-        _interactiveEvents.remove(event.id);
-      }
-      if (choose) _interactiveEvents.add(eventId);
-      // New sources alter the scenario digest and must be re-reviewed.
+      _interactiveEvents..clear()..addAll(next);
       _reviewed = false;
       _gameplaySelection = null;
       _wholeGameplaySelection = null;
       _reviewedProse.clear();
       _recheckedRepair = null;
       _unchangedReview = null;
-      _error = null;
+      _error = omitted > 0
+          ? 'Часть источника остаётся за лимитом: ещё ' +
+              omitted.toString() + ' событий не добавлено в игру.'
+          : null;
     });
+  }
+
+  void _changeEncounter(int act, String eventId, bool choose) {
+    final eligible = BookwideSourceEncounters.eligibleForAct(
+        index: widget.index, bookMap: widget.bookMap,
+        draft: widget.draft, partIndex: act);
+    if (!eligible.any((e) => e.id == eventId)) {
+      setState(() => _error = 'Событие отсутствует в этой части книги.');
+      return;
+    }
+    final next = <String>{..._interactiveEvents};
+    if (choose) {
+      final groupCount = eligible.where((e) => next.contains(e.id)).length;
+      if (!next.contains(eventId) &&
+          (groupCount >= BookwideSourceEncounters.maxReviewedEventsPerAct ||
+           next.length >= BookwideSourceEncounters.maxReviewedEvents)) {
+        setState(() => _error =
+            'Лимит маршрута: восемь событий на акт и 48 всего. '
+            'Остальные остаются в отчёте о покрытии.');
+        return;
+      }
+      next.add(eventId);
+    } else {
+      next.remove(eventId);
+    }
+    _setEncounters(next);
+  }
+
+  void _selectAllAvailableEncounters() {
+    final selected = <String>{};
+    var available = 0;
+    for (var act = 0; act < widget.draft.parts.length; act++) {
+      final events = BookwideSourceEncounters.eligibleForAct(
+          index: widget.index, bookMap: widget.bookMap,
+          draft: widget.draft, partIndex: act);
+      available += events.length;
+      for (final event in events.take(
+          BookwideSourceEncounters.maxReviewedEventsPerAct)) {
+        if (selected.length >= BookwideSourceEncounters.maxReviewedEvents) {
+          break;
+        }
+        selected.add(event.id);
+      }
+    }
+    _setEncounters(selected, omitted: available - selected.length);
   }
 
   Future<void> _chooseGameplay() async {
@@ -398,10 +444,35 @@ class _MultiActTrialPageState extends State<MultiActTrialPage> {
               title: const Text('Дополнительные игровые события из книги'),
               subtitle: Text('Выбрано ' +
                   _interactiveEvents.length.toString() +
-                  '; максимум одно дополнительное событие на акт. '
+                  '; до ' +
+                  BookwideSourceEncounters.maxReviewedEventsPerAct.toString() +
+                  ' событий на акт, не более ' +
+                  BookwideSourceEncounters.maxReviewedEvents.toString() +
+                  ' всего. '
                   'Это настоящие интерактивные выборы, но смысл и '
                   'хронология литературного оригинала не доказаны.'),
               children: [
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 4,
+                  children: [
+                    TextButton.icon(
+                      key: const Key('multiact-select-all-encounters'),
+                      onPressed: _working ? null : _selectAllAvailableEncounters,
+                      icon: const Icon(Icons.library_add_check_outlined),
+                      label: const Text('Выбрать доступные события'),
+                    ),
+                    if (_interactiveEvents.isNotEmpty)
+                      TextButton(
+                        key: const Key('multiact-clear-all-encounters'),
+                        onPressed: _working
+                            ? null : () => _setEncounters(<String>{}),
+                        child: const Text('Снять выбор'),
+                      ),
+                  ],
+                ),
+                const Text('Выбор не заменяет проверку каждой цитаты: '
+                    'её потребуется подтвердить заново.'),
                 for (var act = 0; act < widget.draft.parts.length; act++) ...[
                   Text('Акт ' + (act + 1).toString(),
                       style: const TextStyle(fontWeight: FontWeight.bold)),

@@ -14,10 +14,13 @@ import 'story_plan.dart';
 class BookwideSourceEncounters {
   const BookwideSourceEncounters._();
 
-  static const maxReviewedEvents = 6;
+  // Source observations must stay bounded by the SAME StoryPlan/BookWorld
+  // runtime and finite-state audit as the rest of the game.
+  static const maxReviewedEvents = 48;
+  static const maxReviewedEventsPerAct = 8;
 
-  /// A bounded first step: at most one additional confirmed event per act.
-  /// Never present a source proposal as a confirmed meaning or fact.
+  /// Candidate events in one source-validated act, apart from its 2 anchors.
+  /// Book text order is not a claim about the in-world chronology.
   static List<NarrativeEvent> eligibleForAct({
     required BookSourceIndex index,
     required BookwideActPlan bookMap,
@@ -57,7 +60,8 @@ class BookwideSourceEncounters {
     if (reviewedEventIds.isEmpty) return plan;
     if (!userConfirmedPrivateAdaptation ||
         reviewedEventIds.length > maxReviewedEvents ||
-        reviewedEventIds.length > draft.parts.length ||
+        reviewedEventIds.length >
+            draft.parts.length * maxReviewedEventsPerAct ||
         index.sourceFingerprint != book.sourceFingerprint ||
         bookMap.sourceFingerprint != book.sourceFingerprint ||
         plan.sourceFingerprint != book.sourceFingerprint ||
@@ -67,34 +71,54 @@ class BookwideSourceEncounters {
           'Нужны согласие, текущая редакция и проверенный игровой план.');
     }
 
-    final selected = <int, NarrativeEvent>{};
-    final known = {for (final e in book.events) e.id: e};
-    for (final id in reviewedEventIds) {
-      final event = known[id];
-      if (event == null) {
-        throw const FormatException('Игровая сцена не найдена в книге');
-      }
-      var partIndex = -1;
-      for (var i = 0; i < draft.parts.length; i++) {
-        if (eligibleForAct(
-              index: index, bookMap: bookMap, draft: draft, partIndex: i,
-            ).any((e) => e.id == id)) {
-          partIndex = i;
-          break;
+    // Verify every selected event against this exact edition and its act.
+    // One source event may not be silently reused across multiple acts.
+    final validByEvent = <String, int>{};
+    for (var i = 0; i < draft.parts.length; i++) {
+      for (final event in eligibleForAct(
+        index: index, bookMap: bookMap, draft: draft, partIndex: i,
+      )) {
+        if (validByEvent.containsKey(event.id)) {
+          throw const FormatException('Событие встречается в двух актах.');
         }
+        validByEvent[event.id] = i;
       }
-      if (partIndex < 0 || selected.containsKey(partIndex)) {
+    }
+    final byId = {for (final e in book.events) e.id: e};
+    final selected = <int, List<NarrativeEvent>>{};
+    for (final id in reviewedEventIds) {
+      final event = byId[id];
+      final partIndex = validByEvent[id];
+      if (event == null || partIndex == null) {
         throw const FormatException(
-            'Разрешено одно ДОПОЛНИТЕЛЬНОЕ событие на исходный акт');
+            'Событие не принадлежит текущему акту или его цитате.');
       }
       event.source.validate(index);
-      selected[partIndex] = event;
+      final group = selected.putIfAbsent(partIndex, () => []);
+      group.add(event);
+      if (group.length > maxReviewedEventsPerAct) {
+        throw const FormatException(
+            'На один акт разрешено не более восьми дополнительных событий.');
+      }
+    }
+    for (final group in selected.values) {
+      group.sort((a, b) =>
+          a.narrativePosition.compareTo(b.narrativePosition));
     }
 
+    // Preserve single-encounter IDs for old .bworld files and saves.
+    // More than one selected event yields source-order _2/_3/... suffixes.
+    // A changed set of source choices creates a new signed BookWorld.
+    String encounterId(int act, int j) =>
+        'act_${act + 1}_source_encounter${j == 0 ? '' : '_${j + 1}'}';
+    String examineId(int act, int j) =>
+        'act_${act + 1}_examine_source${j == 0 ? '' : '_${j + 1}'}';
+    String passId(int act, int j) =>
+        'act_${act + 1}_pass_source${j == 0 ? '' : '_${j + 1}'}';
+
     final reroute = <String, String>{
-      for (final i in selected.keys)
-        draft.parts[i].entrySituationId:
-            'act_${i + 1}_source_encounter',
+      for (final act in selected.keys)
+        draft.parts[act].entrySituationId: encounterId(act, 0),
     };
     final updatedScenes = <StorySituation>[
       for (final scene in plan.situations)
@@ -123,36 +147,40 @@ class BookwideSourceEncounters {
           ],
         ),
     ];
-    for (final i in (selected.keys.toList()..sort())) {
-      final e = selected[i]!;
-      final prefix = 'act_${i + 1}_';
-      final originalEntry = draft.parts[i].entrySituationId;
-      updatedScenes.add(StorySituation(
-        id: prefix + 'source_encounter',
-        goal: 'Исследовать другой подтверждённый отрывок главы',
-        conflict: 'Смысл цитаты и время события не подтверждены. '
-            'Игровые действия ниже — вымышленная возможность '
-            'изучить отрывок или продолжить путешествие.',
-        chapterIndex: e.source.chapterIndex,
-        sourceEventId: e.id,
-        route: StoryRoute.canonicalProposal,
-        terminal: false,
-        decisions: [
-          StoryDecision(
-            id: prefix + 'examine_source',
-            intent: 'Изучить фрагмент и запомнить найденное',
-            nextSituationId: originalEntry,
-            sourceEventId: e.id,
-            route: StoryRoute.adaptationFiction,
-          ),
-          StoryDecision(
-            id: prefix + 'pass_source',
-            intent: 'Продолжить путь, не исследуя фрагмент',
-            nextSituationId: originalEntry,
-            route: StoryRoute.adaptationFiction,
-          ),
-        ],
-      ));
+    for (final act in (selected.keys.toList()..sort())) {
+      final group = selected[act]!;
+      final originalEntry = draft.parts[act].entrySituationId;
+      for (var j = 0; j < group.length; j++) {
+        final event = group[j];
+        final next = j + 1 < group.length
+            ? encounterId(act, j + 1) : originalEntry;
+        updatedScenes.add(StorySituation(
+          id: encounterId(act, j),
+          goal: 'Исследовать подтверждённый отрывок главы',
+          conflict: 'Смысл цитаты и время события не подтверждены. '
+              'Игровые действия ниже — вымышленная возможность '
+              'изучить отрывок или продолжить путешествие.',
+          chapterIndex: event.source.chapterIndex,
+          sourceEventId: event.id,
+          route: StoryRoute.canonicalProposal,
+          terminal: false,
+          decisions: [
+            StoryDecision(
+              id: examineId(act, j),
+              intent: 'Изучить фрагмент и запомнить найденное',
+              nextSituationId: next,
+              sourceEventId: event.id,
+              route: StoryRoute.adaptationFiction,
+            ),
+            StoryDecision(
+              id: passId(act, j),
+              intent: 'Пройти мимо, не исследуя отрывок',
+              nextSituationId: next,
+              route: StoryRoute.adaptationFiction,
+            ),
+          ],
+        ));
+      }
     }
     final result = StoryPlan(
       sourceFingerprint: plan.sourceFingerprint,

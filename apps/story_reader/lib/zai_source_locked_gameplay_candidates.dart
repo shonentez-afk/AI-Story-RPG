@@ -98,6 +98,12 @@ class SourceLockedGameplayContext {
     final anchors = <GameplayChoiceAnchor>[];
     for (final scene in plan.situations) {
       for (final choice in scene.decisions) {
+        // A player who PASSES a source encounter cannot receive a new
+        // item/fact merely because the enclosing scene has a quote. Only
+        // the explicit "examine_source" decision is eligible for a
+        // separately reviewed source-locked gameplay effect.
+        if (scene.id.contains('_source_encounter') &&
+            choice.id.contains('_pass_source')) continue;
         // A decision's explicit source takes precedence over its parent
         // scene. A fictional decision is never silently relabeled CANON.
         final sourceId = choice.sourceEventId ?? scene.sourceEventId;
