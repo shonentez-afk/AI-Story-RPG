@@ -241,7 +241,6 @@ void main() {
       final skipped = StoryWorld(game.blueprint, socialRulebook: game.npcSocialRulebook);
       expect(skipped.apply(actionId: 'skip_observation', choiceId: opportunity.observeBaseChoiceId).applied, true);
       expect(skipped.apply(actionId: 'unearned_recall', choiceId: recall).applied, false);
-
       final world = StoryWorld(game.blueprint, socialRulebook: game.npcSocialRulebook);
       final path = <String>[observe, recall, 'act_1_accept_offer', 'act_1_honor_condition', 'act_1_continue_original'];
       for (var i = 0; i < candidates.length; i++) {
@@ -374,19 +373,25 @@ void main() {
     await tester.tap(find.byKey(const Key('whole-npc-load-heroes')));
     await tester.pumpAndSettle();
     expect(find.text('Герой: Артем'), findsOneWidget);
-    final selector = find.byType(DropdownButtonFormField<String>);
-    await tester.ensureVisible(selector);
-    await tester.tap(selector); await tester.pumpAndSettle();
-    await tester.tap(find.text('Мария').hitTestable().last);
+    // Tap the actual interactive button, not the full form decoration whose
+    // centre may fall on its label at narrow width. Then expose the popup's
+    // scrollable option instead of selecting an offstage closed-menu label.
+    final button = find.descendant(of: find.byType(DropdownButtonFormField<String>),
+        matching: find.byType(DropdownButton<String>));
+    await tester.ensureVisible(button);
     await tester.pumpAndSettle();
-    // Verify the REAL saved role before inspecting a lazily built ListView
-    // header. ensureVisible(selector) may have scrolled that header away.
+    await tester.tap(button);
+    await tester.pumpAndSettle();
+    final maria = find.text('Мария').last;
+    await tester.ensureVisible(maria);
+    await tester.pumpAndSettle();
+    await tester.tap(maria);
+    await tester.pumpAndSettle();
     final saved = await heroStore.load(f.free, f.roles);
     expect(saved.role!.displayName, 'Мария');
     expect(saved.revision, 2);
     final header = find.byKey(const Key('whole-npc-current-hero'));
-    await tester.scrollUntilVisible(header, -160,
-        scrollable: find.byType(Scrollable).first);
+    await tester.scrollUntilVisible(header, -160, scrollable: find.byType(Scrollable).first);
     await tester.pumpAndSettle();
     expect(tester.widget<Text>(header).data, 'Герой: Мария');
     final consent = find.byKey(const Key('whole-npc-quotes-reviewed'));

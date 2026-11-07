@@ -14,8 +14,6 @@ import 'zai_source_locked_gameplay_candidates.dart';
 String _planHash(WholeBookNpcSourcePlan source) =>
     sha256.convert(utf8.encode(source.plan.encode())).toString();
 
-/// A consequence review for the exact existing hero/source world. Neither
-/// opening the review nor accepting it installs a game or sends an API call.
 class NpcCampaignConsequencePreview {
   NpcCampaignConsequencePreview._({
     required this.gameplay, required this.planDigest,
@@ -30,9 +28,8 @@ class NpcCampaignConsequencePreview {
   bool get literaryMeaningVerified => false;
 }
 
-/// Immutable, not-yet-installed gameplay variant. NPC authoring receives this
-/// archive BEFORE adding its own knowledge and dialogue, never the reverse.
-/// Exact source/role/base bindings prevent reuse after changing protagonists.
+/// Exact source/role/base binding. The variant is built before NPC authoring;
+/// neither the base nor an installed campaign is modified by this service.
 class NpcCampaignConsequences {
   NpcCampaignConsequences._({
     required Uint8List archive, required this.planDigest,
@@ -122,9 +119,6 @@ class NpcCampaignConsequences {
             world.blueprint.scenes.keys.toSet()).isNotEmpty) {
       throw const FormatException('Последствия изменили личности или состав сцен.');
     }
-    // The existing effect compiler audits source and inventory. This shared
-    // runtime audit also protects every old role action/ending from becoming
-    // unreachable in the actual ZIP, not merely in an authoring graph.
     final originalProof = StoryCampaignCausalAudit.inspect(blueprint: base.blueprint);
     if (!originalProof.playable || !originalProof.exhaustive) {
       throw const FormatException('Исходная кампания не прошла полный обход.');
@@ -134,8 +128,22 @@ class NpcCampaignConsequences {
       requiredChoiceIds: originalProof.choiceWitnesses.keys,
     );
     if (!combinedProof.playable || !combinedProof.exhaustive) {
-      throw const FormatException(
-          'Предметы закрыли прежнее решение или превышен бюджет проверки.');
+      // Fail closed, but report real replayable reasons rather than making
+      // a missing action and a resource limit indistinguishable to authors.
+      throw FormatException('Последствия не прошли причинную проверку: ' +
+          canonicalJson({
+            'status': combinedProof.status.name,
+            'states': combinedProof.exploredStates,
+            'exhaustive': combinedProof.exhaustive,
+            'unproven_choices': combinedProof.unprovenRequiredChoiceIds,
+            'unproven_endings': combinedProof.unprovenTerminalIds,
+            'traps': [for (final trap in combinedProof.traps) {
+              'scene': trap.sceneId,
+              'path': trap.choiceIds,
+              'reasons': trap.choiceLockReasons,
+            }],
+            'cycles': combinedProof.cycleCount,
+          }));
     }
     return NpcCampaignConsequences._(
       archive: bytes, planDigest: source.planDigest,
