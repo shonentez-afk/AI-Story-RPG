@@ -375,7 +375,17 @@ void main() {
   });
 
   test('NPC departure/return/death are event-sourced, guarded and replayed', () {
-    final bp = _blueprint();
+    final raw = jsonDecode(
+        File('../../shared_schemas/fixtures/manor_world_m17.json')
+            .readAsStringSync()) as Map<String, dynamic>;
+    // Isolate the NPC gate from the independent inventory/stat conditions
+    // intentionally present in the general-purpose manor fixture.
+    final gate = (raw['scenes'] as List).cast<Map<String, dynamic>>()
+        .singleWhere((scene) => scene['id'] == 'gate');
+    final hall = (gate['choices'] as List).cast<Map<String, dynamic>>()
+        .singleWhere((choice) => choice['id'] == 'enter_hall');
+    (hall['conditions'] as List).clear();
+    final bp = StoryBlueprint.fromJson(raw);
     final rules = NpcSocialRulebook(
       blueprintHash: bp.blueprintHash,
       requireReviewedWitnesses: true,

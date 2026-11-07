@@ -597,9 +597,10 @@ class NpcSocialLedger {
       if (rulebook.lifeTransitions.isNotEmpty) {
         for (final rule in byChoice[key] ?? <NpcSocialRule>[]) {
           if (rule.observerId != 'player' &&
-              witnessModes['${event.sceneId}|${rule.observerId}'] ==
-                  NpcWitnessMode.present &&
-              life[rule.observerId] != NpcLifeState.present) {
+              (life[rule.observerId] == NpcLifeState.dead ||
+               (witnessModes['${event.sceneId}|${rule.observerId}'] ==
+                    NpcWitnessMode.present &&
+                life[rule.observerId] != NpcLifeState.present))) {
             throw const FormatException('Absent/dead NPC witnessed an event');
           }
         }

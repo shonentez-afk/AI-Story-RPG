@@ -136,8 +136,18 @@ void main() {
     expect(NpcSocialLedger.inspect(world, rules).lifeState(npc),
         NpcLifeState.present);
     expect(world.apply(actionId: 'depart', choiceId: 'wait').applied, isTrue);
-    expect(NpcSocialLedger.inspect(world, rules).lifeState(npc),
-        NpcLifeState.absent);
+    final gone = NpcSocialLedger.inspect(world, rules);
+    expect(gone.lifeState(npc), NpcLifeState.absent);
+    final spoken = <RichDialogueTurn>[
+      const RichDialogueTurn(speaker: 'Мария', text: 'Секретная реплика'),
+    ];
+    final reviewed = <Map<String, dynamic>>[{
+      'turn_index': 0, 'speaker': 'Мария', 'actor_id': npc,
+      'required_fact_ids': <String>[],
+    }];
+    expect(RichNpcDialogueKnowledge.redact(
+        spoken, reviewed, world.state.knowledge, social: gone).single.text,
+        RichNpcDialogueKnowledge.unavailableLine);
     expect(world.choiceLockReason('wait'),
         'condition_not_met:npc_life_transition');
     final reopened = StoryWorld.replay(worldData.blueprint,
