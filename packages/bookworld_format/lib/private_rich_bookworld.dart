@@ -666,11 +666,27 @@ class RichPrivateBookworldImporter {
     }
     final allDialogues = data['scene_dialogues'];
     final knowledgeReview = data['scene_dialogue_knowledge'];
+    // Only verified local source provenance may ground a causal line.
+    // Fail closed if the older archive lacks this exact source structure.
+    final origins = <String, dynamic>{};
+    final rawOrigins = source['scene_origins'];
+    if (rawOrigins is! List) {
+      throw const FormatException('Missing dialogue source origins');
+    }
+    for (final entry in rawOrigins) {
+      if (entry is! Map<String, dynamic> ||
+          entry['scene_id'] is! String ||
+          origins.containsKey(entry['scene_id'])) {
+        throw const FormatException('Invalid dialogue source origin');
+      }
+      origins[entry['scene_id'] as String] = entry;
+    }
     RichNpcDialogueKnowledge.validate(
       knowledgeReview is Map<String, dynamic> ? knowledgeReview : null,
       blueprint,
       allDialogues is Map<String, dynamic> ? allDialogues : null,
       socialRules: socialRules,
+      sceneOrigins: origins,
     );
     if (hasKnowledgeReview && knowledgeReview is! Map<String, dynamic>) {
       throw const FormatException('Wrong NPC line review map');

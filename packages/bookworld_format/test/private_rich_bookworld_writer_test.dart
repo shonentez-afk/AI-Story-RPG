@@ -440,6 +440,123 @@ void main() {
     }
   });
 
+
+  test('P0: causal NPC reply needs committed source action on this route', () {
+    final data = _npcRichSample();
+    final bp = _asObject(data['blueprint']);
+    final entry = (bp['scenes'] as List).first as Map<String, dynamic>;
+    // Same destination, two real routes: direct talk never teaches a secret.
+    (((entry['choices'] as List)[1] as Map)['conditions'] as List).clear();
+    final meeting = (bp['scenes'] as List)[1] as Map<String, dynamic>;
+    meeting['text'] = 'Мария: «Теперь я знаю тайну.»\\n'
+        'Игрок: «Расскажи мне.»';
+    final prov = _asObject(data['provenance']);
+    final source = (prov['scene_origins'] as List).first as Map;
+    final quote = ((source['source_refs'] as List).first
+        as Map)['quote_sha256'] as String;
+    final npc = 'npc_' + List.filled(32, 'c').join();
+    final presentation = _asObject(prov['presentation']);
+    presentation['scene_dialogues'] = {
+      'canon_end': RichSceneDialogue.presentationFor(
+          meeting['text'] as String),
+    };
+    presentation['scene_dialogue_knowledge'] = {
+      'canon_end': [
+        {
+          'turn_index': 0, 'speaker': 'Мария', 'actor_id': npc,
+          'required_fact_ids': ['npc_secret'],
+          'required_prior_choice_id': 'wait',
+          'source_quote_sha256': quote,
+          'private_fiction_confirmed': true,
+        },
+        {
+          'turn_index': 1, 'speaker': 'Игрок', 'actor_id': 'player',
+          'required_fact_ids': <String>[],
+        },
+      ],
+    };
+    prov['presentation'] = presentation;
+    final sourceIndex = _asObject(data['source_index']);
+    final archive = writer.build(
+        blueprint: bp, provenance: prov, sourceIndex: sourceIndex);
+    final verified = importer.inspect(archive);
+    final turns = RichSceneDialogue.verify(
+      (verified.presentation['scene_dialogues'] as Map)['canon_end'],
+      verified.blueprint.scenes['canon_end']!.text,
+    );
+    final reviews = (verified.presentation['scene_dialogue_knowledge']
+        as Map)['canon_end'] as List;
+
+    // Route B: going directly to the dialogue cannot reveal NPC knowledge.
+    final without = StoryWorld(verified.blueprint);
+    expect(without.apply(actionId: 'go_direct', choiceId: 'help').applied,
+        isTrue);
+    final blocked = RichNpcDialogueKnowledge.redact(
+      turns, reviews, without.state.knowledge,
+      committedEvents: without.events, sceneId: without.state.sceneId);
+    expect(blocked[0].text, RichNpcDialogueKnowledge.unavailableLine);
+    expect(blocked[1].text, 'Расскажи мне.');
+
+    // Route A: the earlier source-bound action explicitly teaches the
+    // permanent NPC actor, then the scene becomes eligible.
+    final withLearning = StoryWorld(verified.blueprint);
+    expect(withLearning.apply(actionId: 'observe', choiceId: 'wait').applied,
+        isTrue);
+    expect(withLearning.apply(actionId: 'go_after', choiceId: 'help').applied,
+        isTrue);
+    final spoken = RichNpcDialogueKnowledge.redact(
+      turns, reviews, withLearning.state.knowledge,
+      committedEvents: withLearning.events, sceneId: withLearning.state.sceneId);
+    expect(spoken[0].text, 'Теперь я знаю тайну.');
+    expect(spoken[1].text, 'Расскажи мне.');
+    // Deliberately omit the event journal: a world-state fact alone is
+    // insufficient proof of the causal prerequisite.
+    expect(RichNpcDialogueKnowledge.redact(
+        turns, reviews, withLearning.state.knowledge)[0].text,
+        RichNpcDialogueKnowledge.unavailableLine);
+    final replayed = StoryWorld.replay(
+      verified.blueprint, withLearning.events.map((e) => e.toJson()),
+      expectedSequence: withLearning.state.revision,
+      expectedStateHash: withLearning.state.stateHash);
+    expect(RichNpcDialogueKnowledge.redact(
+      turns, reviews, replayed.state.knowledge,
+      committedEvents: replayed.events, sceneId: replayed.state.sceneId,
+    )[0].text, spoken[0].text);
+    expect(replayed.state.stateHash, withLearning.state.stateHash);
+
+    Map<String, dynamic> cloneSource() =>
+        jsonDecode(jsonEncode(prov)) as Map<String, dynamic>;
+    void changeLine(Map<String, dynamic> origin, String key, Object? value) {
+      final row = (((origin['presentation'] as Map)
+          ['scene_dialogue_knowledge'] as Map)
+          ['canon_end'] as List).first as Map;
+      if (value == null) {
+        row.remove(key);
+      } else {
+        row[key] = value;
+      }
+    }
+    void rejects(String key, Object? value) {
+      final tampered = cloneSource();
+      changeLine(tampered, key, value);
+      expect(() => writer.build(
+          blueprint: bp, provenance: tampered, sourceIndex: sourceIndex),
+          throwsFormatException);
+    }
+    rejects('source_quote_sha256', List.filled(64, '0').join());
+    rejects('required_prior_choice_id', 'leave'); // wrong destination
+    rejects('required_prior_choice_id', 'help'); // never teaches the NPC
+    rejects('private_fiction_confirmed', false);
+    rejects('private_fiction_confirmed', null);
+
+    // The ordinary CI independently verifies these EXACT Dart bytes in
+    // Python (not only a recreated Python fixture).
+    final output = File(
+        '../../artifacts/bookworld/book_private_rich_dialogue_causal_dart.bworld');
+    output.parent.createSync(recursive: true);
+    output.writeAsBytesSync(archive, flush: true);
+  });
+
   test('explicit private NPC v3 roundtrip uses source-reviewed fact grants', () {
     final data = _npcRichSample();
     final rawBlueprint = _asObject(data['blueprint']);

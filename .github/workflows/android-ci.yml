@@ -171,6 +171,11 @@ jobs:
           test -s artifacts/bookworld/book_private_rich_dialogue_dart.bworld
           python3 -c "from pathlib import Path; from tools.bookworld.private_rich_bookworld import verify; p=Path('artifacts/bookworld/book_private_rich_dialogue_dart.bworld'); assert verify(p.read_bytes())['format_version'] == 3"
           (cd artifacts/bookworld && sha256sum book_private_rich_dialogue_dart.bworld >> SHA256SUMS.txt)
+          # Causal dialogue: preserve both verified event conditions and
+          # exact source quote across the independently parsed Dart ZIP.
+          test -s artifacts/bookworld/book_private_rich_dialogue_causal_dart.bworld
+          python3 -c "from pathlib import Path; from tools.bookworld.private_rich_bookworld import verify; p=Path('artifacts/bookworld/book_private_rich_dialogue_causal_dart.bworld'); assert verify(p.read_bytes())['format_version'] == 3"
+          (cd artifacts/bookworld && sha256sum book_private_rich_dialogue_causal_dart.bworld >> SHA256SUMS.txt)
           # NPC v3.1 source-reviewed private extension: exact Dart ZIP
           # MUST pass the independent Python per-actor/quote/reachability gate.
           test -s artifacts/bookworld/book_private_rich_npc_dart.bworld

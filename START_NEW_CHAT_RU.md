@@ -1,5 +1,16 @@
 # AI Story RPG — START_NEW_CHAT_RU
 
+## 2026-11-07 — P0 NPC: причинные условия на проверенных репликах (часть PR #133)
+
+**Новая реализация — awaiting exact-HEAD CI (не объявлять PASS заранее).** В `packages/bookworld_format/lib/npc_dialogue_knowledge.dart` добавлен совместимый с rich-v3 необязательный набор для одобренной частной реплики: `required_prior_choice_id`, `source_quote_sha256`, `private_fiction_confirmed: true`. Все три обязательны вместе. Строгий импортёр сопоставляет предыдущее решение с source-locked исходной цитатой, маршрутной достижимостью до текущей сцены и, для требуемых `required_fact_ids`, точным `learn_fact` этому постоянному `character_id`. Из одного порядка глав знание и право на слова не появляются. Это явно **GAME_FICTION**, а не литературный CANON или доказательство произнесённой NPC реплики.
+
+Во время исполнения `WorldLibraryGateway` получает только journal из проверенной SQLite replay-кампании и передаёт его в `RichNpcDialogueKnowledge.redact`. Без предшествующего committed выбора слова недоступны даже при наличии иных знаний; они не попадают в Flutter, историю и локальный курсор. Поведение детерминированное, офлайн, без дублирования `story_core` и без изменений `.bworld` ZIP/SQLite/механики игровых эффектов. Старые rich-v3 записи без этих полей сохраняют прежнее поведение. `NpcKnowledgeRichWorldBridge.prepare` проверяет тот же набор при авторской подготовке.
+
+Добавлена проверка **двух маршрутов** и replay в `packages/bookworld_format/test/private_rich_bookworld_writer_test.dart` с негативными случаями: ложный SHA источника, недостижимое решение, решение без `learn_fact`, снятое согласие. Независимый `tools/bookworld/private_rich_bookworld.py` проверяет точно ту же тройку; `tests/test_rich_scene_dialogue_projection.py` покрывает Python-контракт; CI `.github/workflows/android-ci.yml` валидирует **те же Dart-созданные байты** `book_private_rich_dialogue_causal_dart.bworld` в Python. 
+
+**Далее:** дождаться exact-HEAD CI/M0 и при необходимости поправить ошибки, затем развить автоматический source-reviewed NPC dialogue authoring по фактам, участникам, мотивам, последовательности событий и разным игровым маршрутам, а после — полно-книжную адаптацию. Текущий пакет — работающая проверка для *подготовленных* диалогов, НЕ автоматическое создание всех литературно достоверных разговоров. PR #133 оставить Draft до полной приёмки Issue #118. E6d не трогать, main не менять. Исторический стабильный SHA до этих изменений: `4bb128e`, CI #939 и M0 #1024 SUCCESS.
+
+
 ## 2026-11-07 — Защита закрытых реплик героя (единый PR #133)
 
 **Подтверждённая база:** [AI Story RPG CI #938](https://github.com/shonentez-afk/AI-Story-RPG/actions/runs/42345757647) и [M0 #1023](https://github.com/shonentez-afk/AI-Story-RPG/actions/runs/42345757634) на коде `b5b7f1ae03600cd19bc61fcc3e9a8d105844bd97` — SUCCESS, включая 635 Flutter tests (2 SKIP), Android APK, Windows portable, Dart/Python/M1.7. PR #133 по-прежнему DRAFT, `main` не трогать, E6d отложен.

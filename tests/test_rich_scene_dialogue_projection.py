@@ -52,5 +52,76 @@ class RichDialogueProjectionTests(unittest.TestCase):
         )
 
 
+
+    def test_source_bound_prior_choice_is_verified_not_inferred(self):
+        import copy
+        import json
+        from pathlib import Path
+
+        sample = json.loads((
+            Path(__file__).resolve().parents[1] /
+            "shared_schemas/fixtures/private_classic_sample.json"
+        ).read_text(encoding="utf-8"))
+        bp = sample["blueprint"]
+        npc = "npc_" + "c" * 32
+        bp["actors"].append(npc)
+        bp["facts"].append("npc_secret")
+        bp["initial_state"]["knowledge"][npc] = []
+        for choice in bp["scenes"][0]["choices"]:
+            if choice["id"] == "wait":
+                choice["effects"].append({
+                    "op": "learn_fact", "id": "npc_secret", "actor": npc
+                })
+        body = 'Мария: «Теперь знаю тайну.»\\nИгрок: «Слушаю.»'
+        bp["scenes"][1]["text"] = body
+        first = sample["provenance"]["scene_origins"][0]
+        quote = first["source_refs"][0]["quote_sha256"]
+        meta = {
+            "hero": {"name": "Игрок", "description": "Тест"},
+            "item_names": {}, "item_descriptions": {},
+            "stat_names": {}, "fact_names": {"npc_secret": "Тайна"},
+            "scene_names": {
+                "entry": "Двор", "canon_end": "Диалог",
+                "alternate_end": "Отказ",
+            },
+            "scene_dialogues": {
+                "canon_end": rich._exact_scene_dialogue(body),
+            },
+            "scene_dialogue_knowledge": {
+                "canon_end": [
+                    {
+                        "turn_index": 0, "speaker": "Мария",
+                        "actor_id": npc, "required_fact_ids": ["npc_secret"],
+                        "required_prior_choice_id": "wait",
+                        "source_quote_sha256": quote,
+                        "private_fiction_confirmed": True,
+                    },
+                    {
+                        "turn_index": 1, "speaker": "Игрок",
+                        "actor_id": "player", "required_fact_ids": [],
+                    },
+                ],
+            },
+        }
+        origins = sample["provenance"]["scene_origins"]
+        rich._presentation(meta, bp, origins=origins)
+        cases = [
+            ("source_quote_sha256", "0" * 64),
+            ("required_prior_choice_id", "leave"),
+            ("required_prior_choice_id", "help"),
+            ("private_fiction_confirmed", False),
+        ]
+        for key, value in cases:
+            forged = copy.deepcopy(meta)
+            forged["scene_dialogue_knowledge"]["canon_end"][0][key] = value
+            with self.subTest(field=key, value=value):
+                with self.assertRaises(Exception):
+                    rich._presentation(forged, bp, origins=origins)
+        missing_consent = copy.deepcopy(meta)
+        del missing_consent["scene_dialogue_knowledge"]["canon_end"][0][
+            "private_fiction_confirmed"]
+        with self.assertRaises(Exception):
+            rich._presentation(missing_consent, bp, origins=origins)
+
 if __name__ == "__main__":
     unittest.main()

@@ -18,6 +18,7 @@ class RichNpcDialogueKnowledge {
     StoryBlueprint blueprint,
     Map<String, dynamic>? signedDialogues, {
     NpcSocialRulebook? socialRules,
+    Map<String, dynamic>? sceneOrigins,
   }) {
     final hasNpcs = blueprint.actors.any((id) => id != 'player');
     final signed = signedDialogues ?? const <String, dynamic>{};
@@ -67,6 +68,8 @@ class RichNpcDialogueKnowledge {
             raw.keys.toSet().difference({
               'turn_index', 'speaker', 'actor_id', 'required_fact_ids',
               'required_social_memory_id', 'minimum_trust_to_player',
+              'required_prior_choice_id', 'source_quote_sha256',
+              'private_fiction_confirmed',
             }).isNotEmpty ||
             !raw.keys.toSet().containsAll({
               'turn_index', 'speaker', 'actor_id', 'required_fact_ids',
@@ -109,11 +112,78 @@ class RichNpcDialogueKnowledge {
           throw const FormatException(
               'Unreviewed NPC directed relationship prerequisite');
         }
+
+        // Three optional keys form ONE source-reviewed, user-approved
+        // private-fiction causal gate. The quote identifies the source
+        // context; it does not prove the NPC uttered these authored words.
+        final hasPrior = raw.containsKey('required_prior_choice_id');
+        final hasQuote = raw.containsKey('source_quote_sha256');
+        final hasConsent = raw.containsKey('private_fiction_confirmed');
+        if (hasPrior || hasQuote || hasConsent) {
+          final priorId = raw['required_prior_choice_id'];
+          final quote = raw['source_quote_sha256'];
+          if (!hasPrior || !hasQuote || !hasConsent ||
+              raw['private_fiction_confirmed'] != true ||
+              actor == 'player' || priorId is! String || quote is! String ||
+              !RegExp(r'^[0-9a-f]{64}$').hasMatch(quote)) {
+            throw const FormatException('Unapproved causal NPC dialogue');
+          }
+          String? producerSceneId;
+          BlueprintChoice? producer;
+          for (final candidate in blueprint.scenes.values) {
+            for (final choice in candidate.choices) {
+              if (choice.id == priorId) {
+                producerSceneId = candidate.id;
+                producer = choice;
+              }
+            }
+          }
+          final origin = sceneOrigins?[producerSceneId];
+          final destination = sceneOrigins?[sceneId];
+          final fromChapter = origin?['chapter_index'];
+          final toChapter = destination?['chapter_index'];
+          final refs = origin?['source_refs'];
+          if (producer == null || producerSceneId == sceneId ||
+              !_reachable(blueprint, producer.nextSceneId, sceneId) ||
+              origin?['origin'] != 'SOURCE_PASSAGE' ||
+              fromChapter is! int || toChapter is! int ||
+              fromChapter > toChapter || refs is! List ||
+              !refs.any((ref) => ref is Map &&
+                  ref['quote_sha256'] == quote &&
+                  ref['visible_after_chapter'] is int &&
+                  (ref['visible_after_chapter'] as int) <= fromChapter) ||
+              // The required knowledge must actually be taught to this
+              // permanent NPC actor by the committed prior choice.
+              !(facts as List).every((fact) => producer!.effects.any(
+                  (effect) => effect.op == 'learn_fact' &&
+                      effect.id == fact && effect.actor == actor))) {
+            throw const FormatException(
+                'NPC line lacks a reachable source-bound learning event');
+          }
+        }
       }
       if (!seen.containsAll(expected)) {
         throw const FormatException('Incomplete NPC dialogue speaker review');
       }
     }
+  }
+
+
+  static bool _reachable(
+      StoryBlueprint blueprint, String fromSceneId, String targetSceneId) {
+    final stack = <String>[fromSceneId];
+    final visited = <String>{};
+    while (stack.isNotEmpty) {
+      final sceneId = stack.removeLast();
+      if (sceneId == targetSceneId) return true;
+      if (!visited.add(sceneId)) continue;
+      final scene = blueprint.scenes[sceneId];
+      if (scene == null) continue;
+      for (final choice in scene.choices) {
+        stack.add(choice.nextSceneId);
+      }
+    }
+    return false;
   }
 
   /// Applied ONLY AFTER importer verification and successful SQLite replay.
@@ -124,6 +194,8 @@ class RichNpcDialogueKnowledge {
     List<dynamic> reviewedTurns,
     Map<String, Set<String>> knowledge, {
     NpcSocialSnapshot? social,
+    List<WorldEvent>? committedEvents,
+    String? sceneId,
   }) {
     final byIndex = <int, Map<String, dynamic>>{};
     for (final item in reviewedTurns) {
@@ -155,10 +227,18 @@ class RichNpcDialogueKnowledge {
             final known = knowledge[actor] ?? const <String>{};
             final memoryId = review['required_social_memory_id'];
             final threshold = review['minimum_trust_to_player'];
+            final prior = review['required_prior_choice_id'];
+            // A book chapter, a UI cursor, and uncommitted branches
+            // never count as evidence: only replayed world events do.
+            final causal = prior == null ||
+                (prior is String && sceneId != null &&
+                 committedEvents != null &&
+                 committedEvents.any((event) =>
+                     event.choiceId == prior && event.sceneId != sceneId));
             // Never reveal words from absent or dead NPCs in UI/history.
             final present = actor == 'player' || social == null ||
                 social.lifeState(actor) == NpcLifeState.present;
-            final allowed = present &&
+            final allowed = present && causal &&
                 required.every((fact) => known.contains(fact)) &&
                 (memoryId == null ||
                  (memoryId is String && social != null &&

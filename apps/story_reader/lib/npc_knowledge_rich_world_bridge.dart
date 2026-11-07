@@ -220,6 +220,7 @@ class NpcKnowledgeRichWorldBridge {
           <String, dynamic>{...reviewedDialogueTurns},
       world, <String, dynamic>{...dialogues},
       socialRules: socialRules,
+      sceneOrigins: origins,
     );
     final facts = world.facts.toList()..sort();
     result['presentation'] = {

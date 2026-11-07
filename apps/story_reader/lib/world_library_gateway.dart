@@ -322,7 +322,8 @@ class DeviceWorldLibraryGateway implements WorldLibraryGateway {
       // Only the replay-verified campaign state decides which words reach UI.
       signedTurns = RichNpcDialogueKnowledge.redact(
           signedTurns, guards[current.id] as List, state.knowledge,
-          social: social);
+          social: social, committedEvents: coordinator.events,
+          sceneId: current.id);
     }
     final hero = presentation['hero'];
     final heroName = hero is Map<String, dynamic> ? hero['name'] as String? : null;
