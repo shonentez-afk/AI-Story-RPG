@@ -3,6 +3,7 @@ library story_core;
 export 'src/blueprint.dart';
 export 'src/causal_route_audit.dart';
 export 'src/campaign_causal_audit.dart';
+export 'src/inventory_route_audit.dart';
 export 'src/character_id.dart';
 export 'src/codec.dart' show canonicalJson;
 export 'src/engine.dart';
