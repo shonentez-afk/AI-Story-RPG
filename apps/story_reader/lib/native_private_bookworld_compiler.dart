@@ -129,6 +129,7 @@ Future<Uint8List> compileReviewedNpcRichPrivateBookworldInWorker(
   required Map<String, String> sourceQuoteByRuleId,
   required bool userConfirmed,
   Map<String, dynamic>? reviewedNpcSocial,
+  List<Map<String, dynamic>> reviewedBookItems = const [],
   Map<String, List<Map<String, dynamic>>> reviewedDialogueTurns = const {},
   Map<String, String> reviewedSpeakerBindings = const {},
   String heroName = 'Игрок',
@@ -152,6 +153,7 @@ Future<Uint8List> compileReviewedNpcRichPrivateBookworldInWorker(
     reviewedDialogueTurns: reviewedDialogueTurns,
     reviewedSpeakerBindings: reviewedSpeakerBindings,
     reviewedNpcSocial: reviewedNpcSocial,
+    reviewedBookItems: reviewedBookItems,
   );
   final archive = await compute(_compilePrivateNpcRichWorld, {
     'blueprint': blueprint,
