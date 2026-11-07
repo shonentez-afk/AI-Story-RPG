@@ -9,6 +9,7 @@ import 'package:ai_story_reader/bookwide_storyplan_composer.dart';
 import 'package:ai_story_reader/bookwide_source_encounters.dart';
 import 'package:ai_story_reader/reviewed_hero_role.dart';
 import 'package:ai_story_reader/reviewed_hero_source_action.dart';
+import 'package:ai_story_reader/reviewed_hero_reading_candidate.dart';
 import 'package:ai_story_reader/npc_editorial_notebook.dart';
 import 'package:ai_story_reader/source_character_dossiers.dart';
 import 'package:ai_story_reader/source_evidence_graph.dart';
@@ -376,13 +377,62 @@ void main() {
         .any((c) => c.id == observe.id), true);
     expect(inspected.blueprint.scenes[opportunity.recallSceneId]!.choices
         .any((c) => c.id == recall.id), true);
+    // Extra OFFLINE path: a human may separately approve learning the
+    // literal words of the source passage only AFTER taking the role-gated
+    // player observation. The canonical character's earlier knowledge
+    // remains unknown and NPC secrets stay isolated.
+    final context = SourceLockedGameplayContext.forPlan(
+      index: index, book: book, plan: rolePlan,
+      exactEventIds: [extraA.id],
+    );
+    final local = ReviewedHeroReadingCandidate.fromContext(
+        index: index, context: context)!;
+    expect(local.candidates, hasLength(1));
+    final candidate = local.candidates.single;
+    expect(candidate.op, 'learn_fact');
+    expect(candidate.choiceId, observe.id);
+    expect(extraA.source.quote, contains(candidate.label));
+    final note = {
+      ReviewedGameplayCompiler.signature(candidate):
+          'Подтверждаю знание только о прочитанном мной дословном '
+          'фрагменте, не о событиях и знаниях героя оригинала.',
+    };
+    final preview = ReviewedGameplayCompiler.preview(
+      currentRichBookworld: compiled.archive,
+      index: index, book: book, plan: rolePlan,
+      context: context, proposals: local,
+      selectedUserReviewNotes: note,
+    );
+    final learnedArchive = await ReviewedGameplayCompiler
+        .compileAfterUserConfirmation(
+      preview: preview, currentRichBookworld: compiled.archive,
+      index: index, explicitlyConfirmedPrivateGameFiction: true,
+      approvedReviewDigest: preview.approvalDigest,
+    );
+    final learnedWorld = const RichPrivateBookworldImporter()
+        .inspect(learnedArchive);
+    expect(learnedWorld.blueprint.initial.knowledge['player'], isEmpty);
+    expect(learnedWorld.blueprint.facts, contains(candidate.id));
+    expect(learnedWorld.presentation['fact_names'],
+        containsPair(candidate.id, candidate.label));
+    final neutralContext = SourceLockedGameplayContext.forPlan(
+      index: index, book: book, plan: bound,
+      exactEventIds: [extraA.id],
+    );
+    expect(ReviewedHeroReadingCandidate.fromContext(
+        index: index, context: neutralContext), isNull);
+    await expectLater(ReviewedGameplayCompiler.compileAfterUserConfirmation(
+      preview: preview, currentRichBookworld: compiled.archive,
+      index: index, explicitlyConfirmedPrivateGameFiction: false,
+      approvedReviewDigest: preview.approvalDigest,
+    ), throwsFormatException);
 
     final dir = await Directory.systemTemp.createTemp('hero-actions-sqlite-');
     try {
       var store = BookworldCampaignStore.openPrivateDirectory(dir.path);
       late String chosenCampaign, skippedCampaign;
       try {
-        final installed = store.installBookworld(compiled.archive);
+        final installed = store.installBookworld(learnedArchive);
         chosenCampaign = store.createCampaign(installed.archiveHash);
         skippedCampaign = store.createCampaign(installed.archiveHash);
         final started = store.loadCampaign(chosenCampaign).coordinator;
@@ -396,7 +446,7 @@ void main() {
         final after = store.loadCampaign(chosenCampaign).coordinator;
         expect(after.sceneId, opportunity.recallSceneId);
         expect(after.state.flags[ReviewedHeroSourceAction.observedFlag], true);
-        expect(after.state.knowledge['player'], isEmpty);
+        expect(after.state.knowledge['player'], contains(candidate.id));
         expect(after.choices.singleWhere(
             (c) => c.id == recall.id).enabled, true);
 
@@ -409,6 +459,7 @@ void main() {
         expect(skipped.sceneId, opportunity.recallSceneId);
         expect(skipped.state.flags[ReviewedHeroSourceAction.observedFlag],
             false);
+        expect(skipped.state.knowledge['player'], isEmpty);
         expect(skipped.choices.singleWhere(
             (c) => c.id == recall.id).enabled, false);
         expect(skipped.choices.any((c) =>
@@ -421,6 +472,8 @@ void main() {
         final afterRestart = store.loadCampaign(chosenCampaign).coordinator;
         expect(afterRestart.state.flags[
             ReviewedHeroSourceAction.observedFlag], true);
+        expect(afterRestart.state.knowledge['player'],
+            contains(candidate.id));
         expect(afterRestart.choices.singleWhere(
             (c) => c.id == recall.id).enabled, true);
         expect(store.loadCampaign(skippedCampaign).coordinator.choices

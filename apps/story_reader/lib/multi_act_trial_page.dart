@@ -280,9 +280,29 @@ class _MultiActTrialPageState extends State<MultiActTrialPage> {
           _error = 'Не проверены последствия всех актов: $error');
       return;
     }
-    // M2h8d1 is deliberately bounded to SIX short, exact source excerpts.
-    // Larger multi-act source sets require a separate consented batch.
-    final sample = _reviewEvents.take(6).toList(growable: false);
+    // M2h8d1 is deliberately bounded to SIX exact excerpts. If a
+    // human-approved role-observe choice is in a later act, include THAT
+    // verified citation rather than silently hiding the offline reading
+    // option behind the first six unrelated excerpts.
+    final sample = _reviewEvents.take(6).toList();
+    if (_reviewedHeroSourceAction && _selectedHeroRole != null) {
+      final anchor = ReviewedHeroSourceAction.find(
+        index: widget.index, book: widget.book,
+        plan: candidatePlan, role: _selectedHeroRole!);
+      if (anchor != null && !sample.any((e) => e.id == anchor.eventId)) {
+        final matching = _reviewEvents.where(
+            (e) => e.id == anchor.eventId).toList();
+        if (matching.length != 1) {
+          setState(() => _error =
+              'Не найден проверенный фрагмент ролевого действия.');
+          return;
+        }
+        if (sample.length == 6) sample.removeLast();
+        sample.add(matching.single);
+        sample.sort((a, b) =>
+            a.narrativePosition.compareTo(b.narrativePosition));
+      }
+    }
     if (sample.isEmpty) return;
     final selection = await Navigator.of(context)
         .push<SelectedGameplayCandidates>(MaterialPageRoute(

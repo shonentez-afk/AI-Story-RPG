@@ -1,5 +1,20 @@
 # AI Story RPG — START_NEW_CHAT_RU
 
+## 2026-11-07 — новое целевое P0: достоверная запись прочитанного героем (локально, без ИИ)
+
+**База PR #133 до этого изменения:** код `fb15a1ee7ce3bfbbe8aaa2a15273be812a5bcf87`: [CI #937](https://github.com/shonentez-afk/AI-Story-RPG/actions/runs/42343416675) **SUCCESS** (Flutter 635 PASS / 2 SKIP, Dart/Python/M1.7, Windows/Android), M0 #1022 SUCCESS. Текущий HEAD `13789101407f4d66eda443b4f0ab6386d6dcbf84` — только docs [skip ci]. `main` = `81fb75b`, PR #133 DRAFT, E6d не трогать.
+
+**Новый связанный функциональный шаг внутри того же PR #133:**
+- `ReviewedHeroReadingCandidate` без запроса к ИИ строит ровно один возможный `learn_fact` **из дословного verified source span**, только когда в реально проверенном `StoryPlan` существует действие `_hero_observe` для выбранного героя по постоянному `character_id`. Предложение *не* является проверенной литературной истиной: это текст, который **игрок прочитал**; никакого исходного знания или тайны NPC не придумываем. Fact ID детерминирован от source edition/event/choice/exact quote и не публикует текст/ключи.
+- На существующем `SourceLockedGameplayReviewPage` добавлена кнопка **«Предложить знание из цитаты без ИИ»**. Она только показывает локального кандидата, не вызывает Z.ai и ничего не устанавливает: нужны ручной выбор, редакторское объяснение (18–350 символов), согласие на частную игровую интерпретацию, финальный exact-digest preview и подтверждение перед сборкой. Это **тот же `ReviewedGameplayCompiler`**, который проверяет source SHA, typed `learn_fact`, игровую достижимость и rich-v3 writer/importer.
+- `MultiActTrialPage._chooseGameplay` при включённом ролевом действии гарантирует, что нужная verified-цитата попадает в лимит 6 выбранных фрагментов, даже когда она находится позже первых шести главных событий. Сортировка по книге сохранена. Старые планы и выборы без роли ведут себя по-прежнему.
+- E2E расширен реальным `MultiActTrialCompiler` → exact quote/context → локальный кандидат → review preview → confirmed rich-v3 `.bworld` → 2 кампании SQLite. Путь `_hero_observe` выдаёт игроку **только память о собственном чтении**, пропуск не выдаёт её, после close/reopen известный факт остаётся у первого игрока и отсутствует у второго; NPC knowledge изначально пустая. Отказ финального согласия блокирует запись.
+- Это **НЕ** полный первичный набор знаний книжного персонажа, **НЕ** генератор NPC-диалогов и **НЕ** готовый CANON. Следующее — отдельно проверенные role-linked сведения/разговоры и полноценная причинность всей книги.
+
+**Приёмка:** после коммита проверить EXACT HEAD CI/M0, Flutter widget, Python/Dart, M1.7, Android/Windows; не объявлять новый пакет PASS раньше подтверждения. Держать PR #133 единым Draft до общей приёмки #118. E6d не изменять.
+
+
+
 ## ПОДТВЕРЖДЁННЫЙ КОНТРОЛЬНЫЙ ПУНКТ — 2026-11-07
 
 **Последний проверенный КОД:** `fb15a1ee7ce3bfbbe8aaa2a15273be812a5bcf87` в [PR #133](https://github.com/shonentez-afk/AI-Story-RPG/pull/133). [AI Story RPG CI #937](https://github.com/shonentez-afk/AI-Story-RPG/actions/runs/42343416675) — **SUCCESS** на ТОЧНОМ кодовом SHA: Flutter analyze, **635 widget тестов PASS, 2 SKIP**, Python, Dart, M1.7, Windows portable, Android APK. [M0 #1022](https://github.com/shonentez-afk/AI-Story-RPG/actions/runs/42343416691) — **SUCCESS** на том же SHA. Публикация тестового GitHub release в PR ожидаемо SKIPPED; это НЕ ошибка сборки.
