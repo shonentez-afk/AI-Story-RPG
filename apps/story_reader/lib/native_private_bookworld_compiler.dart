@@ -134,6 +134,8 @@ Future<Uint8List> compileReviewedNpcRichPrivateBookworldInWorker(
   Map<String, String> reviewedSpeakerBindings = const {},
   ReviewedNpcDialoguePlan? reviewedDialogueProposal,
   String? approvedDialogueDigest,
+  ReviewedNpcResponsePlan? reviewedResponseProposal,
+  String? approvedResponseDigest,
   String heroName = 'Игрок',
 }) async {
   // Exactly the already accepted preflight/translator, no second engine.
@@ -156,6 +158,8 @@ Future<Uint8List> compileReviewedNpcRichPrivateBookworldInWorker(
     reviewedSpeakerBindings: reviewedSpeakerBindings,
     reviewedDialogueProposal: reviewedDialogueProposal,
     approvedDialogueDigest: approvedDialogueDigest,
+    reviewedResponseProposal: reviewedResponseProposal,
+    approvedResponseDigest: approvedResponseDigest,
     reviewedNpcSocial: reviewedNpcSocial,
     reviewedBookItems: reviewedBookItems,
   );

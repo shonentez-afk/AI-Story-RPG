@@ -1,5 +1,21 @@
 # AI Story RPG — START_NEW_CHAT_RU
 
+## 2026-11-07 — P0 NPC: ответы игрока внутри разговора и реальные последствия (PR #133)
+
+**Реализация нового функционального пакета, ожидает exact-HEAD CI.** До изменения проверенная база: `a1be713`, [CI #945](https://github.com/shonentez-afk/AI-Story-RPG/actions/runs/42356760768) SUCCESS, M0 #1030 SUCCESS, Flutter 643 PASS/2 SKIP, Android/Windows PASS. Последний `489a413` — только документация, [skip ci].
+
+В `packages/bookworld_format/lib/npc_dialogue_responses.dart` добавлен **один source-reviewed контракт выбора реплик**: для каждой подписанной диалоговой сцены с 2+ настоящими `BlueprintChoice` все `choice_id` связываются с проверенным `interlocutor_id` (постоянный NPC), точным текстом ответа игрока `player_line` и локальной цитатой `source_quote_sha256`. Автор подтверждает **весь** набор вариантов; `RichNpcDialogueResponses.propose/accept` требует ещё отдельный SHA-256 `approvalDigest` точного blueprint и social rulebook. Никакие незаявленные говорящие, будущее знание, недостающий вариант или поддельное source evidence не принимаются. Выборы обязаны приводить хотя бы к двум *разным* зарегистрированным исходам (сцена/эффекты/memory). Формат — **дополнительное подписанное поле** `presentation.scene_dialogue_responses` внутри прежнего rich-v3 ZIP; старые миры не мигрируют и сохраняют поведение.
+
+`RichPrivateBookworldImporter` и `tools/bookworld/private_rich_bookworld.py` **независимо** проверяют каждое поле нового контракта, включая присутствие NPC через подписанный witness и обязательный engine-choice-gate для NPC, который может уйти/погибнуть; presentation не может выдать доступность игрового выбора, это делает `story_core` по своим typed effects/conditions. `NpcKnowledgeRichWorldBridge.prepare` и `compileReviewedNpcRichPrivateBookworldInWorker` принимают **опциональный** `reviewedResponseProposal` и `approvedResponseDigest`; принятие происходит только после проверенной редакторской подготовки.
+
+`DeviceWorldLibraryGateway` отображает выбранную подписанную реплику как `Игрок: «...»` в действующих кнопках и журнале, **полностью скрывает** текст при любой заблокированности исходного игрового выбора, записывает только штатное `StoryWorld.apply` действие в SQLite, а в журнал дополнительно выводит реальные дельты NPC memory/trust из replay `NpcSocialLedger`. Нет новых операций и второго dialogue engine, ни UI, ни Z.ai не мутируют состояние непосредственно. Совместимость старых `.bworld` сохраняется.
+
+Тесты `private_rich_bookworld_writer_test.dart` выполняют две разные ветки: ожидание/помощь → +20 доверия и знание у NPC, отказ → −10 доверия без знания; сравнивают replay stateHash/social snapshotHash. Отрицательные случаи: подмена `choice_id`, NPC, цитаты, согласия, текста, пропущенная реплика. Flutter unit проверяет отображение доступного/закрытого ответа; независимый Python — metadata и реальные байты `book_private_rich_npc_responses_dart.bworld` из Dart CI.
+
+**Ограничение:** этот этап оформляет **принятые автором** ответы и реальные последствия уже смоделированных игровых действий. Он НЕ создаёт автоматически сюжетные выбора и последствия из художественного текста, НЕ является полным CANON/ALTER_FATE и пока не имеет отдельного текстового UI-редактора ответов. Следующая задача — встроить авторский UI для массовой разметки нескольких разговоров, затем развить source-book event/motive→scenario генератор для всей книги (не E6d), по 2 реальным FB2 и автономной Win/Android приёмке. `main` не менять, PR #133 Draft, Issue #118 остаётся открытым, E6d вести отдельно.
+
+
+
 ## КОНТРОЛЬНЫЙ ПУНКТ 2026-11-07 — NPC Z.ai + autonomous core: exact-head PASS
 
 **Подтверждённый код:** `a1be713fde6bb4f3ba905180a109e825da8be09f`. [AI Story RPG CI #945](https://github.com/shonentez-afk/AI-Story-RPG/actions/runs/42356760768) — **SUCCESS** на точно этом SHA: Python, Dart, M1.7/SQLite, standalone engine, Flutter analyze + **643 PASS / 2 SKIP** (приватные FB2 недоступны публичному CI), Windows portable и Android debug APK. [M0 #1030](https://github.com/shonentez-afk/AI-Story-RPG/actions/runs/42356760749) — **SUCCESS**. Публикация релиза в Draft PR ожидаемо SKIPPED. Первое падение CI #944 было **только UI-тестом**: ListView лениво создавал кнопку, найдено `StateError: No element`; коммит `a1be713` исправил прокрутку и получил green exact-head CI #945.

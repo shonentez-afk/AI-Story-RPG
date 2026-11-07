@@ -37,6 +37,8 @@ class NpcKnowledgeRichWorldBridge {
     Map<String, String> reviewedSpeakerBindings = const {},
     ReviewedNpcDialoguePlan? reviewedDialogueProposal,
     String? approvedDialogueDigest,
+    ReviewedNpcResponsePlan? reviewedResponseProposal,
+    String? approvedResponseDigest,
     String heroName = 'Игрок',
     String heroDescription =
         'Герой частной игровой адаптации. Решения сохраняются в журнале.',
@@ -237,6 +239,23 @@ class NpcKnowledgeRichWorldBridge {
       socialRules: socialRules,
       sceneOrigins: origins,
     );
+    final acceptedResponses = reviewedResponseProposal == null
+        ? null
+        : RichNpcDialogueResponses.accept(
+            proposal: reviewedResponseProposal,
+            blueprint: world,
+            approvedDigest: approvedResponseDigest ?? '',
+            userConfirmed: userConfirmed,
+            socialRules: socialRules,
+          );
+    RichNpcDialogueResponses.validate(
+      acceptedResponses, world,
+      <String, dynamic>{...dialogues},
+      effectiveDialogueReview.isEmpty ? null :
+          <String, dynamic>{...effectiveDialogueReview},
+      origins,
+      socialRules: socialRules,
+    );
     final facts = world.facts.toList()..sort();
     result['presentation'] = {
       'hero': {'name': heroName.trim(), 'description': heroDescription.trim()},
@@ -252,6 +271,8 @@ class NpcKnowledgeRichWorldBridge {
       'scene_dialogues': dialogues,
       if (effectiveDialogueReview.isNotEmpty)
         'scene_dialogue_knowledge': effectiveDialogueReview,
+      if (acceptedResponses != null)
+        'scene_dialogue_responses': acceptedResponses,
     };
     if (effectiveSocial != null) {
       // No inferred presence/consent: each authored item action has an

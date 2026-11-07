@@ -70,6 +70,7 @@ class WorldChoiceView {
     required BlueprintChoice signedChoice,
     required String? lockReason,
     required Map<String, Set<String>> verifiedKnowledge,
+    String? reviewedSpokenReply,
   }) {
     final knowledgeSensitive = signedChoice.conditions
         .any((rule) => rule.op == 'knows_fact');
@@ -84,9 +85,13 @@ class WorldChoiceView {
       id: signedChoice.id,
       // If another gate (identity, presence, a flag, or time) is still
       // closed, don't reveal a knowledge-sensitive reply prematurely.
-      label: knowledgeSensitive && lockReason != null
-          ? 'Реплика скрыта до выполнения условий'
-          : signedChoice.label,
+      label: reviewedSpokenReply != null
+          ? (lockReason == null
+              ? 'Игрок: «' + reviewedSpokenReply + '»'
+              : 'Ответ недоступен до выполнения условий')
+          : (knowledgeSensitive && lockReason != null
+              ? 'Реплика скрыта до выполнения условий'
+              : signedChoice.label),
       lockReason: lockReason,
     );
   }
@@ -344,6 +349,11 @@ class DeviceWorldLibraryGateway implements WorldLibraryGateway {
       final changes = <String>[];
       if (playback != null) {
         final before = playback.state;
+        final activeSocialRules = socialRules?.rules.where((rule) =>
+            rule.sceneId == event.sceneId &&
+            rule.choiceId == event.choiceId).toList() ?? [];
+        final beforeSocial = activeSocialRules.isNotEmpty
+            ? NpcSocialLedger.inspect(playback, socialRules!) : null;
         final beforeLife = socialRules != null &&
             socialRules.lifeTransitions.isNotEmpty
             ? NpcSocialLedger.inspect(playback, socialRules) : null;
@@ -356,6 +366,27 @@ class DeviceWorldLibraryGateway implements WorldLibraryGateway {
           throw const FormatException('Журнал игры не совпадает с сохранением');
         }
         final after = playback.state;
+        if (beforeSocial != null) {
+          final afterSocial = NpcSocialLedger.inspect(playback, socialRules!);
+          final recorded = <String>{};
+          for (final rule in activeSocialRules) {
+            final actor = rule.observerId;
+            final label = npcDisplayNames[actor] ?? actor;
+            if (!beforeSocial.hasMemory(actor, rule.memoryId) &&
+                afterSocial.hasMemory(actor, rule.memoryId)) {
+              changes.add(label + ': запомнил событие разговора');
+            }
+            if (rule.relatedActorId == 'player' &&
+                recorded.add(actor)) {
+              final delta = afterSocial.directedScore(actor, 'player') -
+                  beforeSocial.directedScore(actor, 'player');
+              if (delta != 0) {
+                changes.add(label + ': отношение к герою ' +
+                    (delta > 0 ? '+' : '') + delta.toString());
+              }
+            }
+          }
+        }
         if (beforeLife != null) {
           final afterLife = NpcSocialLedger.inspect(playback, socialRules!);
           for (final actor in socialRules.lifeTransitions
@@ -406,7 +437,12 @@ class DeviceWorldLibraryGateway implements WorldLibraryGateway {
       journal.add(WorldEventView(
         sequence: event.sequence,
         sceneId: event.sceneId,
-        choiceLabel: choice.label,
+        choiceLabel: RichNpcDialogueResponses.replyFor(
+                presentation, event.sceneId, event.choiceId) == null
+            ? choice.label
+            : 'Игрок: «' +
+                RichNpcDialogueResponses.replyFor(
+                    presentation, event.sceneId, event.choiceId)! + '»',
         sceneTitle: scenes[event.sceneId],
         changes: List.unmodifiable(changes),
       ));
@@ -438,6 +474,8 @@ class DeviceWorldLibraryGateway implements WorldLibraryGateway {
               (signed) => signed.id == choice.id),
           lockReason: choice.lockReason,
           verifiedKnowledge: state.knowledge,
+          reviewedSpokenReply: RichNpcDialogueResponses.replyFor(
+              presentation, current.id, choice.id),
         ),
       )),
       journal: List.unmodifiable(journal),
