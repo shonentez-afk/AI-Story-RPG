@@ -4,6 +4,8 @@ import 'package:bookworld_format/bookworld_format.dart';
 import 'book_source_index.dart';
 import 'bookwide_act_planner.dart';
 import 'bookwide_storyplan_composer.dart';
+import 'bookwide_source_encounters.dart';
+import 'story_plan.dart';
 import 'cross_act_consequence_gate.dart';
 import 'multi_act_trial_compiler.dart';
 import 'source_locked_prose_preview_page.dart';
@@ -52,6 +54,7 @@ class _MultiActTrialPageState extends State<MultiActTrialPage> {
   String _heroName = 'Игрок';
   String? _error;
   final Map<String, ReviewedProseSceneApproval> _reviewedProse = {};
+  final Set<String> _interactiveEvents = {};
   SelectedGameplayCandidates? _gameplaySelection;
   SelectedWholePlanGameplayCandidates? _wholeGameplaySelection;
   WholeStoryLiteraryRecheckApproval? _recheckedRepair;
@@ -62,6 +65,7 @@ class _MultiActTrialPageState extends State<MultiActTrialPage> {
       for (final part in widget.draft.parts) ...[
         part.setupEventId, part.outcomeEventId,
       ],
+      ..._interactiveEvents,
     };
     return List.unmodifiable([
       for (final event in widget.book.events)
@@ -78,12 +82,44 @@ class _MultiActTrialPageState extends State<MultiActTrialPage> {
     );
   }
 
+  // Preview binds the SAME plan used for model consent, ZIP and SQLite.
+  // Compilation independently checks the actual private-use consent.
+  StoryPlan _effectivePlan({CrossActContinuityDraft? continuity}) =>
+      BookwideSourceEncounters.attach(
+        index: widget.index, book: widget.book, bookMap: widget.bookMap,
+        draft: widget.draft,
+        plan: _recheckedRepair?.draft ??
+            continuity?.plan ?? widget.draft.plan,
+        reviewedEventIds: _interactiveEvents,
+        userConfirmedPrivateAdaptation: true,
+      );
+
+  void _changeEncounter(int act, String eventId, bool choose) {
+    setState(() {
+      for (final event in BookwideSourceEncounters.eligibleForAct(
+          index: widget.index, bookMap: widget.bookMap,
+          draft: widget.draft, partIndex: act)) {
+        _interactiveEvents.remove(event.id);
+      }
+      if (choose) _interactiveEvents.add(eventId);
+      // New sources alter the scenario digest and must be re-reviewed.
+      _reviewed = false;
+      _gameplaySelection = null;
+      _wholeGameplaySelection = null;
+      _reviewedProse.clear();
+      _recheckedRepair = null;
+      _unchangedReview = null;
+      _error = null;
+    });
+  }
+
   Future<void> _chooseGameplay() async {
     if (_working || !_reviewed || !_privateFiction ||
         _unchangedReview != null || !widget.draft.formalRulesPassed) return;
-    CrossActContinuityDraft? continuity;
+    StoryPlan? candidatePlan;
     try {
-      continuity = _currentReviewedContinuity();
+      final continuity = _currentReviewedContinuity();
+      candidatePlan = _effectivePlan(continuity: continuity);
     } catch (error) {
       if (mounted) setState(() =>
           _error = 'Не проверены последствия всех актов: $error');
@@ -98,7 +134,7 @@ class _MultiActTrialPageState extends State<MultiActTrialPage> {
       builder: (_) => SourceLockedGameplayReviewPage(
         index: widget.index,
         book: widget.book,
-        plan: continuity?.plan ?? widget.draft.plan,
+        plan: candidatePlan!,
         exactEventIds: [for (final e in sample) e.id],
       ),
     ));
@@ -113,9 +149,10 @@ class _MultiActTrialPageState extends State<MultiActTrialPage> {
   Future<void> _chooseWholeGameplay() async {
     if (_working || !_reviewed || !_privateFiction ||
         _unchangedReview != null || !widget.draft.formalRulesPassed) return;
-    CrossActContinuityDraft? continuity;
+    StoryPlan? candidatePlan;
     try {
-      continuity = _currentReviewedContinuity();
+      final continuity = _currentReviewedContinuity();
+      candidatePlan = _effectivePlan(continuity: continuity);
     } catch (error) {
       if (mounted) setState(() =>
           _error = 'Не проверены последствия всех актов: $error');
@@ -125,7 +162,7 @@ class _MultiActTrialPageState extends State<MultiActTrialPage> {
         .push<SelectedWholePlanGameplayCandidates>(MaterialPageRoute(
       builder: (_) => WholePlanGameplayBatchPage(
         index: widget.index, book: widget.book,
-        plan: continuity?.plan ?? widget.draft.plan,
+        plan: candidatePlan!,
       ),
     ));
     if (!mounted || selection == null) return;
@@ -148,6 +185,7 @@ class _MultiActTrialPageState extends State<MultiActTrialPage> {
     }
     if (_unchangedReview != null &&
         (_recheckedRepair != null || _enforceEarlierOutcome ||
+         _interactiveEvents.isNotEmpty ||
          _reviewedProse.isNotEmpty || _gameplaySelection != null ||
          _wholeGameplaySelection != null)) {
       setState(() => _error =
@@ -156,7 +194,8 @@ class _MultiActTrialPageState extends State<MultiActTrialPage> {
       return;
     }
     if (_recheckedRepair != null &&
-        (_reviewedProse.isNotEmpty || _gameplaySelection != null ||
+        (_interactiveEvents.isNotEmpty ||
+         _reviewedProse.isNotEmpty || _gameplaySelection != null ||
          _wholeGameplaySelection != null)) {
       setState(() => _error =
           'Старые художественные и предметные предложения относятся '
@@ -166,6 +205,7 @@ class _MultiActTrialPageState extends State<MultiActTrialPage> {
     setState(() { _working = true; _error = null; });
     try {
       final continuity = _currentReviewedContinuity();
+      final effectivePlan = _effectivePlan(continuity: continuity);
       final compiled = await MultiActTrialCompiler.compile(
         index: widget.index,
         book: widget.book,
@@ -180,6 +220,7 @@ class _MultiActTrialPageState extends State<MultiActTrialPage> {
         privateUseConfirmed: _privateFiction,
         fictionalTrialAcknowledged: _privateFiction,
         reviewedProse: _reviewedProse.values.toList(growable: false),
+        reviewedInteractiveEventIds: _interactiveEvents,
         heroName: _heroName,
       );
       if (!mounted || compiled.sourceFingerprint !=
@@ -193,7 +234,7 @@ class _MultiActTrialPageState extends State<MultiActTrialPage> {
             currentRichBookworld: compiled.archive,
             index: widget.index,
             book: widget.book,
-            plan: continuity?.plan ?? widget.draft.plan,
+            plan: effectivePlan,
             manifest: selection.manifest,
             proposals: selection.drafts,
             selectedUserReviewNotes: selection.selectedUserReviewNotes,
@@ -204,7 +245,7 @@ class _MultiActTrialPageState extends State<MultiActTrialPage> {
             currentRichBookworld: compiled.archive,
             index: widget.index,
             book: widget.book,
-            plan: continuity?.plan ?? widget.draft.plan,
+            plan: effectivePlan,
             context: selection.context,
             proposals: selection.draft,
             selectedUserReviewNotes: selection.selectedUserReviewNotes,
@@ -288,13 +329,15 @@ class _MultiActTrialPageState extends State<MultiActTrialPage> {
   Widget build(BuildContext context) {
     final events = _reviewEvents;
     final count = widget.draft.parts.length;
-    final activePlan = _recheckedRepair?.draft ?? widget.draft.plan;
+    final activePlan =
+        _effectivePlan(continuity: _currentReviewedContinuity());
     final coverage = BookwideActPlanner.compareWithStoryPlan(
         bookMap: widget.bookMap, book: widget.book, story: activePlan);
     final validHero = _heroName.isNotEmpty &&
         _heroName.trim() == _heroName && _heroName.length <= 90 &&
         !RegExp(r'[\x00-\x1f\x7f]').hasMatch(_heroName);
-    final valid = count >= 2 && events.length == count * 2 &&
+    final valid = count >= 2 &&
+        events.length == count * 2 + _interactiveEvents.length &&
         widget.draft.formalRulesPassed && validHero && !_working;
     return Scaffold(
       appBar: AppBar(title: const Text('Пробная игра по частям книги')),
@@ -308,7 +351,7 @@ class _MultiActTrialPageState extends State<MultiActTrialPage> {
             Text('Исходных цитат: ' + events.length.toString() +
                 '; предложенных актов: ' + count.toString() +
                 '; игровых ситуаций: ' +
-                widget.draft.plan.situations.length.toString() + '.'),
+                activePlan.situations.length.toString() + '.'),
             const SizedBox(height: 8),
             const Text('Это приватная ПРОБНАЯ игровая адаптация, '
                 'НЕ полный сюжет книги и НЕ подтверждённый канон. '
@@ -349,6 +392,45 @@ class _MultiActTrialPageState extends State<MultiActTrialPage> {
               ),
               onChanged: (value) => setState(() => _heroName = value),
             ),
+            const SizedBox(height: 8),
+            ExpansionTile(
+              key: const Key('multiact-source-encounters'),
+              title: const Text('Дополнительные игровые события из книги'),
+              subtitle: Text('Выбрано ' +
+                  _interactiveEvents.length.toString() +
+                  '; максимум одно дополнительное событие на акт. '
+                  'Это настоящие интерактивные выборы, но смысл и '
+                  'хронология литературного оригинала не доказаны.'),
+              children: [
+                for (var act = 0; act < widget.draft.parts.length; act++) ...[
+                  Text('Акт ' + (act + 1).toString(),
+                      style: const TextStyle(fontWeight: FontWeight.bold)),
+                  if (BookwideSourceEncounters.eligibleForAct(
+                    index: widget.index, bookMap: widget.bookMap,
+                    draft: widget.draft, partIndex: act).isEmpty)
+                    const ListTile(title: Text(
+                        'Других подтверждённых отрывков пока нет')),
+                  for (final event in BookwideSourceEncounters.eligibleForAct(
+                    index: widget.index, bookMap: widget.bookMap,
+                    draft: widget.draft, partIndex: act))
+                    CheckboxListTile(
+                      key: Key('multiact-extra-' + event.id),
+                      value: _interactiveEvents.contains(event.id),
+                      isThreeLine: true,
+                      title: Text('Исследовать фрагмент из главы ' +
+                          (event.source.chapterIndex + 1).toString()),
+                      subtitle: Text('«' + event.source.quote + '»',
+                          maxLines: 3, overflow: TextOverflow.ellipsis),
+                      onChanged: _working ? null : (v) =>
+                          _changeEncounter(act, event.id, v == true),
+                    ),
+                ],
+              ],
+            ),
+            const Text('Выбор дополнительного фрагмента сбрасывает '
+                'старое подтверждение цитат, версии ИИ-предложений '
+                'и художественные правки; повторная сборка не '
+                'сохраняет устаревшие разрешения.'),
             const SizedBox(height: 8),
             const Text('Проверьте все исходные отрывки:'),
             for (final event in events)

@@ -3,6 +3,7 @@ import 'package:bookworld_format/bookworld_format.dart';
 import 'book_source_index.dart';
 import 'bookwide_act_planner.dart';
 import 'bookwide_storyplan_composer.dart';
+import 'bookwide_source_encounters.dart';
 import 'branch_continuity_auditor.dart';
 import 'source_world_time_auditor.dart';
 import 'source_bound_bridge_auditor.dart';
@@ -38,6 +39,8 @@ class MultiActTrialCompiler {
     required bool fictionalTrialAcknowledged,
     /// UI-only name of the player protagonist; never guesses an NPC identity.
     String heroName = 'Игрок',
+    /// Explicit source-event observations; each is shown before consent.
+    Set<String> reviewedInteractiveEventIds = const {},
     List<ReviewedProseSceneApproval> reviewedProse = const [],
   }) async {
     if (heroName.isEmpty || heroName.length > 90 ||
@@ -67,6 +70,12 @@ class MultiActTrialCompiler {
     // g2b repaired-plan evidence and a clean UNCHANGED review are mutually
     // exclusive. The latter must not silently carry over to changed
     // causal rules, artwork/prose or interactive effects.
+    if (reviewedInteractiveEventIds.isNotEmpty &&
+        (unchangedReview != null || recheckedRepair != null ||
+         reviewedProse.isNotEmpty)) {
+      throw const FormatException(
+          'Рецензия для старого плана не действует для новых игровых сцен.');
+    }
     if (unchangedReview != null) {
       if (recheckedRepair != null || continuity != null ||
           reviewedProse.isNotEmpty) {
@@ -89,7 +98,16 @@ class MultiActTrialCompiler {
             'Художественные правки для старого плана нужно подтвердить заново.');
       }
     }
-    final plan = recheckedRepair?.draft ?? continuity?.plan ?? draft.plan;
+    final basePlan =
+        recheckedRepair?.draft ?? continuity?.plan ?? draft.plan;
+    // Source events become optional, persisted, source-backed choices in the
+    // very SAME StoryPlan sent to gameplay proposals, audits and the writer.
+    final plan = BookwideSourceEncounters.attach(
+      index: index, book: book, bookMap: bookMap,
+      draft: draft, plan: basePlan,
+      reviewedEventIds: reviewedInteractiveEventIds,
+      userConfirmedPrivateAdaptation: fictionalTrialAcknowledged,
+    );
     if (continuity != null &&
         (!continuity.hasEnforcedContinuity ||
          continuity.audit.counterexamples.isNotEmpty ||
@@ -120,6 +138,11 @@ class MultiActTrialCompiler {
     for (final part in draft.parts) {
       if (!expected.add(part.setupEventId) ||
           !expected.add(part.outcomeEventId)) {
+        throw const FormatException('Повторно использована исходная цитата.');
+      }
+    }
+    for (final id in reviewedInteractiveEventIds) {
+      if (!expected.add(id)) {
         throw const FormatException('Повторно использована исходная цитата.');
       }
     }
@@ -295,7 +318,9 @@ class MultiActTrialCompiler {
     };
     final scenes = <DraftScene>[];
     for (final scene in plan.situations) {
-      final sourceScene = sourceSceneIds.contains(scene.id);
+      final sourceScene = sourceSceneIds.contains(scene.id) ||
+          (scene.sourceEventId != null &&
+           reviewedInteractiveEventIds.contains(scene.sourceEventId));
       final reference = sourceScene ? citations[scene.sourceEventId] : null;
       final claimId = sourceScene
           ? claimForEvent[scene.sourceEventId] : null;
