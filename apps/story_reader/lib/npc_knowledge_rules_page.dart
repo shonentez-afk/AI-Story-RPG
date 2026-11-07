@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:bookworld_format/bookworld_format.dart';
 
 import 'native_private_bookworld_compiler.dart';
+import 'zai_npc_dialogue_draft.dart';
+import 'npc_dialogue_draft_page.dart';
 import 'private_classic_scenario_translator.dart';
 import 'world_campaigns_page.dart';
 import 'world_library_gateway.dart';
@@ -94,6 +96,7 @@ class _NpcKnowledgeRulesPageState extends State<NpcKnowledgeRulesPage> {
   ];
 
   NpcKnowledgeRulebook? _book;
+  NpcDialogueDraftContext? _npcDialoguePreview;
   bool _loading = true;
   bool _saving = false;
   String? _error;
@@ -114,6 +117,7 @@ class _NpcKnowledgeRulesPageState extends State<NpcKnowledgeRulesPage> {
   Future<void> _load() async {
     if (mounted) setState(() {
       _loading = true; _error = null; _notice = null; _book = null;
+      _npcDialoguePreview = null;
     });
     try {
       final raw = await _store.read(widget.index.sourceFingerprint);
@@ -159,6 +163,7 @@ class _NpcKnowledgeRulesPageState extends State<NpcKnowledgeRulesPage> {
       await _store.write(widget.index.sourceFingerprint, candidate.encode());
       if (mounted) setState(() {
         _book = candidate;
+        _npcDialoguePreview = null;
         _notice = 'Правила записаны отдельно от книги и сценария.';
       });
     } catch (error) {
@@ -1543,13 +1548,43 @@ class _NpcKnowledgeRulesPageState extends State<NpcKnowledgeRulesPage> {
         reviewedDialogueTurns: spoken,
         reviewedSpeakerBindings: verifiedSpeakers,
       );
+      // These bytes were independently verified by the normal rich-v3
+      // importer; cloud authoring is ALWAYS separate from offline play.
+      // If a source-reviewed spoken NPC scene exists, expose ONE optional
+      // future revision prompt after the current game is installed.
+      final verifiedWorld = const RichPrivateBookworldImporter().inspect(bytes);
+      NpcDialogueDraftContext? dialoguePrompt;
+      final reviewed = verifiedWorld.presentation['scene_dialogue_knowledge'];
+      if (reviewed is Map<String, dynamic>) {
+        for (final entry in reviewed.entries) {
+          final turns = entry.value;
+          if (turns is! List ||
+              !turns.any((line) => line is Map &&
+                  line['actor_id'] != 'player')) continue;
+          try {
+            dialoguePrompt = NpcDialogueDraftContext.fromVerifiedWorld(
+              world: verifiedWorld,
+              sceneId: entry.key,
+              sceneOrigins: origins,
+            );
+            break;
+          } on FormatException {
+            // An unreviewed or unsupported scene must never become a
+            // cloud writing prompt. The already checked game is unchanged.
+          }
+        }
+      }
       // Writer + importer have already checked the archive; install via
       // the existing SQLite gateway and open ONE existing campaigns page.
       final gateway = widget.gateway ?? const DeviceWorldLibraryGateway();
       final installed = await gateway.install(bytes);
       if (!mounted) return;
-      setState(() => _notice =
-          'Частная RPG с проверенными правилами NPC создана.');
+      setState(() {
+        _npcDialoguePreview = dialoguePrompt;
+        _notice = 'Частная RPG с проверенными правилами NPC создана. '
+            'Новый художественный текст можно подготовить отдельно, '
+            'только при явном согласии на облачный запрос.';
+      });
       await Navigator.of(context).push<void>(MaterialPageRoute(
         builder: (_) => WorldCampaignsPage(
           world: installed, gateway: gateway,
@@ -1690,6 +1725,21 @@ class _NpcKnowledgeRulesPageState extends State<NpcKnowledgeRulesPage> {
                       icon: const Icon(Icons.play_arrow),
                       label: const Text('Проверить и собрать RPG с NPC'),
                     ),
+                    if (_npcDialoguePreview != null)
+                      OutlinedButton.icon(
+                        key: const Key('npc-build-cloud-dialogue-draft'),
+                        onPressed: _saving ? null : () =>
+                            Navigator.of(context).push<void>(
+                              MaterialPageRoute(
+                                builder: (_) => NpcDialogueDraftPage(
+                                  preview: _npcDialoguePreview!,
+                                ),
+                              ),
+                            ),
+                        icon: const Icon(Icons.auto_stories_outlined),
+                        label: const Text(
+                            'Предложить реплики NPC через Z.ai (черновик)'),
+                      ),
                     if (_saving) const LinearProgressIndicator(),
                   ],
                 ],

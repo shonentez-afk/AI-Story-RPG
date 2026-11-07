@@ -1,5 +1,20 @@
 # AI Story RPG — актуальный статус 2026-11-07
 
+## 2026-11-07 — P0: Z.ai NPC-диалоги как отдельный черновик автора (PR #133)
+
+**Подтверждённая база перед этапом:** HEAD `187166db326adbf5c576328cc89dc06dbf1cd6a8`, [CI #943](https://github.com/shonentez-afk/AI-Story-RPG/actions/runs/42355345649) **SUCCESS** (637 Flutter tests PASS + 2 SKIP private FB2; Python/Dart/M1.7, Windows portable, Android debug), [M0 #1028](https://github.com/shonentez-afk/AI-Story-RPG/actions/runs/42355345791) **SUCCESS**. [External RPG author tests #232](https://github.com/shonentez-afk/AI-Story-RPG/actions/runs/42355345634) отдельно FAIL по прежнему `contract_drift`; E6d ведётся другим чатом и не меняется.
+
+**Новая разработка (ОЖИДАЕТ exact-head CI, пока не писать PASS):** модуль `apps/story_reader/lib/zai_npc_dialogue_draft.dart` принимает ТОЛЬКО импортированный и подтверждённый rich-v3 `.bworld` и `scene_origins`: отдельно перепроверяет `RichNpcDialogueKnowledge.validate`, source-locked происхождение сцены, всех говорящих/факты. Контекст содержит только показанный пользователю текст одной сцены, выбранные постоянные `character_id`, уже подтверждённые причинные условия реплик, игровые варианты и **необязательные** явно одобренные мотивы; не отправляет всю книгу, fingerprint/hash из локального approval digest, сохранения и API-ключ. Сервер — существующий Z.ai GLM 4.7 Flash с теми же vault/preferences/transport, без фоновых запросов и без отправки без отдельного согласия. До 3 ограниченных повторов только идентичного payload на 429/5xx/обрыв.
+
+Парсер принимает JSON **ровно** одной сцены с тем же числом, порядком и именами говорящих; не может изменить нарративные строки, выборы/эффекты `story_core`, `npc_knowledge`, архив или SQLite. Ответ всегда `NpcDialogueCloudDraft`: `canInstallDirectly=false`, `isHumanReviewed=false`, `isLiteraryCanon=false`. Не доказывает смысл/канон нового текста. Для реального включения автор должен проверить его, перенести в уже существующую редакцию сцены и заново собрать и проверить мир. Данные из книги и слова NPC — недоверенные инструкции для модели.
+
+**UI:** `NpcKnowledgeRulesPage` после успешно установленного `.bworld`, содержащего source-reviewed NPC-диалог, показывает кнопку «Предложить реплики NPC через Z.ai (черновик)». Она открывает `NpcDialogueDraftPage` со всем точным payload, предупреждением о платности и трёх повторах, отдельным флажком согласия, результатом и копированием. Облачная кнопка никогда не появляется в автономном `WorldPlayPage`. При редактировании NPC-правил предыдущий контекст сбрасывается. Это авторская вспомогательная функция — **не автономная генерация готовой сцены из всей книги**.
+
+**Тесты:** `apps/story_reader/test/zai_npc_dialogue_draft_test.dart` с подлинным rich-v3 ZIP, импортёром, source-origin, permanent actor, источниковым `learn_fact`, mock Z.ai, UI consent; атаки с чужими говорящими, переставленными ходами, кавычками/переводами строк, лишними полями, неизвестной сценой; retry 429 точно тем же телом, no-send без согласия, отключённого ИИ/ключа. Запустить Flutter CI #next, M1.7, M0 и Windows/Android на новом SHA.
+
+**Открытые блоки:** полноценный мотивированный source-locked сценарий NPC со многими выборами и последствиями на каждой ветви, истинная автоматическая адаптация всех событий книги без лимита, CANON/ALTER_FATE, полный FB2→RPG мастер, 2 реальные русские FB2 и физический Win/Android QA. PR #133 остаётся Draft; main и E6d не трогать.
+
+
 ## 2026-11-07 — P0 NPC: offline-планировщик диалогов, часть единого PR #133
 
 **Стабильная подтверждённая база до этого этапа:** `fc2d213fdcd9838567fbaefc3c8c157d4adb557b`; [CI #942](https://github.com/shonentez-afk/AI-Story-RPG/actions/runs/42351970248) **SUCCESS** (M1.7, Python, Dart, Flutter, Android APK, Windows portable), [M0 #1027](https://github.com/shonentez-afk/AI-Story-RPG/actions/runs/42351970302) **SUCCESS**. Separate [External RPG author tests #231](https://github.com/shonentez-afk/AI-Story-RPG/actions/runs/42351970215) FAIL из-за старого `contract_drift`; отложенную E6d не затрагивать.
