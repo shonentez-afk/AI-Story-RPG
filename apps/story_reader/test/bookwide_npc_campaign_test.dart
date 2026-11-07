@@ -90,12 +90,15 @@ Future<_Fixture> _prepare() async {
     repository: MemorySourceAnalysisCheckpointRepository(),
     preview: (source, window, token, includeTitle) async {
       final chunk = window.chunks.first;
+      // Source validation permits at most 180 UTF-16 units per quote.
+      // Distinct overlapping 150-unit excerpts keep the reviewed name in
+      // both encounters without bypassing any production source checks.
       final candidates = [
         for (var i = 0; i < 4; i++)
           SemanticCandidate.propose(source, chunk,
             category: SemanticCategory.event,
             startUtf16: chunk.startUtf16 + i * 10,
-            endUtf16: chunk.startUtf16 + 200 + i * 10,
+            endUtf16: chunk.startUtf16 + 150 + i * 10,
             label: 'Проверяемый отрывок',
             uncertainty: 'Игровая интерпретация не подтверждает канон.'),
       ];
