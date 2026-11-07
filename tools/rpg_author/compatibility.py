@@ -27,8 +27,9 @@ def doctor() -> dict:
     lock = check_contract()
     # Real synthetic Python writer/reader + E6d sidecar probe. This is not
     # a claim that complete NPC book authoring or device E2E is ready.
-    from .npc_compatibility_probe import check_npc_extension
+    from .npc_compatibility_probe import check_npc_extension, check_npc_social_v5
     npc_probe = check_npc_extension()
+    social_probe = check_npc_social_v5()
     return {"tool_version": VERSION, "toolchain_sha256": toolchain_id(),
             "optional_npc_knowledge_contract": npc_probe,
             "npc_auto_authoring_ready": False,
