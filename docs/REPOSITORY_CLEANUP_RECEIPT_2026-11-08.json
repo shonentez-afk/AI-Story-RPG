@@ -1,0 +1,74 @@
+{
+  "repository": "shonentez-afk/AI-Story-RPG",
+  "request_date_local": "2026-11-08",
+  "timezone": "Europe/Tallinn",
+  "status": "completed",
+  "deleted": {
+    "workflow_runs": 1140,
+    "artifacts_total": 509,
+    "artifacts_deleted_directly": 6,
+    "artifacts_removed_with_parent_runs": 503,
+    "releases": 50,
+    "tags_total": 52,
+    "tags_associated_with_deleted_releases": 50,
+    "historical_orphan_tags": 2
+  },
+  "reported_deleted_file_sizes": {
+    "artifact_bytes": 8233890845,
+    "release_asset_bytes": 9282181936,
+    "total_bytes": 17516072781,
+    "billing_quota_recalculation_verified": false
+  },
+  "observations": {
+    "workflow_run_count_before": 1222,
+    "workflow_run_count_after": 93,
+    "new_ci_runs_were_created_during_cleanup": true,
+    "retained_test_releases_and_tags": ["test-build-921", "test-build-856", "test-build-824"]
+  },
+  "main_cleanup": {
+    "run_id": 42417159944,
+    "run_number": 4,
+    "job_id": 128537631592,
+    "commit_sha": "77c725eef2b11418a818416a185e38f1b28e1c68",
+    "conclusion": "success",
+    "policy_tests_passed": 6,
+    "result_timestamp_utc": "2026-11-07T22:04:11Z",
+    "run_url": "https://github.com/shonentez-afk/AI-Story-RPG/actions/runs/42417159944",
+    "audit_artifact_id": 13592402082,
+    "audit_artifact_zip_sha256": "9a80df8a64f5ccd207cba84f274454a02a34ea46437cc73a8617cdb90bdc1de8",
+    "audit_artifact_url": "https://github.com/shonentez-afk/AI-Story-RPG/actions/runs/42417159944/artifacts/13592402082",
+    "errors": []
+  },
+  "orphan_tag_cleanup": {
+    "run_id": 42418176864,
+    "run_number": 5,
+    "job_id": 128542690711,
+    "commit_sha": "1ac3932006aae56c9f61c8d3b25d4dc55422049f",
+    "conclusion": "success",
+    "policy_tests_passed": 9,
+    "result_timestamp_utc": "2026-11-07T22:04:25Z",
+    "run_url": "https://github.com/shonentez-afk/AI-Story-RPG/actions/runs/42418176864",
+    "deleted_tags": [
+      {"tag": "test-build-258", "commit_preserved_in_main": "7532667f8497b001a65ee01c108d1e6811b2b158"},
+      {"tag": "test-build-260", "commit_preserved_in_main": "180e32995e71e609fe303cad6db927f0420ed239"}
+    ],
+    "audit_artifact_id": 13592427061,
+    "audit_artifact_zip_sha256": "c3319c96b3fbe2d30da0c91b1400b6c9dcc1cbb99922e137becb5b3ec3306e22",
+    "audit_artifact_url": "https://github.com/shonentez-afk/AI-Story-RPG/actions/runs/42418176864/artifacts/13592427061",
+    "preserved_tags": [],
+    "errors": []
+  },
+  "safety": {
+    "branches_deleted": false,
+    "source_files_deleted": false,
+    "commits_deleted": false,
+    "main_modified": false,
+    "automatic_schedule_created": false,
+    "active_runs_protected": true,
+    "accepted_baselines_protected": true,
+    "unknown_report_artifacts_protected": true,
+    "maintenance_audit_retention_days": 7,
+    "current_request_scope": "verified_historical_test_tags",
+    "do_not_repeat_completed_cleanup_without_reassessing_current_state": true
+  }
+}
