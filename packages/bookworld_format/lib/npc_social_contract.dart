@@ -13,6 +13,9 @@ class RichNpcSocialContract {
   /// V3 additionally binds player/NPC item custody transfers to the EXACT
   /// typed world effect, committed choice, active witness and source quote.
   static const itemTransferFormat = 'ai_story_npc_social_witness_v3';
+  /// V4 adds a confirmed, same-source acquisition event before a transfer:
+  /// the built-in book author must not mint items from arbitrary prose.
+  static const authoredItemFormat = 'ai_story_npc_social_witness_v4';
   static final _sha = RegExp(r'^[0-9a-f]{64}$');
   static final _id = RegExp(r'^[a-z][a-z0-9_]{0,63}$');
 
@@ -64,7 +67,7 @@ class RichNpcSocialContract {
     final marker = manifest['npc_social_format'];
     if (raw == null && marker == null) return null;
     if ((marker != format && marker != choiceGateFormat &&
-         marker != itemTransferFormat) ||
+         marker != itemTransferFormat && marker != authoredItemFormat) ||
         raw is! Map<String, dynamic> ||
         blueprint.rightsStatus != 'private_adaptation') {
       throw const FormatException('NPC social version/capability mismatch');
@@ -73,8 +76,11 @@ class RichNpcSocialContract {
       'format', 'review_scope', 'source_fingerprint',
       'user_confirmed', 'literary_canon_verified', 'witnesses', 'rules',
       if (marker == choiceGateFormat ||
-          marker == itemTransferFormat) 'choice_gates',
-      if (marker == itemTransferFormat) 'item_transfers',
+          marker == itemTransferFormat ||
+          marker == authoredItemFormat) 'choice_gates',
+      if (marker == itemTransferFormat ||
+          marker == authoredItemFormat) 'item_transfers',
+      if (marker == authoredItemFormat) 'item_grants',
     }, 'source review');
     if (raw['format'] != marker ||
         raw['review_scope'] != 'user_declared_private_game_fiction' ||
@@ -173,7 +179,9 @@ class RichNpcSocialContract {
       ));
     }
     final choiceGates = <NpcSocialChoiceGate>[];
-    if (marker == choiceGateFormat || marker == itemTransferFormat) {
+    if (marker == choiceGateFormat ||
+        marker == itemTransferFormat ||
+        marker == authoredItemFormat) {
       final rawGates = raw['choice_gates'];
       if (rawGates is! List ||
           (marker == choiceGateFormat && rawGates.isEmpty) ||
@@ -233,7 +241,7 @@ class RichNpcSocialContract {
       }
     }
     final itemTransfers = <NpcItemTransfer>[];
-    if (marker == itemTransferFormat) {
+    if (marker == itemTransferFormat || marker == authoredItemFormat) {
       final rawTransfers = raw['item_transfers'];
       if (rawTransfers is! List || rawTransfers.isEmpty ||
           rawTransfers.length > 128) {
@@ -260,6 +268,78 @@ class RichNpcSocialContract {
           sceneId: scene, choiceId: choice, itemId: item,
           fromActorId: from, toActorId: to,
         ));
+      }
+    }
+    if (marker == authoredItemFormat) {
+      final authored = raw['item_grants'];
+      if (authored is! List || authored.isEmpty || authored.length > 16) {
+        throw const FormatException('Missing source-approved item acquisition');
+      }
+      final acquired = <String, (String, String)>{};
+      for (final entry in authored) {
+        if (entry is! Map<String, dynamic>) {
+          throw const FormatException('Invalid item acquisition object');
+        }
+        _fields(entry, {
+          'scene_id', 'choice_id', 'item_id', 'source_quote_sha256',
+        }, 'item acquisition');
+        final sceneId = _checkedId(entry['scene_id'], 'acquisition scene');
+        final choiceId = _checkedId(entry['choice_id'], 'acquisition choice');
+        final itemId = _checkedId(entry['item_id'], 'acquired item');
+        final quote = _checkedQuote(entry['source_quote_sha256']);
+        final scene = blueprint.scenes[sceneId];
+        if (!blueprint.items.contains(itemId) ||
+            acquired.containsKey(itemId) ||
+            blueprint.initial.inventory.contains(itemId) ||
+            !_cited(sceneId, quote, origins) ||
+            scene == null ||
+            !scene.choices.any((choice) =>
+                choice.id == choiceId &&
+                choice.effects.where((effect) =>
+                    effect.op == 'grant_item' &&
+                    effect.id == itemId).length == 1)) {
+          throw const FormatException(
+              'NPC item acquisition is not a unique cited game event');
+        }
+        acquired[itemId] = (sceneId, choiceId);
+      }
+      final transferred = itemTransfers.map((t) => t.itemId).toSet();
+      if (!transferred.containsAll(acquired.keys) ||
+          !acquired.keys.toSet().containsAll(transferred)) {
+        throw const FormatException(
+            'Every authored item must have a reviewed NPC transfer');
+      }
+      for (final scene in blueprint.scenes.values) {
+        for (final choice in scene.choices) {
+          for (final effect in choice.effects) {
+            if (effect.op != 'grant_item' || effect.id == null ||
+                !acquired.containsKey(effect.id)) continue;
+            final source = acquired[effect.id]!;
+            final acquisition = scene.id == source.$1 &&
+                choice.id == source.$2;
+            final reviewedReturn = itemTransfers.any((t) =>
+                t.sceneId == scene.id &&
+                t.choiceId == choice.id &&
+                t.itemId == effect.id &&
+                t.toActorId == 'player');
+            if (!acquisition && !reviewedReturn) {
+              throw const FormatException(
+                  'Authored item may not appear from an unreviewed choice');
+            }
+          }
+        }
+      }
+      for (final transfer in itemTransfers) {
+        final created = acquired[transfer.itemId]!;
+        final chapter = origins[transfer.sceneId]?['chapter_index'];
+        final sourceChapter = origins[created.$1]?['chapter_index'];
+        if (chapter is! int || sourceChapter is! int ||
+            sourceChapter > chapter ||
+            (created.$1 == transfer.sceneId &&
+             created.$2 == transfer.choiceId)) {
+          throw const FormatException(
+              'NPC item cannot transfer before its source acquisition');
+        }
       }
     }
     final book = NpcSocialRulebook(
