@@ -97,6 +97,349 @@ void main() {
   const writer = RichPrivateBookworldWriter();
   const importer = RichPrivateBookworldImporter();
 
+  test('source-reviewed v5 NPC lifecycle is portable and event-replayed', () {
+    final data = _npcRichSample();
+    final bp = _asObject(data['blueprint']);
+    final prov = _asObject(data['provenance']);
+    final npc = 'npc_' + List.filled(32, 'c').join();
+    final origin = (prov['scene_origins'] as List).first as Map;
+    final quote = (origin['source_refs'] as List).first['quote_sha256'];
+    prov['npc_social'] = {
+      'format': RichNpcSocialContract.lifeEventFormat,
+      'review_scope': 'user_declared_private_game_fiction',
+      'source_fingerprint': bp['source_fingerprint'],
+      'user_confirmed': true,
+      'literary_canon_verified': false,
+      'witnesses': <Map<String, Object?>>[],
+      'rules': <Map<String, Object?>>[],
+      'choice_gates': <Map<String, Object?>>[],
+      'item_transfers': <Map<String, Object?>>[],
+      'item_grants': <Map<String, Object?>>[],
+      'life_transitions': [{
+        'scene_id': 'entry', 'choice_id': 'wait',
+        'actor_id': npc, 'next_state': 'absent',
+        'source_quote_sha256': quote,
+      }],
+    };
+    data['provenance'] = prov;
+    Uint8List build() => writer.build(
+      blueprint: _asObject(data['blueprint']),
+      provenance: _asObject(data['provenance']),
+      sourceIndex: _asObject(data['source_index']),
+    );
+    final bytes = build();
+    expect(build(), bytes);
+    final worldData = importer.inspect(bytes);
+    final rules = worldData.npcSocialRulebook!;
+    expect(rules.lifeTransitions.single.nextState, NpcLifeState.absent);
+    final world = StoryWorld(worldData.blueprint, socialRulebook: rules);
+    expect(NpcSocialLedger.inspect(world, rules).lifeState(npc),
+        NpcLifeState.present);
+    expect(world.apply(actionId: 'depart', choiceId: 'wait').applied, isTrue);
+    final gone = NpcSocialLedger.inspect(world, rules);
+    expect(gone.lifeState(npc), NpcLifeState.absent);
+    final spoken = <RichDialogueTurn>[
+      const RichDialogueTurn(speaker: 'Мария', text: 'Секретная реплика'),
+    ];
+    final reviewed = <Map<String, dynamic>>[{
+      'turn_index': 0, 'speaker': 'Мария', 'actor_id': npc,
+      'required_fact_ids': <String>[],
+    }];
+    expect(RichNpcDialogueKnowledge.redact(
+        spoken, reviewed, world.state.knowledge, social: gone).single.text,
+        RichNpcDialogueKnowledge.unavailableLine);
+    expect(world.choiceLockReason('wait'),
+        'condition_not_met:npc_life_transition');
+    final reopened = StoryWorld.replay(worldData.blueprint,
+        world.events.map((event) => event.toJson()),
+        socialRulebook: rules, expectedSequence: world.state.revision,
+        expectedStateHash: world.state.stateHash);
+    expect(NpcSocialLedger.inspect(reopened, rules).snapshotHash,
+        NpcSocialLedger.inspect(world, rules).snapshotHash);
+    final forged = jsonDecode(jsonEncode(prov)) as Map<String, dynamic>;
+    ((forged['npc_social'] as Map)['life_transitions'] as List).first
+        ['next_state'] = 'resurrected';
+    expect(() => writer.build(blueprint: bp, provenance: forged,
+        sourceIndex: _asObject(data['source_index'])),
+        throwsFormatException);
+  });
+
+  test('private social memories require source-locked NPC witnesses and replay',
+      () {
+    final data = _npcRichSample();
+    final provenance = _asObject(data['provenance']);
+    final first = (provenance['scene_origins'] as List).first as Map;
+    final quote = (first['source_refs'] as List).first['quote_sha256'] as String;
+    final npc = 'npc_' + List.filled(32, 'c').join();
+    final rawBlueprint = _asObject(data['blueprint']);
+    final sourceScene =
+        (rawBlueprint['scenes'] as List).first as Map<String, dynamic>;
+    sourceScene['text'] = 'Встреча у ворот.\n'
+        'Мария: «Я услышала обещание!»\n'
+        'Игрок: «Обещаю».';
+    final presentation = _asObject(provenance['presentation']);
+    presentation['scene_dialogues'] = {
+      'entry': RichSceneDialogue.presentationFor(
+          sourceScene['text'] as String),
+    };
+    presentation['scene_dialogue_knowledge'] = {
+      'entry': [
+        {
+          'turn_index': 1, 'speaker': 'Мария', 'actor_id': npc,
+          'required_fact_ids': <String>[],
+          'required_social_memory_id': 'npc_heard_promise',
+          'minimum_trust_to_player': 7,
+        },
+        {
+          'turn_index': 2, 'speaker': 'Игрок', 'actor_id': 'player',
+          'required_fact_ids': <String>[],
+        },
+      ],
+    };
+    provenance['presentation'] = presentation;
+    // Only social memory (not an ordinary knows_fact) unlocks this decision.
+    final gatedHelp = ((rawBlueprint['scenes'] as List).first
+        as Map<String, dynamic>)['choices'] as List;
+    ((gatedHelp[1] as Map)['conditions'] as List).clear();
+    provenance['npc_social'] = {
+      'format': RichNpcSocialContract.choiceGateFormat,
+      'review_scope': 'user_declared_private_game_fiction',
+      'source_fingerprint': _asObject(data['blueprint'])['source_fingerprint'],
+      'user_confirmed': true,
+      'literary_canon_verified': false,
+      'witnesses': [
+        {
+          'scene_id': 'entry', 'actor_id': npc,
+          'mode': 'present', 'source_quote_sha256': quote,
+        },
+      ],
+      'rules': [
+        {
+          'memory_id': 'npc_heard_promise',
+          'scene_id': 'entry', 'choice_id': 'wait',
+          'observer_id': npc, 'kind': 'promiseReceived',
+          'related_actor_id': 'player',
+          'relationship_delta': 7, 'max_triggers': 1,
+          'source_quote_sha256': quote,
+        },
+      ],
+      'choice_gates': [
+        {
+          'scene_id': 'entry', 'choice_id': 'help', 'actor_id': npc,
+          'required_memory_id': 'npc_heard_promise',
+          'minimum_trust_to_player': 7,
+          'source_quote_sha256': quote,
+        },
+      ],
+    };
+    data['provenance'] = provenance;
+    Uint8List build() => writer.build(
+      blueprint: _asObject(data['blueprint']),
+      provenance: _asObject(data['provenance']),
+      sourceIndex: _asObject(data['source_index']),
+    );
+    final archive = build();
+    expect(build(), archive);
+    final verified = importer.inspect(archive);
+    final rules = verified.npcSocialRulebook!;
+    expect(rules.requireReviewedWitnesses, isTrue);
+    final world = StoryWorld(verified.blueprint, socialRulebook: rules);
+    expect(world.choiceLockReason('help'), 'condition_not_met:npc_memory');
+    final signed = RichSceneDialogue.verify(
+      (verified.presentation['scene_dialogues'] as Map)['entry'],
+      verified.blueprint.scenes['entry']!.text,
+    );
+    final reviews =
+        (verified.presentation['scene_dialogue_knowledge'] as Map)['entry']
+            as List;
+    final initial = NpcSocialLedger.inspect(world, rules);
+    expect(initial.memoriesFor(npc), isEmpty);
+    expect(RichNpcDialogueKnowledge.redact(
+        signed, reviews, world.state.knowledge, social: initial)[1].text,
+        RichNpcDialogueKnowledge.unavailableLine);
+    expect(world.apply(actionId: 'got_it', choiceId: 'wait').applied, isTrue);
+    final social = NpcSocialLedger.inspect(world, rules);
+    expect(social.memoriesFor(npc), hasLength(1));
+    expect(social.memoriesFor(npc).single.witnessMode, NpcWitnessMode.present);
+    expect(social.directedScore(npc, 'player'), 7);
+    expect(social.directedScore('player', npc), 0);
+    expect(world.choiceLockReason('help'), isNull);
+    expect(RichNpcDialogueKnowledge.redact(
+        signed, reviews, world.state.knowledge, social: social)[1].text,
+        'Я услышала обещание!');
+    final overThreshold = jsonDecode(jsonEncode(reviews)) as List;
+    (overThreshold.first as Map)['minimum_trust_to_player'] = 8;
+    expect(RichNpcDialogueKnowledge.redact(
+        signed, overThreshold, world.state.knowledge, social: social)[1].text,
+        RichNpcDialogueKnowledge.unavailableLine);
+    final replay = StoryWorld.replay(
+        verified.blueprint, world.events.map((e) => e.toJson()),
+        expectedSequence: world.state.revision,
+        expectedStateHash: world.state.stateHash,
+        socialRulebook: rules);
+    expect(NpcSocialLedger.inspect(replay, rules).snapshotHash,
+        social.snapshotHash);
+    // The exact Dart archive, not a recreated Python fixture, must pass
+    // the independent source-bound Python social review in CI.
+    final socialFile = File(
+        '../../artifacts/bookworld/book_private_rich_social_dart.bworld');
+    socialFile.parent.createSync(recursive: true);
+    socialFile.writeAsBytesSync(archive, flush: true);
+
+    void rejects(void Function(Map<String, dynamic>) mutate) {
+      final changed = _npcRichSample();
+      final prov = _asObject(changed['provenance']);
+      prov['npc_social'] =
+          jsonDecode(jsonEncode(provenance['npc_social']));
+      changed['provenance'] = prov;
+      mutate(changed);
+      expect(() => writer.build(
+        blueprint: _asObject(changed['blueprint']),
+        provenance: _asObject(changed['provenance']),
+        sourceIndex: _asObject(changed['source_index']),
+      ), throwsFormatException);
+    }
+    rejects((changed) {
+      final social = _asObject(
+          _asObject(changed['provenance'])['npc_social']);
+      (social['witnesses'] as List).clear();
+    });
+    rejects((changed) {
+      final social = _asObject(
+          _asObject(changed['provenance'])['npc_social']);
+      (social['witnesses'] as List).first['mode'] = 'reported';
+    });
+    rejects((changed) {
+      final social = _asObject(
+          _asObject(changed['provenance'])['npc_social']);
+      (social['rules'] as List).first['source_quote_sha256'] =
+          List.filled(64, 'f').join();
+    });
+  });
+
+  test('reviewed NPC item ownership is portable and replay protected', () {
+    for (final authored in [false, true]) {
+    final data = _npcRichSample();
+    final bp = _asObject(data['blueprint']);
+    (bp['items'] as List).add('map');
+    final entry = (bp['scenes'] as List).first as Map<String, dynamic>;
+    final options = (entry['choices'] as List).cast<Map<String, dynamic>>();
+    (options.singleWhere((c) => c['id'] == 'wait')['effects'] as List)
+        .add({'op': 'grant_item', 'id': 'map'});
+    options.addAll([
+      {
+        'id': 'give_map', 'label': 'Передать карту персонажу',
+        'next_scene_id': 'entry',
+        'conditions': [
+          {'op': 'has_item', 'id': 'map'},
+        ],
+        'effects': [
+          {'op': 'consume_item', 'id': 'map'},
+        ],
+      },
+      {
+        'id': 'return_map', 'label': 'Получить карту обратно',
+        'next_scene_id': 'entry',
+        'conditions': <Object>[],
+        'effects': [
+          {'op': 'grant_item', 'id': 'map'},
+        ],
+      },
+    ]);
+    final prov = _asObject(data['provenance']);
+    final pres = _asObject(prov['presentation']);
+    (pres['item_names'] as Map<String, dynamic>)['map'] = 'Карта';
+    (pres['item_descriptions'] as Map<String, dynamic>)['map'] =
+        'Подтверждённый игровой предмет';
+    prov['presentation'] = pres;
+    final npc = 'npc_' + List.filled(32, 'c').join();
+    final origin = (prov['scene_origins'] as List).first as Map;
+    final quote = (origin['source_refs'] as List).first['quote_sha256'] as String;
+    prov['npc_social'] = {
+      'format': authored
+          ? RichNpcSocialContract.authoredItemFormat
+          : RichNpcSocialContract.itemTransferFormat,
+      'review_scope': 'user_declared_private_game_fiction',
+      'source_fingerprint': bp['source_fingerprint'],
+      'user_confirmed': true,
+      'literary_canon_verified': false,
+      'witnesses': [
+        {
+          'scene_id': 'entry', 'actor_id': npc,
+          'mode': 'present', 'source_quote_sha256': quote,
+        },
+      ],
+      'rules': [
+        {
+          'memory_id': 'npc_remembers_pledge', 'scene_id': 'entry',
+          'choice_id': 'wait', 'observer_id': npc,
+          'kind': 'promiseReceived', 'related_actor_id': 'player',
+          'relationship_delta': 7, 'max_triggers': 1,
+          'source_quote_sha256': quote,
+        },
+      ],
+      'choice_gates': <Map<String, Object?>>[],
+      if (authored)
+        'item_grants': [
+          {
+            'scene_id': 'entry', 'choice_id': 'wait',
+            'item_id': 'map', 'source_quote_sha256': quote,
+          },
+        ],
+      'item_transfers': [
+        {
+          'scene_id': 'entry', 'choice_id': 'give_map',
+          'item_id': 'map', 'from_actor_id': 'player',
+          'to_actor_id': npc, 'source_quote_sha256': quote,
+        },
+        {
+          'scene_id': 'entry', 'choice_id': 'return_map',
+          'item_id': 'map', 'from_actor_id': npc,
+          'to_actor_id': 'player', 'source_quote_sha256': quote,
+        },
+      ],
+    };
+    data['provenance'] = prov;
+    final archive = writer.build(
+      blueprint: bp, provenance: prov,
+      sourceIndex: _asObject(data['source_index']),
+    );
+    final inspected = importer.inspect(archive);
+    final rules = inspected.npcSocialRulebook!;
+    expect(rules.itemTransfers, hasLength(2));
+    final world = StoryWorld(inspected.blueprint, socialRulebook: rules);
+    expect(world.apply(actionId: 'phantom_return', choiceId: 'return_map')
+        .reason, 'condition_not_met:npc_item_owner');
+    expect(world.apply(actionId: 'gift_before_ownership',
+        choiceId: 'give_map').applied, false);
+    expect(world.apply(actionId: 'acquired', choiceId: 'wait').applied, true);
+    expect(NpcSocialLedger.inspect(world, rules).itemOwner('map'), 'player');
+    expect(world.apply(actionId: 'given', choiceId: 'give_map').applied, true);
+    final held = NpcSocialLedger.inspect(world, rules);
+    expect(held.itemOwner('map'), npc);
+    expect(held.itemsHeldBy(npc), ['map']);
+    expect(world.state.inventory, isNot(contains('map')));
+    expect(world.apply(actionId: 'counterfeit', choiceId: 'wait').reason,
+        'condition_not_met:npc_item_custody');
+    expect(world.apply(actionId: 'returned', choiceId: 'return_map')
+        .applied, true);
+    expect(NpcSocialLedger.inspect(world, rules).itemOwner('map'), 'player');
+    final replayed = StoryWorld.replay(
+      inspected.blueprint, world.events.map((event) => event.toJson()),
+      expectedSequence: world.state.revision,
+      expectedStateHash: world.state.stateHash,
+      socialRulebook: rules,
+    );
+    expect(NpcSocialLedger.inspect(replayed, rules).snapshotHash,
+        NpcSocialLedger.inspect(world, rules).snapshotHash);
+    final output = File(authored
+        ? '../../artifacts/bookworld/book_private_rich_items_authored_dart.bworld'
+        : '../../artifacts/bookworld/book_private_rich_items_dart.bworld');
+    output.parent.createSync(recursive: true);
+    output.writeAsBytesSync(archive, flush: true);
+    }
+  });
+
   test('explicit private NPC v3 roundtrip uses source-reviewed fact grants', () {
     final data = _npcRichSample();
     final rawBlueprint = _asObject(data['blueprint']);

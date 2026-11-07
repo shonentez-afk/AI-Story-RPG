@@ -25,6 +25,11 @@ BUILD_TOOL = {"name": "ai_story_private_rich_bookworld", "version": "3.0"}
 MAX_SCENES = 192
 MAX_STATES = 2500
 NPC_GRANTS_FORMAT = "ai_story_npc_knowledge_grants_v1"
+NPC_SOCIAL_FORMAT = "ai_story_npc_social_witness_v1"
+NPC_SOCIAL_GATE_FORMAT = "ai_story_npc_social_witness_v2"
+NPC_SOCIAL_ITEM_FORMAT = "ai_story_npc_social_witness_v3"
+NPC_SOCIAL_AUTHOR_ITEM_FORMAT = "ai_story_npc_social_witness_v4"
+NPC_SOCIAL_LIFE_FORMAT = "ai_story_npc_social_witness_v5"
 
 
 def fail(message: str):
@@ -124,7 +129,7 @@ def _exact_scene_dialogue(text):
     }
 
 
-def _presentation(meta, bp):
+def _presentation(meta, bp, social=None):
     expected = {"hero", "item_names", "item_descriptions",
                 "stat_names", "fact_names", "scene_names"}
     has_dialogues = type(meta) is dict and "scene_dialogues" in meta
@@ -182,8 +187,13 @@ def _presentation(meta, bp):
                 fail("NPC spoken lines are missing review")
             seen = set()
             for entry in entries:
-                _keys(entry, {"turn_index", "speaker", "actor_id",
-                              "required_fact_ids"}, "NPC spoken line")
+                required = {"turn_index", "speaker", "actor_id",
+                            "required_fact_ids"}
+                extra = {"required_social_memory_id",
+                         "minimum_trust_to_player"}
+                if type(entry) is not dict or not required.issubset(entry) or \
+                        set(entry).difference(required | extra):
+                    fail("NPC spoken line has unreviewed social fields")
                 index, actor, facts = (entry["turn_index"],
                                        entry["actor_id"],
                                        entry["required_fact_ids"])
@@ -196,6 +206,24 @@ def _presentation(meta, bp):
                             for fact in facts) or \
                         facts != sorted(set(facts)):
                     fail("Tampered NPC dialogue identity or secret gate")
+                if "required_social_memory_id" in entry:
+                    memory_id = entry["required_social_memory_id"]
+                    if actor == "player" or type(social) is not dict or \
+                            not isinstance(memory_id, str) or \
+                            not any(rule["observer_id"] == actor and
+                                    rule["memory_id"] == memory_id
+                                    for rule in social["rules"]):
+                        fail("Unreviewed NPC memory dialogue prerequisite")
+                if "minimum_trust_to_player" in entry:
+                    threshold = entry["minimum_trust_to_player"]
+                    if actor == "player" or type(social) is not dict or \
+                            type(threshold) is not int or \
+                            not 1 <= threshold <= 100 or \
+                            not any(rule["observer_id"] == actor and
+                                    rule["related_actor_id"] == "player" and
+                                    rule["relationship_delta"] > 0
+                                    for rule in social["rules"]):
+                        fail("Unreviewed NPC trust dialogue prerequisite")
                 seen.add(index)
             if seen != set(spoken):
                 fail("Incomplete reviewed NPC dialogue turns")
@@ -553,6 +581,319 @@ def _npc_knowledge(prov, bp):
         fail("NPC knowledge actions do not match reviewed grant manifest")
 
 
+def _npc_social(prov, bp):
+    """Opt-in reviewed NPC witnesses and event classifications, not canon.
+
+    Authoritative actions remain in the original deterministic event stream;
+    this package only classifies hash-chained actions. It never fabricates
+    presence, learns a secret, or grants an item based on prose inference.
+    """
+    reviewed = prov.get("npc_social")
+    if reviewed is None:
+        return
+    life_format = (type(reviewed) is dict and
+                   reviewed.get("format") == NPC_SOCIAL_LIFE_FORMAT)
+    authored_item = (type(reviewed) is dict and
+                     reviewed.get("format") == NPC_SOCIAL_AUTHOR_ITEM_FORMAT) or life_format
+    item_format = (type(reviewed) is dict and
+                   reviewed.get("format") == NPC_SOCIAL_ITEM_FORMAT) or authored_item
+    gate_format = (type(reviewed) is dict and
+                   reviewed.get("format") == NPC_SOCIAL_GATE_FORMAT) or item_format
+    _keys(reviewed, {"format", "review_scope", "source_fingerprint",
+                     "user_confirmed", "literary_canon_verified",
+                     "witnesses", "rules"} |
+          ({"choice_gates"} if gate_format else set()) |
+          ({"item_transfers"} if item_format else set()) |
+          ({"item_grants"} if authored_item else set()) |
+          ({"life_transitions"} if life_format else set()), "NPC social")
+    if reviewed["format"] not in (
+            NPC_SOCIAL_FORMAT, NPC_SOCIAL_GATE_FORMAT,
+            NPC_SOCIAL_ITEM_FORMAT, NPC_SOCIAL_AUTHOR_ITEM_FORMAT,
+            NPC_SOCIAL_LIFE_FORMAT) or \
+            reviewed["review_scope"] != "user_declared_private_game_fiction" or \
+            reviewed["source_fingerprint"] != bp["source_fingerprint"] or \
+            reviewed["user_confirmed"] is not True or \
+            reviewed["literary_canon_verified"] is not False:
+        fail("NPC social review is not authorized for this private source")
+    witnesses, rules = reviewed["witnesses"], reviewed["rules"]
+    if type(witnesses) is not list or type(rules) is not list or \
+            not (0 if life_format else 1) <= len(witnesses) <= 128 or \
+            not (0 if life_format else 1) <= len(rules) <= 128:
+        fail("Missing or oversized NPC social declarations")
+    origin = {item["scene_id"]: item
+              for item in prov["scene_origins"]}
+    if len(origin) != len(prov["scene_origins"]):
+        fail("Ambiguous NPC scene evidence")
+    scenes = {scene["id"]: scene for scene in bp["scenes"]}
+    actors = set(bp["actors"])
+
+    def citation(scene_id, digest):
+        src = origin.get(scene_id)
+        if not isinstance(digest, str) or \
+                not legacy.SHA_RE.fullmatch(digest) or \
+                src is None or src["origin"] != "SOURCE_PASSAGE":
+            fail("Unverified NPC social quote")
+        chapter = src["chapter_index"]
+        if not any(ref["quote_sha256"] == digest and
+                   ref["chapter_index"] <= chapter and
+                   ref["visible_after_chapter"] <= chapter
+                   for ref in src["source_refs"]):
+            fail("NPC social witness cites absent or future passage")
+
+    present = {}
+    for row in witnesses:
+        _keys(row, {"scene_id", "actor_id", "mode",
+                    "source_quote_sha256"}, "NPC social witness")
+        scene, actor, mode = (row["scene_id"], row["actor_id"], row["mode"])
+        if not _id(scene) or scene not in scenes or \
+                not _id(actor) or actor not in actors or actor == "player" or \
+                not re.fullmatch(r"npc_[0-9a-f]{32}", actor) or \
+                mode not in ("present", "reported") or \
+                (scene, actor) in present:
+            fail("NPC social witness is unknown/duplicated/unstable")
+        citation(scene, row["source_quote_sha256"])
+        present[(scene, actor)] = mode
+
+    seen = set()
+    used = set()
+    memory_kinds = {"witnessed", "promiseReceived", "promiseBroken",
+                    "helped", "betrayed", "rumorHeard"}
+    for row in rules:
+        _keys(row, {"memory_id", "scene_id", "choice_id", "observer_id",
+                    "kind", "related_actor_id", "relationship_delta",
+                    "max_triggers", "source_quote_sha256"}, "NPC social rule")
+        memory, scene, choice, actor = (
+            row["memory_id"], row["scene_id"],
+            row["choice_id"], row["observer_id"])
+        relation, delta, maximum = (
+            row["related_actor_id"], row["relationship_delta"],
+            row["max_triggers"])
+        if not all(_id(v) for v in (memory, scene, choice, actor)) or \
+                scene not in scenes or actor not in actors or \
+                (actor != "player" and
+                 not re.fullmatch(r"npc_[0-9a-f]{32}", actor)) or \
+                not any(c["id"] == choice for c in scenes[scene]["choices"]) or \
+                row["kind"] not in memory_kinds or \
+                (relation is not None and
+                 (not _id(relation) or relation not in actors or
+                  relation == actor)) or \
+                (relation != "player" and relation is not None and
+                 not re.fullmatch(r"npc_[0-9a-f]{32}", relation)) or \
+                type(delta) is not int or not -20 <= delta <= 20 or \
+                type(maximum) is not int or not 1 <= maximum <= 10 or \
+                (delta != 0 and relation is None) or \
+                (actor, memory) in seen:
+            fail("Invalid, inconsistent or duplicated NPC social memory")
+        citation(scene, row["source_quote_sha256"])
+        seen.add((actor, memory))
+        if actor == "player":
+            continue
+        witness = present.get((scene, actor))
+        if witness is None or \
+                (witness == "reported" and
+                 (row["kind"] != "rumorHeard" or delta != 0)):
+            fail("NPC remembered an unseen event or rumor became trust")
+        used.add((scene, actor))
+    if item_format:
+        transfers = reviewed["item_transfers"]
+        if type(transfers) is not list or \
+                not (0 if life_format else 1) <= len(transfers) <= 128:
+            fail("Invalid NPC item custody review list")
+        seen_transfers = set()
+        for transfer in transfers:
+            _keys(transfer, {"scene_id", "choice_id", "item_id",
+                             "from_actor_id", "to_actor_id",
+                             "source_quote_sha256"}, "NPC item transfer")
+            scene, choice, item = (transfer["scene_id"],
+                                   transfer["choice_id"],
+                                   transfer["item_id"])
+            sender, receiver = (transfer["from_actor_id"],
+                                 transfer["to_actor_id"])
+            if not all(_id(v) for v in (scene, choice, item,
+                                         sender, receiver)) or \
+                    scene not in scenes or item not in bp["items"] or \
+                    sender not in actors or receiver not in actors or \
+                    sender == receiver or \
+                    ((sender == "player") == (receiver == "player")) or \
+                    (scene, choice, item) in seen_transfers:
+                fail("Invalid NPC item transfer identities")
+            seen_transfers.add((scene, choice, item))
+            npc = receiver if sender == "player" else sender
+            if not re.fullmatch(r"npc_[0-9a-f]{32}", npc) or \
+                    present.get((scene, npc)) != "present":
+                fail("Item transfer NPC was not witnessed at the scene")
+            citation(scene, transfer["source_quote_sha256"])
+            choices = [c for c in scenes[scene]["choices"]
+                       if c["id"] == choice]
+            expected = "consume_item" if sender == "player" else "grant_item"
+            if len(choices) != 1 or sum(
+                    1 for effect in choices[0]["effects"]
+                    if effect["op"] == expected and effect["id"] == item) != 1:
+                fail("NPC item custody has no matching typed effect")
+            used.add((scene, npc))
+
+    if set(present) != used:
+        fail("Orphaned or unreviewed NPC witness")
+
+    if authored_item:
+        grants = reviewed["item_grants"]
+        if type(grants) is not list or \
+                not (0 if life_format else 1) <= len(grants) <= 16 or \
+                (life_format and not grants and reviewed["item_transfers"]):
+            fail("Native item acquisition needs reviewed sources")
+        origins = origin
+        acquired = {}
+        for grant in grants:
+            _keys(grant, {"scene_id", "choice_id", "item_id",
+                          "source_quote_sha256"}, "NPC item acquisition")
+            scene, choice, item = (
+                grant["scene_id"], grant["choice_id"], grant["item_id"])
+            if not all(_id(v) for v in (scene, choice, item)) or \
+                    item not in bp["items"] or item in acquired or \
+                    item in bp["initial_state"]["inventory"] or \
+                    scene not in scenes:
+                fail("Unreviewed or duplicated NPC item acquisition")
+            citation(scene, grant["source_quote_sha256"])
+            eligible = [c for c in scenes[scene]["choices"]
+                        if c["id"] == choice]
+            if len(eligible) != 1 or sum(
+                    e["op"] == "grant_item" and e["id"] == item
+                    for e in eligible[0]["effects"]) != 1:
+                fail("NPC item source must create exactly one typed item")
+            acquired[item] = (scene, choice)
+        transferred = {rule["item_id"] for rule in reviewed["item_transfers"]}
+        if set(acquired) != transferred:
+            fail("NPC item acquisition/transfer sets are inconsistent")
+        for scene in bp["scenes"]:
+            for choice in scene["choices"]:
+                for effect in choice["effects"]:
+                    item = effect.get("id")
+                    if effect["op"] != "grant_item" or item not in acquired:
+                        continue
+                    source = acquired[item] == (scene["id"], choice["id"])
+                    returned = any(
+                        t["scene_id"] == scene["id"] and
+                        t["choice_id"] == choice["id"] and
+                        t["item_id"] == item and t["to_actor_id"] == "player"
+                        for t in reviewed["item_transfers"])
+                    if not source and not returned:
+                        fail("Unreviewed extra item was created")
+        for transfer in reviewed["item_transfers"]:
+            item = transfer["item_id"]
+            acq_scene, acq_choice = acquired[item]
+            if origins[acq_scene]["chapter_index"] > \
+                    origins[transfer["scene_id"]]["chapter_index"] or \
+                    (acq_scene, acq_choice) == (
+                        transfer["scene_id"], transfer["choice_id"]):
+                fail("NPC item transferred before its source acquisition")
+
+    if life_format:
+        transitions = reviewed["life_transitions"]
+        if type(transitions) is not list or not 1 <= len(transitions) <= 128:
+            fail("Missing or oversized NPC life transitions")
+        seen_life = set()
+        for transition in transitions:
+            _keys(transition, {"scene_id", "choice_id", "actor_id",
+                               "next_state", "source_quote_sha256"},
+                  "NPC life transition")
+            scene, choice, actor = (transition["scene_id"],
+                                    transition["choice_id"],
+                                    transition["actor_id"])
+            if not all(_id(v) for v in (scene, choice, actor)) or \
+                    scene not in scenes or actor not in actors or \
+                    not re.fullmatch(r"npc_[0-9a-f]{32}", actor) or \
+                    transition["next_state"] not in ("present", "absent", "dead") or \
+                    not any(c["id"] == choice
+                            for c in scenes[scene]["choices"]) or \
+                    (scene, choice, actor) in seen_life:
+                fail("Invalid or duplicate NPC life event")
+            citation(scene, transition["source_quote_sha256"])
+            seen_life.add((scene, choice, actor))
+
+    if gate_format:
+        gates = reviewed["choice_gates"]
+        if type(gates) is not list or len(gates) > 128 or \
+                (not item_format and not gates):
+            fail("NPC game choices need bounded reviewed social gates")
+        seen_gates = set()
+        for gate in gates:
+            _keys(gate, {"scene_id", "choice_id", "actor_id",
+                         "required_memory_id", "minimum_trust_to_player",
+                         "source_quote_sha256"}, "NPC choice review")
+            scene, choice, actor = (
+                gate["scene_id"], gate["choice_id"], gate["actor_id"])
+            memory, trust = (gate["required_memory_id"],
+                             gate["minimum_trust_to_player"])
+            if not all(_id(v) for v in (scene, choice, actor)) or \
+                    scene not in scenes or actor not in actors or \
+                    actor == "player" or \
+                    not re.fullmatch(r"npc_[0-9a-f]{32}", actor) or \
+                    not any(c["id"] == choice for c in
+                            scenes[scene]["choices"]) or \
+                    (scene, choice) in seen_gates or \
+                    (memory is None and trust is None) or \
+                    (memory is not None and not _id(memory)) or \
+                    (trust is not None and
+                     (type(trust) is not int or not 1 <= trust <= 100)):
+                fail("Invalid NPC social choice identity/condition")
+            seen_gates.add((scene, choice))
+            citation(scene, gate["source_quote_sha256"])
+            chapter = origin[scene]["chapter_index"]
+            if memory is not None and not any(
+                    rule["observer_id"] == actor and
+                    rule["memory_id"] == memory and
+                    origin[rule["scene_id"]]["chapter_index"] <= chapter
+                    for rule in rules):
+                fail("NPC choice requires future or unreviewed memory")
+            if trust is not None and not any(
+                    rule["observer_id"] == actor and
+                    rule["related_actor_id"] == "player" and
+                    rule["relationship_delta"] > 0 and
+                    origin[rule["scene_id"]]["chapter_index"] <= chapter
+                    for rule in rules):
+                fail("NPC choice trust precedes its source event")
+            if memory is not None and not any(
+                    rule["observer_id"] == actor and
+                    rule["memory_id"] == memory and
+                    (rule["scene_id"], rule["choice_id"]) != (scene, choice)
+                    for rule in rules):
+                fail("NPC social choice cannot require unearned memory")
+            if trust is not None and not any(
+                    rule["observer_id"] == actor and
+                    rule["related_actor_id"] == "player" and
+                    rule["relationship_delta"] > 0 and
+                    (rule["scene_id"], rule["choice_id"]) != (scene, choice)
+                    for rule in rules):
+                fail("NPC social choice cannot require unearned trust")
+
+        # Match story_core: cyclic required-memory chains have no playable
+        # starting choice, even if individual references look correct.
+        gates_by_key = {(g["scene_id"], g["choice_id"]): g
+                        for g in gates}
+        visited, visiting = set(), set()
+
+        def check_chain(key):
+            if key in visited:
+                return
+            if key in visiting:
+                fail("Circular NPC memory choice dependency")
+            visiting.add(key)
+            g = gates_by_key[key]
+            required = g["required_memory_id"]
+            if required is not None:
+                rule = next(rule for rule in rules
+                            if rule["observer_id"] == g["actor_id"] and
+                            rule["memory_id"] == required)
+                source = (rule["scene_id"], rule["choice_id"])
+                if source in gates_by_key:
+                    check_chain(source)
+            visiting.remove(key)
+            visited.add(key)
+
+        for key in gates_by_key:
+            check_chain(key)
+
+
 def _provenance(prov, bp):
     keys = {"format", "bookworld_id", "source_fingerprint", "source_title",
             "source_author", "source_chapters_total", "source_chapters_indexed",
@@ -560,12 +901,13 @@ def _provenance(prov, bp):
             "rights_status", "publication_authorized", "model_provenance",
             "scene_origins", "presentation"}
     _keys({k: v for k, v in prov.items()
-           if k not in {"gameplay_review", "npc_knowledge"}},
+           if k not in {"gameplay_review", "npc_knowledge", "npc_social"}},
           keys, "rich provenance")
     if prov["format"] != PROVENANCE_FORMAT:
         fail("Wrong rich provenance format")
     _model(prov["model_provenance"])
-    _presentation(prov["presentation"], bp)
+    _npc_social(prov, bp)
+    _presentation(prov["presentation"], bp, prov.get("npc_social"))
     _npc_knowledge(prov, bp)
     if "npc_knowledge" in prov and "gameplay_review" in prov:
         fail("NPC grant review and gameplay review must be unified")
@@ -574,6 +916,7 @@ def _provenance(prov, bp):
     old = dict(prov)
     old.pop("gameplay_review", None)
     old.pop("npc_knowledge", None)
+    old.pop("npc_social", None)
     old.pop("presentation")
     old["format"] = "ai_story_private_provenance_v1"
     old["model_provenance"] = {"provider": "none", "model_id": None}
@@ -586,6 +929,8 @@ def _manifest(bp, prov, payloads):
         "format": "ai_story_bookworld", "format_version": 3,
         **({"npc_knowledge_format": NPC_GRANTS_FORMAT}
            if "npc_knowledge" in prov else {}),
+        **({"npc_social_format": prov["npc_social"]["format"]}
+           if "npc_social" in prov else {}),
         "bookworld_id": bp["book_id"],
         "source_fingerprint": bp["source_fingerprint"],
         "title": bp["title"], "author": prov["source_author"],

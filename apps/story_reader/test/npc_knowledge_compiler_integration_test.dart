@@ -264,6 +264,102 @@ void main() {
     } finally {
       sqliteDirectory.deleteSync(recursive: true);
     }
+    // The NORMAL book -> approved NPC -> rich-v3 pipeline now authors
+    // actual typed book items, not just importing a prebuilt .bworld.
+    var itemScenario = expanded;
+    final itemChoiceIds = <String>[];
+    for (final label in [
+      'Взять найденный ключ',
+      'Передать ключ Артему',
+      'Получить ключ обратно',
+    ]) {
+      itemScenario = MultiSceneDraftWorkbench.addChoice(
+          itemScenario, entry.id, entry.id);
+      final added = itemScenario.scenes.first.choices.last;
+      itemChoiceIds.add(added.id);
+      itemScenario = MultiSceneDraftWorkbench.replaceChoice(
+        itemScenario, entry.id,
+        DraftChoice(id: added.id, label: label,
+            nextSceneId: entry.id),
+      );
+    }
+    final itemReview = <Map<String, dynamic>>[
+      {
+        'item_name': 'Ключ',
+        'item_description': 'Найден у двери в первой главе',
+        'actor_id': richActor,
+        'acquire_choice_id': itemChoiceIds[0],
+        'acquire_quote_sha256': quote,
+        'give_choice_id': itemChoiceIds[1],
+        'give_quote_sha256': quote,
+        'return_choice_id': itemChoiceIds[2],
+        'return_quote_sha256': quote,
+        'personally_witnessed': true,
+      },
+    ];
+    final itemBytes = await compileReviewedNpcRichPrivateBookworldInWorker(
+      index, graph, catalog, editorial, itemScenario,
+      npcRules: gatedRules, npcNotebook: permanent, npcDossiers: dossiers,
+      sourceQuoteByRuleId: bound, userConfirmed: true,
+      reviewedBookItems: itemReview,
+    );
+    final itemGame = const RichPrivateBookworldImporter().inspect(itemBytes);
+    expect(itemGame.npcSocialRulebook, isNotNull);
+    expect(itemGame.npcSocialRulebook!.itemTransfers, hasLength(2));
+    expect(itemGame.blueprint.items, hasLength(1));
+    expect(itemGame.blueprint.bookId, isNot(checked.blueprint.bookId));
+    final itemId = itemGame.blueprint.items.single;
+    expect((itemGame.presentation['item_names'] as Map)[itemId], 'Ключ');
+    final itemWorld = StoryWorld(itemGame.blueprint,
+        socialRulebook: itemGame.npcSocialRulebook);
+    expect(itemWorld.apply(actionId: 'phantom', choiceId: itemChoiceIds[2])
+        .applied, false);
+    expect(itemWorld.apply(actionId: 'acquire', choiceId: itemChoiceIds[0])
+        .applied, true);
+    expect(itemWorld.apply(actionId: 'gift', choiceId: itemChoiceIds[1])
+        .applied, true);
+    expect(NpcSocialLedger.inspect(itemWorld, itemGame.npcSocialRulebook!)
+        .itemOwner(itemId), richActor);
+    expect(itemWorld.apply(actionId: 'counterfeit',
+        choiceId: itemChoiceIds[0]).applied, false);
+    final itemDir = Directory.systemTemp.createTempSync('book_item_native_');
+    try {
+      final store = BookworldCampaignStore.openPrivateDirectory(itemDir.path);
+      late String itemCampaign;
+      try {
+        final installed = store.installBookworld(itemBytes);
+        itemCampaign = store.createCampaign(installed.archiveHash);
+        expect(store.commitChoice(itemCampaign,
+            actionId: 'get_item', choiceId: itemChoiceIds[0],
+            expectedRevision: 0).applied, true);
+        expect(store.commitChoice(itemCampaign,
+            actionId: 'give_item', choiceId: itemChoiceIds[1],
+            expectedRevision: 1).applied, true);
+      } finally {
+        store.close();
+      }
+      final reopened = BookworldCampaignStore.openPrivateDirectory(
+          itemDir.path);
+      try {
+        final campaign = reopened.loadCampaign(itemCampaign);
+        final replay = StoryWorld.replay(itemGame.blueprint,
+            campaign.coordinator.events.map((e) => e.toJson()),
+            expectedSequence: campaign.coordinator.state.revision,
+            expectedStateHash: campaign.coordinator.state.stateHash,
+            socialRulebook: itemGame.npcSocialRulebook);
+        expect(NpcSocialLedger.inspect(replay, itemGame.npcSocialRulebook!)
+            .itemOwner(itemId), richActor);
+        expect(reopened.commitChoice(itemCampaign,
+            actionId: 'get_back', choiceId: itemChoiceIds[2],
+            expectedRevision: 2).applied, true);
+      } finally {
+        reopened.close();
+      }
+    } finally {
+      itemDir.deleteSync(recursive: true);
+    }
+    expect(utf8.decode(itemBytes, allowMalformed: true),
+        isNot(contains(note.text)));
     final text = utf8.decode(richBytes, allowMalformed: true);
     expect(text, isNot(contains(note.text)));
   });

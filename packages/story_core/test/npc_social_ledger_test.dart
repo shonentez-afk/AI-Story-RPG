@@ -247,6 +247,403 @@ void main() {
     expect(ledger.hasMemory(stable, 'remember_permanent'), isTrue);
   });
 
+  test('approved scene presence prevents teleporting NPC eyewitness', () {
+    final bp = _blueprint();
+    NpcSocialRulebook reviewed({
+      required List<NpcSceneWitness> witnesses,
+      NpcMemoryKind kind = NpcMemoryKind.witnessed,
+      int score = 8,
+    }) => NpcSocialRulebook(
+      blueprintHash: bp.blueprintHash,
+      requireReviewedWitnesses: true,
+      witnesses: witnesses,
+      rules: [
+        NpcSocialRule(
+          memoryId: 'guard_saw_this',
+          sceneId: 'gate', choiceId: 'inspect_gate',
+          observerId: 'guard', kind: kind,
+          relatedActorId: 'player', relationshipDelta: score,
+        ),
+      ],
+    );
+    const present = NpcSceneWitness(
+      sceneId: 'gate', actorId: 'guard', mode: NpcWitnessMode.present,
+    );
+    final approved = reviewed(witnesses: [present]);
+    final world = StoryWorld(bp);
+    expect(world.apply(actionId: 'x', choiceId: 'inspect_gate').applied, isTrue);
+    final actual = NpcSocialLedger.inspect(world, approved);
+    expect(actual.directedScore('guard', 'player'), 8);
+    expect(actual.memoriesFor('guard').single.witnessMode,
+        NpcWitnessMode.present);
+    final replay = StoryWorld.replay(bp, world.events.map((e) => e.toJson()),
+        expectedSequence: 1, expectedStateHash: world.state.stateHash);
+    expect(NpcSocialLedger.inspect(replay, approved).snapshotHash,
+        actual.snapshotHash);
+
+    // A guard marked present in another scene cannot see the gate.
+    final elsewhere = reviewed(witnesses: const [
+      NpcSceneWitness(
+        sceneId: 'market', actorId: 'guard',
+        mode: NpcWitnessMode.present,
+      ),
+    ]);
+    expect(() => NpcSocialLedger.inspect(world, elsewhere),
+        throwsFormatException);
+    expect(() => NpcSocialLedger.inspect(world, reviewed(witnesses: [])),
+        throwsFormatException);
+    expect(() => NpcSocialLedger.inspect(world, reviewed(
+      witnesses: const [
+        NpcSceneWitness(
+          sceneId: 'gate', actorId: 'guard', mode: NpcWitnessMode.reported,
+        ),
+      ],
+    )), throwsFormatException);
+    expect(() => NpcSocialLedger.inspect(world, reviewed(
+      witnesses: [present, present],
+    )), throwsFormatException);
+  });
+
+  test('reviewed NPC memory and trust authoritatively lock decisions/replay',
+      () {
+    final bp = _blueprint();
+    final rules = NpcSocialRulebook(
+      blueprintHash: bp.blueprintHash,
+      requireReviewedWitnesses: true,
+      witnesses: const [
+        NpcSceneWitness(
+          sceneId: 'gate', actorId: 'guard', mode: NpcWitnessMode.present),
+      ],
+      rules: const [
+        NpcSocialRule(
+          memoryId: 'guard_remembers_promise', sceneId: 'gate',
+          choiceId: 'inspect_gate', observerId: 'guard',
+          kind: NpcMemoryKind.promiseReceived,
+          relatedActorId: 'player', relationshipDelta: 10),
+      ],
+      choiceGates: const [
+        NpcSocialChoiceGate(
+          sceneId: 'gate', choiceId: 'walk_market', actorId: 'guard',
+          requiredMemoryId: 'guard_remembers_promise',
+          minimumTrustToPlayer: 10),
+      ],
+    );
+    final world = StoryWorld(bp, socialRulebook: rules);
+    final initialHash = world.state.stateHash;
+    expect(world.choiceLockReason('walk_market'),
+        'condition_not_met:npc_memory');
+    final denied = world.apply(actionId: 'no', choiceId: 'walk_market');
+    expect(denied.status, DecisionStatus.denied);
+    expect(world.state.stateHash, initialHash);
+    expect(world.events, isEmpty);
+    expect(world.apply(actionId: 'witnessed', choiceId: 'inspect_gate').applied,
+        isTrue);
+    expect(world.choiceLockReason('walk_market'), isNull);
+    final checkpoint = world.events.map((event) => event.toJson()).toList();
+    final restored = StoryWorld.replay(bp, checkpoint,
+      socialRulebook: rules,
+      expectedSequence: world.state.revision,
+      expectedStateHash: world.state.stateHash,
+    );
+    expect(restored.choiceLockReason('walk_market'), isNull);
+    expect(restored.state.stateHash, world.state.stateHash);
+    expect(world.apply(actionId: 'to_market', choiceId: 'walk_market').applied,
+        isTrue);
+    final withoutGate = StoryWorld(bp);
+    expect(withoutGate.apply(actionId: 'unearned', choiceId: 'walk_market')
+        .applied, isTrue);
+    expect(() => StoryWorld.replay(bp,
+        withoutGate.events.map((event) => event.toJson()),
+        socialRulebook: rules,
+        expectedSequence: withoutGate.state.revision,
+        expectedStateHash: withoutGate.state.stateHash),
+        throwsFormatException);
+    final tooHigh = NpcSocialRulebook(
+      blueprintHash: bp.blueprintHash,
+      requireReviewedWitnesses: true,
+      witnesses: rules.witnesses,
+      rules: rules.rules,
+      choiceGates: const [
+        NpcSocialChoiceGate(
+          sceneId: 'gate', choiceId: 'walk_market', actorId: 'guard',
+          requiredMemoryId: 'guard_remembers_promise',
+          minimumTrustToPlayer: 11),
+      ],
+    );
+    expect(StoryWorld.replay(bp, checkpoint, socialRulebook: tooHigh)
+        .choiceLockReason('walk_market'), 'condition_not_met:npc_trust');
+  });
+
+  test('NPC departure/return/death are event-sourced, guarded and replayed', () {
+    final raw = jsonDecode(
+        File('../../shared_schemas/fixtures/manor_world_m17.json')
+            .readAsStringSync()) as Map<String, dynamic>;
+    // Isolate the NPC gate from the independent inventory/stat conditions
+    // intentionally present in the general-purpose manor fixture.
+    final gate = (raw['scenes'] as List).cast<Map<String, dynamic>>()
+        .singleWhere((scene) => scene['id'] == 'gate');
+    final hall = (gate['choices'] as List).cast<Map<String, dynamic>>()
+        .singleWhere((choice) => choice['id'] == 'enter_hall');
+    (hall['conditions'] as List).clear();
+    final bp = StoryBlueprint.fromJson(raw);
+    final rules = NpcSocialRulebook(
+      blueprintHash: bp.blueprintHash,
+      requireReviewedWitnesses: true,
+      witnesses: const [
+        NpcSceneWitness(
+          sceneId: 'gate', actorId: 'guard', mode: NpcWitnessMode.present),
+      ],
+      rules: const [
+        NpcSocialRule(
+          memoryId: 'saw_departure', sceneId: 'gate',
+          choiceId: 'inspect_gate', observerId: 'guard',
+          kind: NpcMemoryKind.witnessed),
+      ],
+      choiceGates: const [
+        NpcSocialChoiceGate(
+          sceneId: 'gate', choiceId: 'enter_hall', actorId: 'guard',
+          requiredMemoryId: 'saw_departure'),
+      ],
+      lifeTransitions: const [
+        NpcLifeTransition(
+          sceneId: 'gate', choiceId: 'inspect_gate',
+          actorId: 'guard', nextState: NpcLifeState.absent),
+        NpcLifeTransition(
+          sceneId: 'market', choiceId: 'return_gate',
+          actorId: 'guard', nextState: NpcLifeState.present),
+        NpcLifeTransition(
+          sceneId: 'market', choiceId: 'buy_map',
+          actorId: 'guard', nextState: NpcLifeState.dead),
+      ],
+    );
+    final world = StoryWorld(bp, socialRulebook: rules);
+    expect(NpcSocialLedger.inspect(world, rules).lifeState('guard'),
+        NpcLifeState.present);
+    expect(world.choiceLockReason('enter_hall'),
+        'condition_not_met:npc_memory');
+    expect(world.apply(actionId: 'depart', choiceId: 'inspect_gate').applied,
+        isTrue);
+    final absent = NpcSocialLedger.inspect(world, rules);
+    expect(absent.lifeState('guard'), NpcLifeState.absent);
+    expect(world.choiceLockReason('enter_hall'),
+        'condition_not_met:npc_unavailable');
+    final oldHead = world.events.last.hash;
+    expect(world.apply(actionId: 'depart_again', choiceId: 'inspect_gate')
+        .status, DecisionStatus.denied);
+    expect(world.events.last.hash, oldHead);
+    expect(world.apply(actionId: 'go_to_market', choiceId: 'walk_market')
+        .applied, isTrue);
+    final branch = world.fork();
+    expect(world.apply(actionId: 'returned', choiceId: 'return_gate').applied,
+        isTrue);
+    expect(NpcSocialLedger.inspect(world, rules).lifeState('guard'),
+        NpcLifeState.present);
+    expect(world.choiceLockReason('enter_hall'), isNull);
+    expect(world.apply(actionId: 'market_again', choiceId: 'walk_market')
+        .applied, isTrue);
+    expect(world.choiceLockReason('return_gate'),
+        'condition_not_met:npc_life_transition');
+    expect(world.apply(actionId: 'death', choiceId: 'buy_map').applied,
+        isTrue);
+    expect(NpcSocialLedger.inspect(world, rules).lifeState('guard'),
+        NpcLifeState.dead);
+    expect(world.choiceLockReason('enter_hall'),
+        'condition_not_met:npc_unavailable');
+    final checkpoint = world.events.map((e) => e.toJson()).toList();
+    final replayed = StoryWorld.replay(bp, checkpoint,
+      socialRulebook: rules, expectedSequence: world.state.revision,
+      expectedStateHash: world.state.stateHash);
+    expect(NpcSocialLedger.inspect(replayed, rules).snapshotHash,
+        NpcSocialLedger.inspect(world, rules).snapshotHash);
+    expect(replayed.apply(actionId: 'visit_again', choiceId: 'walk_market')
+        .applied, isTrue);
+    expect(replayed.choiceLockReason('return_gate'),
+        'condition_not_met:npc_life_transition');
+    expect(replayed.choiceLockReason('buy_map'),
+        'condition_not_met:npc_life_transition');
+    // An alternative branch has its OWN event history; return is valid there.
+    expect(branch.apply(actionId: 'different_return', choiceId: 'return_gate')
+        .applied, isTrue);
+    expect(NpcSocialLedger.inspect(branch, rules).lifeState('guard'),
+        NpcLifeState.present);
+    expect(() => StoryWorld.replay(bp, checkpoint,
+        expectedSequence: world.state.revision,
+        expectedStateHash: world.state.stateHash),
+        returnsNormally); // Old, unguarded replay does not imply verified NPC state.
+  });
+
+  test('circular NPC memories cannot deadlock two authored decisions', () {
+    final bp = _blueprint();
+    final rules = NpcSocialRulebook(
+      blueprintHash: bp.blueprintHash,
+      requireReviewedWitnesses: true,
+      witnesses: const [
+        NpcSceneWitness(
+          sceneId: 'gate', actorId: 'guard', mode: NpcWitnessMode.present),
+      ],
+      rules: const [
+        NpcSocialRule(
+          memoryId: 'before_inspect', sceneId: 'gate',
+          choiceId: 'inspect_gate', observerId: 'guard',
+          kind: NpcMemoryKind.witnessed),
+        NpcSocialRule(
+          memoryId: 'after_market', sceneId: 'gate',
+          choiceId: 'walk_market', observerId: 'guard',
+          kind: NpcMemoryKind.witnessed),
+      ],
+      choiceGates: const [
+        NpcSocialChoiceGate(
+          sceneId: 'gate', choiceId: 'inspect_gate', actorId: 'guard',
+          requiredMemoryId: 'after_market'),
+        NpcSocialChoiceGate(
+          sceneId: 'gate', choiceId: 'walk_market', actorId: 'guard',
+          requiredMemoryId: 'before_inspect'),
+      ],
+    );
+    expect(() => StoryWorld(bp, socialRulebook: rules),
+        throwsFormatException);
+  });
+
+  test('NPC item custody is authoritative and event-sourced, no phantom gifts',
+      () {
+    final raw = jsonDecode(
+      File('../../shared_schemas/fixtures/manor_world_m17.json')
+          .readAsStringSync()) as Map<String, dynamic>;
+    final market = (raw['scenes'] as List)
+        .cast<Map<String, dynamic>>()
+        .singleWhere((scene) => scene['id'] == 'market');
+    final choices = (market['choices'] as List)
+        .cast<Map<String, dynamic>>();
+    (choices.singleWhere((c) => c['id'] == 'ask_guard')['effects']
+        as List).add({'op': 'consume_item', 'id': 'map'});
+    (choices.singleWhere((c) => c['id'] == 'return_gate')['effects']
+        as List).add({'op': 'grant_item', 'id': 'map'});
+    final bp = StoryBlueprint.fromJson(raw);
+    final contract = NpcSocialRulebook(
+      blueprintHash: bp.blueprintHash,
+      requireReviewedWitnesses: true,
+      witnesses: const [
+        NpcSceneWitness(
+          sceneId: 'market', actorId: 'guard', mode: NpcWitnessMode.present),
+      ],
+      rules: const [],
+      itemTransfers: const [
+        NpcItemTransfer(
+          sceneId: 'market', choiceId: 'ask_guard', itemId: 'map',
+          fromActorId: 'player', toActorId: 'guard'),
+        NpcItemTransfer(
+          sceneId: 'market', choiceId: 'return_gate', itemId: 'map',
+          fromActorId: 'guard', toActorId: 'player'),
+      ],
+    );
+    final world = StoryWorld(bp, socialRulebook: contract);
+    expect(world.apply(actionId: 'trip1', choiceId: 'walk_market').applied,
+        isTrue);
+    expect(world.choiceLockReason('return_gate'),
+        'condition_not_met:npc_item_owner');
+    expect(world.choiceLockReason('ask_guard'),
+        'condition_not_met:npc_item_owner');
+    expect(world.apply(actionId: 'buy', choiceId: 'buy_map').applied, isTrue);
+    expect(NpcSocialLedger.inspect(world, contract).itemOwner('map'), 'player');
+    expect(world.apply(actionId: 'trip2', choiceId: 'walk_market').applied,
+        isTrue);
+    expect(world.apply(actionId: 'gift', choiceId: 'ask_guard').applied, isTrue);
+    final given = NpcSocialLedger.inspect(world, contract);
+    expect(given.itemOwner('map'), 'guard');
+    expect(given.itemsHeldBy('guard'), ['map']);
+    expect(world.state.inventory, isNot(contains('map')));
+    expect(() => given.itemOwner('missing'), throwsFormatException);
+
+    expect(world.apply(actionId: 'trip3', choiceId: 'walk_market').applied,
+        isTrue);
+    // New "grant_item" while the guard carries the same unique item must
+    // not duplicate ownership or produce a confirmed event.
+    final beforeRevision = world.state.revision;
+    final beforeHead = world.events.last.hash;
+    final forged = world.apply(actionId: 'counterfeit', choiceId: 'buy_map');
+    expect(forged.status, DecisionStatus.denied);
+    expect(forged.reason, 'condition_not_met:npc_item_custody');
+    expect(world.state.revision, beforeRevision);
+    expect(world.events.last.hash, beforeHead);
+    expect(world.apply(actionId: 'return', choiceId: 'return_gate').applied,
+        isTrue);
+    final returned = NpcSocialLedger.inspect(world, contract);
+    expect(returned.itemOwner('map'), 'player');
+    expect(returned.itemsHeldBy('guard'), isEmpty);
+    expect(world.state.inventory, contains('map'));
+    final replay = StoryWorld.replay(
+      bp, world.events.map((event) => event.toJson()),
+      socialRulebook: contract,
+      expectedSequence: world.state.revision,
+      expectedStateHash: world.state.stateHash,
+    );
+    final recovered = NpcSocialLedger.inspect(replay, contract);
+    expect(recovered.itemOwner('map'), 'player');
+    expect(recovered.snapshotHash, returned.snapshotHash);
+
+    final unreviewed = StoryWorld(bp);
+    expect(unreviewed.apply(actionId: 'trip', choiceId: 'walk_market')
+        .applied, isTrue);
+    expect(unreviewed.apply(actionId: 'phantom', choiceId: 'return_gate')
+        .applied, isTrue);
+    expect(() => StoryWorld.replay(
+      bp, unreviewed.events.map((event) => event.toJson()),
+      socialRulebook: contract,
+      expectedSequence: unreviewed.state.revision,
+      expectedStateHash: unreviewed.state.stateHash,
+    ), throwsFormatException);
+  });
+
+  test('rumor is second-hand information, not witnessed promise or trust',
+      () {
+    final bp = _blueprint();
+    final witness = const NpcSceneWitness(
+      sceneId: 'gate', actorId: 'guard', mode: NpcWitnessMode.reported,
+    );
+    final rumor = NpcSocialRulebook(
+      blueprintHash: bp.blueprintHash,
+      requireReviewedWitnesses: true, witnesses: [witness],
+      rules: const [
+        NpcSocialRule(
+          memoryId: 'guard_heard_gossip', sceneId: 'gate',
+          choiceId: 'inspect_gate', observerId: 'guard',
+          kind: NpcMemoryKind.rumorHeard,
+        ),
+      ],
+    );
+    final world = StoryWorld(bp);
+    expect(world.apply(actionId: 'a', choiceId: 'inspect_gate').applied, isTrue);
+    final snapshot = NpcSocialLedger.inspect(world, rumor);
+    expect(snapshot.memoriesFor('guard').single.witnessMode,
+        NpcWitnessMode.reported);
+    expect(snapshot.directedScore('guard', 'player'), 0);
+    final changed = NpcSocialRulebook(
+      blueprintHash: bp.blueprintHash,
+      requireReviewedWitnesses: true,
+      witnesses: const [
+        NpcSceneWitness(
+          sceneId: 'gate', actorId: 'guard', mode: NpcWitnessMode.present,
+        ),
+      ],
+      rules: rumor.rules,
+    );
+    expect(changed.digest, isNot(rumor.digest));
+    final falseTrust = NpcSocialRulebook(
+      blueprintHash: bp.blueprintHash,
+      requireReviewedWitnesses: true, witnesses: [witness],
+      rules: const [
+        NpcSocialRule(
+          memoryId: 'false_trust', sceneId: 'gate',
+          choiceId: 'inspect_gate', observerId: 'guard',
+          kind: NpcMemoryKind.rumorHeard,
+          relatedActorId: 'player', relationshipDelta: 5,
+        ),
+      ],
+    );
+    expect(() => NpcSocialLedger.inspect(world, falseTrust),
+        throwsFormatException);
+  });
+
   test('independent rulebook fingerprint makes changing authored rules visible',
       () {
     final bp = _blueprint();

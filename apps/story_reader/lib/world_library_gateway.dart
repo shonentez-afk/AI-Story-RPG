@@ -90,6 +90,9 @@ class WorldGameView {
     this.statNames = const {}, this.factNames = const {},
     this.sceneNames = const {},
     this.sceneDialogueTurns,
+    this.npcItemOwners = const {},
+    this.npcDisplayNames = const {},
+    this.npcLifeStates = const {},
   });
 
   final String campaignId;
@@ -114,6 +117,12 @@ class WorldGameView {
   final Map<String, String> sceneNames;
   /// Exact, importer-verified speaker turns. Null for older worlds or prose.
   final List<RichDialogueTurn>? sceneDialogueTurns;
+  /// Item -> NPC character_id, derived only from verified committed events.
+  final Map<String, String> npcItemOwners;
+  /// Source-reviewed signed speakers where available; not guessed from names.
+  final Map<String, String> npcDisplayNames;
+  /// Event-replayed NPC life states only for worlds with v5 annotations.
+  final Map<String, String> npcLifeStates;
 }
 
 class WorldChoiceResult {
@@ -191,13 +200,17 @@ class DeviceWorldLibraryGateway implements WorldLibraryGateway {
         savedAt: entry.savedAt,
       );
 
-  static Map<String, dynamic> _verifiedRichPresentation(
+  static ({
+    Map<String, dynamic> presentation,
+    NpcSocialRulebook? social,
+  }) _verifiedRichContent(
       BookworldCampaignStore store, String worldHash) {
     // The store first verifies exact saved ZIP/SQLite. Only the new v3
     // importer can return rich presentation; legacy v1/v2 stay untouched.
     final bytes = store.exportBookworld(worldHash);
     try {
-      return const RichPrivateBookworldImporter().inspect(bytes).presentation;
+      final rich = const RichPrivateBookworldImporter().inspect(bytes);
+      return (presentation: rich.presentation, social: rich.npcSocialRulebook);
     } on FormatException {
       // An invalid v3 NPC review must NEVER be downgraded to raw scene
       // text; that would bypass actor/fact gates and leak sealed dialogue.
@@ -205,20 +218,32 @@ class DeviceWorldLibraryGateway implements WorldLibraryGateway {
       // without a signed rich presentation.
       try {
         const PrivateBookworldImporter().inspect(bytes);
-        return const {};
+        return (presentation: const <String, dynamic>{}, social: null);
       } on FormatException {
         const BookworldImporter().inspect(bytes);
-        return const {};
+        return (presentation: const <String, dynamic>{}, social: null);
       }
     }
   }
 
   static WorldGameView _view(CampaignRecord record,
-      {Map<String, dynamic> presentation = const {}}) {
+      {Map<String, dynamic> presentation = const {},
+       NpcSocialRulebook? socialRules}) {
     final coordinator = record.coordinator;
     final blueprint = coordinator.blueprint;
     final state = coordinator.state;
     final current = blueprint.scenes[coordinator.sceneId]!;
+    // The SQLite store already checked all events. Independently recompute
+    // social memory from the exact replayed head, never from UI labels.
+    final social = socialRules == null ? null : NpcSocialLedger.inspect(
+      StoryWorld.replay(
+        blueprint, coordinator.events.map((event) => event.toJson()),
+        expectedSequence: state.revision,
+        expectedStateHash: state.stateHash,
+        socialRulebook: socialRules,
+      ),
+      socialRules,
+    );
     Map<String, String> names(String field) {
       final value = presentation[field];
       return value is Map<String, dynamic>
@@ -230,6 +255,23 @@ class DeviceWorldLibraryGateway implements WorldLibraryGateway {
     final stats = names('stat_names');
     final facts = names('fact_names');
     final scenes = names('scene_names');
+    final npcDisplayNames = <String, String>{};
+    final allReviewedSpeakers = presentation['scene_dialogue_knowledge'];
+    if (allReviewedSpeakers is Map<String, dynamic>) {
+      for (final turns in allReviewedSpeakers.values) {
+        if (turns is! List) continue;
+        for (final entry in turns) {
+          if (entry is! Map) continue;
+          final actor = entry['actor_id'];
+          final speaker = entry['speaker'];
+          if (actor is String && actor != 'player' &&
+              blueprint.actors.contains(actor) &&
+              speaker is String && speaker.trim().isNotEmpty) {
+            npcDisplayNames.putIfAbsent(actor, () => speaker);
+          }
+        }
+      }
+    }
     // No separate NPC identity or gameplay is trusted here. The v3 importer
     // has already compared each projection to the exact signed scene text.
     // Recheck the currently displayed scene so nothing else can override it.
@@ -250,7 +292,8 @@ class DeviceWorldLibraryGateway implements WorldLibraryGateway {
       // The importer already verified EVERY signed line and reviewed actor ID.
       // Only the replay-verified campaign state decides which words reach UI.
       signedTurns = RichNpcDialogueKnowledge.redact(
-          signedTurns, guards[current.id] as List, state.knowledge);
+          signedTurns, guards[current.id] as List, state.knowledge,
+          social: social);
     }
     final hero = presentation['hero'];
     final heroName = hero is Map<String, dynamic> ? hero['name'] as String? : null;
@@ -260,7 +303,9 @@ class DeviceWorldLibraryGateway implements WorldLibraryGateway {
     // Journal is reconstructed from the committed, replay-verified event log.
     // Actual before/after deltas keep even idempotent effects from being
     // misrepresented as newly acquired items or facts.
-    final playback = presentation.isNotEmpty ? StoryWorld(blueprint) : null;
+    final playback = presentation.isNotEmpty
+        ? StoryWorld(blueprint, socialRulebook: socialRules)
+        : null;
     final journal = <WorldEventView>[];
     for (final event in coordinator.events) {
       final scene = blueprint.scenes[event.sceneId]!;
@@ -269,6 +314,9 @@ class DeviceWorldLibraryGateway implements WorldLibraryGateway {
       final changes = <String>[];
       if (playback != null) {
         final before = playback.state;
+        final beforeLife = socialRules != null &&
+            socialRules.lifeTransitions.isNotEmpty
+            ? NpcSocialLedger.inspect(playback, socialRules) : null;
         final committed = playback.apply(
           actionId: event.actionId,
           choiceId: event.choiceId,
@@ -278,11 +326,38 @@ class DeviceWorldLibraryGateway implements WorldLibraryGateway {
           throw const FormatException('Журнал игры не совпадает с сохранением');
         }
         final after = playback.state;
+        if (beforeLife != null) {
+          final afterLife = NpcSocialLedger.inspect(playback, socialRules!);
+          for (final actor in socialRules.lifeTransitions
+              .map((event) => event.actorId).toSet()) {
+            final previous = beforeLife.lifeState(actor);
+            final current = afterLife.lifeState(actor);
+            if (previous != current) {
+              final label = npcDisplayNames[actor] ?? actor;
+              final stateLabel = switch (current) {
+                NpcLifeState.present => 'вернулся',
+                NpcLifeState.absent => 'ушёл',
+                NpcLifeState.dead => 'погиб',
+              };
+              changes.add('$label: $stateLabel');
+            }
+          }
+        }
+        final reviewedTransfers = socialRules?.itemTransfers.where(
+          (transfer) => transfer.sceneId == event.sceneId &&
+              transfer.choiceId == event.choiceId).toList() ??
+            <NpcItemTransfer>[];
         for (final id in (after.inventory.difference(before.inventory).toList()..sort())) {
-          changes.add('Получено: ' + (items[id] ?? id));
+          final returned = reviewedTransfers.where((transfer) =>
+              transfer.itemId == id && transfer.toActorId == 'player').toList();
+          changes.add((returned.isNotEmpty
+              ? 'Получено от персонажа: ' : 'Получено: ') + (items[id] ?? id));
         }
         for (final id in (before.inventory.difference(after.inventory).toList()..sort())) {
-          changes.add('Использовано: ' + (items[id] ?? id));
+          final given = reviewedTransfers.where((transfer) =>
+              transfer.itemId == id && transfer.fromActorId == 'player').toList();
+          changes.add((given.isNotEmpty
+              ? 'Передано персонажу: ' : 'Использовано: ') + (items[id] ?? id));
         }
         for (final id in (after.stats.keys.toList()..sort())) {
           final amount = after.stats[id]! - before.stats[id]!;
@@ -342,6 +417,20 @@ class DeviceWorldLibraryGateway implements WorldLibraryGateway {
       factNames: facts,
       sceneNames: scenes,
       sceneDialogueTurns: signedTurns,
+      npcItemOwners: Map.unmodifiable({
+        if (social != null)
+          for (final item in blueprint.items)
+            if (social.itemOwner(item) != null &&
+                social.itemOwner(item) != 'player')
+              item: social.itemOwner(item)!,
+      }),
+      npcDisplayNames: Map.unmodifiable(npcDisplayNames),
+      npcLifeStates: Map.unmodifiable({
+        if (social != null && socialRules != null)
+          for (final actor in socialRules.lifeTransitions
+              .map((event) => event.actorId).toSet())
+            actor: social.lifeState(actor).name,
+      }),
     );
   }
 
@@ -372,8 +461,10 @@ class DeviceWorldLibraryGateway implements WorldLibraryGateway {
   Future<WorldGameView> load(String campaignId) =>
       _execute((store) {
         final record = store.loadCampaign(campaignId);
-        return _view(record, presentation: _verifiedRichPresentation(
-          store, record.metadata.worldHash));
+        final rich = _verifiedRichContent(
+          store, record.metadata.worldHash);
+        return _view(record, presentation: rich.presentation,
+            socialRules: rich.social);
       });
 
   @override
@@ -390,8 +481,10 @@ class DeviceWorldLibraryGateway implements WorldLibraryGateway {
     );
     // A complete view is read only after the SQLite transaction returned.
     final record = store.loadCampaign(campaignId);
-    final view = _view(record, presentation: _verifiedRichPresentation(
-      store, record.metadata.worldHash));
+    final rich = _verifiedRichContent(
+      store, record.metadata.worldHash);
+    final view = _view(record, presentation: rich.presentation,
+        socialRules: rich.social);
     return WorldChoiceResult(
       applied: result.applied,
       duplicate: result.status.name == 'duplicate',

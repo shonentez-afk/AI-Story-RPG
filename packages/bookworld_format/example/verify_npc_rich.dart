@@ -19,10 +19,13 @@ void main(List<String> args) {
   }
   final npc = npcIds.single;
   final fact = verified.blueprint.facts.single;
-  final world = StoryWorld(verified.blueprint);
+  final world = StoryWorld(verified.blueprint,
+      socialRulebook: verified.npcSocialRulebook);
   final before = world.apply(actionId: 'early', choiceId: 'help');
+  final expectedLock = verified.npcSocialRulebook?.choiceGates.isNotEmpty == true
+      ? 'condition_not_met:npc_memory' : 'condition_not_met:knows_fact';
   if (before.applied ||
-      before.reason != 'condition_not_met:knows_fact' ||
+      before.reason != expectedLock ||
       world.actorKnowsFact(npc, fact)) {
     throw StateError('NPC learned a fact before its committed event');
   }
@@ -39,11 +42,63 @@ void main(List<String> args) {
     world.events.map((event) => event.toJson()),
     expectedSequence: world.state.revision,
     expectedStateHash: world.state.stateHash,
+    socialRulebook: verified.npcSocialRulebook,
   );
   if (!restored.actorKnowsFact(npc, fact) ||
       restored.factLearningEvents(npc, fact).single.hash !=
           world.events.first.hash) {
     throw StateError('NPC provenance did not survive deterministic replay');
+  }
+  final socialRules = verified.npcSocialRulebook;
+  if (socialRules != null) {
+    if (!socialRules.requireReviewedWitnesses) {
+      throw StateError('Python-built social contract was not reviewed');
+    }
+    final social = NpcSocialLedger.inspect(world, socialRules);
+    final saved = NpcSocialLedger.inspect(restored, socialRules);
+    if (social.directedScore(npc, 'player') != 7 ||
+        social.directedScore('player', npc) != 0 ||
+        social.memoriesFor(npc).length != 1 ||
+        social.memoriesFor(npc).single.witnessMode != NpcWitnessMode.present ||
+        social.snapshotHash != saved.snapshotHash) {
+      throw StateError('Python social witness/replay parity mismatch');
+    }
+  }
+  if (socialRules != null && socialRules.itemTransfers.isNotEmpty) {
+    final custodyWorld = StoryWorld(verified.blueprint,
+        socialRulebook: socialRules);
+    if (custodyWorld.apply(actionId: 'false_return',
+        choiceId: 'return_map').reason !=
+            'condition_not_met:npc_item_owner' ||
+        custodyWorld.apply(actionId: 'initial_gift',
+        choiceId: 'give_map').applied) {
+      throw StateError('NPC fabricated a gift or return without ownership');
+    }
+    if (!custodyWorld.apply(actionId: 'acquire',
+        choiceId: 'wait').applied ||
+        !custodyWorld.apply(actionId: 'give',
+        choiceId: 'give_map').applied ||
+        NpcSocialLedger.inspect(custodyWorld, socialRules)
+            .itemOwner('map') != npc ||
+        custodyWorld.apply(actionId: 'counterfeit',
+        choiceId: 'wait').reason !=
+            'condition_not_met:npc_item_custody' ||
+        !custodyWorld.apply(actionId: 'return',
+        choiceId: 'return_map').applied ||
+        NpcSocialLedger.inspect(custodyWorld, socialRules)
+            .itemOwner('map') != 'player') {
+      throw StateError('NPC ownership transfer was not enforced');
+    }
+    final restoredItems = StoryWorld.replay(
+      verified.blueprint, custodyWorld.events.map((e) => e.toJson()),
+      expectedSequence: custodyWorld.state.revision,
+      expectedStateHash: custodyWorld.state.stateHash,
+      socialRulebook: socialRules,
+    );
+    if (NpcSocialLedger.inspect(restoredItems, socialRules).snapshotHash !=
+        NpcSocialLedger.inspect(custodyWorld, socialRules).snapshotHash) {
+      throw StateError('NPC custody changed after replay');
+    }
   }
   stdout.writeln('Python-built NPC rich-v3 passed independent Dart replay.');
 }
