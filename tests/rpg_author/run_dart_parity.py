@@ -18,6 +18,7 @@ from tools.rpg_author.common import AuthoringError
 from tools.rpg_author.validate import candidate_blueprint
 from tests.rpg_author.fixtures import source, story, TEXT, analysis
 from tests.rpg_author.fixtures_rich import enrichment
+from tests.rpg_author.test_npc_review import reviewed_fixture, ACTOR, FACT
 from tools.rpg_author.rich_package import compile_rich_from_project
 from tools.rpg_author import project
 from tools.rpg_author.legacy_package import compile_from_project
@@ -191,6 +192,29 @@ def main():
         assert alternative["stats"]["insight"] == 2
         assert alternative["journal"] == ["leave_rope", "go_for_help"]
         assert alternative["restart_ok"] and alternative["save_import_ok"] and alternative["fork_ok"]
+        # E6f: the EXTERNAL Python author must emit a v5 NPC world that
+        # the actual Dart importer and SQLite replay understand. No fake
+        # social data, main engine modification, network or real book here.
+        reviewed_enrichment, reviewed_npc = reviewed_fixture()
+        npc_bytes, _ = compile_rich_from_project(
+            checkpoint, reviewed_enrichment, npc_review=reviewed_npc)
+        npc_world = dart({
+            "operation": "rich_private",
+            "data": base64.b64encode(npc_bytes).decode("ascii"),
+            "paths": [["take_rope", "rescue"], ["leave_rope", "go_for_help"]],
+        })
+        assert npc_world["private_only"] and npc_world["v2_rejected_v3"]
+        assert npc_world["archive_sha256"] == digest(npc_bytes)
+        assert npc_world["journeys"][0]["replay_ok"]
+        assert npc_world["journeys"][1]["replay_ok"]
+        npc_save = dart({
+            "operation": "rich_campaign",
+            "data": base64.b64encode(npc_bytes).decode("ascii"),
+            "path": ["take_rope", "rescue"],
+        })
+        assert npc_save["revision"] == 2
+        assert npc_save["restart_ok"] and npc_save["save_import_ok"]
+        assert npc_save["fork_ok"]
         # Verify Python -> Dart -> SQLite on both real flag-only routes.
         plain = enrichment()
         plain["items"] = {}
@@ -233,7 +257,8 @@ def main():
                       "rich_v3_state_replayed_in_two_routes": True,
                       "legacy_v2_rejects_v3": True,
                       "rich_v3_sqlite_restart_fork_portable_save": True,
-                      "rich_v3_empty_catalogs_dart_sqlite": True}))
+                      "rich_v3_empty_catalogs_dart_sqlite": True,
+                      "external_reviewed_npc_social_v5_dart_sqlite": True}))
 
 
 if __name__ == "__main__":
