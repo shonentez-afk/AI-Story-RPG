@@ -461,10 +461,12 @@ void main() {
       userConfirmedPrivateAdaptation: true,
     );
     final excerpt = eligible.first.source;
+    final nameAt = excerpt.quote.indexOf('Артем');
+    expect(nameAt, greaterThanOrEqualTo(0));
     final mention = SourceEvidence.propose(index,
         chunkId: excerpt.chunkId, kind: EvidenceKind.character,
-        startUtf16: excerpt.startUtf16,
-        endUtf16: excerpt.startUtf16 + 5);
+        startUtf16: excerpt.startUtf16 + nameAt,
+        endUtf16: excerpt.startUtf16 + nameAt + 5);
     expect(mention.label, 'Артем');
     var graph = SourceEvidenceGraph.empty(index).addAll(index, [mention]);
     graph = graph.review(index, mention.id, EvidenceStatus.confirmed);
@@ -520,7 +522,7 @@ void main() {
         contains(arc.secondSceneId));
     final report = StoryCampaignCausalAudit.inspect(
       blueprint: imported.blueprint,
-      socialRules: imported.npcSocialRulebook,
+      socialRulebook: imported.npcSocialRulebook,
       requiredChoiceIds: arc.requiredChoiceIds,
     );
     expect(report.status, CampaignCausalStatus.playable);
@@ -549,8 +551,13 @@ void main() {
         expect(listening.state.knowledge['player'], isEmpty);
         expect(listening.choices.singleWhere(
             (choice) => choice.id == arc.replyChoiceId).enabled, true);
+        final standAloneWorld = StoryWorld(imported.blueprint,
+            socialRulebook: imported.npcSocialRulebook);
+        expect(standAloneWorld.apply(
+            actionId: 'social_witness', choiceId: arc.listenChoiceId
+        ).applied, true);
         final social = NpcSocialLedger.inspect(
-            listening, imported.npcSocialRulebook!);
+            standAloneWorld, imported.npcSocialRulebook!);
         expect(social.hasMemory(role.characterId, BookwideNpcArc.memoryId),
             true);
         expect(social.directedScore(role.characterId, 'player'),

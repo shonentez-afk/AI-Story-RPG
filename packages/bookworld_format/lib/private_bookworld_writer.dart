@@ -569,8 +569,7 @@ class RichPrivateBookworldWriter {
     final playerLine = review['player_line'];
     final npcLine = review['npc_line'];
     if (name is! String || playerLine is! String || npcLine is! String ||
-        !RegExp(r'^[А-ЯЁA-Z][А-Яа-яЁёA-Za-z0-9 .-]{0,49}
-,
+        !RegExp(r'^[А-ЯЁA-Z][А-Яа-яЁёA-Za-z0-9 .-]{0,49}$',
             unicode: true).hasMatch(name) ||
         playerLine.isEmpty || npcLine.isEmpty ||
         playerLine.length > 250 || npcLine.length > 250 ||
@@ -592,8 +591,7 @@ class RichPrivateBookworldWriter {
       final id = review[key];
       final digest = review[quote];
       if (id is! String || digest is! String ||
-          !RegExp(r'^[a-f0-9]{64}
-).hasMatch(digest)) {
+          !RegExp(r'^[a-f0-9]{64}$').hasMatch(digest)) {
         throw const FormatException('Некорректная ссылка на встречу NPC.');
       }
       final original = origins[id];
