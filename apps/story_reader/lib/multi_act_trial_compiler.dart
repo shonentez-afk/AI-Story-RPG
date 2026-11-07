@@ -284,40 +284,44 @@ class MultiActTrialCompiler {
           'Непроверенная связь между актами не может считаться каноном.');
     }
 
-    // M2h7b: replay every possible act route independently. An accepted
-    // GAME_FICTION obligation may exist only after its accepting action;
-    // refusal must not unlock later performance of an unmade promise.
-    // This is a private game-state audit, NOT a claim about book meaning.
-    final promiseRules = <BranchContinuityRule>[];
-    for (var i = 0; i < draft.parts.length; i++) {
-      final prefix = 'act_' + (i + 1).toString() + '_';
-      final accepted = plan.flags.where((flag) =>
-          flag.startsWith(prefix) && flag.endsWith('_accepted')).toList();
-      if (accepted.length != 1) {
-        throw const FormatException(
-            'Не найдено однозначное состояние принятия игрового условия.');
+    // M2h7b: legacy per-act promise ledgers remain EXACTLY unchanged for
+    // old 2..6 act .bworld files. On >6 acts the three local process flags
+    // are reused: a global unique-grant ledger would falsely reject them.
+    // The BookwideCampaignContract ABOVE instead enforces the exact scoped
+    // grant/require/forbid for EVERY act, verifies both bridge resets, then
+    // the REAL imported StoryWorld BELOW proves all executable paths.
+    if (draft.parts.length <= 6) {
+      final promiseRules = <BranchContinuityRule>[];
+      for (var i = 0; i < draft.parts.length; i++) {
+        final prefix = 'act_' + (i + 1).toString() + '_';
+        final accepted = plan.flags.where((flag) =>
+            flag.startsWith(prefix) && flag.endsWith('_accepted')).toList();
+        if (accepted.length != 1) {
+          throw const FormatException(
+              'Не найдено однозначное состояние принятия игрового условия.');
+        }
+        promiseRules.add(BranchContinuityRule(
+          id: prefix + 'promise_gate',
+          sourceFingerprint: index.sourceFingerprint,
+          kind: ContinuityLedgerKind.promise,
+          subjectId: 'player',
+          resourceId: prefix + 'fictional_offer',
+          sourceEventId: draft.parts[i].setupEventId,
+          stateFlag: accepted.single,
+          grantDecisionId: prefix + 'accept_offer',
+          protectedDecisionIds: [prefix + 'honor_condition'],
+          refusalDecisionIds: [prefix + 'refuse_offer'],
+          reviewedAsGameFiction: true,
+        ));
       }
-      promiseRules.add(BranchContinuityRule(
-        id: prefix + 'promise_gate',
-        sourceFingerprint: index.sourceFingerprint,
-        kind: ContinuityLedgerKind.promise,
-        subjectId: 'player',
-        resourceId: prefix + 'fictional_offer',
-        sourceEventId: draft.parts[i].setupEventId,
-        stateFlag: accepted.single,
-        grantDecisionId: prefix + 'accept_offer',
-        protectedDecisionIds: [prefix + 'honor_condition'],
-        refusalDecisionIds: [prefix + 'refuse_offer'],
-        reviewedAsGameFiction: true,
-      ));
-    }
-    final continuityCheck = BranchContinuityAuditor.audit(
-      index: index, book: book, plan: plan, rules: promiseRules);
-    if (!continuityCheck.passedFormalStateAudit ||
-        continuityCheck.verifiesBookMeaning ||
-        continuityCheck.canPublishCanonicalRpg) {
-      throw const FormatException('Игровое обязательство возникает '
-          'без согласия, после отказа или без проверенного состояния.');
+      final continuityCheck = BranchContinuityAuditor.audit(
+        index: index, book: book, plan: plan, rules: promiseRules);
+      if (!continuityCheck.passedFormalStateAudit ||
+          continuityCheck.verifiesBookMeaning ||
+          continuityCheck.canPublishCanonicalRpg) {
+        throw const FormatException('Игровое обязательство возникает '
+            'без согласия, после отказа или без проверенного состояния.');
+      }
     }
 
     // Page order is not historical world time. Keep all inferred act-to-act

@@ -395,6 +395,11 @@ void main() {
         expect(db.loadCampaign(campaign).coordinator.sceneId,
             'act_5_source_encounter');
         expect(db.loadCampaign(campaign).metadata.revision, 16);
+        final boundaryState = db.loadCampaign(campaign).coordinator.state;
+        expect(boundaryState.flags['act_1_original_outcome'], isTrue);
+        expect(boundaryState.flags['act_4_original_outcome'], isTrue);
+        expect(boundaryState.flags[
+            BookwideStoryPlanComposer.rollingAccepted], isFalse);
       } finally {
         db.close();
       }
@@ -402,6 +407,8 @@ void main() {
       try {
         expect(db.loadCampaign(campaign).coordinator.sceneId,
             'act_5_source_encounter');
+        expect(db.loadCampaign(campaign).coordinator.state
+            .flags['act_1_original_outcome'], isTrue);
         for (var act = 5; act <= 8; act++) {
           for (final id in [
             'act_${act}_examine_source',

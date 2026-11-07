@@ -100,6 +100,57 @@ class BookwideCampaignContract {
       }
       source[part.setupEventId] = accept.id;
       source[part.outcomeEventId] = honor.id;
+
+      if (rolling) {
+        // A shared process flag may be granted again in the NEXT act only
+        // after both incoming bridges reset it. Within THIS act, only
+        // accept_offer grants accepted; only refuse_offer grants declined.
+        // honor_condition must therefore imply this act's real consent.
+        final refusals = first.decisions.where(
+            (d) => d.id == prefix + 'refuse_offer').toList();
+        final search = scenes[prefix + 'search_path'];
+        final discovery = scenes[prefix + 'discovery_path'];
+        final explores = search?.decisions.where(
+            (d) => d.id == prefix + 'explore').toList();
+        final uses = discovery?.decisions.where(
+            (d) => d.id == prefix + 'use_discovery').toList();
+        if (refusals == null || refusals.length != 1 ||
+            explores == null || explores.length != 1 ||
+            uses == null || uses.length != 1 ||
+            !accept.adds.contains(BookwideStoryPlanComposer.rollingAccepted) ||
+            !refusals.single.adds.contains(
+                BookwideStoryPlanComposer.rollingDeclined) ||
+            refusals.single.adds.contains(
+                BookwideStoryPlanComposer.rollingAccepted) ||
+            !honor.requires.contains(
+                BookwideStoryPlanComposer.rollingAccepted) ||
+            !honor.forbids.contains(
+                BookwideStoryPlanComposer.rollingDeclined) ||
+            !explores.single.adds.contains(
+                BookwideStoryPlanComposer.rollingDiscovered) ||
+            !uses.single.requires.contains(
+                BookwideStoryPlanComposer.rollingDiscovered)) {
+          throw const FormatException(
+              'Временное обещание акта не защищено условиями решения.');
+        }
+        for (final scene in scenes.values.where(
+            (s) => s.id.startsWith(prefix))) {
+          for (final choice in scene.decisions) {
+            if ((choice.id != accept.id &&
+                 choice.adds.contains(
+                     BookwideStoryPlanComposer.rollingAccepted)) ||
+                (choice.id != refusals.single.id &&
+                 choice.adds.contains(
+                     BookwideStoryPlanComposer.rollingDeclined)) ||
+                (choice.id != explores.single.id &&
+                 choice.adds.contains(
+                     BookwideStoryPlanComposer.rollingDiscovered))) {
+              throw const FormatException(
+                  'Чужое действие присваивает временное состояние акта.');
+            }
+          }
+        }
+      }
       final entryId = scenes.containsKey(prefix + 'source_encounter')
           ? prefix + 'source_encounter' : part.entrySituationId;
       entries.add(entryId);

@@ -549,14 +549,6 @@ class _MultiActTrialPageState extends State<MultiActTrialPage> {
                 '; игровых ситуаций: ' +
                 activePlan.situations.length.toString() + '.'),
             const SizedBox(height: 8),
-            Text('Перед запуском проверим ' +
-                (count * 2 + _interactiveEvents.length).toString() +
-                ' исходных игровых решений (включая опорные) и ' +
-                (2 * (count - 1)).toString() +
-                ' переходов между актами по реальным путям движка. '
-                'Это не подтверждение литературного канона.',
-                key: const Key('multiact-campaign-executable-contract')),
-            const SizedBox(height: 8),
             const Text('Это приватная ПРОБНАЯ игровая адаптация, '
                 'НЕ полный сюжет книги и НЕ подтверждённый канон. '
                 'Между частями используются придуманные переходы; '
@@ -669,6 +661,14 @@ class _MultiActTrialPageState extends State<MultiActTrialPage> {
               ),
               onChanged: (value) => setState(() => _heroName = value),
             ),
+            const SizedBox(height: 8),
+            Text('Перед запуском проверим ' +
+                (count * 2 + _interactiveEvents.length).toString() +
+                ' исходных игровых решений (включая опорные) и ' +
+                (2 * (count - 1)).toString() +
+                ' переходов между актами по реальным путям движка. '
+                'Это не подтверждение литературного канона.',
+                key: const Key('multiact-campaign-executable-contract')),
             const SizedBox(height: 8),
             ExpansionTile(
               // Keep this editorial drawer expanded when the long ListView
