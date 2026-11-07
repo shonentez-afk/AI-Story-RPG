@@ -69,10 +69,26 @@ class _MultiActTrialPageState extends State<MultiActTrialPage> {
     ]);
   }
 
+  // All reviews and previews must bind the SAME effective plan as the game.
+  CrossActContinuityDraft? _currentReviewedContinuity() {
+    if (!_enforceEarlierOutcome) return null;
+    return CrossActConsequenceGate.applyReviewedActChain(
+      index: widget.index, book: widget.book, bookMap: widget.bookMap,
+      draft: widget.draft, userConfirmedFictionalContinuity: true,
+    );
+  }
+
   Future<void> _chooseGameplay() async {
     if (_working || !_reviewed || !_privateFiction ||
-        _enforceEarlierOutcome || _unchangedReview != null ||
-        !widget.draft.formalRulesPassed) return;
+        _unchangedReview != null || !widget.draft.formalRulesPassed) return;
+    CrossActContinuityDraft? continuity;
+    try {
+      continuity = _currentReviewedContinuity();
+    } catch (error) {
+      if (mounted) setState(() =>
+          _error = 'Не проверены последствия всех актов: $error');
+      return;
+    }
     // M2h8d1 is deliberately bounded to SIX short, exact source excerpts.
     // Larger multi-act source sets require a separate consented batch.
     final sample = _reviewEvents.take(6).toList(growable: false);
@@ -82,7 +98,7 @@ class _MultiActTrialPageState extends State<MultiActTrialPage> {
       builder: (_) => SourceLockedGameplayReviewPage(
         index: widget.index,
         book: widget.book,
-        plan: widget.draft.plan,
+        plan: continuity?.plan ?? widget.draft.plan,
         exactEventIds: [for (final e in sample) e.id],
       ),
     ));
@@ -96,13 +112,20 @@ class _MultiActTrialPageState extends State<MultiActTrialPage> {
 
   Future<void> _chooseWholeGameplay() async {
     if (_working || !_reviewed || !_privateFiction ||
-        _enforceEarlierOutcome || _unchangedReview != null ||
-        !widget.draft.formalRulesPassed) return;
+        _unchangedReview != null || !widget.draft.formalRulesPassed) return;
+    CrossActContinuityDraft? continuity;
+    try {
+      continuity = _currentReviewedContinuity();
+    } catch (error) {
+      if (mounted) setState(() =>
+          _error = 'Не проверены последствия всех актов: $error');
+      return;
+    }
     final selection = await Navigator.of(context)
         .push<SelectedWholePlanGameplayCandidates>(MaterialPageRoute(
       builder: (_) => WholePlanGameplayBatchPage(
         index: widget.index, book: widget.book,
-        plan: widget.draft.plan,
+        plan: continuity?.plan ?? widget.draft.plan,
       ),
     ));
     if (!mounted || selection == null) return;
@@ -116,8 +139,7 @@ class _MultiActTrialPageState extends State<MultiActTrialPage> {
   Future<void> _start() async {
     if (!_reviewed || !_privateFiction || _working) return;
     if (_enforceEarlierOutcome &&
-        (_reviewedProse.isNotEmpty || _gameplaySelection != null ||
-         _wholeGameplaySelection != null || _recheckedRepair != null)) {
+        (_reviewedProse.isNotEmpty || _recheckedRepair != null)) {
       setState(() => _error = 'Подтверждённые художественные сцены '
           'относятся к прежней версии игрового плана. '
           'Снимите дополнительное правило или удалите '
@@ -143,16 +165,7 @@ class _MultiActTrialPageState extends State<MultiActTrialPage> {
     }
     setState(() { _working = true; _error = null; });
     try {
-      CrossActContinuityDraft? continuity;
-      if (_enforceEarlierOutcome) {
-        continuity = CrossActConsequenceGate.applyReviewedActChain(
-          index: widget.index,
-          book: widget.book,
-          bookMap: widget.bookMap,
-          draft: widget.draft,
-          userConfirmedFictionalContinuity: true,
-        );
-      }
+      final continuity = _currentReviewedContinuity();
       final compiled = await MultiActTrialCompiler.compile(
         index: widget.index,
         book: widget.book,
@@ -180,7 +193,7 @@ class _MultiActTrialPageState extends State<MultiActTrialPage> {
             currentRichBookworld: compiled.archive,
             index: widget.index,
             book: widget.book,
-            plan: widget.draft.plan,
+            plan: continuity?.plan ?? widget.draft.plan,
             manifest: selection.manifest,
             proposals: selection.drafts,
             selectedUserReviewNotes: selection.selectedUserReviewNotes,
@@ -191,7 +204,7 @@ class _MultiActTrialPageState extends State<MultiActTrialPage> {
             currentRichBookworld: compiled.archive,
             index: widget.index,
             book: widget.book,
-            plan: widget.draft.plan,
+            plan: continuity?.plan ?? widget.draft.plan,
             context: selection.context,
             proposals: selection.draft,
             selectedUserReviewNotes: selection.selectedUserReviewNotes,
@@ -481,7 +494,7 @@ class _MultiActTrialPageState extends State<MultiActTrialPage> {
             OutlinedButton.icon(
               key: const Key('multiact-trial-optional-gameplay'),
               onPressed: valid && _reviewed && _privateFiction &&
-                  !_enforceEarlierOutcome && _recheckedRepair == null &&
+                  _recheckedRepair == null &&
                   _unchangedReview == null
                   ? _chooseGameplay : null,
               icon: const Icon(Icons.inventory_2_outlined),
@@ -495,7 +508,7 @@ class _MultiActTrialPageState extends State<MultiActTrialPage> {
             OutlinedButton.icon(
               key: const Key('multiact-trial-whole-gameplay-batch'),
               onPressed: valid && _reviewed && _privateFiction &&
-                  !_enforceEarlierOutcome && _recheckedRepair == null &&
+                  _recheckedRepair == null &&
                   _unchangedReview == null
                   ? () async {
                 await _chooseWholeGameplay();
@@ -504,14 +517,16 @@ class _MultiActTrialPageState extends State<MultiActTrialPage> {
               label: const Text('Предложения по всему сюжету '
                   '(пакетная обработка)'),
             ),
-            const Text('Пакеты используют все привязанные к игровым '
-                'решениям цитаты, сохраняя прогресс на устройстве. '
-                'Модельные предложения не добавляются в игру без '
-                'отдельного выбора и второго подтверждения.'),
+            const Text('Предметы и знания проверяются против ТОЙ ЖЕ '
+                'редакции сюжета, включая последствия между актами. '
+                'Предложения старой версии нельзя использовать повторно '
+                'без проверки. Облачные запросы и игровые эффекты '
+                'требуют отдельного согласия.'),
             const SizedBox(height: 8),
             OutlinedButton.icon(
               key: const Key('multiact-trial-whole-literary-review'),
-              onPressed: valid && !_working ? () async {
+              onPressed: valid && !_working && !_enforceEarlierOutcome
+                  ? () async {
                 final result = await Navigator.of(context)
                     .push<Object>(
                   MaterialPageRoute(
@@ -521,12 +536,6 @@ class _MultiActTrialPageState extends State<MultiActTrialPage> {
                       approvedRules: StoryCausalContract(
                         decisionInvariants: [
                           ...widget.draft.causalContract.decisionInvariants,
-                          if (_enforceEarlierOutcome)
-                            StoryDecisionInvariant(
-                              id: 'reviewed_cross_act_fictional_gate',
-                              decisionId: 'act_2_accept_offer',
-                              requires: const ['act_1_original_outcome'],
-                            ),
                         ],
                         knowledgeGates:
                             widget.draft.causalContract.knowledgeGates,
@@ -568,6 +577,10 @@ class _MultiActTrialPageState extends State<MultiActTrialPage> {
               icon: const Icon(Icons.fact_check_outlined),
               label: const Text('Проверить всю логику сюжета через ИИ'),
             ),
+            if (_enforceEarlierOutcome)
+              const Text('Литературный отчёт базового плана нельзя '
+                  'переиспользовать после изменения правил всех актов. '
+                  'Для этой редакции нужна новая отдельная проверка.'),
             const Text('Независимо проверяются все достижимые решения. '
                 'Если ошибок не найдено, можно отдельно принять '
                 'исходный частный черновик; если ошибки исправимы — '

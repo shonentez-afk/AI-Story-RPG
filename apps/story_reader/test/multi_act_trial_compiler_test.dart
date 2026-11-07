@@ -1229,6 +1229,117 @@ void main() {
     }
   });
 
+  test('reviewed gameplay item and cross-act choice restriction compile '
+      'together, reject stale consent and survive SQLite replay', () async {
+    final index = _index();
+    final book = await _analyze(index);
+    final setup = _draft(index, book);
+    final continuity = CrossActConsequenceGate.applyReviewedActChain(
+      index: index, book: book, bookMap: setup.map, draft: setup.draft,
+      userConfirmedFictionalContinuity: true,
+    );
+    final context = SourceLockedGameplayContext.forPlan(
+      index: index, book: book, plan: continuity.plan,
+      exactEventIds: setup.eventIds.toList(),
+    );
+    final first = context.choices.singleWhere(
+        (choice) => choice.choiceId == 'act_1_accept_offer');
+    final ring = GameplayCandidate(
+      kind: 'item', id: 'source_ring', label: 'кольцо',
+      op: 'grant_item', sceneId: first.sceneId, choiceId: first.choiceId,
+      sourceEventId: first.sourceEventId,
+      uncertainty: 'Это только вымышленная игровая награда по цитате.',
+    );
+    final proposals = GameplayCandidateDraft(
+      sourceFingerprint: context.sourceFingerprint,
+      approvalDigest: context.approvalDigest,
+      candidates: [ring],
+    );
+    final notes = {
+      ReviewedGameplayCompiler.signature(ring):
+          'Разрешаю выдачу игрового кольца в частной версии, '
+          'но не объявляю владение оригинальным каноном.',
+    };
+    final base = await MultiActTrialCompiler.compile(
+      index: index, book: book, bookMap: setup.map, draft: setup.draft,
+      continuity: continuity,
+      sourceEventIdsReviewedByUser: setup.eventIds,
+      privateUseConfirmed: true, fictionalTrialAcknowledged: true,
+    );
+    expect(() => ReviewedGameplayCompiler.preview(
+      currentRichBookworld: base.archive,
+      index: index, book: book, plan: setup.draft.plan,
+      context: context, proposals: proposals,
+      selectedUserReviewNotes: notes,
+    ), throwsFormatException); // The pre-continuity plan is NOT consented.
+    final approval = ReviewedGameplayCompiler.preview(
+      currentRichBookworld: base.archive,
+      index: index, book: book, plan: continuity.plan,
+      context: context, proposals: proposals,
+      selectedUserReviewNotes: notes,
+    );
+    expect((approval.shownReview['effects'] as List), hasLength(1));
+    final archive = await ReviewedGameplayCompiler.compileAfterUserConfirmation(
+      preview: approval, currentRichBookworld: base.archive,
+      index: index, explicitlyConfirmedPrivateGameFiction: true,
+      approvedReviewDigest: approval.approvalDigest,
+    );
+    final inspected = const RichPrivateBookworldImporter().inspect(archive);
+    expect(inspected.presentation['item_names'],
+        containsPair('source_ring', 'кольцо'));
+    final folder = await Directory.systemTemp.createTemp('linked-item-');
+    try {
+      var store = BookworldCampaignStore.openPrivateDirectory(folder.path);
+      late String accepted, rejected;
+      try {
+        final installed = store.installBookworld(archive);
+        accepted = store.createCampaign(installed.archiveHash);
+        rejected = store.createCampaign(installed.archiveHash);
+        expect(store.commitChoice(accepted, actionId: 'pick_ring',
+            choiceId: 'act_1_accept_offer',
+            expectedRevision: 0).applied, true);
+        expect(store.loadCampaign(accepted).coordinator.state.inventory,
+            contains('source_ring'));
+        expect(store.commitChoice(accepted, actionId: 'finish_first',
+            choiceId: 'act_1_honor_condition',
+            expectedRevision: 1).applied, true);
+        expect(store.commitChoice(accepted, actionId: 'next_original',
+            choiceId: 'act_1_continue_original',
+            expectedRevision: 2).applied, true);
+        expect(store.loadCampaign(accepted).coordinator.choices.any((c) =>
+            c.id == 'act_2_accept_offer' && c.enabled), true);
+        for (final (n, choice) in [
+          'act_1_refuse_offer', 'act_1_explore',
+          'act_1_use_discovery', 'act_1_end_alternative',
+          'act_1_continue_alternative',
+        ].indexed) {
+          expect(store.commitChoice(rejected,
+              actionId: 'reject_' + n.toString(), choiceId: choice,
+              expectedRevision: n).applied, true);
+        }
+        expect(store.loadCampaign(rejected).coordinator.choices.any((c) =>
+            c.id == 'act_2_accept_offer' && c.enabled), false);
+        expect(store.loadCampaign(rejected).coordinator.state.inventory,
+            isNot(contains('source_ring')));
+      } finally {
+        store.close();
+      }
+      store = BookworldCampaignStore.openPrivateDirectory(folder.path);
+      try {
+        expect(store.loadCampaign(accepted).coordinator.state.inventory,
+            contains('source_ring'));
+        expect(store.loadCampaign(accepted).coordinator.choices.any((c) =>
+            c.id == 'act_2_accept_offer' && c.enabled), true);
+        expect(store.loadCampaign(rejected).coordinator.choices.any((c) =>
+            c.id == 'act_2_accept_offer' && c.enabled), false);
+      } finally {
+        store.close();
+      }
+    } finally {
+      await folder.delete(recursive: true);
+    }
+  });
+
   test('four source-anchored acts create MORE THAN one six-citation GLM '
       'window with no loss of late-book references', () async {
     final index = BookSourceIndexer.index(ImportedBook(
