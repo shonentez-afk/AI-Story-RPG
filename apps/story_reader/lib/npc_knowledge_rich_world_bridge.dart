@@ -200,7 +200,7 @@ class NpcKnowledgeRichWorldBridge {
     final socialRules = reviewedNpcSocial == null ? null :
         RichNpcSocialContract.inspect(
           {...provenance, 'npc_social': reviewedNpcSocial},
-          {'npc_social_format': RichNpcSocialContract.format},
+          {'npc_social_format': reviewedNpcSocial['format']},
           world,
         );
     RichNpcDialogueKnowledge.validate(
