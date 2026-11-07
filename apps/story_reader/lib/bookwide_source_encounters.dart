@@ -49,8 +49,13 @@ class BookwideSourceEncounters {
 
   // Source observations must stay bounded by the SAME StoryPlan/BookWorld
   // runtime and finite-state audit as the rest of the game.
-  static const maxReviewedEvents = 48;
-  static const maxReviewedEventsPerAct = 8;
+  // Each act is bounded independently; the existing 192-scene and
+  // finite-state validators remain authoritative for the complete world.
+  static const maxReviewedEventsPerAct = 24;
+  static const maxComposedScenes = 192;
+
+  static int remainingSceneCapacity(StoryPlan plan) =>
+      maxComposedScenes - plan.situations.length;
 
   /// Candidate events in one source-validated act, apart from its 2 anchors.
   /// Book text order is not a claim about the in-world chronology.
@@ -92,7 +97,7 @@ class BookwideSourceEncounters {
   }) {
     if (reviewedEventIds.isEmpty) return plan;
     if (!userConfirmedPrivateAdaptation ||
-        reviewedEventIds.length > maxReviewedEvents ||
+        reviewedEventIds.length > remainingSceneCapacity(plan) ||
         reviewedEventIds.length >
             draft.parts.length * maxReviewedEventsPerAct ||
         index.sourceFingerprint != book.sourceFingerprint ||
@@ -214,6 +219,29 @@ class BookwideSourceEncounters {
           ],
         ));
       }
+    }
+    // Per-act boundary contract: a source encounter must advance to the
+    // next approved event or to the original entry for the same act.
+    final byScene = {for (final s in updatedScenes) s.id: s};
+    for (final act in selected.keys) {
+      final events = selected[act]!;
+      for (var j = 0; j < events.length; j++) {
+        final scene = byScene[encounterId(act, j)];
+        final destination = j + 1 < events.length
+            ? encounterId(act, j + 1)
+            : draft.parts[act].entrySituationId;
+        if (scene == null || scene.sourceEventId != events[j].id ||
+            scene.decisions.length != 2 ||
+            scene.decisions.any((d) => d.nextSituationId != destination) ||
+            !byScene.containsKey(destination)) {
+          throw const FormatException(
+              'Нарушена проверенная граница акта или цепочка событий.');
+        }
+      }
+    }
+    if (updatedScenes.length > maxComposedScenes ||
+        updatedScenes.map((s) => s.id).toSet().length != updatedScenes.length) {
+      throw const FormatException('Слишком много сцен или повторён ID сцены.');
     }
     final result = StoryPlan(
       sourceFingerprint: plan.sourceFingerprint,

@@ -236,9 +236,10 @@ class _MultiActTrialPageState extends State<MultiActTrialPage> {
       final groupCount = eligible.where((e) => next.contains(e.id)).length;
       if (!next.contains(eventId) &&
           (groupCount >= BookwideSourceEncounters.maxReviewedEventsPerAct ||
-           next.length >= BookwideSourceEncounters.maxReviewedEvents)) {
+           next.length >= BookwideSourceEncounters.remainingSceneCapacity(
+               widget.draft.plan))) {
         setState(() => _error =
-            'Лимит маршрута: восемь событий на акт и 48 всего. '
+            'Достигнута вместимость акта или игрового мира. '
             'Остальные остаются в отчёте о покрытии.');
         return;
       }
@@ -259,7 +260,8 @@ class _MultiActTrialPageState extends State<MultiActTrialPage> {
       available += events.length;
       for (final event in events.take(
           BookwideSourceEncounters.maxReviewedEventsPerAct)) {
-        if (selected.length >= BookwideSourceEncounters.maxReviewedEvents) {
+        if (selected.length >= BookwideSourceEncounters.remainingSceneCapacity(
+                widget.draft.plan)) {
           break;
         }
         selected.add(event.id);
@@ -670,9 +672,8 @@ class _MultiActTrialPageState extends State<MultiActTrialPage> {
                   _interactiveEvents.length.toString() +
                   '; до ' +
                   BookwideSourceEncounters.maxReviewedEventsPerAct.toString() +
-                  ' событий на акт, не более ' +
-                  BookwideSourceEncounters.maxReviewedEvents.toString() +
-                  ' всего. '
+                  ' событий на акт. Общего лимита 48 нет; '
+                  'действуют проверки границ актов и вместимости мира. '
                   'Это настоящие интерактивные выборы, но смысл и '
                   'хронология литературного оригинала не доказаны.'),
               children: [

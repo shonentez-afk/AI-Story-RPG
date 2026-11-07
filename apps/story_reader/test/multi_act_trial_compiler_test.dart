@@ -1833,6 +1833,10 @@ void main() {
     expect(augmented.situations.length,
         ready.draft.plan.situations.length + 4);
     expect(augmented.validate(book).isStructurallySound, true);
+    expect(BookwideSourceEncounters.maxReviewedEventsPerAct, greaterThan(8));
+    expect(BookwideSourceEncounters.remainingSceneCapacity(
+        ready.continuity.plan),
+        192 - ready.continuity.plan.situations.length);
     final actionable =
         BookwideSourceEncounters.executableChoicesForReviewedEvents(
       plan: augmented, reviewedEventIds: extras,
