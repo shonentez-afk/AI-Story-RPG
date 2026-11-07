@@ -93,6 +93,21 @@ class _MultiActTrialPageState extends State<MultiActTrialPage> {
       if (!mounted) return;
       setState(() {
         _eligibleHeroes = roles;
+        // A deleted/renamed/rebound NPC cannot remain selected merely
+        // because the old dropdown value is still in local UI state.
+        if (_selectedNpcRole != null && !roles.any((role) =>
+            role.characterId == _selectedNpcRole!.characterId &&
+            role.groupDigest == _selectedNpcRole!.groupDigest &&
+            role.displayName == _selectedNpcRole!.displayName)) {
+          _selectedNpcRole = null;
+          _reviewedNpcArc = false;
+          _reviewed = false;
+          _gameplaySelection = null;
+          _wholeGameplaySelection = null;
+          _reviewedProse.clear();
+          _recheckedRepair = null;
+          _unchangedReview = null;
+        }
         if (_selectedHeroRole != null && !roles.any((r) =>
             r.characterId == _selectedHeroRole!.characterId &&
             r.groupDigest == _selectedHeroRole!.groupDigest &&
@@ -216,7 +231,10 @@ class _MultiActTrialPageState extends State<MultiActTrialPage> {
 
   // Preview binds the SAME plan used for model consent, ZIP and SQLite.
   // Compilation independently checks the actual private-use consent.
-  StoryPlan _effectivePlan({CrossActContinuityDraft? continuity}) {
+  StoryPlan _effectivePlan({
+    CrossActContinuityDraft? continuity,
+    bool includeNpc = true,
+  }) {
     final source = BookwideSourceEncounters.attach(
       index: widget.index, book: widget.book, bookMap: widget.bookMap,
       draft: widget.draft,
@@ -226,7 +244,7 @@ class _MultiActTrialPageState extends State<MultiActTrialPage> {
       userConfirmedPrivateAdaptation: true,
     );
     final rolePlan = _selectedHeroRole?.bindTo(source, widget.book) ?? source;
-    final npcArc = _reviewedNpcArc
+    final npcArc = includeNpc && _reviewedNpcArc
         ? BookwideNpcArc.review(
             index: widget.index, book: widget.book, plan: rolePlan,
             role: _selectedNpcRole!, privateFictionConfirmed: true,
@@ -573,8 +591,14 @@ class _MultiActTrialPageState extends State<MultiActTrialPage> {
   Widget build(BuildContext context) {
     final events = _reviewEvents;
     final count = widget.draft.parts.length;
-    final activePlan =
-        _effectivePlan(continuity: _currentReviewedContinuity());
+    final reviewedContinuity = _currentReviewedContinuity();
+    final activePlan = _effectivePlan(continuity: reviewedContinuity);
+    // Check availability on the SAME source/hero plan BEFORE the NPC
+    // overlay adds its own contact flag. Otherwise a selected arc would
+    // incorrectly disable its checkbox and could never be unchecked.
+    final npcPreviewPlan = _reviewedNpcArc
+        ? _effectivePlan(continuity: reviewedContinuity, includeNpc: false)
+        : activePlan;
     final roleOpportunity = _selectedHeroRole == null ? null :
         ReviewedHeroSourceAction.find(
           index: widget.index, book: widget.book,
@@ -586,7 +610,7 @@ class _MultiActTrialPageState extends State<MultiActTrialPage> {
         _selectedNpcRole?.characterId != _selectedHeroRole?.characterId) {
       try {
         npcAvailable = BookwideNpcArc.review(
-          index: widget.index, book: widget.book, plan: activePlan,
+          index: widget.index, book: widget.book, plan: npcPreviewPlan,
           role: _selectedNpcRole!, privateFictionConfirmed: true,
           playerLine: _npcPlayerLine, npcLine: _npcReplyLine,
         );
@@ -782,7 +806,8 @@ class _MultiActTrialPageState extends State<MultiActTrialPage> {
                 CheckboxListTile(
                   key: const Key('multiact-reviewed-npc-arc'),
                   value: _reviewedNpcArc,
-                  onChanged: !_working && npcAvailable != null
+                  onChanged: !_working &&
+                          (npcAvailable != null || _reviewedNpcArc)
                       ? (value) => setState(() {
                           _reviewedNpcArc = value == true;
                           _reviewed = false;
