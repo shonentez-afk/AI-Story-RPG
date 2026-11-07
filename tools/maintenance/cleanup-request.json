@@ -1,9 +1,11 @@
 {
-  "request": "2026-11-08-owner-requested-storage-cleanup",
+  "request": "2026-11-08-finish-owner-requested-test-tag-cleanup",
   "repository": "shonentez-afk/AI-Story-RPG",
-  "keep_complete_test_releases": 3,
-  "keep_successful_artifact_copies_per_active_branch": 2,
-  "preserve": ["main", "open PR branches", "active runs", "unknown report artifacts", "CI 979", "CI 975", "latest successful external author checks"],
-  "delete_tags_only_with_obsolete_test_release_and_reachable_commit": true,
+  "scope": "verified_historical_test_tags",
+  "expected_tags": {
+    "test-build-258": "7532667f8497b001a65ee01c108d1e6811b2b158",
+    "test-build-260": "180e32995e71e609fe303cad6db927f0420ed239"
+  },
+  "require_no_release_and_commit_ancestor_of_main": true,
   "schedule": null
 }

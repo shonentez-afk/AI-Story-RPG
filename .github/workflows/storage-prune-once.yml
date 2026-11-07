@@ -1,7 +1,7 @@
 name: User-requested safe RPG storage cleanup
 
-# No schedule and no main push trigger. This request is explicitly authorized
-# by the repository owner in chat; later source changes do not retrigger it.
+# No schedule or main push trigger. Only a newly changed, owner-approved
+# request marker may initiate cleanup; ordinary development never does.
 on:
   push:
     branches: [feature/p0-bookwide-gameplay-readiness-20261107]
@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
     inputs:
       confirm:
-        description: 'Delete obsolete runs, duplicate artifacts and old test releases/tags'
+        description: 'Execute the exact cleanup scope recorded in cleanup-request.json'
         type: boolean
         default: false
         required: true
@@ -36,12 +36,12 @@ jobs:
         with:
           persist-credentials: false
       - name: Test retention rules before any deletion
-        run: python3 -m unittest discover -s tools/maintenance -p 'test_prune.py' -v
-      - name: Apply owner-requested cleanup with protected baselines
+        run: python3 -m unittest discover -s tools/maintenance -p 'test_*.py' -v
+      - name: Apply exact owner-requested cleanup scope
         env:
           GH_TOKEN: ${{ github.token }}
           PYTHONUNBUFFERED: '1'
-        run: python3 tools/maintenance/prune.py --apply
+        run: python3 tools/maintenance/execute_request.py
       - name: Preserve exact deletion audit, including partial failures
         if: always()
         uses: actions/upload-artifact@v4
