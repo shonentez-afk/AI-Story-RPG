@@ -60,6 +60,8 @@ def parser():
     final.add_argument("--project", required=True, type=Path)
     final.add_argument("--enrichment", required=True, type=Path)
     final.add_argument("--review", required=True, type=Path)
+    final.add_argument("--npc-review", type=Path,
+                       help="Private source-locked, explicitly confirmed NPC social v1-v5 overlay")
     final.add_argument("--output", required=True, type=Path)
     final.add_argument("--report", type=Path)
     final.add_argument("--dialogues", type=Path)
@@ -73,6 +75,8 @@ def parser():
                                  help="Build source-checked rich private v3 game and attribution")
     richer.add_argument("--project", required=True, type=Path)
     richer.add_argument("--enrichment", required=True, type=Path)
+    richer.add_argument("--npc-review", type=Path,
+                        help="Optional separately reviewed NPC witnesses, memories, items and life")
     richer.add_argument("--output", required=True, type=Path)
     richer.add_argument("--model-id", choices=["gpt-6"], default=None)
     richer_check = commands.add_parser("verify", aliases=["verify-rich"],
@@ -136,7 +140,8 @@ def main(argv=None) -> int:
                               args.output, dialogues=args.dialogues,
                               question_inventory_path=args.question_inventory,
                               no_interactive_questions=args.no_interactive_questions,
-                              report_path=args.report)
+                              report_path=args.report,
+                              npc_review_path=args.npc_review)
         elif name == "build-legacy":
             from .legacy_package import build_legacy
             result = build_legacy(args.project, args.output,
@@ -147,7 +152,8 @@ def main(argv=None) -> int:
             result = verify_bundle(args.input, args.attribution)
         elif name in ("build", "build-rich"):
             result = project.build(args.project, args.enrichment, args.output,
-                                   model_id=args.model_id)
+                                   model_id=args.model_id,
+                                   npc_review_path=args.npc_review)
         elif name in ("verify", "verify-rich"):
             from .rich_package import verify_rich_bundle
             result = verify_rich_bundle(args.input, args.attribution)
