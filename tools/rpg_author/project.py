@@ -247,7 +247,9 @@ def export_candidate(root: Path, output: Path) -> dict:
 
 
 def build(root: Path, enrichment_path: Path, output: Path,
-          *, model_id: str | None = None):
+          *, model_id: str | None = None,
+          npc_review_path: Path | None = None):
     """Default output is the current rich v3 contract, with actual AI attribution."""
     from .rich_package import build_rich
-    return build_rich(root, enrichment_path, output, model_id=model_id)
+    return build_rich(root, enrichment_path, output,
+                      model_id=model_id, npc_review_path=npc_review_path)
