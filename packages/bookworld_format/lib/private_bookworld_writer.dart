@@ -675,8 +675,6 @@ class RichPrivateBookworldWriter {
       'witnesses': [
         {'scene_id': firstId, 'actor_id': actor, 'mode': 'present',
          'source_quote_sha256': firstQuote},
-        {'scene_id': secondId, 'actor_id': actor, 'mode': 'present',
-         'source_quote_sha256': secondQuote},
       ],
       'rules': [
         {
