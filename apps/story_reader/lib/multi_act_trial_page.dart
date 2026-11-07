@@ -788,6 +788,12 @@ class _MultiActTrialPageState extends State<MultiActTrialPage> {
                     _npcPlayerLine = value;
                     _reviewedNpcArc = false;
                     _reviewed = false;
+                    _gameplaySelection = null;
+                    _wholeGameplaySelection = null;
+                    _reviewedProse.clear();
+                    _unchangedReview = null;
+                    _recheckedRepair = null;
+                    _error = null;
                   }),
                 ),
                 TextFormField(
@@ -801,6 +807,12 @@ class _MultiActTrialPageState extends State<MultiActTrialPage> {
                     _npcReplyLine = value;
                     _reviewedNpcArc = false;
                     _reviewed = false;
+                    _gameplaySelection = null;
+                    _wholeGameplaySelection = null;
+                    _reviewedProse.clear();
+                    _unchangedReview = null;
+                    _recheckedRepair = null;
+                    _error = null;
                   }),
                 ),
                 CheckboxListTile(
