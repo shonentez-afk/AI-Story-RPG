@@ -14,6 +14,7 @@ import io
 import stat
 import zipfile
 import hashlib
+import json
 import re
 
 from tools.bookworld import bookworld as legacy
@@ -129,15 +130,18 @@ def _exact_scene_dialogue(text):
     }
 
 
-def _presentation(meta, bp, social=None):
+def _presentation(meta, bp, social=None, origins=None):
     expected = {"hero", "item_names", "item_descriptions",
                 "stat_names", "fact_names", "scene_names"}
     has_dialogues = type(meta) is dict and "scene_dialogues" in meta
     has_npc_review = type(meta) is dict and "scene_dialogue_knowledge" in meta
+    has_responses = type(meta) is dict and "scene_dialogue_responses" in meta
     if has_dialogues:
         expected.add("scene_dialogues")
     if has_npc_review:
         expected.add("scene_dialogue_knowledge")
+    if has_responses:
+        expected.add("scene_dialogue_responses")
     _keys(meta, expected, "presentation")
     _keys(meta["hero"], {"name", "description"}, "hero")
     if not _txt(meta["hero"]["name"], 120) or \
@@ -190,7 +194,9 @@ def _presentation(meta, bp, social=None):
                 required = {"turn_index", "speaker", "actor_id",
                             "required_fact_ids"}
                 extra = {"required_social_memory_id",
-                         "minimum_trust_to_player"}
+                         "minimum_trust_to_player",
+                         "required_prior_choice_id", "source_quote_sha256",
+                         "private_fiction_confirmed"}
                 if type(entry) is not dict or not required.issubset(entry) or \
                         set(entry).difference(required | extra):
                     fail("NPC spoken line has unreviewed social fields")
@@ -224,9 +230,173 @@ def _presentation(meta, bp, social=None):
                                     rule["relationship_delta"] > 0
                                     for rule in social["rules"]):
                         fail("Unreviewed NPC trust dialogue prerequisite")
+
+                # All three keys are one explicit private-fiction gate.
+                # A source quote grounds an earlier event but NEVER proves
+                # that the NPC spoke the generated words in the book.
+                has_prior = "required_prior_choice_id" in entry
+                has_quote = "source_quote_sha256" in entry
+                has_consent = "private_fiction_confirmed" in entry
+                if has_prior or has_quote or has_consent:
+                    prior = entry.get("required_prior_choice_id")
+                    quote = entry.get("source_quote_sha256")
+                    if not (has_prior and has_quote and has_consent) or \
+                            entry.get("private_fiction_confirmed") is not True or \
+                            actor == "player" or \
+                            type(prior) is not str or type(quote) is not str or \
+                            len(quote) != 64 or \
+                            any(c not in "0123456789abcdef" for c in quote):
+                        fail("Unapproved causal NPC line")
+                    producers = [
+                        (scene, choice)
+                        for scene in bp["scenes"]
+                        for choice in scene["choices"]
+                        if choice["id"] == prior
+                    ]
+                    producer_scene, producer = (
+                        producers[0] if len(producers) == 1 else (None, None)
+                    )
+                    origin_by_id = {
+                        src["scene_id"]: src for src in (origins or [])
+                    }
+                    source = origin_by_id.get(
+                        producer_scene["id"] if producer_scene else None)
+                    target = origin_by_id.get(scene_id)
+                    scene_graph = {
+                        scene["id"]: [
+                            choice["next_scene_id"] for choice in scene["choices"]
+                        ] for scene in bp["scenes"]
+                    }
+                    reachable = False
+                    if producer is not None:
+                        todo, seen_scenes = [producer["next_scene_id"]], set()
+                        while todo:
+                            point = todo.pop()
+                            if point == scene_id:
+                                reachable = True
+                                break
+                            if point not in seen_scenes:
+                                seen_scenes.add(point)
+                                todo.extend(scene_graph.get(point, []))
+                    if source is None or target is None or \
+                            producer_scene["id"] == scene_id or \
+                            not reachable or \
+                            source["origin"] != "SOURCE_PASSAGE" or \
+                            source["chapter_index"] > target["chapter_index"] or \
+                            not any(
+                                ref["quote_sha256"] == quote and
+                                ref["visible_after_chapter"] <=
+                                source["chapter_index"]
+                                for ref in source["source_refs"]
+                            ) or not all(
+                                {"op": "learn_fact", "id": fact, "actor": actor}
+                                in producer["effects"] for fact in facts
+                            ):
+                        fail("Causal NPC line lacks a source-bound learning event")
                 seen.add(index)
             if seen != set(spoken):
                 fail("Incomplete reviewed NPC dialogue turns")
+
+    _npc_dialogue_responses(meta, bp, social, origins)
+
+
+def _npc_dialogue_responses(meta, bp, social, origins):
+    groups = meta.get("scene_dialogue_responses")
+    if groups is None:
+        return  # old signed rich-v3 world remains compatible
+    if type(groups) is not dict or not 1 <= len(groups) <= 48 or \
+            type(meta.get("scene_dialogues")) is not dict or \
+            type(meta.get("scene_dialogue_knowledge")) is not dict or \
+            bp["rights_status"] != "private_adaptation":
+        fail("NPC response metadata needs complete signed review")
+    scenes = {scene["id"]: scene for scene in bp["scenes"]}
+    origin_map = {o["scene_id"]: o for o in origins}
+    for scene_id, rows in groups.items():
+        scene = scenes.get(scene_id)
+        origin = origin_map.get(scene_id)
+        reviews = meta["scene_dialogue_knowledge"].get(scene_id)
+        if not scene or scene_id not in meta["scene_dialogues"] or \
+                type(reviews) is not list or \
+                not origin or origin["origin"] != "SOURCE_PASSAGE" or \
+                type(rows) is not list or \
+                not 2 <= len(scene["choices"]) <= 16 or \
+                len(rows) != len(scene["choices"]) or scene["terminal"]:
+            fail("NPC responses need signed source dialogue and choices")
+        turns = meta["scene_dialogues"][scene_id]["turns"]
+        actors = set()
+        for review in reviews:
+            i = review["turn_index"]
+            if type(i) is not int or i < 0 or i >= len(turns) or \
+                    turns[i]["speaker"] != review["speaker"]:
+                fail("NPC response speaker review changed")
+            if review["actor_id"] != "player":
+                actors.add(review["actor_id"])
+        if not actors:
+            fail("NPC reply lacks permanent interlocutor")
+        outcomes = set()
+        for choice in scene["choices"]:
+            memories = sorted([
+                [rule["observer_id"], rule["memory_id"],
+                 rule["relationship_delta"], rule["related_actor_id"]]
+                for rule in (social or {}).get("rules", [])
+                if rule["scene_id"] == scene_id and
+                   rule["choice_id"] == choice["id"]
+            ], key=lambda row: str(row))
+            signature = {
+                "next": choice["next_scene_id"],
+                "effects": [
+                    [effect["op"], effect.get("id"), effect.get("actor"),
+                     effect.get("amount"), effect.get("value")]
+                    for effect in choice["effects"]
+                ],
+                "npc_memories": memories,
+            }
+            outcomes.add(json.dumps(signature, sort_keys=True,
+                                    separators=(",", ":"), ensure_ascii=False))
+        if len(outcomes) < 2:
+            fail("NPC reply choices have identical outcomes")
+        used = set()
+        for row in rows:
+            expected = {"choice_id", "interlocutor_id", "player_line",
+                        "source_quote_sha256", "private_fiction_confirmed"}
+            if type(row) is not dict or set(row) != expected:
+                fail("Unknown NPC reply fields")
+            choice = row["choice_id"]
+            actor = row["interlocutor_id"]
+            line = row["player_line"]
+            quote = row["source_quote_sha256"]
+            if type(choice) is not str or choice in used or \
+                    choice not in {c["id"] for c in scene["choices"]} or \
+                    type(actor) is not str or actor not in actors or \
+                    re.fullmatch(r"npc_[0-9a-f]{32}", actor) is None or \
+                    type(line) is not str or not 4 <= len(line) <= 220 or \
+                    line.strip() != line or \
+                    any(c in line for c in ('«', '»', '"')) or \
+                    any(ord(c) < 32 or ord(c) == 127 for c in line) or \
+                    type(quote) is not str or \
+                    re.fullmatch(r"[0-9a-f]{64}", quote) is None or \
+                    row["private_fiction_confirmed"] is not True:
+                fail("Unapproved or forged NPC reply line")
+            if not any(ref["quote_sha256"] == quote and
+                       ref["chapter_index"] <= origin["chapter_index"] and
+                       ref["visible_after_chapter"] <= origin["chapter_index"]
+                       for ref in origin["source_refs"]):
+                fail("NPC reply is not source-bound")
+            if social is not None:
+                if not any(w["scene_id"] == scene_id and
+                           w["actor_id"] == actor and w["mode"] == "present"
+                           for w in social["witnesses"]):
+                    fail("NPC reply lacks signed eyewitness presence")
+                if any(e["actor_id"] == actor
+                       for e in social.get("life_transitions", [])) and \
+                        not any(g["scene_id"] == scene_id and
+                                g["choice_id"] == choice and
+                                g["actor_id"] == actor
+                                for g in social.get("choice_gates", [])):
+                    fail("NPC life-state dialogue needs core choice gate")
+            used.add(choice)
+        if used != {c["id"] for c in scene["choices"]}:
+            fail("Unreviewed NPC reply option")
 
 
 def _check_rule(rule, bp, effect):
@@ -907,7 +1077,8 @@ def _provenance(prov, bp):
         fail("Wrong rich provenance format")
     _model(prov["model_provenance"])
     _npc_social(prov, bp)
-    _presentation(prov["presentation"], bp, prov.get("npc_social"))
+    _presentation(prov["presentation"], bp, prov.get("npc_social"),
+                  prov["scene_origins"])
     _npc_knowledge(prov, bp)
     if "npc_knowledge" in prov and "gameplay_review" in prov:
         fail("NPC grant review and gameplay review must be unified")

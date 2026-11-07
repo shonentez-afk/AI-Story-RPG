@@ -2,8 +2,12 @@ import 'package:bookworld_format/bookworld_format.dart';
 
 import 'book_source_index.dart';
 import 'bookwide_act_planner.dart';
+import 'bookwide_campaign_contract.dart';
+import 'bookwide_npc_arc.dart';
 import 'bookwide_storyplan_composer.dart';
+import 'bookwide_source_encounters.dart';
 import 'branch_continuity_auditor.dart';
+import 'compiled_campaign_causal_gate.dart';
 import 'source_world_time_auditor.dart';
 import 'source_bound_bridge_auditor.dart';
 import 'cross_act_consequence_gate.dart';
@@ -16,6 +20,8 @@ import 'source_semantic_editorial_review.dart';
 import 'story_plan.dart';
 import 'story_plan_trial_compiler.dart';
 import 'reviewed_prose_scene_overlay.dart';
+import 'reviewed_hero_role.dart';
+import 'reviewed_hero_source_action.dart';
 import 'whole_story_literary_bounded_repair.dart';
 import 'whole_story_literary_unchanged_approval.dart';
 
@@ -36,8 +42,59 @@ class MultiActTrialCompiler {
     required Set<String> sourceEventIdsReviewedByUser,
     required bool privateUseConfirmed,
     required bool fictionalTrialAcknowledged,
+    /// UI-only name of the player protagonist; never guesses an NPC identity.
+    String heroName = 'Игрок',
+    /// An existing human-reviewed permanent character_id, never an
+    /// identity guessed from names. Its flag becomes real story_core state.
+    ReviewedHeroRole? selectedHeroRole,
+    /// A source-anchored, opt-in ROLE -> OBSERVE -> RECALL sequence.
+    /// Does not give player any NPC secrets or literary claims.
+    bool reviewedHeroSourceAction = false,
+    /// Explicit, source-checked and user-reviewed NPC meeting, never canon.
+    ReviewedHeroRole? npcEncounterRole,
+    bool reviewedNpcEncounter = false,
+    String npcPlayerLine = '',
+    String npcReplyLine = '',
+    /// Explicit source-event observations; each is shown before consent.
+    Set<String> reviewedInteractiveEventIds = const {},
     List<ReviewedProseSceneApproval> reviewedProse = const [],
   }) async {
+    if (reviewedNpcEncounter &&
+        (npcEncounterRole == null ||
+         npcEncounterRole.sourceFingerprint != index.sourceFingerprint ||
+         npcEncounterRole.characterId == selectedHeroRole?.characterId)) {
+      throw const FormatException(
+          'Нужна отдельная подтверждённая личность NPC, не персонаж игрока.');
+    }
+    if (reviewedNpcEncounter &&
+        (unchangedReview != null || recheckedRepair != null ||
+         reviewedProse.isNotEmpty)) {
+      throw const FormatException(
+          'Диалог NPC меняет сюжет; старый литературный отзыв нужно снять.');
+    }
+    if (reviewedHeroSourceAction && selectedHeroRole == null) {
+      throw const FormatException(
+          'Ролевое действие требует проверенного постоянного character_id.');
+    }
+    if (reviewedHeroSourceAction &&
+        (unchangedReview != null || recheckedRepair != null ||
+         reviewedProse.isNotEmpty)) {
+      throw const FormatException(
+          'Старое литературное согласование не покрывает новые '
+          'ролевые игровые действия.');
+    }
+    if (selectedHeroRole != null &&
+        (selectedHeroRole.sourceFingerprint != index.sourceFingerprint ||
+         selectedHeroRole.displayName != heroName)) {
+      throw const FormatException(
+          'Имя и постоянная личность героя не совпали с проверенной картой.');
+    }
+    if (heroName.isEmpty || heroName.length > 90 ||
+        heroName.trim() != heroName ||
+        RegExp(r'[\x00-\x1f\x7f]').hasMatch(heroName)) {
+      throw const FormatException(
+          'Имя героя должно быть подтверждено и не длиннее 90 символов.');
+    }
     if (!privateUseConfirmed || !fictionalTrialAcknowledged) {
       throw const FormatException(
           'Подтвердите частный характер игры и то, что '
@@ -59,6 +116,12 @@ class MultiActTrialCompiler {
     // g2b repaired-plan evidence and a clean UNCHANGED review are mutually
     // exclusive. The latter must not silently carry over to changed
     // causal rules, artwork/prose or interactive effects.
+    if (reviewedInteractiveEventIds.isNotEmpty &&
+        (unchangedReview != null || recheckedRepair != null ||
+         reviewedProse.isNotEmpty)) {
+      throw const FormatException(
+          'Рецензия для старого плана не действует для новых игровых сцен.');
+    }
     if (unchangedReview != null) {
       if (recheckedRepair != null || continuity != null ||
           reviewedProse.isNotEmpty) {
@@ -81,7 +144,34 @@ class MultiActTrialCompiler {
             'Художественные правки для старого плана нужно подтвердить заново.');
       }
     }
-    final plan = recheckedRepair?.draft ?? continuity?.plan ?? draft.plan;
+    final basePlan =
+        recheckedRepair?.draft ?? continuity?.plan ?? draft.plan;
+    // Source events become optional, persisted, source-backed choices in the
+    // very SAME StoryPlan sent to gameplay proposals, audits and the writer.
+    final sourcePlan = BookwideSourceEncounters.attach(
+      index: index, book: book, bookMap: bookMap,
+      draft: draft, plan: basePlan,
+      reviewedEventIds: reviewedInteractiveEventIds,
+      userConfirmedPrivateAdaptation: fictionalTrialAcknowledged,
+    );
+    final rolePlan = selectedHeroRole == null ? sourcePlan :
+        selectedHeroRole.bindTo(sourcePlan, book);
+    final npcArc = reviewedNpcEncounter ? BookwideNpcArc.review(
+      index: index, book: book, plan: rolePlan,
+      role: npcEncounterRole!, privateFictionConfirmed: true,
+      playerLine: npcPlayerLine, npcLine: npcReplyLine,
+    ) : null;
+    if (reviewedNpcEncounter && npcArc == null) {
+      throw const FormatException(
+          'В двух выбранных событиях нет проверенной встречи с NPC.');
+    }
+    final npcPlan = npcArc?.attach(rolePlan, book) ?? rolePlan;
+    final plan = reviewedHeroSourceAction
+        ? ReviewedHeroSourceAction.attach(
+            index: index, book: book, plan: npcPlan,
+            role: selectedHeroRole!,
+            explicitlyConfirmedPrivateGameFiction: fictionalTrialAcknowledged)
+        : npcPlan;
     if (continuity != null &&
         (!continuity.hasEnforcedContinuity ||
          continuity.audit.counterexamples.isNotEmpty ||
@@ -115,11 +205,23 @@ class MultiActTrialCompiler {
         throw const FormatException('Повторно использована исходная цитата.');
       }
     }
+    for (final id in reviewedInteractiveEventIds) {
+      if (!expected.add(id)) {
+        throw const FormatException('Повторно использована исходная цитата.');
+      }
+    }
     if (sourceEventIdsReviewedByUser.length != expected.length ||
         !sourceEventIdsReviewedByUser.containsAll(expected)) {
       throw const FormatException(
           'Перед запуском нужно проверить все исходные цитаты актов.');
     }
+    // One acceptance for every source anchor, reviewed encounter, and both
+    // act-bridge choices. The importer and StoryWorld audit prove execution.
+    final campaignContract = BookwideCampaignContract.fromPlan(
+      book: book, draft: draft, plan: plan,
+      reviewedInteractiveEventIds: reviewedInteractiveEventIds,
+    );
+
     // Confirm quoted SOURCE WORDS ONLY; this is not independent acceptance of
     // a character's claims, causal relations, knowledge or world chronology.
     final byId = {for (final e in book.events) e.id: e};
@@ -211,40 +313,44 @@ class MultiActTrialCompiler {
           'Непроверенная связь между актами не может считаться каноном.');
     }
 
-    // M2h7b: replay every possible act route independently. An accepted
-    // GAME_FICTION obligation may exist only after its accepting action;
-    // refusal must not unlock later performance of an unmade promise.
-    // This is a private game-state audit, NOT a claim about book meaning.
-    final promiseRules = <BranchContinuityRule>[];
-    for (var i = 0; i < draft.parts.length; i++) {
-      final prefix = 'act_' + (i + 1).toString() + '_';
-      final accepted = plan.flags.where((flag) =>
-          flag.startsWith(prefix) && flag.endsWith('_accepted')).toList();
-      if (accepted.length != 1) {
-        throw const FormatException(
-            'Не найдено однозначное состояние принятия игрового условия.');
+    // M2h7b: legacy per-act promise ledgers remain EXACTLY unchanged for
+    // old 2..6 act .bworld files. On >6 acts the three local process flags
+    // are reused: a global unique-grant ledger would falsely reject them.
+    // The BookwideCampaignContract ABOVE instead enforces the exact scoped
+    // grant/require/forbid for EVERY act, verifies both bridge resets, then
+    // the REAL imported StoryWorld BELOW proves all executable paths.
+    if (draft.parts.length <= 6) {
+      final promiseRules = <BranchContinuityRule>[];
+      for (var i = 0; i < draft.parts.length; i++) {
+        final prefix = 'act_' + (i + 1).toString() + '_';
+        final accepted = plan.flags.where((flag) =>
+            flag.startsWith(prefix) && flag.endsWith('_accepted')).toList();
+        if (accepted.length != 1) {
+          throw const FormatException(
+              'Не найдено однозначное состояние принятия игрового условия.');
+        }
+        promiseRules.add(BranchContinuityRule(
+          id: prefix + 'promise_gate',
+          sourceFingerprint: index.sourceFingerprint,
+          kind: ContinuityLedgerKind.promise,
+          subjectId: 'player',
+          resourceId: prefix + 'fictional_offer',
+          sourceEventId: draft.parts[i].setupEventId,
+          stateFlag: accepted.single,
+          grantDecisionId: prefix + 'accept_offer',
+          protectedDecisionIds: [prefix + 'honor_condition'],
+          refusalDecisionIds: [prefix + 'refuse_offer'],
+          reviewedAsGameFiction: true,
+        ));
       }
-      promiseRules.add(BranchContinuityRule(
-        id: prefix + 'promise_gate',
-        sourceFingerprint: index.sourceFingerprint,
-        kind: ContinuityLedgerKind.promise,
-        subjectId: 'player',
-        resourceId: prefix + 'fictional_offer',
-        sourceEventId: draft.parts[i].setupEventId,
-        stateFlag: accepted.single,
-        grantDecisionId: prefix + 'accept_offer',
-        protectedDecisionIds: [prefix + 'honor_condition'],
-        refusalDecisionIds: [prefix + 'refuse_offer'],
-        reviewedAsGameFiction: true,
-      ));
-    }
-    final continuityCheck = BranchContinuityAuditor.audit(
-      index: index, book: book, plan: plan, rules: promiseRules);
-    if (!continuityCheck.passedFormalStateAudit ||
-        continuityCheck.verifiesBookMeaning ||
-        continuityCheck.canPublishCanonicalRpg) {
-      throw const FormatException('Игровое обязательство возникает '
-          'без согласия, после отказа или без проверенного состояния.');
+      final continuityCheck = BranchContinuityAuditor.audit(
+        index: index, book: book, plan: plan, rules: promiseRules);
+      if (!continuityCheck.passedFormalStateAudit ||
+          continuityCheck.verifiesBookMeaning ||
+          continuityCheck.canPublishCanonicalRpg) {
+        throw const FormatException('Игровое обязательство возникает '
+            'без согласия, после отказа или без проверенного состояния.');
+      }
     }
 
     // Page order is not historical world time. Keep all inferred act-to-act
@@ -287,7 +393,9 @@ class MultiActTrialCompiler {
     };
     final scenes = <DraftScene>[];
     for (final scene in plan.situations) {
-      final sourceScene = sourceSceneIds.contains(scene.id);
+      final sourceScene = sourceSceneIds.contains(scene.id) ||
+          (scene.sourceEventId != null &&
+           reviewedInteractiveEventIds.contains(scene.sourceEventId));
       final reference = sourceScene ? citations[scene.sourceEventId] : null;
       final claimId = sourceScene
           ? claimForEvent[scene.sourceEventId] : null;
@@ -346,17 +454,51 @@ class MultiActTrialCompiler {
     // format. No forced/fabricated items, stats, knowledge or cloud calls.
     final archive = await compileReviewedRichPrivateBookworldInWorker(
         index, evidence, catalog, editorial, intermediate,
+        heroName: heroName,
         sceneTitles: {
           for (final scene in plan.situations) scene.id: scene.goal,
-        });
+        },
+        reviewedNpcArc: npcArc?.writerReview);
     final inspected = const RichPrivateBookworldImporter().inspect(archive);
     if (inspected.sourceFingerprint != index.sourceFingerprint ||
         inspected.requiresNetwork ||
         inspected.canDistributePublicly ||
         inspected.blueprint.scenes.length != scenes.length ||
-        inspected.blueprint.scenes.length < 14) {
+        inspected.blueprint.scenes.length < 14 ||
+        inspected.presentation['hero'] is! Map ||
+        (inspected.presentation['hero'] as Map)['name'] != heroName ||
+        (selectedHeroRole != null &&
+         inspected.blueprint.initial.flags[
+             selectedHeroRole.playerIdentityFlag] != true) ||
+        (reviewedHeroSourceAction &&
+         !inspected.blueprint.initial.flags.containsKey(
+             ReviewedHeroSourceAction.observedFlag)) ||
+        (npcArc != null &&
+         (!inspected.blueprint.actors.contains(npcArc.role.characterId) ||
+          inspected.npcSocialRulebook == null))) {
       throw const FormatException(
           'Частный многоактовый пакет не прошёл независимую проверку.');
+    }
+    // Final pass on the EXACT independently imported world, not on a
+    // convenient graph of StoryPlan situations. Reject reachable softlocks
+    // and structurally connected but impossible endings before installation.
+    final campaignReport = CompiledCampaignCausalGate.verify(
+      blueprint: inspected.blueprint,
+      socialRules: inspected.npcSocialRulebook,
+      requiredChoiceIds: [
+        ...campaignContract.requiredChoiceIds,
+        if (npcArc != null) ...npcArc.requiredChoiceIds,
+      ],
+    );
+    campaignContract.verifyWitnesses(campaignReport);
+    if (npcArc != null) {
+      for (final id in npcArc.requiredChoiceIds) {
+        final witness = campaignReport.choiceWitnesses[id];
+        if (witness == null || witness.isEmpty ||
+            witness.last.choiceId != id) {
+          throw FormatException('Нет исполнимой NPC-реплики: ' + id);
+        }
+      }
     }
     return StoryPlanTrialCompilation(
       archive: archive,
@@ -365,6 +507,19 @@ class MultiActTrialCompiler {
       archiveSha256: inspected.archiveSha256,
       sceneCount: inspected.blueprint.scenes.length,
       sourceQuoteCount: expected.length,
+      sourceEventsTotal: coverage.allEvents,
+      sourceEventsRepresented: coverage.referencedEvents,
+      unrepresentedSourceEventIds:
+          List.unmodifiable(coverage.eventIdsStillUnrepresented),
+      uncoveredSourceChapters:
+          List.unmodifiable(coverage.chaptersNotCovered),
+      chaptersWithoutSourceEvents:
+          List.unmodifiable(coverage.chaptersWithoutEventProposals),
+      selectedHeroLabel: heroName,
+      selectedHeroCharacterId: selectedHeroRole?.characterId,
+      verifiedSourceChoices: campaignContract.sourceDecisions.length,
+      verifiedActBridges: campaignContract.bridgeDecisions.length,
+      verifiedNpcActions: npcArc == null ? 0 : npcArc.requiredChoiceIds.length,
     );
   }
 }

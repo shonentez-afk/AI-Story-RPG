@@ -35,6 +35,10 @@ class NpcKnowledgeRichWorldBridge {
     List<Map<String, dynamic>> reviewedBookItems = const [],
     Map<String, List<Map<String, dynamic>>> reviewedDialogueTurns = const {},
     Map<String, String> reviewedSpeakerBindings = const {},
+    ReviewedNpcDialoguePlan? reviewedDialogueProposal,
+    String? approvedDialogueDigest,
+    ReviewedNpcResponsePlan? reviewedResponseProposal,
+    String? approvedResponseDigest,
     String heroName = 'Игрок',
     String heroDescription =
         'Герой частной игровой адаптации. Решения сохраняются в журнале.',
@@ -191,13 +195,26 @@ class NpcKnowledgeRichWorldBridge {
       final turns = RichSceneDialogue.presentationFor(scene['text'] as String);
       if (turns != null) dialogues[id] = turns;
     }
+    if (reviewedDialogueProposal != null && reviewedDialogueTurns.isNotEmpty) {
+      throw const FormatException(
+          'Нельзя одновременно подменить принятую разметку диалогов');
+    }
+    final effectiveDialogueReview = reviewedDialogueProposal == null
+        ? reviewedDialogueTurns
+        : RichNpcDialogueAuthoring.accept(
+            proposal: reviewedDialogueProposal,
+            blueprint: world,
+            reviewedSpeakerActorIds: reviewedSpeakerBindings,
+            approvedDigest: approvedDialogueDigest ?? '',
+            userConfirmed: userConfirmed,
+          );
     if (dialogues.keys.toSet().difference(
-            reviewedDialogueTurns.keys.toSet()).isNotEmpty ||
-        reviewedDialogueTurns.keys.toSet().difference(
+            effectiveDialogueReview.keys.toSet()).isNotEmpty ||
+        effectiveDialogueReview.keys.toSet().difference(
             dialogues.keys.toSet()).isNotEmpty) {
       throw const FormatException('Нужна проверка всех реплик NPC');
     }
-    for (final entries in reviewedDialogueTurns.values) {
+    for (final entries in effectiveDialogueReview.values) {
       for (final entry in entries) {
         final speaker = entry['speaker'];
         final actor = entry['actor_id'];
@@ -216,9 +233,37 @@ class NpcKnowledgeRichWorldBridge {
           world,
         );
     RichNpcDialogueKnowledge.validate(
-      reviewedDialogueTurns.isEmpty ? null :
-          <String, dynamic>{...reviewedDialogueTurns},
+      effectiveDialogueReview.isEmpty ? null :
+          <String, dynamic>{...effectiveDialogueReview},
       world, <String, dynamic>{...dialogues},
+      socialRules: socialRules,
+      sceneOrigins: origins,
+    );
+    // Even a fully source-reviewed turn is not authorable if no actual
+    // playable route can establish its fact, memory or directed trust.
+    // Run the same pure core audit here with ALL signed social rules,
+    // rather than relying on a text-only/graph-only authoring proposal.
+    if (effectiveDialogueReview.isNotEmpty) {
+      RichNpcDialogueKnowledge.auditExecutableRoutes(
+        <String, dynamic>{...effectiveDialogueReview},
+        world, socialRules: socialRules,
+      );
+    }
+    final acceptedResponses = reviewedResponseProposal == null
+        ? null
+        : RichNpcDialogueResponses.accept(
+            proposal: reviewedResponseProposal,
+            blueprint: world,
+            approvedDigest: approvedResponseDigest ?? '',
+            userConfirmed: userConfirmed,
+            socialRules: socialRules,
+          );
+    RichNpcDialogueResponses.validate(
+      acceptedResponses, world,
+      <String, dynamic>{...dialogues},
+      effectiveDialogueReview.isEmpty ? null :
+          <String, dynamic>{...effectiveDialogueReview},
+      origins,
       socialRules: socialRules,
     );
     final facts = world.facts.toList()..sort();
@@ -234,8 +279,10 @@ class NpcKnowledgeRichWorldBridge {
       },
       'scene_names': sceneNames,
       'scene_dialogues': dialogues,
-      if (reviewedDialogueTurns.isNotEmpty)
-        'scene_dialogue_knowledge': reviewedDialogueTurns,
+      if (effectiveDialogueReview.isNotEmpty)
+        'scene_dialogue_knowledge': effectiveDialogueReview,
+      if (acceptedResponses != null)
+        'scene_dialogue_responses': acceptedResponses,
     };
     if (effectiveSocial != null) {
       // No inferred presence/consent: each authored item action has an

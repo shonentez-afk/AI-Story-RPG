@@ -348,7 +348,10 @@ class _WorldPlayPageState extends State<WorldPlayPage> {
             ? null
             : ColoredBox(
                 color: prefs.background,
-                child: GameQuickBar(onOpen: _openPanel, color: ink),
+                child: GameQuickBar(
+                  onOpen: _openPanel, color: ink,
+                  showNpc: view.npcRelations.isNotEmpty,
+                ),
               ),
         body: ColoredBox(
           color: prefs.background,
@@ -596,17 +599,47 @@ class _WorldInfoSheet extends StatelessWidget {
   final GamePanel panel;
   final WorldGameView view;
 
+  // The v3 runtime still uses the actor key 'player'. Only a user-reviewed
+  // source-linked NPC role may set a permanent player_is_npc_<id> flag.
+  // Never invent one from the display name, dialogue or knownFacts.
+  static String _memoryKindName(String kind) => switch (kind) {
+    'witnessed' => 'Наблюдал',
+    'promiseReceived' => 'Принял обещание',
+    'promiseBroken' => 'Нарушенное обещание',
+    'helped' => 'Получил помощь',
+    'betrayed' => 'Пережил предательство',
+    'rumorHeard' => 'Услышал сведения',
+    _ => 'Подтверждённые события',
+  };
+
+  static final RegExp _roleFlag = RegExp(
+      r'^player_is_npc_[0-9a-f]{32}$');
+  String? get _selectedHeroCharacterId {
+    final entries = view.flags.entries.where(
+        (e) => e.value && _roleFlag.hasMatch(e.key)).toList();
+    if (entries.length != 1) return null;
+    return entries.single.key.substring('player_is_'.length);
+  }
+
   @override
   Widget build(BuildContext context) {
     final heading = switch (panel) {
       GamePanel.character => 'Герой',
       GamePanel.inventory => 'Предметы',
       GamePanel.journal => 'Журнал',
+      GamePanel.npc => 'Персонажи',
     };
     final entries = switch (panel) {
       GamePanel.character => [
         if (view.heroName != null) 'Герой: ' + view.heroName!,
         if (view.heroDescription != null) view.heroDescription!,
+        if (_selectedHeroCharacterId != null)
+          'Роль: проверенная карточка персонажа',
+        if (_selectedHeroCharacterId != null)
+          'Постоянный ID: ' +
+              _selectedHeroCharacterId!.substring(0, 12) + '…',
+        if (_selectedHeroCharacterId != null)
+          'Знания и секреты NPC не присваиваются автоматически.',
         if (view.stats.isEmpty) 'Характеристики не заданы',
         for (final stat in view.stats.entries)
           (view.statNames[stat.key] ?? _statLabel(stat.key)) +
@@ -659,6 +692,7 @@ class _WorldInfoSheet extends StatelessWidget {
                         : '\n' + entry.changes
                             .map((change) => '• ' + change).join('\n')),
             ],
+      GamePanel.npc => const <String>[],
     };
     return SafeArea(
       child: ConstrainedBox(
@@ -681,14 +715,57 @@ class _WorldInfoSheet extends StatelessWidget {
                 ),
               ]),
               const SizedBox(height: 8),
-              Flexible(child: ListView.builder(
-                shrinkWrap: true,
-                itemCount: entries.length,
-                itemBuilder: (_, index) => Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 7),
-                  child: Text(entries[index]),
-                ),
-              )),
+              Flexible(child: panel == GamePanel.npc
+                  ? ListView(
+                      key: const Key('world-npc-relation-list'),
+                      shrinkWrap: true,
+                      children: [
+                        const Text('Только встреченные персонажи. '
+                            'Память и отношение вычислены из сохранённых '
+                            'решений, а не из реплик ИИ или текста книги.'),
+                        const SizedBox(height: 8),
+                        for (final npc in view.npcRelations)
+                          Card(
+                            key: Key('world-npc-' + npc.actorId),
+                            child: Padding(
+                              padding: const EdgeInsets.all(12),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(npc.displayName,
+                                      style: Theme.of(context)
+                                          .textTheme.titleMedium),
+                                  const SizedBox(height: 4),
+                                  Text('Отношение NPC к герою: ' +
+                                      (npc.directedScore > 0 ? '+' : '') +
+                                      npc.directedScore.toString()),
+                                  Text('Запомненных событий: ' +
+                                      npc.memoryCount.toString()),
+                                  if (npc.lifeState != null)
+                                    Text('Состояние: ' +
+                                        switch (npc.lifeState) {
+                                          'present' => 'доступен',
+                                          'absent' => 'отсутствует',
+                                          'dead' => 'погиб',
+                                          _ => 'неизвестно',
+                                        }),
+                                  for (final kind in npc.memoryKinds.entries)
+                                    Text(_memoryKindName(kind.key) + ': ' +
+                                        kind.value.toString()),
+                                ],
+                              ),
+                            ),
+                          ),
+                      ],
+                    )
+                  : ListView.builder(
+                      shrinkWrap: true,
+                      itemCount: entries.length,
+                      itemBuilder: (_, index) => Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 7),
+                        child: Text(entries[index]),
+                      ),
+                    )),
             ],
           ),
         ),

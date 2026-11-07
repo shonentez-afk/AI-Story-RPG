@@ -103,7 +103,16 @@ class MultiActStoryPlanDraft {
 class BookwideStoryPlanComposer {
   const BookwideStoryPlanComposer._();
 
-  static const maxDraftActs = 6; // 5 flags per dilemma; StoryPlan caps at 32.
+  static const maxDraftActs = 12;
+
+  // rich-v3 retains its 32-flag contract. Longer campaigns lease only
+  // transient process flags; each act keeps durable outcome flags.
+  static const rollingAccepted = 'campaign_accepted';
+  static const rollingDeclined = 'campaign_declined';
+  static const rollingDiscovered = 'campaign_discovered';
+  static const rollingFlags = <String>[
+    rollingAccepted, rollingDeclined, rollingDiscovered,
+  ];
 
   static MultiActStoryPlanDraft compose({
     required BookSourceIndex index,
@@ -120,7 +129,7 @@ class BookwideStoryPlanComposer {
         actProposals.length < 2 ||
         actProposals.length > maxDraftActs) {
       throw const FormatException(
-          'Для многоактового черновика нужны 2–6 разных '
+          'Для многоактового черновика нужны 2–12 разных '
           'предложений, основанных на завершённом анализе одной книги.');
     }
 
@@ -159,6 +168,8 @@ class BookwideStoryPlanComposer {
     final flags = <String>[];
     final usedEvents = <String>{};
     final usedActIds = <String>{};
+    // Preserve the exact old flag names for 2..6 act saved worlds.
+    final rolling = actProposals.length > 6;
     var previousOrder = -1;
 
     for (var i = 0; i < actProposals.length; i++) {
@@ -192,6 +203,16 @@ class BookwideStoryPlanComposer {
       final local = quality.plan;
       final prefix = 'act_' + (i + 1).toString() + '_';
       String scoped(String localId) => prefix + localId;
+      String stateFlag(String flag) {
+        if (!rolling) return scoped(flag);
+        if (flag.endsWith('_accepted')) return rollingAccepted;
+        if (flag.endsWith('_declined')) return rollingDeclined;
+        if (flag == 'alternative_found') return rollingDiscovered;
+        if (flag == 'original_outcome' || flag == 'alternate_outcome') {
+          return scoped(flag); // Durable, distinct ACT outcomes.
+        }
+        throw FormatException('Неизвестное локальное состояние акта: ' + flag);
+      }
       final localScenes = <StorySituation>[];
       for (final original in local.situations) {
         localScenes.add(StorySituation(
@@ -212,16 +233,16 @@ class BookwideStoryPlanComposer {
                 nextSituationId: scoped(choice.nextSituationId),
                 sourceEventId: choice.sourceEventId,
                 route: choice.route,
-                requires: [for (final f in choice.requires) scoped(f)],
-                forbids: [for (final f in choice.forbids) scoped(f)],
-                adds: [for (final f in choice.adds) scoped(f)],
-                removes: [for (final f in choice.removes) scoped(f)],
+                requires: [for (final f in choice.requires) stateFlag(f)],
+                forbids: [for (final f in choice.forbids) stateFlag(f)],
+                adds: [for (final f in choice.adds) stateFlag(f)],
+                removes: [for (final f in choice.removes) stateFlag(f)],
               ),
           ],
         ));
       }
       sceneGroups.add(localScenes);
-      flags.addAll([for (final f in local.flags) scoped(f)]);
+      flags.addAll([for (final f in local.flags) stateFlag(f)]);
 
       final originalContract =
           StoryPlanQualityGate.structuralContract(proposal);
@@ -231,15 +252,15 @@ class BookwideStoryPlanComposer {
             StoryDecisionInvariant(
               id: scoped(rule.id),
               decisionId: scoped(rule.decisionId),
-              requires: [for (final f in rule.requires) scoped(f)],
-              forbids: [for (final f in rule.forbids) scoped(f)],
+              requires: [for (final f in rule.requires) stateFlag(f)],
+              forbids: [for (final f in rule.forbids) stateFlag(f)],
             ),
         ],
         exclusiveGroups: [
           for (final rule in originalContract.exclusiveGroups)
             StoryExclusiveFlags(
               id: scoped(rule.id),
-              flags: [for (final f in rule.flags) scoped(f)],
+              flags: [for (final f in rule.flags) stateFlag(f)],
             ),
         ],
       ));
@@ -290,6 +311,9 @@ class BookwideStoryPlanComposer {
                 route: StoryRoute.adaptationFiction,
                 requires: [condition],
                 forbids: [opposite],
+                // Retire only short-lived slots. The WorldEvent ledger
+                // preserves the full history and outcome flags stay live.
+                removes: rolling ? rollingFlags : const [],
               ),
             ],
           ));
@@ -313,7 +337,7 @@ class BookwideStoryPlanComposer {
       sourceFingerprint: book.sourceFingerprint,
       title: book.title,
       entrySituationId: parts.first.entrySituationId,
-      flags: flags,
+      flags: rolling ? flags.toSet().toList() : flags,
       initialFlags: const [],
       situations: composedScenes,
     );

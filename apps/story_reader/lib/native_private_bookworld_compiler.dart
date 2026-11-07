@@ -70,6 +70,8 @@ Uint8List _upgradeReviewedPrivateWorld(Map<String, dynamic> data) {
     sourceIndex: Map<String, dynamic>.from(data['source_index'] as Map),
     heroName: data['hero_name'] as String,
     sceneTitles: Map<String, String>.from(data['scene_titles'] as Map),
+    reviewedNpcArc: data['reviewed_npc_arc'] == null ? null
+        : Map<String, dynamic>.from(data['reviewed_npc_arc'] as Map),
   );
 }
 
@@ -81,6 +83,7 @@ Future<Uint8List> compileReviewedRichPrivateBookworldInWorker(
   IntermediateStoryBlueprint draft, {
   String heroName = 'Игрок',
   Map<String, String> sceneTitles = const {},
+  Map<String, dynamic>? reviewedNpcArc,
 }) async {
   // Preserve the accepted fail-closed M2c checks rather than inventing
   // another path that trusts LLM-authored source offsets.
@@ -91,6 +94,7 @@ Future<Uint8List> compileReviewedRichPrivateBookworldInWorker(
     'source_index': Map<String, dynamic>.from(index.toJson()),
     'hero_name': heroName,
     'scene_titles': sceneTitles,
+    'reviewed_npc_arc': reviewedNpcArc,
   });
   final checked = const RichPrivateBookworldImporter().inspect(archive);
   if (checked.sourceFingerprint != index.sourceFingerprint ||
@@ -132,6 +136,10 @@ Future<Uint8List> compileReviewedNpcRichPrivateBookworldInWorker(
   List<Map<String, dynamic>> reviewedBookItems = const [],
   Map<String, List<Map<String, dynamic>>> reviewedDialogueTurns = const {},
   Map<String, String> reviewedSpeakerBindings = const {},
+  ReviewedNpcDialoguePlan? reviewedDialogueProposal,
+  String? approvedDialogueDigest,
+  ReviewedNpcResponsePlan? reviewedResponseProposal,
+  String? approvedResponseDigest,
   String heroName = 'Игрок',
 }) async {
   // Exactly the already accepted preflight/translator, no second engine.
@@ -152,6 +160,10 @@ Future<Uint8List> compileReviewedNpcRichPrivateBookworldInWorker(
     userConfirmed: userConfirmed, heroName: heroName,
     reviewedDialogueTurns: reviewedDialogueTurns,
     reviewedSpeakerBindings: reviewedSpeakerBindings,
+    reviewedDialogueProposal: reviewedDialogueProposal,
+    approvedDialogueDigest: approvedDialogueDigest,
+    reviewedResponseProposal: reviewedResponseProposal,
+    approvedResponseDigest: approvedResponseDigest,
     reviewedNpcSocial: reviewedNpcSocial,
     reviewedBookItems: reviewedBookItems,
   );

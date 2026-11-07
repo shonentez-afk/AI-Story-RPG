@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'package:bookworld_format/bookworld_format.dart';
 
 import 'book_source_index.dart';
+import 'compiled_campaign_causal_gate.dart';
 import 'intermediate_story_blueprint.dart';
 import 'native_private_bookworld_compiler.dart';
 import 'narrative_book_model.dart';
@@ -23,11 +24,42 @@ class StoryPlanTrialCompilation {
     required this.archiveSha256,
     required this.sceneCount,
     required this.sourceQuoteCount,
+    this.sourceEventsTotal = 0,
+    this.sourceEventsRepresented = 0,
+    this.unrepresentedSourceEventIds = const [],
+    this.uncoveredSourceChapters = const [],
+    this.chaptersWithoutSourceEvents = const [],
+    this.selectedHeroLabel = 'Игрок',
+    this.selectedHeroCharacterId,
+    this.verifiedSourceChoices = 0,
+    this.verifiedActBridges = 0,
+    this.verifiedNpcActions = 0,
   });
 
   final Uint8List archive;
   final String sourceFingerprint, bookworldId, archiveSha256;
   final int sceneCount, sourceQuoteCount;
+  /// Verified executable source-bound actions and both outgoing act bridges.
+  /// This is NOT approval of the book's literary meaning or chronology.
+  final int verifiedSourceChoices, verifiedActBridges;
+  /// Additional source-reviewed NPC conversation actions proven by story_core.
+  final int verifiedNpcActions;
+  /// Computed from this exact book/plan during compilation, NOT model claims.
+  final int sourceEventsTotal, sourceEventsRepresented;
+  final List<String> unrepresentedSourceEventIds;
+  final List<int> uncoveredSourceChapters;
+  /// Gaps in source analysis are distinct from omitted planned scenes.
+  final List<int> chaptersWithoutSourceEvents;
+  /// User-approved display label for the player actor (not a verified NPC).
+  final String selectedHeroLabel;
+  /// A verified permanent NPC identity when the player deliberately chooses
+  /// that role. The actual runtime actor stays 'player' in every v3 world.
+  /// Identity is bound to initial story_core state via player_is_npc_<id>.
+  final String? selectedHeroCharacterId;
+  bool get hasAllSourceEventsRepresented =>
+      sourceEventsTotal > 0 && sourceEventsRepresented == sourceEventsTotal &&
+      unrepresentedSourceEventIds.isEmpty &&
+      uncoveredSourceChapters.isEmpty && chaptersWithoutSourceEvents.isEmpty;
   bool get isFullBookAdaptation => false;
   bool get sourceMeaningIsVerified => false;
   bool get isPrivateTrial => true;
@@ -194,6 +226,12 @@ class StoryPlanTrialCompiler {
       throw const FormatException(
           'Пакет пробной RPG не прошёл независимую проверку.');
     }
+    // Short trials must also be executable through actual core actions;
+    // a terminal shown by the draft graph is not automatically reachable.
+    CompiledCampaignCausalGate.verify(
+      blueprint: inspected.blueprint,
+      socialRules: inspected.npcSocialRulebook,
+    );
     return StoryPlanTrialCompilation(
       archive: archive,
       sourceFingerprint: index.sourceFingerprint,

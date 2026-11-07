@@ -32,6 +32,8 @@ jobs:
         working-directory: experiments/m0_engine_comparison
       - name: Android host security regression
         run: python3 -m unittest discover -s tools/tests -v
+      - name: Independent source-bound NPC dialogue regression
+        run: python3 -m unittest discover -s tests -p 'test_rich_scene_dialogue_projection.py' -v
 
   dart-sdk:
     name: Dart engine and scenario tests
@@ -171,6 +173,22 @@ jobs:
           test -s artifacts/bookworld/book_private_rich_dialogue_dart.bworld
           python3 -c "from pathlib import Path; from tools.bookworld.private_rich_bookworld import verify; p=Path('artifacts/bookworld/book_private_rich_dialogue_dart.bworld'); assert verify(p.read_bytes())['format_version'] == 3"
           (cd artifacts/bookworld && sha256sum book_private_rich_dialogue_dart.bworld >> SHA256SUMS.txt)
+          # Causal dialogue: preserve both verified event conditions and
+          # exact source quote across the independently parsed Dart ZIP.
+          test -s artifacts/bookworld/book_private_rich_dialogue_causal_dart.bworld
+          python3 -c "from pathlib import Path; from tools.bookworld.private_rich_bookworld import verify; p=Path('artifacts/bookworld/book_private_rich_dialogue_causal_dart.bworld'); assert verify(p.read_bytes())['format_version'] == 3"
+          (cd artifacts/bookworld && sha256sum book_private_rich_dialogue_causal_dart.bworld >> SHA256SUMS.txt)
+          # P0 authoring: the new source-reviewed NPC conversation planner
+          # emits an actual signed rich-v3 ZIP; verify exactly those Dart bytes
+          # with the independent Python importer before accepting portability.
+          test -s artifacts/bookworld/book_private_rich_dialogue_plan_dart.bworld
+          python3 -c "from pathlib import Path; from tools.bookworld.private_rich_bookworld import verify; p=Path('artifacts/bookworld/book_private_rich_dialogue_plan_dart.bworld'); assert verify(p.read_bytes())['format_version'] == 3"
+          (cd artifacts/bookworld && sha256sum book_private_rich_dialogue_plan_dart.bworld >> SHA256SUMS.txt)
+          # Branching spoken answers: the exact signed Dart-generated ZIP
+          # must pass the INDEPENDENT Python source+consequence validator.
+          test -s artifacts/bookworld/book_private_rich_npc_responses_dart.bworld
+          python3 -c "from pathlib import Path; from tools.bookworld.private_rich_bookworld import verify; p=Path('artifacts/bookworld/book_private_rich_npc_responses_dart.bworld'); assert verify(p.read_bytes())['format_version'] == 3"
+          (cd artifacts/bookworld && sha256sum book_private_rich_npc_responses_dart.bworld >> SHA256SUMS.txt)
           # NPC v3.1 source-reviewed private extension: exact Dart ZIP
           # MUST pass the independent Python per-actor/quote/reachability gate.
           test -s artifacts/bookworld/book_private_rich_npc_dart.bworld
