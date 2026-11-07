@@ -18,7 +18,7 @@ from tools.rpg_author.common import AuthoringError
 from tools.rpg_author.validate import candidate_blueprint
 from tests.rpg_author.fixtures import source, story, TEXT, analysis
 from tests.rpg_author.fixtures_rich import enrichment
-from tests.rpg_author.test_npc_review import reviewed_fixture, ACTOR, FACT
+from tests.rpg_author.test_npc_review import reviewed_fixture, reviewed_transfer_fixture
 from tools.rpg_author.rich_package import compile_rich_from_project
 from tools.rpg_author import project
 from tools.rpg_author.legacy_package import compile_from_project
@@ -215,6 +215,24 @@ def main():
         assert npc_save["revision"] == 2
         assert npc_save["restart_ok"] and npc_save["save_import_ok"]
         assert npc_save["fork_ok"]
+        # E6f custody: source-backed player acquisition, NPC gift and
+        # departure are serialized by the external author and replayed by
+        # the main Dart importer/campaign store, not a forked engine.
+        transfer_plan, transfer_overlay, transfer_review = reviewed_transfer_fixture()
+        transfer_project = root / "transfer_project"
+        project.init_project(transfer_project, source_path)
+        project.submit_analysis(transfer_project, analysis())
+        project.submit_story(transfer_project, transfer_plan)
+        transferred_bytes, _ = compile_rich_from_project(
+            transfer_project, transfer_overlay, npc_review=transfer_review)
+        transferred = dart({
+            "operation": "rich_campaign",
+            "data": base64.b64encode(transferred_bytes).decode("ascii"),
+            "path": ["take_rope", "rescue"],
+        })
+        assert transferred["inventory"] == [] and transferred["revision"] == 2
+        assert (transferred["restart_ok"] and transferred["save_import_ok"]
+                and transferred["fork_ok"]), transferred
         # Verify Python -> Dart -> SQLite on both real flag-only routes.
         plain = enrichment()
         plain["items"] = {}
@@ -258,7 +276,8 @@ def main():
                       "legacy_v2_rejects_v3": True,
                       "rich_v3_sqlite_restart_fork_portable_save": True,
                       "rich_v3_empty_catalogs_dart_sqlite": True,
-                      "external_reviewed_npc_social_v5_dart_sqlite": True}))
+                      "external_reviewed_npc_social_v5_dart_sqlite": True,
+                      "external_reviewed_npc_item_custody_life_v5_dart_sqlite": True}))
 
 
 if __name__ == "__main__":
