@@ -28,6 +28,7 @@ NPC_GRANTS_FORMAT = "ai_story_npc_knowledge_grants_v1"
 NPC_SOCIAL_FORMAT = "ai_story_npc_social_witness_v1"
 NPC_SOCIAL_GATE_FORMAT = "ai_story_npc_social_witness_v2"
 NPC_SOCIAL_ITEM_FORMAT = "ai_story_npc_social_witness_v3"
+NPC_SOCIAL_AUTHOR_ITEM_FORMAT = "ai_story_npc_social_witness_v4"
 
 
 def fail(message: str):
@@ -589,18 +590,21 @@ def _npc_social(prov, bp):
     reviewed = prov.get("npc_social")
     if reviewed is None:
         return
+    authored_item = (type(reviewed) is dict and
+                     reviewed.get("format") == NPC_SOCIAL_AUTHOR_ITEM_FORMAT)
     item_format = (type(reviewed) is dict and
-                   reviewed.get("format") == NPC_SOCIAL_ITEM_FORMAT)
+                   reviewed.get("format") == NPC_SOCIAL_ITEM_FORMAT) or authored_item
     gate_format = (type(reviewed) is dict and
                    reviewed.get("format") == NPC_SOCIAL_GATE_FORMAT) or item_format
     _keys(reviewed, {"format", "review_scope", "source_fingerprint",
                      "user_confirmed", "literary_canon_verified",
                      "witnesses", "rules"} |
           ({"choice_gates"} if gate_format else set()) |
-          ({"item_transfers"} if item_format else set()), "NPC social")
+          ({"item_transfers"} if item_format else set()) |
+          ({"item_grants"} if authored_item else set()), "NPC social")
     if reviewed["format"] not in (
             NPC_SOCIAL_FORMAT, NPC_SOCIAL_GATE_FORMAT,
-            NPC_SOCIAL_ITEM_FORMAT) or \
+            NPC_SOCIAL_ITEM_FORMAT, NPC_SOCIAL_AUTHOR_ITEM_FORMAT) or \
             reviewed["review_scope"] != "user_declared_private_game_fiction" or \
             reviewed["source_fingerprint"] != bp["source_fingerprint"] or \
             reviewed["user_confirmed"] is not True or \
@@ -723,6 +727,56 @@ def _npc_social(prov, bp):
 
     if set(present) != used:
         fail("Orphaned or unreviewed NPC witness")
+
+    if authored_item:
+        grants = reviewed["item_grants"]
+        if type(grants) is not list or not 1 <= len(grants) <= 16:
+            fail("Native item acquisition needs reviewed sources")
+        origins = origin
+        acquired = {}
+        for grant in grants:
+            _keys(grant, {"scene_id", "choice_id", "item_id",
+                          "source_quote_sha256"}, "NPC item acquisition")
+            scene, choice, item = (
+                grant["scene_id"], grant["choice_id"], grant["item_id"])
+            if not all(_id(v) for v in (scene, choice, item)) or \
+                    item not in bp["items"] or item in acquired or \
+                    item in bp["initial_state"]["inventory"] or \
+                    scene not in scenes:
+                fail("Unreviewed or duplicated NPC item acquisition")
+            citation(scene, grant["source_quote_sha256"])
+            eligible = [c for c in scenes[scene]["choices"]
+                        if c["id"] == choice]
+            if len(eligible) != 1 or sum(
+                    e["op"] == "grant_item" and e["id"] == item
+                    for e in eligible[0]["effects"]) != 1:
+                fail("NPC item source must create exactly one typed item")
+            acquired[item] = (scene, choice)
+        transferred = {rule["item_id"] for rule in reviewed["item_transfers"]}
+        if set(acquired) != transferred:
+            fail("NPC item acquisition/transfer sets are inconsistent")
+        for scene in bp["scenes"]:
+            for choice in scene["choices"]:
+                for effect in choice["effects"]:
+                    item = effect.get("id")
+                    if effect["op"] != "grant_item" or item not in acquired:
+                        continue
+                    source = acquired[item] == (scene["id"], choice["id"])
+                    returned = any(
+                        t["scene_id"] == scene["id"] and
+                        t["choice_id"] == choice["id"] and
+                        t["item_id"] == item and t["to_actor_id"] == "player"
+                        for t in reviewed["item_transfers"])
+                    if not source and not returned:
+                        fail("Unreviewed extra item was created")
+        for transfer in reviewed["item_transfers"]:
+            item = transfer["item_id"]
+            acq_scene, acq_choice = acquired[item]
+            if origins[acq_scene]["chapter_index"] > \
+                    origins[transfer["scene_id"]]["chapter_index"] or \
+                    (acq_scene, acq_choice) == (
+                        transfer["scene_id"], transfer["choice_id"]):
+                fail("NPC item transferred before its source acquisition")
 
     if gate_format:
         gates = reviewed["choice_gates"]
