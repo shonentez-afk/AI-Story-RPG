@@ -84,7 +84,9 @@ def reviewed_transfer_fixture():
     river["origin"] = "SOURCE_PASSAGE"
     river["assertion_ids"] = ["rescue_event"]
     overlay, reviewed = reviewed_fixture()
+    overlay["story_sha256"] = digest(canonical(plan))
     reviewed["story_sha256"] = digest(canonical(plan))
+    reviewed["enrichment_sha256"] = digest(canonical(overlay))
     quote = digest(TEXT.encode("utf-8"))
     social = reviewed["npc_social"]
     social["witnesses"].append({
