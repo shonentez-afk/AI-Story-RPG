@@ -86,6 +86,20 @@ class _MultiActTrialPageState extends State<MultiActTrialPage> {
       if (!mounted) return;
       setState(() {
         _eligibleHeroes = roles;
+        if (_selectedHeroRole != null && !roles.any((r) =>
+            r.characterId == _selectedHeroRole!.characterId &&
+            r.groupDigest == _selectedHeroRole!.groupDigest &&
+            r.displayName == _selectedHeroRole!.displayName)) {
+          _selectedHeroRole = null;
+          _heroName = 'Игрок';
+          _heroController.text = _heroName;
+          _reviewed = false;
+          _gameplaySelection = null;
+          _wholeGameplaySelection = null;
+          _reviewedProse.clear();
+          _recheckedRepair = null;
+          _unchangedReview = null;
+        }
         _heroNotice = roles.isEmpty
             ? 'Подтверждённых персонажей нет. Создайте и проверьте '
               'постоянные карточки NPC в редакторе этой книги.'
@@ -526,8 +540,9 @@ class _MultiActTrialPageState extends State<MultiActTrialPage> {
               Text(_heroNotice!, key: const Key('multiact-hero-notice')),
             if (_eligibleHeroes.isNotEmpty)
               DropdownButtonFormField<String>(
-                key: const Key('multiact-hero-identity'),
-                value: _selectedHeroRole?.characterId ?? '',
+                key: ValueKey('multiact-hero-identity-' +
+                    (_selectedHeroRole?.characterId ?? 'free')),
+                initialValue: _selectedHeroRole?.characterId ?? '',
                 isExpanded: true,
                 decoration: const InputDecoration(
                   labelText: 'Постоянная личность игрового героя',
