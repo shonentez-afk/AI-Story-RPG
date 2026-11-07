@@ -9,11 +9,10 @@ import 'package:path_provider/path_provider.dart';
 import 'source_analysis_checkpoint_repository.dart';
 import 'whole_book_npc_campaign.dart';
 
-String npcWritingHash(Object value) =>
-    sha256.convert(utf8.encode(canonicalJson(value))).toString();
+String npcWritingHash(Object value) => sha256.convert(utf8.encode(canonicalJson(value))).toString();
 
-/// Exact authoring inputs. Identity, source quotes and scene addresses are
-/// not model-editable. Catalog construction does not authorize transmission.
+/// Exact authoring inputs, with a separate, shown protagonist identity.
+/// Free-player catalogs keep their existing bytes and storage addresses.
 class NpcWritingCatalog {
   NpcWritingCatalog._(this.source, this.candidates, this.digest, this.storageKey);
   final WholeBookNpcSourcePlan source;
@@ -31,19 +30,20 @@ class NpcWritingCatalog {
     for (final c in sorted) {
       c.firstEvent.source.validate(source.index);
       c.responseEvent.source.validate(source.index);
-      if (c.role.sourceFingerprint != source.index.sourceFingerprint) {
-        throw const FormatException('NPC относится к другой редакции книги.');
+      if (c.role.sourceFingerprint != source.index.sourceFingerprint ||
+          c.role.characterId == source.selectedHeroRole?.characterId) {
+        throw const FormatException('NPC относится к другой книге или совпадает с героем.');
       }
     }
     final digest = npcWritingHash({
       'format': 'npc_writing_catalog_v1',
       'source': source.index.sourceFingerprint, 'plan': source.planDigest,
+      if (source.selectedHeroRole != null) 'hero_review': source.heroReviewDigest,
       'candidates': [for (final c in sorted) {
         'id': c.id, 'actor': c.role.characterId, 'name': c.role.displayName,
         'group': c.role.groupDigest,
         'first_scene': c.firstSceneId, 'response_scene': c.responseSceneId,
-        'first_quote': c.firstEvent.source.quote,
-        'response_quote': c.responseEvent.source.quote,
+        'first_quote': c.firstEvent.source.quote, 'response_quote': c.responseEvent.source.quote,
       }],
     });
     return NpcWritingCatalog._(source,
@@ -54,8 +54,7 @@ class NpcWritingCatalog {
   }
 }
 
-/// Partial manual edits and untrusted AI suggestions are durable; permission
-/// to transmit or install is NEVER part of a checkpoint.
+/// Durable writing, never durable permission to transmit or install.
 class NpcWritingEdit {
   NpcWritingEdit({
     required this.id, this.playerLine = '', this.npcLine = '',
@@ -66,8 +65,7 @@ class NpcWritingEdit {
   final List<String> dependencies;
   final bool noSuggestion;
   bool get isBlank => playerLine.isEmpty && npcLine.isEmpty && !noSuggestion;
-  bool get complete => !noSuggestion &&
-      playerLine.trim().length >= 4 && npcLine.trim().length >= 4;
+  bool get complete => !noSuggestion && playerLine.trim().length >= 4 && npcLine.trim().length >= 4;
   NpcCampaignDialogueDraft toDraft() => NpcCampaignDialogueDraft(
     candidateId: id, playerLine: playerLine.trim(), npcLine: npcLine.trim(),
     requiresCandidateIds: dependencies,
@@ -90,12 +88,9 @@ class NpcWritingSession {
   bool get literaryCanon => false;
 }
 
-/// Uses the existing atomic private file repository in its OWN parent folder.
-/// Source text, key, HTTP response and approval flags never enter this scope.
 class NpcWritingStore {
   NpcWritingStore({SourceAnalysisCheckpointRepository? repository})
-      : repository = repository ?? FileSourceAnalysisCheckpointRepository(
-          rootDirectory: _privateRoot);
+      : repository = repository ?? FileSourceAnalysisCheckpointRepository(rootDirectory: _privateRoot);
   final SourceAnalysisCheckpointRepository repository;
   static Future<Directory> _privateRoot() async => Directory(
       '${(await getApplicationSupportDirectory()).path}/ai_story_npc_writing_v1');
@@ -111,25 +106,19 @@ class NpcWritingStore {
     }
     for (final e in rows) {
       if (!catalog.candidates.containsKey(e.id) ||
-          e.playerLine.length > 400 || e.npcLine.length > 400 ||
-          e.uncertainty.length > 350 ||
-          !const ['manual', 'ai_draft'].contains(e.origin) ||
-          e.dependencies.length > 8 ||
+          e.playerLine.length > 400 || e.npcLine.length > 400 || e.uncertainty.length > 350 ||
+          !const ['manual', 'ai_draft'].contains(e.origin) || e.dependencies.length > 8 ||
           e.dependencies.toSet().length != e.dependencies.length ||
           e.dependencies.any((id) => id == e.id || !byId.containsKey(id)) ||
-          (e.noSuggestion && (e.origin != 'ai_draft' ||
-              e.playerLine.isNotEmpty || e.npcLine.isNotEmpty)) ||
-          [e.playerLine, e.npcLine, e.uncertainty].any(
-              (text) => RegExp(r'[\x00-\x1f\x7f]').hasMatch(text))) {
+          (e.noSuggestion && (e.origin != 'ai_draft' || e.playerLine.isNotEmpty || e.npcLine.isNotEmpty)) ||
+          [e.playerLine, e.npcLine, e.uncertainty].any((text) => RegExp(r'[\x00-\x1f\x7f]').hasMatch(text))) {
         throw const FormatException('Черновик содержит чужие или неверные данные.');
       }
     }
     final visiting = <String>{}, checked = <String>{};
     void visit(String id) {
       if (checked.contains(id)) return;
-      if (!visiting.add(id)) {
-        throw const FormatException('Круговая зависимость разговоров.');
-      }
+      if (!visiting.add(id)) throw const FormatException('Круговая зависимость разговоров.');
       for (final dependency in byId[id]!.dependencies) { visit(dependency); }
       visiting.remove(id); checked.add(id);
     }
@@ -139,9 +128,7 @@ class NpcWritingStore {
   Future<NpcWritingSession> load(NpcWritingCatalog catalog) async {
     final saved = await repository.read(catalog.storageKey);
     if (saved == null) return NpcWritingSession._(catalog.digest, 0, const []);
-    if (utf8.encode(saved).length > maxBytes) {
-      throw const FormatException('Сохранённый черновик слишком большой.');
-    }
+    if (utf8.encode(saved).length > maxBytes) throw const FormatException('Сохранённый черновик слишком большой.');
     try {
       final envelope = jsonDecode(saved) as Map<String, dynamic>;
       if (envelope.length != 2 || !envelope.containsKey('payload') ||
@@ -151,23 +138,18 @@ class NpcWritingStore {
           p['source'] != catalog.source.index.sourceFingerprint ||
           p['plan'] != catalog.source.planDigest || p['catalog'] != catalog.digest ||
           p['revision'] is! int || (p['revision'] as int) < 1 ||
-          p['edits'] is! List || envelope['sha256'] != npcWritingHash(p)) {
-        throw const FormatException();
-      }
+          p['edits'] is! List || envelope['sha256'] != npcWritingHash(p)) throw const FormatException();
       final entries = <NpcWritingEdit>[];
       for (final raw in p['edits'] as List) {
         final row = raw as Map<String, dynamic>;
         if (row.length != 7 || !row.keys.toSet().containsAll({
-          'id', 'player_line', 'npc_line', 'dependencies',
-          'uncertainty', 'origin', 'no_suggestion',
+          'id', 'player_line', 'npc_line', 'dependencies', 'uncertainty', 'origin', 'no_suggestion',
         })) throw const FormatException();
-        entries.add(NpcWritingEdit(
-          id: row['id'] as String, playerLine: row['player_line'] as String,
-          npcLine: row['npc_line'] as String,
+        entries.add(NpcWritingEdit(id: row['id'] as String,
+          playerLine: row['player_line'] as String, npcLine: row['npc_line'] as String,
           dependencies: (row['dependencies'] as List).cast<String>(),
           uncertainty: row['uncertainty'] as String, origin: row['origin'] as String,
-          noSuggestion: row['no_suggestion'] as bool,
-        ));
+          noSuggestion: row['no_suggestion'] as bool));
       }
       validateEdits(catalog, entries);
       return NpcWritingSession._(catalog.digest, p['revision'] as int, entries);
@@ -196,21 +178,16 @@ class NpcWritingStore {
     validateEdits(catalog, snapshot);
     return _locked(catalog.storageKey, () async {
       final before = await load(catalog);
-      if (before.revision != expectedRevision) {
-        throw const FormatException('Черновик изменён в другом окне. '
-            'Перечитайте сохранённую версию перед записью.');
-      }
+      if (before.revision != expectedRevision) throw const FormatException(
+          'Черновик изменён в другом окне. Перечитайте сохранённую версию перед записью.');
       final ordered = [...snapshot]..sort((a, b) => a.id.compareTo(b.id));
       final payload = {
         'format': _format, 'source': catalog.source.index.sourceFingerprint,
         'plan': catalog.source.planDigest, 'catalog': catalog.digest,
-        'revision': before.revision + 1,
-        'edits': ordered.map((e) => e.toJson()).toList(),
+        'revision': before.revision + 1, 'edits': ordered.map((e) => e.toJson()).toList(),
       };
       final encoded = canonicalJson({'payload': payload, 'sha256': npcWritingHash(payload)});
-      if (utf8.encode(encoded).length > maxBytes) {
-        throw const FormatException('Слишком большой авторский черновик.');
-      }
+      if (utf8.encode(encoded).length > maxBytes) throw const FormatException('Слишком большой авторский черновик.');
       await repository.write(catalog.storageKey, encoded);
       return NpcWritingSession._(catalog.digest, before.revision + 1, ordered);
     });
@@ -222,8 +199,8 @@ class NpcWritingStore {
   }
 }
 
-/// Immutable transmission preview. A resume request contains ONLY untouched
-/// empty conversations. Completed/manual/refused drafts are never re-billed.
+/// A resume contains only blank selected conversations. Hero data is shown
+/// inside the exact consented bytes, and cannot be supplied by model output.
 class NpcWritingRequest {
   NpcWritingRequest._(this.catalogDigest, this.revision, this.batches,
       this.approvalDigest, this.candidateCount);
@@ -243,21 +220,17 @@ class NpcWritingRequest {
     NpcWritingStore.validateEdits(catalog, session.edits.values);
     final pending = session.edits.values.where((e) => e.isBlank).toList()
       ..sort((a, b) => a.id.compareTo(b.id));
-    if (pending.isEmpty) {
-      throw const FormatException('Нет пустых разговоров для ИИ. '
-          'Готовые и вручную изменённые реплики сохранены.');
-    }
+    if (pending.isEmpty) throw const FormatException('Нет пустых разговоров для ИИ. '
+        'Готовые и вручную изменённые реплики сохранены.');
     final batches = <String>[];
     for (var offset = 0; offset < pending.length; offset += perRequest) {
       final rows = pending.skip(offset).take(perRequest).map((edit) {
         final c = catalog.candidates[edit.id]!;
         return <String, dynamic>{
-          'candidate_id': c.id, 'actor_id': c.role.characterId,
-          'speaker': c.role.displayName,
+          'candidate_id': c.id, 'actor_id': c.role.characterId, 'speaker': c.role.displayName,
           'first_chapter': c.firstEvent.source.chapterIndex,
           'response_chapter': c.responseEvent.source.chapterIndex,
-          'first_quote': c.firstEvent.source.quote,
-          'response_quote': c.responseEvent.source.quote,
+          'first_quote': c.firstEvent.source.quote, 'response_quote': c.responseEvent.source.quote,
           'requires_episodes': edit.dependencies,
           'game_rule': 'The NPC remembers only this approved private game meeting; '
               'do not invent source truth, objects, secrets, actions or new actors.',
@@ -266,6 +239,7 @@ class NpcWritingRequest {
       final payload = <String, dynamic>{
         'format': 'ai_story_npc_writing_request_v1',
         'status': 'UNTRUSTED_PRIVATE_GAME_FICTION',
+        if (catalog.source.selectedHeroRole != null) 'player_role': catalog.source.heroCloudContext,
         'conversations': rows,
       };
       payload['batch_id'] = npcWritingHash({'catalog': catalog.digest, 'payload': payload});
@@ -278,7 +252,6 @@ class NpcWritingRequest {
     final immutable = List<String>.unmodifiable(batches);
     return NpcWritingRequest._(catalog.digest, session.revision, immutable,
       npcWritingHash({'format': 'npc_writing_consent_v1',
-        'catalog': catalog.digest, 'revision': session.revision, 'batches': immutable}),
-      pending.length);
+        'catalog': catalog.digest, 'revision': session.revision, 'batches': immutable}), pending.length);
   }
 }

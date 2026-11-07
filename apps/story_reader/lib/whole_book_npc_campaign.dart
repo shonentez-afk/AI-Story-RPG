@@ -14,21 +14,22 @@ import 'bookwide_storyplan_composer.dart';
 import 'multi_act_trial_compiler.dart';
 import 'narrative_book_model.dart';
 import 'reviewed_hero_role.dart';
+import 'reviewed_hero_source_action.dart';
 import 'source_evidence_graph.dart';
 import 'story_plan.dart';
 import 'story_plan_trial_compiler.dart';
 
 String _sha(String value) => sha256.convert(utf8.encode(value)).toString();
 
-/// ALL eligible source events of the supplied act scenario are considered.
-/// Nothing is silently truncated to an arbitrary first encounter or actor.
-/// Missing acts/events remain an explicit coverage gap, never literary canon.
+/// The selected protagonist and all NPC episodes share ONE source plan and
+/// the existing compiler/runtime. Source coverage is not literary truth.
 class WholeBookNpcSourcePlan {
   WholeBookNpcSourcePlan._({
     required this.index, required this.book, required this.bookMap,
     required this.draft, required this.plan,
     required Set<String> extraEventIds, required Set<String> reviewedEventIds,
-    required this.coverage,
+    required this.coverage, required this.selectedHeroRole,
+    required this.reviewedHeroSourceAction,
   }) : extraEventIds = Set.unmodifiable(extraEventIds),
        reviewedEventIds = Set.unmodifiable(reviewedEventIds),
        planDigest = _sha(plan.encode());
@@ -41,31 +42,106 @@ class WholeBookNpcSourcePlan {
   final Set<String> extraEventIds, reviewedEventIds;
   final BookwideStoryCoverage coverage;
   final String planDigest;
+  final ReviewedHeroRole? selectedHeroRole;
+  final bool reviewedHeroSourceAction;
   bool get literaryMeaningVerified => false;
+  String get heroName => selectedHeroRole?.displayName ?? 'Игрок';
+
+  /// Bind consent to the exact source-reviewed role, not just its name or ID.
+  /// This digest is local: the cloud receives only the separately shown role.
+  static String roleDigest(ReviewedHeroRole role) {
+    final mentions = [...role.confirmedMentions]..sort((a, b) => a.id.compareTo(b.id));
+    return _sha(canonicalJson({
+      'source': role.sourceFingerprint, 'character_id': role.characterId,
+      'name': role.displayName, 'dossier': role.dossierId, 'group': role.groupDigest,
+      'first_chapter': role.firstSourceChapter,
+      'mentions': [for (final m in mentions) {
+        'id': m.id, 'chunk': m.chunkId, 'start': m.startUtf16,
+        'end': m.endUtf16, 'status': m.status.name, 'kind': m.kind.name,
+      }],
+    }));
+  }
+
+  String get heroReviewDigest => _sha(canonicalJson({
+    'role': selectedHeroRole == null ? null : roleDigest(selectedHeroRole!),
+    'source_action': reviewedHeroSourceAction,
+  }));
+
+  Map<String, dynamic> get heroCloudContext => {
+    'runtime_actor': 'player',
+    'character_id': selectedHeroRole?.characterId,
+    'display_name': heroName,
+    'status': 'PRIVATE_PLAYER_ROLE_NOT_LITERARY_CANON',
+    'imports_npc_knowledge': false,
+    'source_observation_enabled': reviewedHeroSourceAction,
+  };
+
+  void verifyCurrentHero(List<ReviewedHeroRole> currentRoles) {
+    final hero = selectedHeroRole;
+    if (hero == null) return;
+    final matches = currentRoles.where((r) => r.characterId == hero.characterId).toList();
+    if (matches.length != 1 || roleDigest(matches.single) != roleDigest(hero)) {
+      throw const FormatException('Карточка выбранного героя изменена или отозвана. '
+          'Выберите и подтвердите роль заново.');
+    }
+    for (final mention in matches.single.confirmedMentions) { mention.validate(index); }
+  }
+
+  /// Check both the initial runtime identity and its visible profile. A base
+  /// with the same scene count but another protagonist cannot reuse review.
+  void verifyArchiveHero(VerifiedRichPrivateBookworld world) {
+    final hero = selectedHeroRole;
+    final identity = world.blueprint.initial.flags.entries
+        .where((e) => e.key.startsWith('player_is_npc_')).toList();
+    final profile = world.presentation['hero'];
+    if (world.sourceFingerprint != index.sourceFingerprint ||
+        profile is! Map || profile['name'] != heroName ||
+        (hero == null ? identity.isNotEmpty :
+          identity.length != 1 || identity.single.key != hero.playerIdentityFlag ||
+          identity.single.value != true || world.blueprint.actors.contains(hero.characterId))) {
+      throw const FormatException('Роль героя в собранном мире не совпала с выбранной карточкой.');
+    }
+  }
 
   factory WholeBookNpcSourcePlan.fromBook({
     required BookSourceIndex index, required NarrativeBookModel book,
     required BookwideActPlan bookMap, required MultiActStoryPlanDraft draft,
+    ReviewedHeroRole? selectedHeroRole,
+    bool reviewedHeroSourceAction = false,
   }) {
+    if (reviewedHeroSourceAction && selectedHeroRole == null) {
+      throw const FormatException('Ролевое действие требует выбранного героя.');
+    }
+    if (selectedHeroRole != null) {
+      if (selectedHeroRole.sourceFingerprint != index.sourceFingerprint ||
+          !CharacterId.isValidNpc(selectedHeroRole.characterId) ||
+          selectedHeroRole.confirmedMentions.isEmpty) {
+        throw const FormatException('Герой не подтверждён в этой редакции книги.');
+      }
+      for (final mention in selectedHeroRole.confirmedMentions) { mention.validate(index); }
+    }
     final extras = <String>{};
     for (var i = 0; i < draft.parts.length; i++) {
       final candidates = BookwideSourceEncounters.eligibleForAct(
           index: index, bookMap: bookMap, draft: draft, partIndex: i);
       if (candidates.length > BookwideSourceEncounters.maxReviewedEventsPerAct) {
-        throw const FormatException(
-            'Акт превышает вместимость. Нельзя молча отбросить события книги.');
+        throw const FormatException('Акт превышает вместимость. Нельзя молча отбросить события книги.');
       }
       extras.addAll(candidates.map((e) => e.id));
     }
     if (extras.length > BookwideSourceEncounters.remainingSceneCapacity(draft.plan)) {
-      throw const FormatException(
-          'Сценарий всей книги не помещается в текущий формат; события не обрезаны.');
+      throw const FormatException('Сценарий не помещается в текущий формат; события не обрезаны.');
     }
-    final plan = BookwideSourceEncounters.attach(
+    final sourcePlan = BookwideSourceEncounters.attach(
       index: index, book: book, bookMap: bookMap, draft: draft,
       plan: draft.plan, reviewedEventIds: extras,
-      userConfirmedPrivateAdaptation: true, // Local preview only, no bytes or API.
+      userConfirmedPrivateAdaptation: true, // Local preview; no export or API.
     );
+    final rolePlan = selectedHeroRole?.bindTo(sourcePlan, book) ?? sourcePlan;
+    final plan = reviewedHeroSourceAction ? ReviewedHeroSourceAction.attach(
+      index: index, book: book, plan: rolePlan, role: selectedHeroRole!,
+      explicitlyConfirmedPrivateGameFiction: true,
+    ) : rolePlan;
     final reviewed = <String>{
       ...extras,
       for (final part in draft.parts) ...[part.setupEventId, part.outcomeEventId],
@@ -75,34 +151,35 @@ class WholeBookNpcSourcePlan {
     }
     return WholeBookNpcSourcePlan._(
       index: index, book: book, bookMap: bookMap, draft: draft, plan: plan,
+      selectedHeroRole: selectedHeroRole, reviewedHeroSourceAction: reviewedHeroSourceAction,
       extraEventIds: extras, reviewedEventIds: reviewed,
-      coverage: BookwideActPlanner.compareWithStoryPlan(
-          bookMap: bookMap, book: book, story: plan),
+      coverage: BookwideActPlanner.compareWithStoryPlan(bookMap: bookMap, book: book, story: plan),
     );
   }
 
-  /// The same production compiler and exact source consent as a manual game.
   Future<StoryPlanTrialCompilation> compileBase({
     required String approvedPlanDigest,
     required bool allShownQuotesReviewed,
     required bool privateFictionConfirmed,
+    String? approvedHeroDigest,
   }) {
     if (!allShownQuotesReviewed || !privateFictionConfirmed ||
-        approvedPlanDigest != planDigest || _sha(plan.encode()) != planDigest) {
-      throw const FormatException('Согласие на цитаты всей кампании устарело.');
+        approvedPlanDigest != planDigest || _sha(plan.encode()) != planDigest ||
+        (selectedHeroRole != null && approvedHeroDigest != heroReviewDigest)) {
+      throw const FormatException('Согласие на цитаты или выбранного героя устарело.');
     }
     return MultiActTrialCompiler.compile(
       index: index, book: book, bookMap: bookMap, draft: draft,
       sourceEventIdsReviewedByUser: reviewedEventIds,
       reviewedInteractiveEventIds: extraEventIds,
+      heroName: heroName, selectedHeroRole: selectedHeroRole,
+      reviewedHeroSourceAction: reviewedHeroSourceAction,
       privateUseConfirmed: true, fictionalTrialAcknowledged: true,
     );
   }
 }
 
-/// A source-backed opportunity, NOT an inferred literary conversation.
-/// Pairing adjacent reviewed mentions is a writing suggestion; only execution
-/// through the imported StoryWorld can prove its actual game chronology.
+/// A suggested source-backed opportunity, not a canonical conversation.
 class BookwideNpcConversationCandidate {
   BookwideNpcConversationCandidate._({
     required this.id, required this.role,
@@ -121,8 +198,7 @@ class BookwideNpcConversationCandidate {
     'id': id, 'actor_id': role.characterId, 'display_name': role.displayName,
     'character_group_digest': role.groupDigest,
     'first_scene_id': firstSceneId, 'first_exit_choice_id': firstExitChoiceId,
-    'response_scene_id': responseSceneId,
-    'response_exit_choice_id': responseExitChoiceId,
+    'response_scene_id': responseSceneId, 'response_exit_choice_id': responseExitChoiceId,
     'source_event_id': firstEvent.id, 'response_event_id': responseEvent.id,
     'first_quote_sha256': _sha(firstEvent.source.quote),
     'response_quote_sha256': _sha(responseEvent.source.quote),
@@ -140,22 +216,18 @@ class NpcCampaignDialogueDraft {
   final List<String> requiresCandidateIds;
 }
 
-/// An immutable, exact review. Editing a word, dependency, identity or base
-/// archive creates another approval digest and cannot overwrite an old save.
 class ReviewedBookwideNpcCampaign {
   ReviewedBookwideNpcCampaign._({
-    required this.reviewJson, required this.planDigest,
-    required Uint8List baseArchive,
-    required this.selectedDrafts, required this.actorCount,
+    required this.reviewJson, required this.planDigest, required this.heroReviewDigest,
+    required Uint8List baseArchive, required this.selectedDrafts, required this.actorCount,
   }) : _baseArchive = Uint8List.fromList(baseArchive),
        approvalDigest = ReviewedNpcCampaignBookworldWriter.digest(reviewJson);
-  final String reviewJson, approvalDigest, planDigest;
+  final String reviewJson, approvalDigest, planDigest, heroReviewDigest;
   final Uint8List _baseArchive;
   final List<NpcCampaignDialogueDraft> selectedDrafts;
   final int actorCount;
   int get episodeCount => selectedDrafts.length;
-  Map<String, dynamic> get shownReview =>
-      Map<String, dynamic>.from(jsonDecode(reviewJson) as Map);
+  Map<String, dynamic> get shownReview => Map<String, dynamic>.from(jsonDecode(reviewJson) as Map);
   bool get isLiteraryCanon => false;
 }
 
@@ -167,8 +239,7 @@ class BookwideNpcCampaignBuild {
   });
   final Uint8List archive;
   final String archiveSha256;
-  final int actorCount, episodeCount;
-  final int sourceEventsRepresented, sourceEventsTotal;
+  final int actorCount, episodeCount, sourceEventsRepresented, sourceEventsTotal;
   bool get requiresNetworkToPlay => false;
   bool get canonicalAdaptationVerified => false;
 }
@@ -178,8 +249,7 @@ Uint8List _compileNpcCampaign(Map<String, dynamic> data) =>
       verifiedBaseArchive: data['archive'] as Uint8List,
       sourceIndex: Map<String, dynamic>.from(data['source_index'] as Map),
       reviewJson: data['review_json'] as String,
-      approvedDigest: data['approval_digest'] as String,
-      userConfirmed: true,
+      approvedDigest: data['approval_digest'] as String, userConfirmed: true,
     );
 
 class BookwideNpcCampaignAuthoring {
@@ -200,8 +270,8 @@ class BookwideNpcCampaignAuthoring {
     if (source.planDigest != _sha(source.plan.encode())) {
       throw const FormatException('Сценарий изменился после просмотра цитат.');
     }
-    final roles = [...currentReviewedRoles]
-      ..sort((a, b) => a.characterId.compareTo(b.characterId));
+    source.verifyCurrentHero(currentReviewedRoles);
+    final roles = [...currentReviewedRoles]..sort((a, b) => a.characterId.compareTo(b.characterId));
     if (roles.map((r) => r.characterId).toSet().length != roles.length) {
       throw const FormatException('Один character_id повторён в карточках.');
     }
@@ -209,16 +279,16 @@ class BookwideNpcCampaignAuthoring {
     final result = <BookwideNpcConversationCandidate>[];
     for (final role in roles) {
       if (role.sourceFingerprint != source.index.sourceFingerprint ||
-          !CharacterId.isValidNpc(role.characterId) ||
-          role.confirmedMentions.isEmpty) {
+          !CharacterId.isValidNpc(role.characterId) || role.confirmedMentions.isEmpty) {
         throw const FormatException('Карточка NPC относится к другой книге.');
       }
+      // One literary identity is either player or interlocutor, never both.
+      if (role.characterId == source.selectedHeroRole?.characterId) continue;
       final matching = <(StorySituation, StoryDecision, NarrativeEvent)>[];
       for (final scene in source.plan.situations) {
         final event = events[scene.sourceEventId];
         final exit = _safePass(scene);
-        if (event == null || exit == null ||
-            scene.route != StoryRoute.canonicalProposal) continue;
+        if (event == null || exit == null || scene.route != StoryRoute.canonicalProposal) continue;
         event.source.validate(source.index);
         final mentioned = role.confirmedMentions.any((mention) {
           mention.validate(source.index);
@@ -235,27 +305,23 @@ class BookwideNpcCampaignAuthoring {
         return order != 0 ? order : a.$1.id.compareTo(b.$1.id);
       });
       for (var i = 1; i < matching.length; i++) {
-        final first = matching[i - 1];
-        final next = matching[i];
+        final first = matching[i - 1], next = matching[i];
         if (first.$1.id == next.$1.id ||
             first.$3.source.chapterIndex > next.$3.source.chapterIndex) continue;
         final id = 'npc_arc_${_sha(canonicalJson({
-          'source': source.index.sourceFingerprint,
-          'actor': role.characterId, 'group': role.groupDigest,
-          'first': first.$1.id, 'next': next.$1.id,
+          'source': source.index.sourceFingerprint, 'actor': role.characterId,
+          'group': role.groupDigest, 'first': first.$1.id, 'next': next.$1.id,
         })).substring(0, 16)}';
         result.add(BookwideNpcConversationCandidate._(
-          id: id, role: role,
-          firstSceneId: first.$1.id, responseSceneId: next.$1.id,
+          id: id, role: role, firstSceneId: first.$1.id, responseSceneId: next.$1.id,
           firstExitChoiceId: first.$2.id, responseExitChoiceId: next.$2.id,
           firstEvent: first.$3, responseEvent: next.$3,
         ));
       }
     }
     result.sort((a, b) {
-      final position = a.firstEvent.narrativePosition
-          .compareTo(b.firstEvent.narrativePosition);
-      return position != 0 ? position : a.id.compareTo(b.id);
+      final p = a.firstEvent.narrativePosition.compareTo(b.firstEvent.narrativePosition);
+      return p != 0 ? p : a.id.compareTo(b.id);
     });
     return List.unmodifiable(result);
   }
@@ -267,17 +333,14 @@ class BookwideNpcCampaignAuthoring {
     required List<NpcCampaignDialogueDraft> selectedDrafts,
   }) {
     final base = const RichPrivateBookworldImporter().inspect(verifiedBaseArchive);
-    if (base.sourceFingerprint != source.index.sourceFingerprint ||
-        base.blueprint.scenes.length != source.plan.situations.length ||
-        selectedDrafts.isEmpty ||
-        selectedDrafts.length > ReviewedNpcCampaignBookworldWriter.maxEpisodes) {
+    source.verifyCurrentHero(currentReviewedRoles);
+    source.verifyArchiveHero(base);
+    if (base.blueprint.scenes.length != source.plan.situations.length ||
+        selectedDrafts.isEmpty || selectedDrafts.length > ReviewedNpcCampaignBookworldWriter.maxEpisodes) {
       throw const FormatException('Неверный сценарий или число NPC-разговоров.');
     }
-    final candidates = {
-      for (final candidate in discover(
-          source: source, currentReviewedRoles: currentReviewedRoles))
-        candidate.id: candidate,
-    };
+    final candidates = {for (final c in discover(
+        source: source, currentReviewedRoles: currentReviewedRoles)) c.id: c};
     final chosen = <String>{};
     final rows = <Map<String, dynamic>>[];
     for (final draft in selectedDrafts) {
@@ -293,8 +356,7 @@ class BookwideNpcCampaignAuthoring {
       }
       rows.add(candidate.approvedRow(draft));
     }
-    if (selectedDrafts.any((d) =>
-        d.requiresCandidateIds.any((id) => !chosen.contains(id)))) {
+    if (selectedDrafts.any((d) => d.requiresCandidateIds.any((id) => !chosen.contains(id)))) {
       throw const FormatException('Предшествующий разговор не включён в кампанию.');
     }
     rows.sort((a, b) => (a['id'] as String).compareTo(b['id'] as String));
@@ -303,13 +365,11 @@ class BookwideNpcCampaignAuthoring {
       'scope': ReviewedNpcCampaignBookworldWriter.scope,
       'source_fingerprint': base.sourceFingerprint,
       'base_archive_sha256': base.archiveSha256,
-      'base_blueprint_sha256': base.blueprint.blueprintHash,
-      'episodes': rows,
+      'base_blueprint_sha256': base.blueprint.blueprintHash, 'episodes': rows,
     });
     return ReviewedBookwideNpcCampaign._(
-      reviewJson: json, planDigest: source.planDigest,
-      baseArchive: verifiedBaseArchive,
-      selectedDrafts: List.unmodifiable(selectedDrafts),
+      reviewJson: json, planDigest: source.planDigest, heroReviewDigest: source.heroReviewDigest,
+      baseArchive: verifiedBaseArchive, selectedDrafts: List.unmodifiable(selectedDrafts),
       actorCount: rows.map((r) => r['actor_id']).toSet().length,
     );
   }
@@ -321,29 +381,22 @@ class BookwideNpcCampaignAuthoring {
     required String approvedDigest,
     required bool explicitlyConfirmedPrivateFiction,
   }) async {
-    if (!explicitlyConfirmedPrivateFiction ||
-        approvedDigest != approval.approvalDigest ||
-        source.planDigest != approval.planDigest) {
-      throw const FormatException('Нет точного согласия на NPC-кампанию.');
+    if (!explicitlyConfirmedPrivateFiction || approvedDigest != approval.approvalDigest ||
+        source.planDigest != approval.planDigest || source.heroReviewDigest != approval.heroReviewDigest) {
+      throw const FormatException('Нет точного согласия на героя и NPC-кампанию.');
     }
-    // Reloaded identities/revoked quotes/changed dialogue cannot reuse consent.
-    final fresh = review(source: source,
-      verifiedBaseArchive: approval._baseArchive,
-      currentReviewedRoles: freshReviewedRoles,
-      selectedDrafts: approval.selectedDrafts,
-    );
+    final fresh = review(source: source, verifiedBaseArchive: approval._baseArchive,
+      currentReviewedRoles: freshReviewedRoles, selectedDrafts: approval.selectedDrafts);
     if (fresh.approvalDigest != approvedDigest) {
       throw const FormatException('Карточки или реплики изменились: проверьте заново.');
     }
     final archive = await compute(_compileNpcCampaign, <String, dynamic>{
-      'archive': approval._baseArchive,
-      'source_index': source.index.toJson(),
-      'review_json': approval.reviewJson,
-      'approval_digest': approvedDigest,
+      'archive': approval._baseArchive, 'source_index': source.index.toJson(),
+      'review_json': approval.reviewJson, 'approval_digest': approvedDigest,
     });
     final verified = const RichPrivateBookworldImporter().inspect(archive);
-    if (verified.sourceFingerprint != source.index.sourceFingerprint ||
-        verified.requiresNetwork || verified.canDistributePublicly ||
+    source.verifyArchiveHero(verified);
+    if (verified.requiresNetwork || verified.canDistributePublicly ||
         verified.blueprint.actors.length != approval.actorCount + 1) {
       throw const FormatException('Собранный NPC-мир не соответствует принятой кампании.');
     }
