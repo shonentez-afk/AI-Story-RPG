@@ -239,6 +239,16 @@ class NpcKnowledgeRichWorldBridge {
       socialRules: socialRules,
       sceneOrigins: origins,
     );
+    // Even a fully source-reviewed turn is not authorable if no actual
+    // playable route can establish its fact, memory or directed trust.
+    // Run the same pure core audit here with ALL signed social rules,
+    // rather than relying on a text-only/graph-only authoring proposal.
+    if (effectiveDialogueReview.isNotEmpty) {
+      RichNpcDialogueKnowledge.auditExecutableRoutes(
+        <String, dynamic>{...effectiveDialogueReview},
+        world, socialRules: socialRules,
+      );
+    }
     final acceptedResponses = reviewedResponseProposal == null
         ? null
         : RichNpcDialogueResponses.accept(

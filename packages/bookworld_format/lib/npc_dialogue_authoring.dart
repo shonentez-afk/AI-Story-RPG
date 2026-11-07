@@ -149,6 +149,9 @@ class RichNpcDialogueAuthoring {
     // contract; no second semantic gate or engine is introduced.
     RichNpcDialogueKnowledge.validate(
       reviews, blueprint, signed, sceneOrigins: sceneOrigins);
+    // A graph edge is not enough: prove that the NPC can really learn
+    // the guarded fact through committed StoryWorld choices before speaking.
+    RichNpcDialogueKnowledge.auditExecutableRoutes(reviews, blueprint);
     final frozen = <String, List<Map<String, dynamic>>>{
       for (final row in reviews.entries)
         row.key: List<Map<String, dynamic>>.unmodifiable([

@@ -169,6 +169,79 @@ class RichNpcDialogueKnowledge {
   }
 
 
+
+  /// Source-review preflight against executable paths, not only scene
+  /// connectivity. Authoring calls this before asking the user to approve
+  /// a literary dialogue. It is intentionally separate from the signed
+  /// rich-v3 importer: it adds no ZIP fields or Python format drift.
+  ///
+  /// All *claimed* prerequisites must have at least one witness consisting
+  /// entirely of real StoryWorld.apply decisions. A route without the fact
+  /// may still exist; in that branch redact() must hide the guarded line.
+  /// If a bounded search cannot decide, fail closed with an actionable error.
+  static void auditExecutableRoutes(
+    Map<String, dynamic> reviewedTurns,
+    StoryBlueprint blueprint, {
+    NpcSocialRulebook? socialRules,
+    int maxStates = 4096,
+    int maxMoves = 128,
+  }) {
+    final unique = <String>{};
+    for (final sceneEntry in reviewedTurns.entries) {
+      if (!blueprint.scenes.containsKey(sceneEntry.key) ||
+          sceneEntry.value is! List) {
+        throw const FormatException('Unknown reviewed causal dialogue scene');
+      }
+      for (final raw in sceneEntry.value as List) {
+        if (raw is! Map<String, dynamic> ||
+            raw['actor_id'] is! String ||
+            raw['required_fact_ids'] is! List) {
+          throw const FormatException('Invalid reviewed causal dialogue turn');
+        }
+        final actor = raw['actor_id'] as String;
+        if (actor == 'player') continue;
+        final prior = raw['required_prior_choice_id'] as String?;
+        final memory = raw['required_social_memory_id'] as String?;
+        final trust = raw['minimum_trust_to_player'] as int?;
+        final facts = List<String>.from(raw['required_fact_ids'] as List);
+        if (prior == null && memory == null && trust == null &&
+            facts.isEmpty) continue;
+        facts.sort();
+        final key = canonicalJson({
+          'scene': sceneEntry.key,
+          'actor': actor,
+          'prior': prior,
+          'facts': facts,
+          'memory': memory,
+          'trust': trust,
+        });
+        if (!unique.add(key)) continue;
+        final proof = StoryCausalRouteAudit.find(
+          blueprint: blueprint,
+          targetSceneId: sceneEntry.key,
+          requiredPriorChoiceId: prior,
+          actorId: actor,
+          requiredFactIds: facts,
+          requiredMemoryId: memory,
+          minimumTrustToPlayer: trust,
+          socialRulebook: socialRules,
+          maxStates: maxStates,
+          maxMoves: maxMoves,
+        );
+        if (!proof.proven) {
+          final cause = proof.status == CausalRouteStatus.unreachable
+              ? 'no executable route satisfies the requirements'
+              : 'bounded route search was inconclusive';
+          throw FormatException(
+            'NPC dialogue causal preflight: ' + cause +
+            ' (scene ' + sceneEntry.key + ', actor ' + actor + ')',
+          );
+        }
+      }
+    }
+  }
+
+
   static bool _reachable(
       StoryBlueprint blueprint, String fromSceneId, String targetSceneId) {
     final stack = <String>[fromSceneId];

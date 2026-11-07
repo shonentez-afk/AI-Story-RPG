@@ -1,5 +1,19 @@
 # AI Story RPG — актуальный статус 2026-11-07
 
+## 2026-11-07 — P0 двигатель: реальные причинные маршруты NPC
+
+**Новый связанный пакет в PR #133 ожидает exact-HEAD CI; не объявлять PASS заранее.** Последний подтверждённый кодовый baseline `a45fa886`, [CI #949](https://github.com/shonentez-afk/AI-Story-RPG/actions/runs/42361497532) SUCCESS (654 Flutter PASS/2 SKIP, Python/Dart/M1.7/SQLite, Windows portable, Android APK), [M0 #1034](https://github.com/shonentez-afk/AI-Story-RPG/actions/runs/42361497406) SUCCESS.
+
+**Исправленный пробел движка:** структурная связь source scene → dialogue scene ещё не гарантирует, что NPC может на реальной ветке узнать факт, вспомнить событие или заслужить доверие. Добавлен чистый `StoryCausalRouteAudit.find` в `packages/story_core`: детерминированно перебирает только реально принятые `StoryWorld.apply` ветки, различает факты по постоянному actor ID, социальную память и отношения, предметы, флаги, время и жизненные состояния; отдаёт подтверждённые события и воспроизводимую последовательность выбора. У результата три статуса: proven/unreachable/inconclusive (лимит, **не** ложный отказ). Предусмотрен режим `forbiddenChoiceId` для контрмаршрута.
+
+**Применение:** `RichNpcDialogueKnowledge.auditExecutableRoutes` проверяет knowledge/memory/trust/causal prerequisites NPC-turn до авторского подтверждения; `RichNpcDialogueAuthoring.propose` и `NpcKnowledgeRichWorldBridge.prepare` вызывают его до компиляции. Исходные source-lock и runtime-redaction не меняются; готовые игры совместимы, **rich-v3 формат и Python importer не изменены**. Написаны новые engine + authoring regression tests включая невозможный путь, альтернативу, replay, social memory и предел бюджета.
+
+Точный контракт, границы и список проверок: [docs/P0_NPC_EXECUTABLE_CAUSAL_ROUTES_RU_2026-11-07.md](docs/P0_NPC_EXECUTABLE_CAUSAL_ROUTES_RU_2026-11-07.md).
+
+**Затем по плану:** на базе контрпримеров `StoryCausalRouteAudit` расширять валидатор многоактного сценария для полной книги: авторские цели и причинные переходы `source event → choice → consequence → dialogue`, отдельная смысловая проверка на реальных 2 русских FB2 и GLM. Не переключаться на дизайн, E6d, веб-платформу, пиксельную графику. PR #133 Draft, `main` не менять.
+
+
+
 ## Контрольный пункт 2026-11-07: интерфейс NPC синхронизирован с движком
 
 **Подтверждённый кодовый SHA:** `a45fa8869ba064d6129ced346f6fadab639a1dac` ([commit](https://github.com/shonentez-afk/AI-Story-RPG/commit/a45fa8869ba064d6129ced346f6fadab639a1dac)); [CI #949](https://github.com/shonentez-afk/AI-Story-RPG/actions/runs/42361497532) — Python SUCCESS, Dart SUCCESS, M1.7/SQLite/standalone SUCCESS, Flutter analyze SUCCESS, **654 PASS / 2 SKIP** (приватные FB2 отсутствуют в публичном CI), Windows portable **SUCCESS**, **Android APK: SUCCESS**. [M0 #1034](https://github.com/shonentez-afk/AI-Story-RPG/actions/runs/42361497406) **SUCCESS**. **Полный основной CI #949: SUCCESS.** Артефакты: [Windows portable](https://github.com/shonentez-afk/AI-Story-RPG/actions/runs/42361497532/artifacts/13569893314), [Android debug APK (в ZIP-артефакте)](https://github.com/shonentez-afk/AI-Story-RPG/actions/runs/42361497532/artifacts/13569694203).
