@@ -11,7 +11,7 @@ import zipfile
 from itertools import combinations
 from pathlib import Path
 
-from .common import AuthoringError, canonical, digest, parse_json, read_bytes, read_json, require
+from .common import AuthoringError, canonical, digest, outside_repository, parse_json, read_bytes, read_json, require
 from .compatibility import check_contract
 from .project import load_project
 from .rich_package import _enrich
