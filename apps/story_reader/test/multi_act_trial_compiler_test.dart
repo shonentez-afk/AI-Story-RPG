@@ -518,6 +518,8 @@ void main() {
     expect(compilation.requiresCloudToPlay, false);
     expect(compilation.canDistributePublicly, false);
     expect(compilation.sceneCount, 14);
+    expect(compilation.verifiedSourceChoices, 4);
+    expect(compilation.verifiedActBridges, 2);
     expect(compilation.sourceQuoteCount, 4);
     expect(compilation.sourceEventsTotal, book.events.length);
     expect(compilation.sourceEventsRepresented, input.draft.coverage.referencedEvents);

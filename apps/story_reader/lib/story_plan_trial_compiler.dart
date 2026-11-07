@@ -31,11 +31,16 @@ class StoryPlanTrialCompilation {
     this.chaptersWithoutSourceEvents = const [],
     this.selectedHeroLabel = 'Игрок',
     this.selectedHeroCharacterId,
+    this.verifiedSourceChoices = 0,
+    this.verifiedActBridges = 0,
   });
 
   final Uint8List archive;
   final String sourceFingerprint, bookworldId, archiveSha256;
   final int sceneCount, sourceQuoteCount;
+  /// Verified executable source-bound actions and both outgoing act bridges.
+  /// This is NOT approval of the book's literary meaning or chronology.
+  final int verifiedSourceChoices, verifiedActBridges;
   /// Computed from this exact book/plan during compilation, NOT model claims.
   final int sourceEventsTotal, sourceEventsRepresented;
   final List<String> unrepresentedSourceEventIds;

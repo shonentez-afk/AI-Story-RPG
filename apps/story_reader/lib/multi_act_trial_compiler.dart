@@ -2,6 +2,7 @@ import 'package:bookworld_format/bookworld_format.dart';
 
 import 'book_source_index.dart';
 import 'bookwide_act_planner.dart';
+import 'bookwide_campaign_contract.dart';
 import 'bookwide_storyplan_composer.dart';
 import 'bookwide_source_encounters.dart';
 import 'branch_continuity_auditor.dart';
@@ -185,6 +186,13 @@ class MultiActTrialCompiler {
       throw const FormatException(
           'Перед запуском нужно проверить все исходные цитаты актов.');
     }
+    // One acceptance for every source anchor, reviewed encounter, and both
+    // act-bridge choices. The importer and StoryWorld audit prove execution.
+    final campaignContract = BookwideCampaignContract.fromPlan(
+      book: book, draft: draft, plan: plan,
+      reviewedInteractiveEventIds: reviewedInteractiveEventIds,
+    );
+
     // Confirm quoted SOURCE WORDS ONLY; this is not independent acceptance of
     // a character's claims, causal relations, knowledge or world chronology.
     final byId = {for (final e in book.events) e.id: e};
@@ -437,24 +445,12 @@ class MultiActTrialCompiler {
     // Final pass on the EXACT independently imported world, not on a
     // convenient graph of StoryPlan situations. Reject reachable softlocks
     // and structurally connected but impossible endings before installation.
-    final sourceEventChoices =
-        BookwideSourceEncounters.executableChoicesForReviewedEvents(
-      plan: plan, reviewedEventIds: reviewedInteractiveEventIds,
-    );
     final campaignReport = CompiledCampaignCausalGate.verify(
       blueprint: inspected.blueprint,
       socialRules: inspected.npcSocialRulebook,
-      requiredChoiceIds: sourceEventChoices.values,
+      requiredChoiceIds: campaignContract.requiredChoiceIds,
     );
-    // The imported package has to prove the reviewed actions were actually
-    // committed on real replayable paths. Text coverage alone is insufficient.
-    for (final entry in sourceEventChoices.entries) {
-      if (!campaignReport.choiceWitnesses.containsKey(entry.value)) {
-        throw FormatException(
-            'Событие книги не имеет исполнимого игрового решения: ' +
-            entry.key);
-      }
-    }
+    campaignContract.verifyWitnesses(campaignReport);
     return StoryPlanTrialCompilation(
       archive: archive,
       sourceFingerprint: index.sourceFingerprint,
@@ -472,6 +468,8 @@ class MultiActTrialCompiler {
           List.unmodifiable(coverage.chaptersWithoutEventProposals),
       selectedHeroLabel: heroName,
       selectedHeroCharacterId: selectedHeroRole?.characterId,
+      verifiedSourceChoices: campaignContract.sourceDecisions.length,
+      verifiedActBridges: campaignContract.bridgeDecisions.length,
     );
   }
 }
