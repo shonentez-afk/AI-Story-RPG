@@ -71,7 +71,7 @@ Future<NarrativeBookModel> _longBook(BookSourceIndex index) async {
     explicitWholeBookConsent: true,
     maxWindowsPerRun: 64,
   );
-  expect(review.analysisComplete, isTrue);
+  expect(review.complete, isTrue);
   return NarrativeBookModel.fromExisting(
     index: index,
     outline: ZaiWholeBookEventOutline.build(review),
