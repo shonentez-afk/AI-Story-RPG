@@ -32,6 +32,8 @@ def doctor() -> dict:
     social_probe = check_npc_social_v5()
     return {"tool_version": VERSION, "toolchain_sha256": toolchain_id(),
             "optional_npc_knowledge_contract": npc_probe,
+            "optional_npc_social_v5_contract": social_probe,
+            "npc_reviewed_authoring_supported": True,
             "npc_auto_authoring_ready": False,
             "application_baseline": lock["application_baseline"],
             "source_adapter": "python_port_with_dart_parity_tests",
@@ -42,4 +44,4 @@ def doctor() -> dict:
             "default_package_version": 3,
             "build_command": "build --project PROJECT --enrichment JSON --output GAME.bworld",
             "verify_command": "verify --input GAME.bworld --attribution GAME.attribution.json",
-            "next_step": "Analyze the source, validate the story, then provide rich enrichment and build v3"}
+            "next_step": "Analyze the full source, validate the story, supply rich enrichment and optional explicitly reviewed NPC overlay, then build/verify rich v3"}
