@@ -260,13 +260,17 @@ def audit_blueprint(bp: dict, *, max_states: int = MAX_STATES) -> dict:
                             "Source-grounded literary and human playtesting remain separate"]}
 
 
-def audit_project(root: Path, enrichment_path: Path) -> dict:
+def audit_project(root: Path, enrichment_path: Path,
+                  npc_review_path: Path | None = None) -> dict:
     check_contract()
     _, state, index, analyses, story = load_project(root)
     require(story is not None, "story_missing", "A complete accepted StoryPlan is required")
     validate_story(story, index, analyses)
     enrichment = read_json(enrichment_path)
-    bp, _ = _enrich(candidate_blueprint(story, index), story, index, enrichment)
+    reviewed = (read_json(outside_repository(npc_review_path))
+                if npc_review_path is not None else None)
+    bp, _ = _enrich(candidate_blueprint(story, index), story, index,
+                    enrichment, npc_review=reviewed)
     report = audit_blueprint(bp)
     report.update({"source_fingerprint": index["source_fingerprint"],
                    "story_sha256": state["story_sha256"],
