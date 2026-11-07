@@ -29,6 +29,7 @@ class StoryPlanTrialCompilation {
     this.uncoveredSourceChapters = const [],
     this.chaptersWithoutSourceEvents = const [],
     this.selectedHeroLabel = 'Игрок',
+    this.selectedHeroCharacterId,
   });
 
   final Uint8List archive;
@@ -42,6 +43,10 @@ class StoryPlanTrialCompilation {
   final List<int> chaptersWithoutSourceEvents;
   /// User-approved display label for the player actor (not a verified NPC).
   final String selectedHeroLabel;
+  /// A verified permanent NPC identity when the player deliberately chooses
+  /// that role. The actual runtime actor stays 'player' in every v3 world.
+  /// Identity is bound to initial story_core state via player_is_npc_<id>.
+  final String? selectedHeroCharacterId;
   bool get hasAllSourceEventsRepresented =>
       sourceEventsTotal > 0 && sourceEventsRepresented == sourceEventsTotal &&
       unrepresentedSourceEventIds.isEmpty &&

@@ -6,6 +6,7 @@ import 'bookwide_act_planner.dart';
 import 'bookwide_storyplan_composer.dart';
 import 'bookwide_source_encounters.dart';
 import 'story_plan.dart';
+import 'reviewed_hero_role.dart';
 import 'cross_act_consequence_gate.dart';
 import 'multi_act_trial_compiler.dart';
 import 'source_locked_prose_preview_page.dart';
@@ -33,6 +34,7 @@ class MultiActTrialPage extends StatefulWidget {
     required this.bookMap,
     required this.draft,
     required this.gateway,
+    this.heroRoleCatalog,
   });
 
   final BookSourceIndex index;
@@ -40,6 +42,9 @@ class MultiActTrialPage extends StatefulWidget {
   final BookwideActPlan bookMap;
   final MultiActStoryPlanDraft draft;
   final WorldLibraryGateway gateway;
+  /// Defaults to existing local NPC editorial checkpoints, no network.
+  /// Injectable for deterministic widget and source-identity tests.
+  final ReviewedHeroRoleCatalog? heroRoleCatalog;
 
   @override
   State<MultiActTrialPage> createState() => _MultiActTrialPageState();
@@ -50,8 +55,15 @@ class _MultiActTrialPageState extends State<MultiActTrialPage> {
   bool _privateFiction = false;
   bool _enforceEarlierOutcome = false;
   bool _working = false;
-  /// Signed player label only; this does not mint an NPC character_id.
   String _heroName = 'Игрок';
+  final TextEditingController _heroController =
+      TextEditingController(text: 'Игрок');
+  late final ReviewedHeroRoleCatalog _roleCatalog =
+      widget.heroRoleCatalog ?? const ReviewedHeroRoleCatalog();
+  List<ReviewedHeroRole> _eligibleHeroes = const [];
+  ReviewedHeroRole? _selectedHeroRole;
+  bool _loadingHeroRoles = false;
+  String? _heroNotice;
   String? _error;
   final Map<String, ReviewedProseSceneApproval> _reviewedProse = {};
   final Set<String> _interactiveEvents = {};
@@ -59,6 +71,66 @@ class _MultiActTrialPageState extends State<MultiActTrialPage> {
   SelectedWholePlanGameplayCandidates? _wholeGameplaySelection;
   WholeStoryLiteraryRecheckApproval? _recheckedRepair;
   WholeStoryLiteraryUnchangedApproval? _unchangedReview;
+
+  @override
+  void dispose() {
+    _heroController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadHeroRoles() async {
+    if (_loadingHeroRoles || _working) return;
+    setState(() { _loadingHeroRoles = true; _heroNotice = null; });
+    try {
+      final roles = await _roleCatalog.load(widget.index);
+      if (!mounted) return;
+      setState(() {
+        _eligibleHeroes = roles;
+        _heroNotice = roles.isEmpty
+            ? 'Подтверждённых персонажей нет. Создайте и проверьте '
+              'постоянные карточки NPC в редакторе этой книги.'
+            : 'Подтверждено персонажей: ' + roles.length.toString() +
+              '. Книга и уже сохранённые игры не меняются.';
+      });
+    } catch (error) {
+      if (mounted) setState(() {
+        _eligibleHeroes = const [];
+        _heroNotice = 'Не удалось подтвердить персонажей: ' +
+            error.toString() +
+            '. Имя не будет автоматически угадано по тексту.';
+      });
+    } finally {
+      if (mounted) setState(() => _loadingHeroRoles = false);
+    }
+  }
+
+  void _chooseHero(String? id) {
+    if (_working) return;
+    final chosen = [
+      for (final role in _eligibleHeroes)
+        if (role.characterId == id) role,
+    ];
+    if (id != null && id.isNotEmpty && chosen.length != 1) {
+      setState(() => _heroNotice =
+          'Нужен существующий постоянный character_id.');
+      return;
+    }
+    final role = chosen.isEmpty ? null : chosen.single;
+    setState(() {
+      _selectedHeroRole = role;
+      _heroName = role?.displayName ?? 'Игрок';
+      _heroController.text = _heroName;
+      // Player identity IS part of signed scenario state, so previous
+      // role-specific proposals, approvals and prose become stale.
+      _reviewed = false;
+      _gameplaySelection = null;
+      _wholeGameplaySelection = null;
+      _reviewedProse.clear();
+      _recheckedRepair = null;
+      _unchangedReview = null;
+      _error = null;
+    });
+  }
 
   List<NarrativeEvent> get _reviewEvents {
     final ids = <String>{
@@ -84,15 +156,17 @@ class _MultiActTrialPageState extends State<MultiActTrialPage> {
 
   // Preview binds the SAME plan used for model consent, ZIP and SQLite.
   // Compilation independently checks the actual private-use consent.
-  StoryPlan _effectivePlan({CrossActContinuityDraft? continuity}) =>
-      BookwideSourceEncounters.attach(
-        index: widget.index, book: widget.book, bookMap: widget.bookMap,
-        draft: widget.draft,
-        plan: _recheckedRepair?.draft ??
-            continuity?.plan ?? widget.draft.plan,
-        reviewedEventIds: _interactiveEvents,
-        userConfirmedPrivateAdaptation: true,
-      );
+  StoryPlan _effectivePlan({CrossActContinuityDraft? continuity}) {
+    final source = BookwideSourceEncounters.attach(
+      index: widget.index, book: widget.book, bookMap: widget.bookMap,
+      draft: widget.draft,
+      plan: _recheckedRepair?.draft ??
+          continuity?.plan ?? widget.draft.plan,
+      reviewedEventIds: _interactiveEvents,
+      userConfirmedPrivateAdaptation: true,
+    );
+    return _selectedHeroRole?.bindTo(source, widget.book) ?? source;
+  }
 
   /// A single source/plan revision invalidates prior quotes, model digests
   /// and gameplay item/fact consent. A newly selected batch is NOT approved.
@@ -251,6 +325,18 @@ class _MultiActTrialPageState extends State<MultiActTrialPage> {
     setState(() { _working = true; _error = null; });
     try {
       final continuity = _currentReviewedContinuity();
+      // A second local read prevents silently compiling an ID from an
+      // NPC notebook deleted or regrouped since the selection was shown.
+      if (_selectedHeroRole != null) {
+        final fresh = await _roleCatalog.load(widget.index);
+        if (!fresh.any((role) =>
+            role.characterId == _selectedHeroRole!.characterId &&
+            role.groupDigest == _selectedHeroRole!.groupDigest &&
+            role.displayName == _selectedHeroRole!.displayName)) {
+          throw const FormatException(
+              'Карточка героя изменилась после выбора: выберите заново.');
+        }
+      }
       final effectivePlan = _effectivePlan(continuity: continuity);
       final compiled = await MultiActTrialCompiler.compile(
         index: widget.index,
@@ -268,6 +354,7 @@ class _MultiActTrialPageState extends State<MultiActTrialPage> {
         reviewedProse: _reviewedProse.values.toList(growable: false),
         reviewedInteractiveEventIds: _interactiveEvents,
         heroName: _heroName,
+        selectedHeroRole: _selectedHeroRole,
       );
       if (!mounted || compiled.sourceFingerprint !=
           widget.index.sourceFingerprint) return;
@@ -426,15 +513,56 @@ class _MultiActTrialPageState extends State<MultiActTrialPage> {
                 'CANON не включаем до подтверждения событий и причинности.',
                 key: Key('multiact-available-mode')),
             const SizedBox(height: 8),
+            OutlinedButton.icon(
+              key: const Key('multiact-load-reviewed-heroes'),
+              onPressed: _working || _loadingHeroRoles
+                  ? null : _loadHeroRoles,
+              icon: const Icon(Icons.person_search_outlined),
+              label: const Text('Выбрать героя по проверенной карточке NPC'),
+            ),
+            if (_loadingHeroRoles)
+              const LinearProgressIndicator(),
+            if (_heroNotice != null)
+              Text(_heroNotice!, key: const Key('multiact-hero-notice')),
+            if (_eligibleHeroes.isNotEmpty)
+              DropdownButtonFormField<String>(
+                key: const Key('multiact-hero-identity'),
+                value: _selectedHeroRole?.characterId ?? '',
+                isExpanded: true,
+                decoration: const InputDecoration(
+                  labelText: 'Постоянная личность игрового героя',
+                  border: OutlineInputBorder(),
+                ),
+                items: [
+                  const DropdownMenuItem(
+                    value: '', child: Text('Свободный игровой герой'),
+                  ),
+                  for (final role in _eligibleHeroes)
+                    DropdownMenuItem(
+                      value: role.characterId,
+                      child: Text(role.displayName +
+                          ' · ' + role.characterId.substring(0, 12)),
+                    ),
+                ],
+                onChanged: _working
+                    ? null : (id) => _chooseHero(id),
+              ),
+            if (_selectedHeroRole != null)
+              const Text('Роль привязана к постоянному character_id '
+                  'в игровом состоянии и сохранении. Знания NPC, '
+                  'секреты и литературный канон автоматически '
+                  'не передаются игроку.'),
             TextFormField(
               key: const Key('multiact-hero-label'),
-              initialValue: _heroName,
+              controller: _heroController,
+              enabled: _selectedHeroRole == null && !_working,
               maxLength: 90,
-              decoration: const InputDecoration(
+              decoration: InputDecoration(
                 labelText: 'Имя героя в игровой версии',
-                helperText: 'Это только подпись игрока, '
-                    'а не подтверждённая роль персонажа книги',
-                border: OutlineInputBorder(),
+                helperText: _selectedHeroRole == null
+                    ? 'Свободный персонаж: только подпись игрока'
+                    : 'Имя закреплено за проверенной личностью NPC',
+                border: const OutlineInputBorder(),
               ),
               onChanged: (value) => setState(() => _heroName = value),
             ),

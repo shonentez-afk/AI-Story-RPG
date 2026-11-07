@@ -7,6 +7,14 @@ import 'package:ai_story_reader/book_source_index.dart';
 import 'package:ai_story_reader/bookwide_act_planner.dart';
 import 'package:ai_story_reader/bookwide_storyplan_composer.dart';
 import 'package:ai_story_reader/bookwide_source_encounters.dart';
+import 'package:ai_story_reader/reviewed_hero_role.dart';
+import 'package:ai_story_reader/npc_editorial_notebook.dart';
+import 'package:ai_story_reader/source_character_dossiers.dart';
+import 'package:ai_story_reader/source_evidence_graph.dart';
+import 'package:ai_story_reader/source_narrative_extractor.dart';
+import 'package:ai_story_reader/source_relation_review.dart';
+import 'package:ai_story_reader/source_semantic_catalog.dart';
+import 'package:ai_story_reader/source_semantic_editorial_review.dart';
 import 'package:ai_story_reader/cross_act_consequence_gate.dart';
 import 'package:ai_story_reader/cross_act_source_evidence_packet.dart';
 import 'package:ai_story_reader/multi_act_trial_compiler.dart';
@@ -153,6 +161,90 @@ StoryDilemmaProposal _proposal(NarrativeBookModel book, int chapter) {
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+
+  test('confirmed permanent character_id is a signed player state '
+      'flag, survives SQLite and never imports NPC secrets', () async {
+    final index = BookSourceIndexer.index(ImportedBook(
+      title: 'Два акта с подтвержденным героем',
+      author: 'Игровой тест личности',
+      chapters: [
+        List.filled(5, 'Артем увидел ворота и нашёл ключ. '
+            'Артем услышал предложение от путника. ').join(' '),
+        List.filled(5, 'Мария ждала у ворот. '
+            'Артем выбрал другую дорогу и вернулся. ').join(' '),
+      ],
+    ));
+    final book = await _analyze(index);
+    final input = _draft(index, book);
+    var graph = SourceEvidenceGraph.empty(index);
+    for (final chunk in index.chunks) {
+      graph = graph.addAll(index,
+          SourceNarrativeExtractor.extractChunk(index, chunk));
+    }
+    for (final evidence in graph.records) {
+      graph = graph.review(index, evidence.id, EvidenceStatus.confirmed);
+    }
+    final relations = SourceRelationReviewSession.create(index, graph);
+    final catalog = SourceSemanticCatalog.fromLocalEvidence(index, graph);
+    final editorial = SemanticEditorialReviewSession.create(index, catalog);
+    final dossiers = SourceCharacterDossierIndex.build(
+        index, graph, relations, catalog, editorial);
+    final artem = dossiers.dossiers.firstWhere(
+        (d) => d.labels.contains('Артем'));
+    final notebook = NpcEditorialNotebook.empty(index).putProfile(
+        NpcEditorialNotebook.freshProfile(artem));
+    final role = ReviewedHeroRole.fromReviewedSources(
+      index: index, dossiers: dossiers, graph: graph, catalog: catalog,
+      editorial: editorial, notebook: notebook,
+    ).single;
+    expect(role.characterId, startsWith('npc_'));
+    expect(role.playerIdentityFlag, 'player_is_' + role.characterId);
+    await expectLater(MultiActTrialCompiler.compile(
+      index: index, book: book, bookMap: input.map, draft: input.draft,
+      sourceEventIdsReviewedByUser: input.eventIds,
+      privateUseConfirmed: true, fictionalTrialAcknowledged: true,
+      heroName: 'Чужой герой', selectedHeroRole: role,
+    ), throwsFormatException);
+    final compiled = await MultiActTrialCompiler.compile(
+      index: index, book: book, bookMap: input.map, draft: input.draft,
+      sourceEventIdsReviewedByUser: input.eventIds,
+      privateUseConfirmed: true, fictionalTrialAcknowledged: true,
+      heroName: role.displayName, selectedHeroRole: role,
+    );
+    expect(compiled.selectedHeroCharacterId, role.characterId);
+    final checked = const RichPrivateBookworldImporter()
+        .inspect(compiled.archive);
+    expect(checked.presentation['hero'],
+        containsPair('name', role.displayName));
+    expect(checked.blueprint.actors, {'player'});
+    expect(checked.blueprint.initial.flags[role.playerIdentityFlag], true);
+    expect(checked.blueprint.initial.knowledge['player'], isEmpty);
+    final folder = await Directory.systemTemp.createTemp('reviewed-hero-');
+    try {
+      var store = BookworldCampaignStore.openPrivateDirectory(folder.path);
+      late String campaign;
+      try {
+        final installed = store.installBookworld(compiled.archive);
+        campaign = store.createCampaign(installed.archiveHash);
+        expect(store.loadCampaign(campaign)
+            .coordinator.state.flags[role.playerIdentityFlag], true);
+        expect(store.loadCampaign(campaign)
+            .coordinator.state.knowledge['player'], isEmpty);
+      } finally {
+        store.close();
+      }
+      store = BookworldCampaignStore.openPrivateDirectory(folder.path);
+      try {
+        expect(store.loadCampaign(campaign)
+            .coordinator.state.flags[role.playerIdentityFlag], true);
+      } finally {
+        store.close();
+      }
+    } finally {
+      await folder.delete(recursive: true);
+    }
+  });
 
   test('multi-act trial uses existing PRIVATE BookWorld and SQLite, '
       'real earlier outcome changes act2 choice and two campaigns '
@@ -1370,42 +1462,58 @@ void main() {
       gateway: const DeviceWorldLibraryGateway(background: false),
     )));
     final scroll = find.byType(Scrollable).first;
+    // ListView lazily builds offscreen children of the expanded tile.
+    // Repeated scrollUntilVisible on a child not built yet throws No element.
+    Future<void> reveal(Finder target, {required bool down}) async {
+      for (var n = 0; n < 24 && target.evaluate().isEmpty; n++) {
+        await tester.drag(scroll, Offset(0, down ? -220 : 220));
+        await tester.pumpAndSettle();
+      }
+      expect(target, findsOneWidget);
+      await tester.ensureVisible(target);
+      await tester.pumpAndSettle();
+      final y = tester.getCenter(target).dy;
+      if (y < 95) {
+        await tester.drag(scroll, const Offset(0, 140));
+        await tester.pumpAndSettle();
+      } else if (y > 510) {
+        await tester.drag(scroll, const Offset(0, -130));
+        await tester.pumpAndSettle();
+      }
+    }
+
     final reviewed = find.byKey(const Key('multiact-trial-source-reviewed'));
-    await tester.scrollUntilVisible(reviewed, 250, scrollable: scroll);
-    await tester.pumpAndSettle();
+    await reveal(reviewed, down: true);
     await tester.tap(reviewed);
     await tester.pumpAndSettle();
     expect(tester.widget<CheckboxListTile>(reviewed).value, true);
     final expand = find.byKey(const Key('multiact-source-encounters'));
-    // This tile must be BELOW the AppBar to receive the actual pointer:
-    // a negative delta placed its centre at y=19 on a 600px test viewport.
-    await tester.scrollUntilVisible(expand, 200, scrollable: scroll);
-    await tester.pumpAndSettle();
+    await reveal(expand, down: false);
     await tester.tap(expand);
     await tester.pumpAndSettle();
     final choice = find.byKey(Key('multiact-extra-' + event.id));
-    await tester.scrollUntilVisible(choice, 250, scrollable: scroll);
+    await reveal(choice, down: true);
     await tester.tap(choice);
     await tester.pumpAndSettle();
     final secondChoice = find.byKey(Key('multiact-extra-' + secondEvent.id));
-    await tester.scrollUntilVisible(secondChoice, 250, scrollable: scroll);
+    await reveal(secondChoice, down: true);
     await tester.tap(secondChoice);
     await tester.pumpAndSettle();
-    expect(tester.widget<CheckboxListTile>(choice).value, true);
     expect(tester.widget<CheckboxListTile>(secondChoice).value, true);
-    await tester.scrollUntilVisible(reviewed, 250, scrollable: scroll);
+    await reveal(choice, down: false);
+    expect(tester.widget<CheckboxListTile>(choice).value, true);
+    await reveal(reviewed, down: false);
     expect(tester.widget<CheckboxListTile>(reviewed).value, false);
     final coverage = find.byKey(const Key('multiact-source-coverage'));
-    await tester.scrollUntilVisible(coverage, -100, scrollable: scroll);
+    await reveal(coverage, down: false);
     expect(tester.widget<Text>(coverage).data, contains('не представлено 2'));
-    // One tap includes all available events in the 2 x 4 proposal test;
-    // it still requires a NEW source approval before compilation.
-    final bulk = find.byKey(
-        const Key('multiact-select-all-encounters'));
-    await tester.scrollUntilVisible(bulk, 240, scrollable: scroll);
+    final bulk = find.byKey(const Key('multiact-select-all-encounters'));
+    await reveal(bulk, down: true);
     await tester.tap(bulk);
     await tester.pumpAndSettle();
+    await reveal(coverage, down: false);
     expect(tester.widget<Text>(coverage).data, contains('не представлено 0'));
+    await reveal(reviewed, down: true);
     expect(tester.widget<CheckboxListTile>(reviewed).value, false);
     expect(find.byType(MultiActTrialPage), findsOneWidget);
   });

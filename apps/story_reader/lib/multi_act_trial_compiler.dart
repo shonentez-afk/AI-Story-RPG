@@ -17,6 +17,7 @@ import 'source_semantic_editorial_review.dart';
 import 'story_plan.dart';
 import 'story_plan_trial_compiler.dart';
 import 'reviewed_prose_scene_overlay.dart';
+import 'reviewed_hero_role.dart';
 import 'whole_story_literary_bounded_repair.dart';
 import 'whole_story_literary_unchanged_approval.dart';
 
@@ -39,10 +40,19 @@ class MultiActTrialCompiler {
     required bool fictionalTrialAcknowledged,
     /// UI-only name of the player protagonist; never guesses an NPC identity.
     String heroName = 'Игрок',
+    /// An existing human-reviewed permanent character_id, never an
+    /// identity guessed from names. Its flag becomes real story_core state.
+    ReviewedHeroRole? selectedHeroRole,
     /// Explicit source-event observations; each is shown before consent.
     Set<String> reviewedInteractiveEventIds = const {},
     List<ReviewedProseSceneApproval> reviewedProse = const [],
   }) async {
+    if (selectedHeroRole != null &&
+        (selectedHeroRole.sourceFingerprint != index.sourceFingerprint ||
+         selectedHeroRole.displayName != heroName)) {
+      throw const FormatException(
+          'Имя и постоянная личность героя не совпали с проверенной картой.');
+    }
     if (heroName.isEmpty || heroName.length > 90 ||
         heroName.trim() != heroName ||
         RegExp(r'[\x00-\x1f\x7f]').hasMatch(heroName)) {
@@ -102,12 +112,14 @@ class MultiActTrialCompiler {
         recheckedRepair?.draft ?? continuity?.plan ?? draft.plan;
     // Source events become optional, persisted, source-backed choices in the
     // very SAME StoryPlan sent to gameplay proposals, audits and the writer.
-    final plan = BookwideSourceEncounters.attach(
+    final sourcePlan = BookwideSourceEncounters.attach(
       index: index, book: book, bookMap: bookMap,
       draft: draft, plan: basePlan,
       reviewedEventIds: reviewedInteractiveEventIds,
       userConfirmedPrivateAdaptation: fictionalTrialAcknowledged,
     );
+    final plan = selectedHeroRole == null ? sourcePlan :
+        selectedHeroRole.bindTo(sourcePlan, book);
     if (continuity != null &&
         (!continuity.hasEnforcedContinuity ||
          continuity.audit.counterexamples.isNotEmpty ||
@@ -390,7 +402,10 @@ class MultiActTrialCompiler {
         inspected.blueprint.scenes.length != scenes.length ||
         inspected.blueprint.scenes.length < 14 ||
         inspected.presentation['hero'] is! Map ||
-        (inspected.presentation['hero'] as Map)['name'] != heroName) {
+        (inspected.presentation['hero'] as Map)['name'] != heroName ||
+        (selectedHeroRole != null &&
+         inspected.blueprint.initial.flags[
+             selectedHeroRole.playerIdentityFlag] != true)) {
       throw const FormatException(
           'Частный многоактовый пакет не прошёл независимую проверку.');
     }
@@ -410,6 +425,7 @@ class MultiActTrialCompiler {
       chaptersWithoutSourceEvents:
           List.unmodifiable(coverage.chaptersWithoutEventProposals),
       selectedHeroLabel: heroName,
+      selectedHeroCharacterId: selectedHeroRole?.characterId,
     );
   }
 }
