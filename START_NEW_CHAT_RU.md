@@ -1,5 +1,20 @@
 # AI Story RPG — START_NEW_CHAT_RU
 
+## 2026-11-07 — P0 NPC: offline-планировщик диалогов, часть единого PR #133
+
+**Стабильная подтверждённая база до этого этапа:** `fc2d213fdcd9838567fbaefc3c8c157d4adb557b`; [CI #942](https://github.com/shonentez-afk/AI-Story-RPG/actions/runs/42351970248) **SUCCESS** (M1.7, Python, Dart, Flutter, Android APK, Windows portable), [M0 #1027](https://github.com/shonentez-afk/AI-Story-RPG/actions/runs/42351970302) **SUCCESS**. Separate [External RPG author tests #231](https://github.com/shonentez-afk/AI-Story-RPG/actions/runs/42351970215) FAIL из-за старого `contract_drift`; отложенную E6d не затрагивать.
+
+**Новый пакет к проверке exact-head CI:**
+- `packages/bookworld_format/lib/npc_dialogue_authoring.dart` (pure Dart, **без Flutter, LLM, Python и сети**) добавляет `RichNpcDialogueAuthoring.propose/accept`: из уже принятого подписанного текста сцены, явного назначения говорящих → постоянным `character_id`, проверенных `npc_knowledge.grants` с точными цитатами и отдельно просмотренных семантических привязок строит все `scene_dialogue_knowledge` записи для существующего rich-v3. Никаких новых флагов, событий, предметов, канонических утверждений или реплик не выдумывает.
+- Каждый голос NPC строго классифицируется автором: либо реплика после **конкретного исходного игрового `learn_fact`**, либо отдельно разрешённая бытовая `GAME_FICTION` без знаний. Отсутствующие/двусмысленные привязки, неверная цитата, чужой актёр, осиротевшая разметка или конфликт классификаций — отказ; нет auto-guess личности по имени.
+- Сам план **не устанавливает** игру и не меняет кампания; второй шаг `accept` требует точный SHA-256 digest, привязанный к версии всего `StoryBlueprint`, профилям говорящих и условиям, и явное подтверждение. После этого `NpcKnowledgeRichWorldBridge.prepare` (и `compileReviewedNpcRichPrivateBookworldInWorker`) принимают `reviewedDialogueProposal`/`approvedDialogueDigest`; конфликт с ручной подменой `reviewedDialogueTurns` запрещён.
+- Контракт проверяется существующим `RichNpcDialogueKnowledge.validate` и импортёром; во время игры реплики всё ещё раскрываются только после SQLite replay через `RichNpcDialogueKnowledge.redact`. **Автономный движок не менялся**, новых save-схем и второго рантайма нет.
+- E2E тесты для двух маршрутов (знающий NPC / ещё не знающий), отказ без согласия, неоднозначный grant, неверный `character_id`, смена digest, импорт rich-v3, replay. CI независимо проверяет ZIP, собранный Dart, с Python.
+
+**Честная граница:** автоматизируем **сборку игрового контракта для готового проверенного диалогового текста**, пока ещё **не создаём автоматически художественные слова NPC из полного графа книги**, не доказываем мотивы/канон и не решаем большие CANON/ALTER_FATE. Дальше — полно-книжный NPC/event/motive graph, GLM draft с согласием, литературная проверка каждой реплики, последствия ответов и развилки, две реальные FB2 Win/Android. Не закрывать Issue #118, PR #133 оставить Draft, E6d не изменять.
+
+
+
 ## 2026-11-07 — P0 NPC: причинные условия на проверенных репликах (часть PR #133)
 
 **Новая реализация — awaiting exact-HEAD CI (не объявлять PASS заранее).** В `packages/bookworld_format/lib/npc_dialogue_knowledge.dart` добавлен совместимый с rich-v3 необязательный набор для одобренной частной реплики: `required_prior_choice_id`, `source_quote_sha256`, `private_fiction_confirmed: true`. Все три обязательны вместе. Строгий импортёр сопоставляет предыдущее решение с source-locked исходной цитатой, маршрутной достижимостью до текущей сцены и, для требуемых `required_fact_ids`, точным `learn_fact` этому постоянному `character_id`. Из одного порядка глав знание и право на слова не появляются. Это явно **GAME_FICTION**, а не литературный CANON или доказательство произнесённой NPC реплики.

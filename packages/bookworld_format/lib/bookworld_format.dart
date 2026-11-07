@@ -11,6 +11,7 @@ export 'private_bookworld.dart' show PrivateBookworldImporter, VerifiedPrivateBo
 export 'private_rich_bookworld.dart' show RichPrivateBookworldImporter, VerifiedRichPrivateBookworld;
 export 'rich_scene_dialogue.dart' show RichSceneDialogue, RichDialogueTurn;
 export 'npc_dialogue_knowledge.dart' show RichNpcDialogueKnowledge;
+export 'npc_dialogue_authoring.dart' show RichNpcDialogueAuthoring, ReviewedNpcDialoguePlan;
 export 'npc_social_contract.dart' show RichNpcSocialContract;
 export 'private_bookworld_writer.dart' show PrivateBookworldWriter, RichPrivateBookworldWriter;
 export 'reviewed_gameplay_bookworld_writer.dart' show ReviewedGameplayBookworldWriter;

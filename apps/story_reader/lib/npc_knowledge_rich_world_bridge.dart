@@ -35,6 +35,8 @@ class NpcKnowledgeRichWorldBridge {
     List<Map<String, dynamic>> reviewedBookItems = const [],
     Map<String, List<Map<String, dynamic>>> reviewedDialogueTurns = const {},
     Map<String, String> reviewedSpeakerBindings = const {},
+    ReviewedNpcDialoguePlan? reviewedDialogueProposal,
+    String? approvedDialogueDigest,
     String heroName = 'Игрок',
     String heroDescription =
         'Герой частной игровой адаптации. Решения сохраняются в журнале.',
@@ -191,13 +193,26 @@ class NpcKnowledgeRichWorldBridge {
       final turns = RichSceneDialogue.presentationFor(scene['text'] as String);
       if (turns != null) dialogues[id] = turns;
     }
+    if (reviewedDialogueProposal != null && reviewedDialogueTurns.isNotEmpty) {
+      throw const FormatException(
+          'Нельзя одновременно подменить принятую разметку диалогов');
+    }
+    final effectiveDialogueReview = reviewedDialogueProposal == null
+        ? reviewedDialogueTurns
+        : RichNpcDialogueAuthoring.accept(
+            proposal: reviewedDialogueProposal,
+            blueprint: world,
+            reviewedSpeakerActorIds: reviewedSpeakerBindings,
+            approvedDigest: approvedDialogueDigest ?? '',
+            userConfirmed: userConfirmed,
+          );
     if (dialogues.keys.toSet().difference(
-            reviewedDialogueTurns.keys.toSet()).isNotEmpty ||
-        reviewedDialogueTurns.keys.toSet().difference(
+            effectiveDialogueReview.keys.toSet()).isNotEmpty ||
+        effectiveDialogueReview.keys.toSet().difference(
             dialogues.keys.toSet()).isNotEmpty) {
       throw const FormatException('Нужна проверка всех реплик NPC');
     }
-    for (final entries in reviewedDialogueTurns.values) {
+    for (final entries in effectiveDialogueReview.values) {
       for (final entry in entries) {
         final speaker = entry['speaker'];
         final actor = entry['actor_id'];
@@ -216,8 +231,8 @@ class NpcKnowledgeRichWorldBridge {
           world,
         );
     RichNpcDialogueKnowledge.validate(
-      reviewedDialogueTurns.isEmpty ? null :
-          <String, dynamic>{...reviewedDialogueTurns},
+      effectiveDialogueReview.isEmpty ? null :
+          <String, dynamic>{...effectiveDialogueReview},
       world, <String, dynamic>{...dialogues},
       socialRules: socialRules,
       sceneOrigins: origins,
@@ -235,8 +250,8 @@ class NpcKnowledgeRichWorldBridge {
       },
       'scene_names': sceneNames,
       'scene_dialogues': dialogues,
-      if (reviewedDialogueTurns.isNotEmpty)
-        'scene_dialogue_knowledge': reviewedDialogueTurns,
+      if (effectiveDialogueReview.isNotEmpty)
+        'scene_dialogue_knowledge': effectiveDialogueReview,
     };
     if (effectiveSocial != null) {
       // No inferred presence/consent: each authored item action has an

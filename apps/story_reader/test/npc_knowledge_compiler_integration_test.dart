@@ -360,6 +360,91 @@ void main() {
     }
     expect(utf8.decode(itemBytes, allowMalformed: true),
         isNot(contains(note.text)));
+
+    // Real application path, not only a low-level importer fixture:
+    // the reviewed prose is mapped to permanent character IDs, exact
+    // learning events and author-approved dialogue turns, then compiled by
+    // the SAME private native writer/SQLite/runtime pipeline.
+    final dialogueEndId = expandedEntry.choices.first.nextSceneId;
+    final dialogueEnd = expanded.scenes.singleWhere(
+        (scene) => scene.id == dialogueEndId);
+    final dialogueDraft = MultiSceneDraftWorkbench.replaceScene(
+      expanded,
+      MultiSceneDraftWorkbench.sceneCopy(dialogueEnd,
+        text: 'Артем: «Я услышал твой рассказ.»\n'
+            'Игрок: «Что ты теперь знаешь?»'),
+    );
+    final dialogueTranslation = PrivateClassicScenarioTranslator.translate(
+      index, graph, catalog, editorial, dialogueDraft,
+      npcRules: gatedRules, npcNotebook: permanent, npcDossiers: dossiers,
+    );
+    final dialogueBlueprint =
+        StoryBlueprint.fromJson(dialogueTranslation.blueprintJson);
+    final dialogueOrigins = <String, dynamic>{
+      for (final origin in
+          dialogueTranslation.provenanceJson['scene_origins'] as List)
+        (origin as Map)['scene_id'] as String: origin,
+    };
+    final dialogueFact = dialogueBlueprint.facts.single;
+    final names = {'Артем': richActor, 'Игрок': 'player'};
+    final plannedDialogue = RichNpcDialogueAuthoring.propose(
+      blueprint: dialogueBlueprint,
+      sceneOrigins: dialogueOrigins,
+      reviewedSpeakerActorIds: names,
+      verifiedNpcFactGrants: [
+        {
+          'scene_id': expandedEntry.id,
+          'choice_id': learnChoice.id,
+          'actor_id': richActor,
+          'fact_id': dialogueFact,
+          'source_quote_sha256': quote,
+        },
+      ],
+      reviewedNpcFactByTurn: {
+        dialogueEndId: {0: dialogueFact},
+      },
+      reviewedSafeNpcTurns: const {},
+      wholeDialogueTextReviewed: true,
+      privateFictionAcknowledged: true,
+    );
+    Future<Uint8List> dialogueBuild(String digest) =>
+        compileReviewedNpcRichPrivateBookworldInWorker(
+      index, graph, catalog, editorial, dialogueDraft,
+      npcRules: gatedRules, npcNotebook: permanent, npcDossiers: dossiers,
+      sourceQuoteByRuleId: bound, userConfirmed: true,
+      reviewedSpeakerBindings: names,
+      reviewedDialogueProposal: plannedDialogue,
+      approvedDialogueDigest: digest,
+    );
+    await expectLater(dialogueBuild(List.filled(64, '0').join()),
+        throwsFormatException);
+    final dialogueBytes = await dialogueBuild(plannedDialogue.approvalDigest);
+    final dialogueWorld =
+        const RichPrivateBookworldImporter().inspect(dialogueBytes);
+    final dialogueScreen = RichSceneDialogue.verify(
+      (dialogueWorld.presentation['scene_dialogues'] as Map)[dialogueEndId],
+      dialogueWorld.blueprint.scenes[dialogueEndId]!.text,
+    );
+    final dialogueReviews =
+        (dialogueWorld.presentation['scene_dialogue_knowledge'] as Map)
+        [dialogueEndId] as List;
+    final learnedDialogue = StoryWorld(dialogueWorld.blueprint);
+    expect(learnedDialogue.apply(
+        actionId: 'npc_learn_dialogue', choiceId: learnChoice.id).applied, true);
+    expect(learnedDialogue.apply(
+        actionId: 'enter_dialogue',
+        choiceId: expandedEntry.choices.first.id).applied, true);
+    expect(RichNpcDialogueKnowledge.redact(
+      dialogueScreen, dialogueReviews, learnedDialogue.state.knowledge,
+      committedEvents: learnedDialogue.events,
+      sceneId: dialogueEndId,
+    ).first.text, 'Я услышал твой рассказ.');
+    final refusedDialogue = StoryWorld(dialogueWorld.blueprint);
+    expect(refusedDialogue.apply(
+        actionId: 'skip_npc',
+        choiceId: expandedEntry.choices.first.id).applied, false);
+    expect(refusedDialogue.state.knowledge[richActor], isEmpty);
+
     final text = utf8.decode(richBytes, allowMalformed: true);
     expect(text, isNot(contains(note.text)));
   });
