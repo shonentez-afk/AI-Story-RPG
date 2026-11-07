@@ -1,5 +1,17 @@
 # AI Story RPG — START_NEW_CHAT_RU
 
+## КОНТРОЛЬНЫЙ ПУНКТ 2026-11-07 — NPC Z.ai + autonomous core: exact-head PASS
+
+**Подтверждённый код:** `a1be713fde6bb4f3ba905180a109e825da8be09f`. [AI Story RPG CI #945](https://github.com/shonentez-afk/AI-Story-RPG/actions/runs/42356760768) — **SUCCESS** на точно этом SHA: Python, Dart, M1.7/SQLite, standalone engine, Flutter analyze + **643 PASS / 2 SKIP** (приватные FB2 недоступны публичному CI), Windows portable и Android debug APK. [M0 #1030](https://github.com/shonentez-afk/AI-Story-RPG/actions/runs/42356760749) — **SUCCESS**. Публикация релиза в Draft PR ожидаемо SKIPPED. Первое падение CI #944 было **только UI-тестом**: ListView лениво создавал кнопку, найдено `StateError: No element`; коммит `a1be713` исправил прокрутку и получил green exact-head CI #945.
+
+**Подтверждённые артефакты #945:** Windows portable `13568395844` (~15 MB), Android debug `13567794310` (~88 MB ZIP с APK внутри), demo .bworld `13567623707`, benchmark Grimm Frog Prince FB2 `13567462394` — все не истекли при проверке.
+
+**Что добавлено и как открыть:** после создания частного rich-v3 мира в существующем `NpcKnowledgeRulesPage` вернитесь из экрана кампаний в редактор правил — появится кнопка «Предложить реплики NPC через Z.ai (черновик)» только при наличии точного source-verified разговора. `NpcDialogueDraftPage` показывает полный payload, требует отдельное согласие на возможный платный запрос, строго контролирует состав/порядок/speaker_id ответа и позволяет скопировать текст **без установки** в игру. Для включения текста в RPG потребуется редакторская приёмка/перекомпиляция; автоматического одобрения литературного смысла нет. `story_core`, SQLite и автономный runtime НЕ вызывают ИИ и не зависят от Flutter/UI. Подтверждён отдельно mock-test 429 → тот же запрос, без отправки до согласия.
+
+**Честно не закрыто:** это именно авторский черновик уже существующей диалоговой сцены, не автоматическая полно-книжная генерация; нужны многовариантные NPC-разговоры с причинными последствиями каждого ответа, проверка мотиваций/хронологии по полному источнику, CANON/ALTER_FATE, единый FB2→RPG мастер, две реальные русские FB2 и ручные Win/Android проверки. PR #133 **DRAFT**, Issue #118 не закрывать, `main` не изменять. `External RPG author tests #234` отдельно FAIL с прежним `contract_drift`, **E6d сейчас не трогать** (параллельный чат). Документальный коммит после этого контрольного пункта — только docs `[skip ci]`; проверенный кодовый SHA остаётся `a1be713`.
+
+
+
 ## 2026-11-07 — P0: Z.ai NPC-диалоги как отдельный черновик автора (PR #133)
 
 **Подтверждённая база перед этапом:** HEAD `187166db326adbf5c576328cc89dc06dbf1cd6a8`, [CI #943](https://github.com/shonentez-afk/AI-Story-RPG/actions/runs/42355345649) **SUCCESS** (637 Flutter tests PASS + 2 SKIP private FB2; Python/Dart/M1.7, Windows portable, Android debug), [M0 #1028](https://github.com/shonentez-afk/AI-Story-RPG/actions/runs/42355345791) **SUCCESS**. [External RPG author tests #232](https://github.com/shonentez-afk/AI-Story-RPG/actions/runs/42355345634) отдельно FAIL по прежнему `contract_drift`; E6d ведётся другим чатом и не меняется.
