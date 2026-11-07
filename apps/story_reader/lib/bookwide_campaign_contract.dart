@@ -114,7 +114,7 @@ class BookwideCampaignContract {
             (d) => d.id == prefix + 'explore').toList();
         final uses = discovery?.decisions.where(
             (d) => d.id == prefix + 'use_discovery').toList();
-        if (refusals == null || refusals.length != 1 ||
+        if (refusals.length != 1 ||
             explores == null || explores.length != 1 ||
             uses == null || uses.length != 1 ||
             !accept.adds.contains(BookwideStoryPlanComposer.rollingAccepted) ||
