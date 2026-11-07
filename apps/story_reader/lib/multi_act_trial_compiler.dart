@@ -382,6 +382,8 @@ class MultiActTrialCompiler {
           List.unmodifiable(coverage.eventIdsStillUnrepresented),
       uncoveredSourceChapters:
           List.unmodifiable(coverage.chaptersNotCovered),
+      chaptersWithoutSourceEvents:
+          List.unmodifiable(coverage.chaptersWithoutEventProposals),
       selectedHeroLabel: heroName,
     );
   }

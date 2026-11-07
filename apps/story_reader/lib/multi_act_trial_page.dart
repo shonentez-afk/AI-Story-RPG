@@ -327,7 +327,10 @@ class _MultiActTrialPageState extends State<MultiActTrialPage> {
                 'не представлено ' +
                 coverage.eventIdsStillUnrepresented.length.toString() +
                 '. Глав без игрового представления: ' +
-                coverage.chaptersNotCovered.length.toString() + '.',
+                coverage.chaptersNotCovered.length.toString() +
+                '; главы без предложений событий: ' +
+                coverage.chaptersWithoutEventProposals.length.toString() +
+                '.',
                 key: const Key('multiact-source-coverage')),
             const SizedBox(height: 8),
             const Text('Даже полное покрытие цитатами ещё не доказывает '

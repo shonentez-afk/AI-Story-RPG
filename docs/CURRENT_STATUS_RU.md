@@ -9,7 +9,7 @@
 
 ## Следующий P0
 
-Рабочая ветка `feature/p0-bookwide-gameplay-readiness-20261107`: единый путь **полная книга → связный сценарий → выбор настоящего героя/реального режима → приватный playable BookWorld**. [План и критерии](P0_BOOKWIDE_AUTHOR_PATH_RU_2026-11-07.md).
+[PR #133 DRAFT](https://github.com/shonentez-afk/AI-Story-RPG/pull/133), рабочая ветка `feature/p0-bookwide-gameplay-readiness-20261107`: единый путь **полная книга → связный сценарий → выбор настоящего героя/реального режима → приватный playable BookWorld**. [План и критерии](P0_BOOKWIDE_AUTHOR_PATH_RU_2026-11-07.md).
 
 - Уже существует short/multi-act пробный ALTER_FATE с source-locked цитатами, игровыми выборами, SQLite, GLM proposals после согласия и ограниченной редакторской проверкой.
 - Первый инкремент следующего пакета вводит source coverage без доверия к AI-оценке, выбранную пользователем **подпись** героя в `presentation.hero.name`, честный UI «только пробный ALTER_FATE». Подпись — не подлинный выбор литературного NPC. Это не готовый CANON/1.0.

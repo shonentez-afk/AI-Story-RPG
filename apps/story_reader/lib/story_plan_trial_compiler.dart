@@ -27,6 +27,7 @@ class StoryPlanTrialCompilation {
     this.sourceEventsRepresented = 0,
     this.unrepresentedSourceEventIds = const [],
     this.uncoveredSourceChapters = const [],
+    this.chaptersWithoutSourceEvents = const [],
     this.selectedHeroLabel = 'Игрок',
   });
 
@@ -37,11 +38,14 @@ class StoryPlanTrialCompilation {
   final int sourceEventsTotal, sourceEventsRepresented;
   final List<String> unrepresentedSourceEventIds;
   final List<int> uncoveredSourceChapters;
+  /// Gaps in source analysis are distinct from omitted planned scenes.
+  final List<int> chaptersWithoutSourceEvents;
   /// User-approved display label for the player actor (not a verified NPC).
   final String selectedHeroLabel;
   bool get hasAllSourceEventsRepresented =>
       sourceEventsTotal > 0 && sourceEventsRepresented == sourceEventsTotal &&
-      unrepresentedSourceEventIds.isEmpty && uncoveredSourceChapters.isEmpty;
+      unrepresentedSourceEventIds.isEmpty &&
+      uncoveredSourceChapters.isEmpty && chaptersWithoutSourceEvents.isEmpty;
   bool get isFullBookAdaptation => false;
   bool get sourceMeaningIsVerified => false;
   bool get isPrivateTrial => true;

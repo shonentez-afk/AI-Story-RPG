@@ -173,6 +173,11 @@ void main() {
     expect(compilation.sourceEventsRepresented, input.draft.coverage.referencedEvents);
     expect(compilation.unrepresentedSourceEventIds,
         input.draft.coverage.eventIdsStillUnrepresented);
+    expect(compilation.chaptersWithoutSourceEvents,
+        input.draft.coverage.chaptersWithoutEventProposals);
+    expect(compilation.hasAllSourceEventsRepresented,
+        input.draft.coverage.allDetectedEventsReferenced &&
+            input.draft.coverage.allChaptersCovered);
     expect(compilation.selectedHeroLabel, 'Игрок');
     expect(compilation.isFullBookAdaptation, false);
     final inspected = const RichPrivateBookworldImporter().inspect(
