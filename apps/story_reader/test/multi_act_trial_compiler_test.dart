@@ -10,6 +10,7 @@ import 'package:ai_story_reader/bookwide_source_encounters.dart';
 import 'package:ai_story_reader/cross_act_consequence_gate.dart';
 import 'package:ai_story_reader/cross_act_source_evidence_packet.dart';
 import 'package:ai_story_reader/multi_act_trial_compiler.dart';
+import 'package:ai_story_reader/story_plan.dart';
 import 'package:ai_story_reader/story_plan_causal_audit.dart';
 import 'package:ai_story_reader/whole_story_literary_evidence_manifest.dart';
 import 'package:ai_story_reader/whole_story_literary_review.dart';
