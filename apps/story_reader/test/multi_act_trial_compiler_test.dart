@@ -920,45 +920,63 @@ void main() {
     // Scroll the PRIMARY page ListView, not an ExpansionTile or nested
     // ListTile scrollable. Controls below the viewport are lazily built.
     final scrollable = find.byType(Scrollable).first;
+    // The long primary ListView lazily builds children. In this test,
+    // scrollUntilVisible on a not-yet-built child throws No element; using
+    // explicit drag keeps all actual checkbox/button interactions tested.
+    Future<void> reveal(Finder target, {required bool down}) async {
+      for (var n = 0; n < 40 && target.evaluate().isEmpty; n++) {
+        await tester.drag(scrollable, Offset(0, down ? -240 : 240));
+        await tester.pumpAndSettle();
+      }
+      expect(target, findsOneWidget);
+      await tester.ensureVisible(target);
+      await tester.pumpAndSettle();
+      final y = tester.getCenter(target).dy;
+      if (y < 105) {
+        await tester.drag(scrollable, const Offset(0, 150));
+        await tester.pumpAndSettle();
+      } else if (y > 500) {
+        await tester.drag(scrollable, const Offset(0, -150));
+        await tester.pumpAndSettle();
+      }
+      expect(target, findsOneWidget);
+    }
     final quotes = find.byKey(const Key('multiact-trial-source-reviewed'));
-    await tester.scrollUntilVisible(quotes, 250, scrollable: scrollable);
+    await reveal(quotes, down: true);
     await tester.pumpAndSettle();
     await tester.tap(quotes);
     await tester.pumpAndSettle();
     expect(tester.widget<CheckboxListTile>(quotes).value, true);
     final fiction = find.byKey(const Key('multiact-trial-private-fiction'));
-    await tester.scrollUntilVisible(fiction, 250, scrollable: scrollable);
+    await reveal(fiction, down: true);
     await tester.pumpAndSettle();
     await tester.tap(fiction);
     await tester.pumpAndSettle();
     expect(tester.widget<CheckboxListTile>(fiction).value, true);
 
     final crossAct = find.byKey(const Key('multiact-trial-consequence'));
-    await tester.scrollUntilVisible(crossAct, 250, scrollable: scrollable);
+    await reveal(crossAct, down: true);
     await tester.pumpAndSettle();
     await tester.tap(crossAct);
     await tester.pumpAndSettle();
     expect(tester.widget<CheckboxListTile>(crossAct).value, true);
     final itemButton = find.byKey(
         const Key('multiact-trial-optional-gameplay'));
-    await tester.scrollUntilVisible(itemButton, 250, scrollable: scrollable);
+    await reveal(itemButton, down: true);
     await tester.pumpAndSettle();
     expect(tester.widget<OutlinedButton>(itemButton).onPressed, isNotNull);
     final batchButton =
         find.byKey(const Key('multiact-trial-whole-gameplay-batch'));
-    await tester.scrollUntilVisible(batchButton, 250,
-        scrollable: scrollable);
+    await reveal(batchButton, down: true);
     await tester.pumpAndSettle();
     expect(tester.widget<OutlinedButton>(batchButton).onPressed, isNotNull);
     final literaryButton =
         find.byKey(const Key('multiact-trial-whole-literary-review'));
-    await tester.scrollUntilVisible(literaryButton, 250,
-        scrollable: scrollable);
+    await reveal(literaryButton, down: true);
     await tester.pumpAndSettle();
     expect(tester.widget<OutlinedButton>(literaryButton).onPressed, isNull);
 
-    await tester.scrollUntilVisible(itemButton, 240,
-        scrollable: scrollable);
+    await reveal(itemButton, down: false);
     await tester.pumpAndSettle();
     await tester.tap(itemButton);
     await tester.pumpAndSettle();
@@ -1496,7 +1514,8 @@ void main() {
     await tester.tap(reviewed);
     await tester.pumpAndSettle();
     expect(tester.widget<CheckboxListTile>(reviewed).value, true);
-    final expand = find.byKey(const Key('multiact-source-encounters'));
+    final expand = find.byKey(const PageStorageKey<String>(
+        'multiact-source-encounters'));
     await reveal(expand, down: false);
     await tester.tap(expand);
     await tester.pumpAndSettle();

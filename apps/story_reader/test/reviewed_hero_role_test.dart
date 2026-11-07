@@ -65,6 +65,18 @@ void main() {
     expect(loaded.single.playerIdentityFlag,
         'player_is_' + profile.characterId!);
     expect(loaded.single.firstSourceChapter, 0);
+    // A newly authored NPC card can exist before the editor saves an
+    // optional identity-relation checkpoint; match the existing editor's
+    // exact empty-session fallback, NEVER an unchecked name lookup.
+    await relationsRepo.delete(index.sourceFingerprint);
+    expect((await roles.load(index)).single.characterId,
+        profile.characterId);
+    // A broken PRESENT relation record cannot be treated as absent.
+    await relationsRepo.write(
+        index.sourceFingerprint, '{"corrupted":true}');
+    await expectLater(roles.load(index), throwsFormatException);
+    await relationsRepo.write(
+        index.sourceFingerprint, relations.encode());
 
     final renamed = notebook.putProfile(
         profile.copyWith(displayName: 'Артем — игровая роль'));

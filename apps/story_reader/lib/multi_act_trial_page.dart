@@ -583,7 +583,10 @@ class _MultiActTrialPageState extends State<MultiActTrialPage> {
             ),
             const SizedBox(height: 8),
             ExpansionTile(
-              key: const Key('multiact-source-encounters'),
+              // Keep this editorial drawer expanded when the long ListView
+              // lazily disposes it while the user reviews quotes below.
+              key: const PageStorageKey<String>(
+                  'multiact-source-encounters'),
               title: const Text('Дополнительные игровые события из книги'),
               subtitle: Text('Выбрано ' +
                   _interactiveEvents.length.toString() +

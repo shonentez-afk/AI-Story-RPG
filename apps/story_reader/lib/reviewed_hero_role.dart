@@ -141,10 +141,14 @@ class ReviewedHeroRoleCatalog {
     final relationsRaw = await (identityRepository ??
       const FileSourceAnalysisCheckpointRepository(
         scope: SourceCheckpointScope.identityRelations)).read(fingerprint);
+    // The existing NPC editor accepts a default relation session if a
+    // user has not authored any identity merges yet. Rejecting that valid
+    // scenario here would hide otherwise confirmed permanent identities.
+    // A present but malformed relation checkpoint must STILL fail closed.
     if (evidenceRaw == null || catalogRaw == null ||
-        editorialRaw == null || relationsRaw == null) {
+        editorialRaw == null) {
       throw const FormatException(
-          'Нужны проверенные упоминания, связи и карточки NPC.');
+          'Нужны проверенные упоминания и карточки NPC.');
     }
     final graph = StoryEvidenceReviewSession.decode(
         index, evidenceRaw).graph;
@@ -152,8 +156,9 @@ class ReviewedHeroRoleCatalog {
         index, graph, catalogRaw);
     final editorial = SemanticEditorialReviewSession.decode(
         index, graph, catalog, editorialRaw);
-    final relations = SourceRelationReviewSession.decode(
-        index, graph, relationsRaw);
+    final relations = relationsRaw == null
+        ? SourceRelationReviewSession.create(index, graph)
+        : SourceRelationReviewSession.decode(index, graph, relationsRaw);
     final dossiers = SourceCharacterDossierIndex.build(
         index, graph, relations, catalog, editorial);
     final notebook = NpcEditorialNotebook.decode(
