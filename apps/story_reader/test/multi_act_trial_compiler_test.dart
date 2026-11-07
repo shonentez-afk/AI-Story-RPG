@@ -20,6 +20,7 @@ import 'package:ai_story_reader/whole_plan_gameplay_candidate_batch.dart';
 import 'package:ai_story_reader/gameplay_candidate_reachability.dart';
 import 'package:ai_story_reader/reviewed_gameplay_compiler.dart';
 import 'package:ai_story_reader/whole_plan_gameplay_batch_page.dart';
+import 'package:ai_story_reader/source_locked_gameplay_review_page.dart';
 import 'package:ai_story_reader/reviewed_prose_scene_overlay.dart';
 import 'package:ai_story_reader/zai_source_locked_prose_preview.dart';
 import 'package:ai_story_reader/narrative_book_model.dart';
@@ -801,8 +802,8 @@ void main() {
   });
 
 
-  testWidgets('multi-act item proposal requires explicit approval; '
-      'extra cross-act rule blocks incompatible review',
+  testWidgets('cross-act gameplay proposal stays tied to the '
+      'source-reviewed effective plan with no automatic API call',
       (tester) async {
     final index = _index();
     final book = await _analyze(index);
@@ -837,23 +838,32 @@ void main() {
         const Key('multiact-trial-optional-gameplay'));
     await tester.scrollUntilVisible(itemButton, 110, scrollable: scrollable);
     await tester.pumpAndSettle();
-    expect(tester.widget<OutlinedButton>(itemButton).onPressed, isNull);
-
-    await tester.scrollUntilVisible(crossAct, -110,
-        scrollable: scrollable);
-    // When returning from the lower controls, keep the checkbox clear
-    // of the fixed AppBar before the second interaction.
-    await tester.drag(scrollable, const Offset(0, 155));
-    await tester.pumpAndSettle();
-    await tester.tap(crossAct);
-    await tester.pumpAndSettle();
-    await tester.scrollUntilVisible(itemButton, 110,
-        scrollable: scrollable);
-    await tester.pumpAndSettle();
     expect(tester.widget<OutlinedButton>(itemButton).onPressed, isNotNull);
+    final batchButton =
+        find.byKey(const Key('multiact-trial-whole-gameplay-batch'));
+    await tester.scrollUntilVisible(batchButton, 110,
+        scrollable: scrollable);
+    await tester.pumpAndSettle();
+    expect(tester.widget<OutlinedButton>(batchButton).onPressed, isNotNull);
+    final literaryButton =
+        find.byKey(const Key('multiact-trial-whole-literary-review'));
+    await tester.scrollUntilVisible(literaryButton, 110,
+        scrollable: scrollable);
+    await tester.pumpAndSettle();
+    expect(tester.widget<OutlinedButton>(literaryButton).onPressed, isNull);
+
+    await tester.scrollUntilVisible(itemButton, -110,
+        scrollable: scrollable);
+    await tester.pumpAndSettle();
     await tester.tap(itemButton);
     await tester.pumpAndSettle();
-
+    final candidatePage = tester.widget<SourceLockedGameplayReviewPage>(
+        find.byType(SourceLockedGameplayReviewPage));
+    final second = candidatePage.plan.situations.singleWhere(
+        (scene) => scene.id == 'act_2_turning_point');
+    final accept = second.decisions.singleWhere(
+        (choice) => choice.id == 'act_2_accept_offer');
+    expect(accept.requires, contains('act_1_original_outcome'));
     expect(find.text('Предметы и знания из книги'), findsOneWidget);
     final request = find.byKey(const Key('gameplay-source-request'));
     await tester.scrollUntilVisible(request, 110,
