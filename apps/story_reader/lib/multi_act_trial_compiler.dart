@@ -18,6 +18,7 @@ import 'story_plan.dart';
 import 'story_plan_trial_compiler.dart';
 import 'reviewed_prose_scene_overlay.dart';
 import 'reviewed_hero_role.dart';
+import 'reviewed_hero_source_action.dart';
 import 'whole_story_literary_bounded_repair.dart';
 import 'whole_story_literary_unchanged_approval.dart';
 
@@ -43,10 +44,24 @@ class MultiActTrialCompiler {
     /// An existing human-reviewed permanent character_id, never an
     /// identity guessed from names. Its flag becomes real story_core state.
     ReviewedHeroRole? selectedHeroRole,
+    /// A source-anchored, opt-in ROLE -> OBSERVE -> RECALL sequence.
+    /// Does not give player any NPC secrets or literary claims.
+    bool reviewedHeroSourceAction = false,
     /// Explicit source-event observations; each is shown before consent.
     Set<String> reviewedInteractiveEventIds = const {},
     List<ReviewedProseSceneApproval> reviewedProse = const [],
   }) async {
+    if (reviewedHeroSourceAction && selectedHeroRole == null) {
+      throw const FormatException(
+          'Ролевое действие требует проверенного постоянного character_id.');
+    }
+    if (reviewedHeroSourceAction &&
+        (unchangedReview != null || recheckedRepair != null ||
+         reviewedProse.isNotEmpty)) {
+      throw const FormatException(
+          'Старое литературное согласование не покрывает новые '
+          'ролевые игровые действия.');
+    }
     if (selectedHeroRole != null &&
         (selectedHeroRole.sourceFingerprint != index.sourceFingerprint ||
          selectedHeroRole.displayName != heroName)) {
@@ -118,8 +133,14 @@ class MultiActTrialCompiler {
       reviewedEventIds: reviewedInteractiveEventIds,
       userConfirmedPrivateAdaptation: fictionalTrialAcknowledged,
     );
-    final plan = selectedHeroRole == null ? sourcePlan :
+    final rolePlan = selectedHeroRole == null ? sourcePlan :
         selectedHeroRole.bindTo(sourcePlan, book);
+    final plan = reviewedHeroSourceAction
+        ? ReviewedHeroSourceAction.attach(
+            index: index, book: book, plan: rolePlan,
+            role: selectedHeroRole!,
+            explicitlyConfirmedPrivateGameFiction: fictionalTrialAcknowledged)
+        : rolePlan;
     if (continuity != null &&
         (!continuity.hasEnforcedContinuity ||
          continuity.audit.counterexamples.isNotEmpty ||
@@ -405,7 +426,10 @@ class MultiActTrialCompiler {
         (inspected.presentation['hero'] as Map)['name'] != heroName ||
         (selectedHeroRole != null &&
          inspected.blueprint.initial.flags[
-             selectedHeroRole.playerIdentityFlag] != true)) {
+             selectedHeroRole.playerIdentityFlag] != true) ||
+        (reviewedHeroSourceAction &&
+         !inspected.blueprint.initial.flags.containsKey(
+             ReviewedHeroSourceAction.observedFlag))) {
       throw const FormatException(
           'Частный многоактовый пакет не прошёл независимую проверку.');
     }

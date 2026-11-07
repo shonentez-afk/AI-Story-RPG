@@ -8,6 +8,7 @@ import 'package:ai_story_reader/bookwide_act_planner.dart';
 import 'package:ai_story_reader/bookwide_storyplan_composer.dart';
 import 'package:ai_story_reader/bookwide_source_encounters.dart';
 import 'package:ai_story_reader/reviewed_hero_role.dart';
+import 'package:ai_story_reader/reviewed_hero_source_action.dart';
 import 'package:ai_story_reader/npc_editorial_notebook.dart';
 import 'package:ai_story_reader/source_character_dossiers.dart';
 import 'package:ai_story_reader/source_evidence_graph.dart';
@@ -246,6 +247,193 @@ void main() {
       }
     } finally {
       await folder.delete(recursive: true);
+    }
+  });
+
+
+  test('source-locked NPC identity gates an observed passage and a later '
+      'recall choice in real private BookWorld with SQLite replay', () async {
+    final index = BookSourceIndexer.index(ImportedBook(
+      title: 'Подтверждённые цитаты героя двух актов',
+      author: 'Тест игровых ролевых условий',
+      chapters: [
+        List.filled(9, 'Артем по прозвищу Волк открыл дверь. '
+            'Дверь была закрыта. ').join(' '),
+        List.filled(9, 'Мария по прозвищу Лиса увидела дом. '
+            'Дверь была открыта. ').join(' '),
+      ],
+    ));
+    final book = await _analyze(index, eventsPerChapter: 4);
+    final input = _draft(index, book);
+    final firstAct = book.events
+        .where((event) => event.source.chapterIndex == 0).toList();
+    final extraA = firstAct[1];
+    final extraB = firstAct[2];
+    var graph = SourceEvidenceGraph.empty(index);
+    for (final chunk in index.chunks) {
+      graph = graph.addAll(index,
+          SourceNarrativeExtractor.extractChunk(index, chunk));
+    }
+    for (final evidence in graph.records) {
+      graph = graph.review(index, evidence.id, EvidenceStatus.confirmed);
+    }
+    final relations = SourceRelationReviewSession.create(index, graph);
+    final catalog = SourceSemanticCatalog.fromLocalEvidence(index, graph);
+    final editorial = SemanticEditorialReviewSession.create(index, catalog);
+    final dossiers = SourceCharacterDossierIndex.build(
+        index, graph, relations, catalog, editorial);
+    // A same-name passage at a DIFFERENT offset does not grant permission.
+    // Choose the dossier with a real confirmed span in the FIRST quote.
+    final sourceDossier = dossiers.dossiers.firstWhere((d) =>
+        d.labels.contains('Артем') && d.mentions.any((m) =>
+            m.status == EvidenceStatus.confirmed &&
+            m.chunkId == extraA.source.chunkId &&
+            m.startUtf16 < extraA.source.endUtf16 &&
+            extraA.source.startUtf16 < m.endUtf16));
+    final notebook = NpcEditorialNotebook.empty(index)
+        .putProfile(NpcEditorialNotebook.freshProfile(sourceDossier));
+    final role = ReviewedHeroRole.fromReviewedSources(
+      index: index, dossiers: dossiers, graph: graph,
+      catalog: catalog, editorial: editorial, notebook: notebook,
+    ).single;
+    final extraIds = {extraA.id, extraB.id};
+    final sourcePlan = BookwideSourceEncounters.attach(
+      index: index, book: book, bookMap: input.map,
+      draft: input.draft, plan: input.draft.plan,
+      reviewedEventIds: extraIds,
+      userConfirmedPrivateAdaptation: true,
+    );
+    final bound = role.bindTo(sourcePlan, book);
+    final opportunity = ReviewedHeroSourceAction.find(
+        index: index, book: book, plan: bound, role: role);
+    expect(opportunity, isNotNull);
+    expect(opportunity!.eventId, extraA.id);
+    expect(opportunity.observeSceneId, 'act_1_source_encounter');
+    expect(opportunity.recallSceneId, 'act_1_source_encounter_2');
+    expect(ReviewedHeroSourceAction.find(
+      index: index, book: book,
+      plan: role.bindTo(BookwideSourceEncounters.attach(
+        index: index, book: book, bookMap: input.map,
+        draft: input.draft, plan: input.draft.plan,
+        reviewedEventIds: {extraA.id},
+        userConfirmedPrivateAdaptation: true,
+      ), book),
+      role: role,
+    ), isNull);
+    expect(() => ReviewedHeroSourceAction.attach(
+      index: index, book: book, plan: bound, role: role,
+      explicitlyConfirmedPrivateGameFiction: false,
+    ), throwsFormatException);
+    final rolePlan = ReviewedHeroSourceAction.attach(
+      index: index, book: book, plan: bound, role: role,
+      explicitlyConfirmedPrivateGameFiction: true,
+    );
+    expect(rolePlan.flags, contains(ReviewedHeroSourceAction.observedFlag));
+    expect(rolePlan.initialFlags,
+        isNot(contains(ReviewedHeroSourceAction.observedFlag)));
+    expect(rolePlan.validate(book).isStructurallySound, true);
+    final anchor = rolePlan.situations.firstWhere(
+        (s) => s.id == opportunity.observeSceneId);
+    final following = rolePlan.situations.firstWhere(
+        (s) => s.id == opportunity.recallSceneId);
+    final observe = anchor.decisions.firstWhere((d) =>
+        d.id.endsWith('_hero_observe'));
+    final recall = following.decisions.firstWhere((d) =>
+        d.id.endsWith('_hero_recall'));
+    expect(observe.requires, [role.playerIdentityFlag]);
+    expect(observe.adds, [ReviewedHeroSourceAction.observedFlag]);
+    expect(recall.requires, [
+      role.playerIdentityFlag, ReviewedHeroSourceAction.observedFlag,
+    ]);
+    expect(anchor.decisions.any((d) => d.id.endsWith('_pass_source')), true);
+    expect(following.decisions.any((d) =>
+        d.id.endsWith('_pass_source_2')), true);
+
+    await expectLater(MultiActTrialCompiler.compile(
+      index: index, book: book, bookMap: input.map, draft: input.draft,
+      sourceEventIdsReviewedByUser: {...input.eventIds, ...extraIds},
+      reviewedInteractiveEventIds: extraIds,
+      privateUseConfirmed: true, fictionalTrialAcknowledged: true,
+      heroName: role.displayName,
+      reviewedHeroSourceAction: true,
+    ), throwsFormatException); // No verified actor can claim the action.
+
+    final compiled = await MultiActTrialCompiler.compile(
+      index: index, book: book, bookMap: input.map, draft: input.draft,
+      sourceEventIdsReviewedByUser: {...input.eventIds, ...extraIds},
+      reviewedInteractiveEventIds: extraIds,
+      privateUseConfirmed: true, fictionalTrialAcknowledged: true,
+      heroName: role.displayName, selectedHeroRole: role,
+      reviewedHeroSourceAction: true,
+    );
+    final inspected = const RichPrivateBookworldImporter()
+        .inspect(compiled.archive);
+    expect(inspected.blueprint.initial.flags[role.playerIdentityFlag], true);
+    expect(inspected.blueprint.initial.flags[
+        ReviewedHeroSourceAction.observedFlag], false);
+    expect(inspected.blueprint.initial.knowledge['player'], isEmpty);
+    expect(inspected.blueprint.scenes[opportunity.observeSceneId]!.choices
+        .any((c) => c.id == observe.id), true);
+    expect(inspected.blueprint.scenes[opportunity.recallSceneId]!.choices
+        .any((c) => c.id == recall.id), true);
+
+    final dir = await Directory.systemTemp.createTemp('hero-actions-sqlite-');
+    try {
+      var store = BookworldCampaignStore.openPrivateDirectory(dir.path);
+      late String chosenCampaign, skippedCampaign;
+      try {
+        final installed = store.installBookworld(compiled.archive);
+        chosenCampaign = store.createCampaign(installed.archiveHash);
+        skippedCampaign = store.createCampaign(installed.archiveHash);
+        final started = store.loadCampaign(chosenCampaign).coordinator;
+        expect(started.sceneId, opportunity.observeSceneId);
+        expect(started.choices.singleWhere(
+            (c) => c.id == observe.id).enabled, true);
+        final first = store.commitChoice(chosenCampaign,
+          actionId: 'role_action_observe', choiceId: observe.id,
+          expectedRevision: 0);
+        expect(first.applied, true);
+        final after = store.loadCampaign(chosenCampaign).coordinator;
+        expect(after.sceneId, opportunity.recallSceneId);
+        expect(after.state.flags[ReviewedHeroSourceAction.observedFlag], true);
+        expect(after.state.knowledge['player'], isEmpty);
+        expect(after.choices.singleWhere(
+            (c) => c.id == recall.id).enabled, true);
+
+        final normalPass = anchor.decisions.firstWhere((d) =>
+            d.id.endsWith('_pass_source'));
+        expect(store.commitChoice(skippedCampaign,
+          actionId: 'role_action_skip', choiceId: normalPass.id,
+          expectedRevision: 0).applied, true);
+        final skipped = store.loadCampaign(skippedCampaign).coordinator;
+        expect(skipped.sceneId, opportunity.recallSceneId);
+        expect(skipped.state.flags[ReviewedHeroSourceAction.observedFlag],
+            false);
+        expect(skipped.choices.singleWhere(
+            (c) => c.id == recall.id).enabled, false);
+        expect(skipped.choices.any((c) =>
+            c.id == following.decisions.first.id && c.enabled), true);
+      } finally {
+        store.close();
+      }
+      store = BookworldCampaignStore.openPrivateDirectory(dir.path);
+      try {
+        final afterRestart = store.loadCampaign(chosenCampaign).coordinator;
+        expect(afterRestart.state.flags[
+            ReviewedHeroSourceAction.observedFlag], true);
+        expect(afterRestart.choices.singleWhere(
+            (c) => c.id == recall.id).enabled, true);
+        expect(store.loadCampaign(skippedCampaign).coordinator.choices
+            .singleWhere((c) => c.id == recall.id).enabled, false);
+        expect(store.commitChoice(chosenCampaign,
+          actionId: 'role_action_recall', choiceId: recall.id,
+          expectedRevision: 1).applied, true);
+        expect(store.loadCampaign(chosenCampaign).metadata.revision, 2);
+      } finally {
+        store.close();
+      }
+    } finally {
+      await dir.delete(recursive: true);
     }
   });
 

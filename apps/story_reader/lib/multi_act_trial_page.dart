@@ -7,6 +7,7 @@ import 'bookwide_storyplan_composer.dart';
 import 'bookwide_source_encounters.dart';
 import 'story_plan.dart';
 import 'reviewed_hero_role.dart';
+import 'reviewed_hero_source_action.dart';
 import 'cross_act_consequence_gate.dart';
 import 'multi_act_trial_compiler.dart';
 import 'source_locked_prose_preview_page.dart';
@@ -62,6 +63,7 @@ class _MultiActTrialPageState extends State<MultiActTrialPage> {
       widget.heroRoleCatalog ?? const ReviewedHeroRoleCatalog();
   List<ReviewedHeroRole> _eligibleHeroes = const [];
   ReviewedHeroRole? _selectedHeroRole;
+  bool _reviewedHeroSourceAction = false;
   bool _loadingHeroRoles = false;
   String? _heroNotice;
   String? _error;
@@ -91,6 +93,7 @@ class _MultiActTrialPageState extends State<MultiActTrialPage> {
             r.groupDigest == _selectedHeroRole!.groupDigest &&
             r.displayName == _selectedHeroRole!.displayName)) {
           _selectedHeroRole = null;
+          _reviewedHeroSourceAction = false;
           _heroName = 'Игрок';
           _heroController.text = _heroName;
           _reviewed = false;
@@ -109,6 +112,16 @@ class _MultiActTrialPageState extends State<MultiActTrialPage> {
     } catch (error) {
       if (mounted) setState(() {
         _eligibleHeroes = const [];
+        _selectedHeroRole = null;
+        _reviewedHeroSourceAction = false;
+        _heroName = 'Игрок';
+        _heroController.text = _heroName;
+        _reviewed = false;
+        _gameplaySelection = null;
+        _wholeGameplaySelection = null;
+        _reviewedProse.clear();
+        _recheckedRepair = null;
+        _unchangedReview = null;
         _heroNotice = 'Не удалось подтвердить персонажей: ' +
             error.toString() +
             '. Имя не будет автоматически угадано по тексту.';
@@ -132,6 +145,7 @@ class _MultiActTrialPageState extends State<MultiActTrialPage> {
     final role = chosen.isEmpty ? null : chosen.single;
     setState(() {
       _selectedHeroRole = role;
+      _reviewedHeroSourceAction = false;
       _heroName = role?.displayName ?? 'Игрок';
       _heroController.text = _heroName;
       // Player identity IS part of signed scenario state, so previous
@@ -179,7 +193,13 @@ class _MultiActTrialPageState extends State<MultiActTrialPage> {
       reviewedEventIds: _interactiveEvents,
       userConfirmedPrivateAdaptation: true,
     );
-    return _selectedHeroRole?.bindTo(source, widget.book) ?? source;
+    final rolePlan = _selectedHeroRole?.bindTo(source, widget.book) ?? source;
+    return _reviewedHeroSourceAction
+        ? ReviewedHeroSourceAction.attach(
+            index: widget.index, book: widget.book,
+            plan: rolePlan, role: _selectedHeroRole!,
+            explicitlyConfirmedPrivateGameFiction: true)
+        : rolePlan;
   }
 
   /// A single source/plan revision invalidates prior quotes, model digests
@@ -189,6 +209,7 @@ class _MultiActTrialPageState extends State<MultiActTrialPage> {
         _interactiveEvents.containsAll(next)) return;
     setState(() {
       _interactiveEvents..clear()..addAll(next);
+      _reviewedHeroSourceAction = false;
       _reviewed = false;
       _gameplaySelection = null;
       _wholeGameplaySelection = null;
@@ -319,6 +340,7 @@ class _MultiActTrialPageState extends State<MultiActTrialPage> {
     }
     if (_unchangedReview != null &&
         (_recheckedRepair != null || _enforceEarlierOutcome ||
+         _reviewedHeroSourceAction ||
          _interactiveEvents.isNotEmpty ||
          _reviewedProse.isNotEmpty || _gameplaySelection != null ||
          _wholeGameplaySelection != null)) {
@@ -369,6 +391,7 @@ class _MultiActTrialPageState extends State<MultiActTrialPage> {
         reviewedInteractiveEventIds: _interactiveEvents,
         heroName: _heroName,
         selectedHeroRole: _selectedHeroRole,
+        reviewedHeroSourceAction: _reviewedHeroSourceAction,
       );
       if (!mounted || compiled.sourceFingerprint !=
           widget.index.sourceFingerprint) return;
@@ -478,6 +501,10 @@ class _MultiActTrialPageState extends State<MultiActTrialPage> {
     final count = widget.draft.parts.length;
     final activePlan =
         _effectivePlan(continuity: _currentReviewedContinuity());
+    final roleOpportunity = _selectedHeroRole == null ? null :
+        ReviewedHeroSourceAction.find(
+          index: widget.index, book: widget.book,
+          plan: activePlan, role: _selectedHeroRole!);
     final coverage = BookwideActPlanner.compareWithStoryPlan(
         bookMap: widget.bookMap, book: widget.book, story: activePlan);
     final validHero = _heroName.isNotEmpty &&
@@ -567,6 +594,37 @@ class _MultiActTrialPageState extends State<MultiActTrialPage> {
                   'в игровом состоянии и сохранении. Знания NPC, '
                   'секреты и литературный канон автоматически '
                   'не передаются игроку.'),
+            if (_selectedHeroRole != null)
+              CheckboxListTile(
+                key: const Key('multiact-reviewed-role-source-action'),
+                value: _reviewedHeroSourceAction,
+                onChanged: !_working && roleOpportunity != null
+                    ? (value) => setState(() {
+                        _reviewedHeroSourceAction = value == true;
+                        // Changed real plan IDs/flags invalidate every
+                        // prior source, literary and gameplay approval.
+                        _reviewed = false;
+                        _gameplaySelection = null;
+                        _wholeGameplaySelection = null;
+                        _reviewedProse.clear();
+                        _recheckedRepair = null;
+                        _unchangedReview = null;
+                        _error = null;
+                      })
+                    : null,
+                title: const Text(
+                    'Добавить ролевое действие по цитате (частная игра)'),
+                subtitle: Text(roleOpportunity == null
+                    ? 'Выберите два последовательных дополнительных '
+                      'события; первое должно содержать проверенное '
+                      'дословное упоминание выбранного персонажа.'
+                    : 'В первом выбранном событии можно отметить '
+                      'своё подтверждённое упоминание. Во втором '
+                      'появится вариант вспомнить сделанную проверку. '
+                      'Эти решения изменяют игровой журнал/состояние, '
+                      'но не подтверждают знания, канон или '
+                      'присутствие NPC в оригинальном событии.'),
+              ),
             TextFormField(
               key: const Key('multiact-hero-label'),
               controller: _heroController,

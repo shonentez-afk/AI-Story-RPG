@@ -24,11 +24,15 @@ class ReviewedHeroRole {
     required this.dossierId,
     required this.groupDigest,
     required this.firstSourceChapter,
+    required this.confirmedMentions,
   });
 
   final String sourceFingerprint, characterId, displayName;
   final String dossierId, groupDigest;
   final int firstSourceChapter;
+  /// Literal source spans, explicitly confirmed in the original NPC editor.
+  /// Text is never shipped to a public archive or inferred from a name.
+  final List<SourceEvidence> confirmedMentions;
 
   String get playerIdentityFlag => 'player_is_' + characterId;
 
@@ -65,6 +69,9 @@ class ReviewedHeroRole {
         dossierId: dossier.id,
         groupDigest: NpcEditorialNotebook.groupDigest(dossier),
         firstSourceChapter: dossier.firstChapter,
+        confirmedMentions: List.unmodifiable(dossier.mentions
+            .where((m) => m.kind == EvidenceKind.character &&
+                m.status == EvidenceStatus.confirmed)),
       ));
     }
     result.sort((a, b) {
