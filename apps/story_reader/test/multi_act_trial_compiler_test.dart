@@ -1392,7 +1392,16 @@ void main() {
   test('two additional source events become real investigate/skip '
       'choices in rich-v3, locked to human review and saved in SQLite',
       () async {
-    final index = _index();
+    // "ключ" occurs in every possible 60-character citation, so a typed
+    // item effect remains source-locked rather than inventing an item label.
+    final index = BookSourceIndexer.index(ImportedBook(
+      title: 'Две главы о проверенном слове',
+      author: 'Синтетический текст для игрового QA',
+      chapters: [
+        List.filled(16, 'Путник нашёл ключ у ворот. ').join(' '),
+        List.filled(16, 'Героя ожидал ключ на тропе. ').join(' '),
+      ],
+    ));
     final book = await _analyze(index, eventsPerChapter: 3);
     expect(book.events, hasLength(6));
     final ready = _draft(index, book);
@@ -1483,8 +1492,11 @@ void main() {
     // No model call occurs and a skip does NOT acquire the item.
     final inspectChoice = sourceContext.choices.singleWhere(
         (c) => c.choiceId == 'act_1_examine_source');
+    expect(book.events.firstWhere(
+        (e) => e.id == inspectChoice.sourceEventId).source.quote
+        .toLowerCase(), contains('ключ'));
     final optionalItem = GameplayCandidate(
-      kind: 'item', id: 'travel_token', label: 'памятный знак',
+      kind: 'item', id: 'travel_token', label: 'ключ',
       op: 'grant_item',
       sceneId: inspectChoice.sceneId, choiceId: inspectChoice.choiceId,
       sourceEventId: inspectChoice.sourceEventId,
@@ -1513,7 +1525,7 @@ void main() {
     );
     expect(const RichPrivateBookworldImporter()
         .inspect(withItem).presentation['item_names'],
-        containsPair('travel_token', 'памятный знак'));
+        containsPair('travel_token', 'ключ'));
 
     final temp = await Directory.systemTemp.createTemp('source-encounter-');
     try {
