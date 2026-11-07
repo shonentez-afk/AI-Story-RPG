@@ -1,5 +1,7 @@
 # AI Story RPG — единый генеральный документ: книга → полностью готовая игра .bworld
 
+> **Актуализация 7 ноября 2026 — игровые панели и E6e.** Подробная спецификация [«Герой / Предметы / Журнал»](GAME_PANELS_IMPLEMENTATION_PLAN_RU_2026-11-07.md) теперь **нормативная часть этого генерального плана**, а не отдельное конкурирующее направление. Основа интеграции — [проверенный аудит текущего Flutter-кода и сторонних игр](GAME_PANELS_REFERENCE_AUDIT_RU_2026-11-07.md). На E6e-коде 0.3.0a3 коммита bfa4190afec7c0f5e00c70e357898a9660c05450 оба задания [Actions #42297819582](https://github.com/shonentez-afk/AI-Story-RPG/actions/runs/42297819582) завершились SUCCESS. Это не доказательство настоящего book-to-game E2E. Последний прочитанный main для описанных ниже native API — 9c9bdc142495e536b5d11ca5e61680948e45f8fe (после PR #131); PR #132 по social ещё draft. Ни один из новых UI/vNext пунктов не объявляется реализованным.
+
 ## Обязательное техническое приложение: ссылки на сторонние реализации (2026-11-07)
 
 **Новый нормативный технический справочник:** [ENGINE_BEST_PRACTICES_INTEGRATION_PLAN_RU_2026-11-07.md](https://github.com/shonentez-afk/AI-Story-RPG/blob/feature/external-rpg-author-e6d-handoff-20261106/tools/rpg_author/ENGINE_BEST_PRACTICES_INTEGRATION_PLAN_RU_2026-11-07.md). Он подробно указывает, **что брать и из каких проверенных GitHub-файлов**, что уже реализовано в AI Story RPG, какие модели/правила расширять, что делать в основном Flutter/Dart-движке и во внешнем E6, как версионировать .bworld, какие тесты обязательны, какие лицензии запрещают простое копирование. Правильные исходные ветки: Ink/Project Lunar/LimboAI/GOAP — master; Twine — develop; остальные — указаны у соответствующих ссылок.
@@ -400,6 +402,33 @@ game.bworld
 
 **Редактирование:** пользователь позже открывает редактор, меняет положение пруда/цвет героев или реплику, запускает preview, при экспорте получает новый проверенный файл. Старое прохождение/архив не переписываются скрыто.
 
+### 11.3 Вкладки «Герой», «Предметы», «Журнал»: обязательная интеграция с реальной игрой
+
+**Полная рабочая спецификация и тесты:** [GAME_PANELS_IMPLEMENTATION_PLAN_RU_2026-11-07.md](GAME_PANELS_IMPLEMENTATION_PLAN_RU_2026-11-07.md). [Первичные источники](GAME_PANELS_REFERENCE_AUDIT_RU_2026-11-07.md) — Narrat / Quest / RPG Maker / Ren'Py / Dialogic / AI Dungeon. Используем их UX-решения, а не runtime, Pinia/Vue/Godot-код или незаверенную игровую логику.
+
+**Сохраняем ровно три нижние кнопки:** Герой, Предметы, Журнал. Внутри панели показываются **только те вложенные разделы, которые реально поддерживает книга**; не делать новую постоянную кнопку для каждого NPC, навыка, задания или разговора. Для телефона — адаптивный прокручиваемый sheet, ReaderChrome, SafeArea и крупные цели касания; для Windows — панель/окно с keyboard focus и теми же данными. Учесть масштаб 200 %, тёмную тему, reduced motion и поддержку экранного диктора.
+
+| Игровой раздел | Действующий P0 / rich-v3 | Будущий только по потребности книги P1/vNext |
+|---|---|---|
+| **Герой** | Герой/описание, существующие stats, current scene, только известные player facts; read-only картина WorldGameView | Одобренные навыки и проверки, направленные отношения и знакомства с NPC по стабильному character_id, только source/event-gated |
+| **Предметы** | Только текущие item ID из inventory Set, проверенные название/описание, связь с получением и расходом; никаких выдуманных xN и Use | ItemDefinition (тип, max stack, provenance), OwnedItem (владелец/количество), контекстные use/give/equip только через допустимый choice/typed effect |
+| **Журнал → События** | Хронология replay-проверенных WorldEvent: выбор + фактические изменения inventory/stats/player knowledge; фильтры/карточки | Структурные event ссылки на quest/item/NPC и дополнительные проверенные эффекты |
+| **Журнал → Задачи** | **Не объявлять существующей подсистемой:** обязательства пока выражаются самим сюжетом и флагами | QuestDefinition/ObjectiveState, start/complete/fail, source/cause, доступные/активные/завершённые без спойлеров |
+| **Журнал → Сведения** | Уже открытые player facts, без закрытых сведений NPC и всей непрочитанной книги | Source-linked энциклопедия известных NPC/мест/фактов, aliases≠character_id, согласование с social ledger |
+| **Журнал → Диалоги** | **История текущей сцены уже существует** в SceneDialogueStage; использовать без копирования скрытых реплик | Межсценовые DialogueDisplayRecord только для фактически показанных после knowledge gate turns, отдельные от игровых WorldEvent |
+
+**Точный источник истины:** apps/story_reader/lib/game_panels.dart, world_play_page.dart, world_library_gateway.dart/WorldGameView; packages/story_core/lib/src/world_state.dart (inventory пока Set без quantity/owner), engine.dart (WorldEvent + deterministic replay), packages/story_runtime_adapter (available choice + fact learning), campaign_manager SQLite, scene_dialogue_stage.dart (текущий локальный dialogue cursor/history). Новые Flutter-карточки — read-only projection этих структур. Ни один рендер/AI summary не пишет GameState. Реальное действие идёт через gateway.choose(allowed choiceId + expectedRevision/idempotent actionId) → story_core atomic commit → event → SQLite/replay → новый WorldGameView → все три панели.
+
+**Неприкосновенные правила:** потреблённый/переданный предмет не может оставаться у героя; уникальная вещь не может иметь двух владельцев; целевые задачи нельзя выполнять без committed условия; портрет/карточка NPC/история разговора не показывает незнакомых персонажей и секреты до разрешённого факта; история диалога **не** равна истории committed решений и **не** пополняется пропущенными строками через Skip; свободная фраза к ИИ не создаёт loot или XP; новые пакеты **не** превращают историю в универсальную D&D.
+
+**Функциональные пакеты и очередность:**
+1. **UI-P0 (рядом с закрытием текущего P0, без блокирования полного FB2→game):** одним PR заменить плоский _WorldInfoSheet на удобные карточки трёх панелей из действующего WorldGameView, event delta и безопасных подписей. Не менять v3, story_core, SQLite, формат NPC или механики владения. Пройти UI/widget/Android/Windows тесты и сохранение позиции чтения.
+2. **NPC-P0 (в общем native NPC/social пакете, а не отдельный PR на поле):** после принятого exact-head API #132/преемника добавить только безопасные видимые NPC связи/знания. Source/event identity и сохранения обязательно.
+3. **GAME-P1 (один сквозной PR после первого полноценно испытанного book→game):** новый согласованный versioned schema для quests/objectives, при необходимости item ownership/quantity/use/transfer и skill checks → авторский BookEvidenceGraph/StoryPlan → Python writer/verifier → Dart importer/story_core → SQLite/replay → Flutter tabs → QA реальных двух книг. Строгая версия/capabilities; **текущий rich v3 с четырьмя ZIP-членами не расширять молча**. Если новых правил не требует книга, не добавлять их насильно. При необходимости это входит в общее vNext/P2 формата, не новая конкурирующая версия.
+4. **EXTRA-P2:** энциклопедия, межсценовая история диалогов, поиск, визуальные рецепты и декоративные награды — только после работающей основной игры; не gate готовности текстового rich-v3.
+
+**Критерий принятия вкладок:** реальные решения меняют только committed state, три панели отражают то же состояние после replay и рестарта, длинные тексты видны на Android/Windows, недоступные знания никогда не попадают в историю и поиск, две разные ветви и две реальные книги проходят сквозную проверку. Одна зелёная сборка/документация не заменяет пользовательский walkthrough.
+
 ## 12. Где будет код — целевые границы
 
 **Внешний генератор / навык** (поэтапные имена модулей, этих файлов ещё нет):
@@ -426,7 +455,9 @@ game.bworld
 |---|---|
 | Весь источник | Проанализированы все индексируемые главы, exact UTF-16 ссылки/цитаты, не потеряны основные персонажи/события, unresolved вынесены отдельно |
 | Сюжет | Проходимые и содержательно законченные ветви, корректные терминалы/условия/предметы, CANON не подменён альтернативой; ALTER_FATE — реально разные допустимые финалы |
-| Герой/предметы/журнал | Реальные typed effects отображаются, инвентарь не заполняется фиктивными предметами, журнал проверяется replay |
+| Герой/предметы/журнал (UI-P0) | Три привычные кнопки, адаптивные карточки реально доступных stats/facts/items, читабельность Windows/Android, нет новых v3 полей; журнал совпадает с committed replay/SQLite и показывает фактические дельты |
+| Герой/предметы/журнал (GAME-P1) | Если подключён vNext: actor-owned items без двойного владения, quests/objectives и item actions доступны по проверенным выборам, disabled с объяснением; после reboot/portable save история и state совпадают |
+| История разговоров и сведения | Current-scene dialogue history не выдаётся за весь журнал; в будущей межсценовой истории только реально показанные и source/knowledge-allowed turn IDs, skip не раскрывает секреты, не объединяются чужие NPC/кампании |
 | NPC | Профили ВСЕХ нужных действующих лиц, нет выдачи secret до события, место/знания/отношения согласованы, исходные цитаты и GAME_FICTION различимы |
 | Диалоги | Все обязательные offline реплики и вопросы подписаны speaker/turn IDs, доступны в нужное время, one-shot и requires_fact проверены, пропущенных тем нет |
 | AI | Без API проход возможен; с API restricted context и consent, unknown choice/маскировка ключа/spoiler injection не дают world effect; retry/429/timeout/cancel протестированы |
@@ -446,7 +477,9 @@ game.bworld
 | Приоритет | Результат | Что не блокирует |
 |---|---|---|
 | **P0 — ближайшее** | Закрыть текущие задачи внешнего E6e и main full-book/literary/structured dialogue gates; проверить **готовую текстовую rich-v3 игру** на «Короле-лягушонке» и второй книге; два маршрута и offline Windows/Android | Графический редактор, AI NPC, пиксели |
+| **P0-UI — без задержки релиза** | По существующему WorldGameView сделать одну качественную read-only карточную реализацию «Герой/Предметы/Журнал»; P0 device QA/сохранения и одна согласованная приёмка | Квестовая база, ownership, XP, полная история реплик |
 | **P1** | Навык автоматически создаёт единый BookEvidenceGraph, полные NPC cards, готовые offline диалоги, interactions/visual plans и строгий QA; проверка на синтетических и приватных настоящих историях | Ручной редактор |
+| **P1-GAME — после P0** | Один versioned gameplay contract: source-backed quest/obligations, по необходимости item quantity/ownership/transfer и deterministic skills → Python/Dart/SQLite/replay/Flutter tabs в одном пакете; только при наличии механик в книге | 1.0 офлайн text-v3, старый importer и завершённое чтение |
 | **P2** | Новый один self-contained .bworld (условно v4) с Python writer/verifier + Dart importer и Canvas procedural renderer, три display modes и короткие анимации. **Готовую визуальную игру можно импортировать сразу** | Сложные AI диалоги, редактор |
 | **P3** | BYOK AI_NPC SAY/LOOK/DO/INTERACT и отдельная локальная conversation memory, contexts/consent/action gate; **без изменения offline полноты** | Случайная генерация новых ветвей |
 | **P4** | Необязательный встроенный Windows/Android редактор графов, персонажей, диалогов, внешности и анимаций, QA и экспорт новой версии | Основной запуск готовой игры |
@@ -473,6 +506,8 @@ game.bworld
 https://github.com/shonentez-afk/AI-Story-RPG — main `959c8134f4ef20cd00dd4039d8d131638f502f60` (срез 2026-11-06): `tools/rpg_author/`, `tools/bookworld/private_rich_bookworld.py`, `packages/bookworld_format/lib/private_rich_bookworld.dart`, `packages/story_core/lib/`, `packages/story_runtime_adapter/lib/`, `packages/campaign_manager/lib/`, `apps/story_reader/lib/`, `docs/PROJECT_COMPLETION_GATE_RU_2026-11-06.md` и Issue #118.
 
 **Сторонние источники:** первичные URL для каждой технологии и её предложенного применения перечислены в §4; Key docs: Yarn line IDs https://www.yarnspinner.dev/docs/unreal/06-localisation-and-assets/ ; Convai sections/triggers https://docs.convai.com/api-docs/convai-playground/character-customization/narrative-design ; Rasa flow control https://rasa.com/faq/rasa-playground ; AI Dungeon Context/Story Cards https://help.aidungeon.com/faq/story-cards ; Character Card V2 https://github.com/malfoyslastname/character-card-spec-v2/blob/main/spec_v2.md ; Flame GameWidget https://docs.flame-engine.org/latest/flame/game_widget.html ; Dart CustomPainter https://api.flutter.dev/flutter/rendering/CustomPainter-class.html .
+
+**Согласованные игровые панели (новое нормативное приложение):** [GAME_PANELS_IMPLEMENTATION_PLAN_RU_2026-11-07.md](GAME_PANELS_IMPLEMENTATION_PLAN_RU_2026-11-07.md) (11 разделов: Hero/Items/Journal, event replay, quests, NPC, vNext, Flutter, QA и пакеты P0/P1) и [GAME_PANELS_REFERENCE_AUDIT_RU_2026-11-07.md](GAME_PANELS_REFERENCE_AUDIT_RU_2026-11-07.md) (проверенные чужие UX/модули и реальные границы текущего UI). Эти ссылки являются частью **этого же**, а не новым отдельным планом.
 
 **Исторические, теперь подчинённые этому единому плану:** `tools/rpg_author/MASTER_BOOK_GRAPH_PROCEDURAL_PIXEL_PLAN_RU_2026-11-06.md`, `PROCEDURAL_PIXEL_SCENES_RU.md`, `E6F_VISUAL_RUNTIME_COMPATIBILITY_RU_2026-11-06.md`, `E6G_THIRD_PARTY_AND_AI_FREE_INTERACTION_DECISIONS_RU_2026-11-06.md`.
 
