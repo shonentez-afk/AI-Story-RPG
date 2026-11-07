@@ -283,7 +283,7 @@ void main() {
             nextSceneId: entry.id),
       );
     }
-    final review = <Map<String, dynamic>>[
+    final itemReview = <Map<String, dynamic>>[
       {
         'item_name': 'Ключ',
         'item_description': 'Найден у двери в первой главе',
@@ -301,7 +301,7 @@ void main() {
       index, graph, catalog, editorial, itemScenario,
       npcRules: gatedRules, npcNotebook: permanent, npcDossiers: dossiers,
       sourceQuoteByRuleId: bound, userConfirmed: true,
-      reviewedBookItems: review,
+      reviewedBookItems: itemReview,
     );
     final itemGame = const RichPrivateBookworldImporter().inspect(itemBytes);
     expect(itemGame.npcSocialRulebook, isNotNull);
