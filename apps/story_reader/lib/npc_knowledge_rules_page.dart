@@ -1053,8 +1053,10 @@ class _NpcKnowledgeRulesPageState extends State<NpcKnowledgeRulesPage> {
                                 overflow: TextOverflow.ellipsis)),
                       ],
                       onChanged: (value) {
-                        if (value != null) update(() =>
-                            item.actorId = value);
+                        if (value != null) update(() {
+                          item.actorId = value;
+                          item.witnessed = false;
+                        });
                       },
                     ),
                     const SizedBox(height: 8),
@@ -1076,6 +1078,15 @@ class _NpcKnowledgeRulesPageState extends State<NpcKnowledgeRulesPage> {
                         if (value != null) update(() {
                           item.acquireChoice = value;
                           item.acquireQuote = null;
+                          if (item.giveChoice == value) {
+                            item.giveChoice = null;
+                            item.giveQuote = null;
+                          }
+                          if (item.returnChoice == value) {
+                            item.returnChoice = null;
+                            item.returnQuote = null;
+                          }
+                          item.witnessed = false;
                         });
                       },
                     ),
@@ -1100,6 +1111,7 @@ class _NpcKnowledgeRulesPageState extends State<NpcKnowledgeRulesPage> {
                         onChanged: (value) {
                           if (value != null) update(() =>
                               item.acquireQuote = value);
+                          item.witnessed = false;
                         },
                       ),
                     ],
@@ -1123,6 +1135,11 @@ class _NpcKnowledgeRulesPageState extends State<NpcKnowledgeRulesPage> {
                         if (value != null) update(() {
                           item.giveChoice = value;
                           item.giveQuote = null;
+                          if (item.returnChoice == value) {
+                            item.returnChoice = null;
+                            item.returnQuote = null;
+                          }
+                          item.witnessed = false;
                         });
                       },
                     ),
@@ -1147,6 +1164,7 @@ class _NpcKnowledgeRulesPageState extends State<NpcKnowledgeRulesPage> {
                         onChanged: (value) {
                           if (value != null) update(() =>
                               item.giveQuote = value);
+                          item.witnessed = false;
                         },
                       ),
                     ],
@@ -1174,6 +1192,7 @@ class _NpcKnowledgeRulesPageState extends State<NpcKnowledgeRulesPage> {
                         if (value != null) update(() {
                           item.returnChoice = value;
                           item.returnQuote = null;
+                          item.witnessed = false;
                         });
                       },
                     ),
@@ -1199,6 +1218,7 @@ class _NpcKnowledgeRulesPageState extends State<NpcKnowledgeRulesPage> {
                         onChanged: (value) {
                           if (value != null) update(() =>
                               item.returnQuote = value);
+                          item.witnessed = false;
                         },
                       ),
                     ],
