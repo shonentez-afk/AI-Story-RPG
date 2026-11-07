@@ -77,6 +77,34 @@ def reviewed_fixture():
     return overlay, reviewed
 
 
+def reviewed_transfer_fixture():
+    """Same exact source: item grant, custody transfer, NPC then departs."""
+    plan = story()
+    river = next(scene for scene in plan["scenes"] if scene["id"] == "river")
+    river["origin"] = "SOURCE_PASSAGE"
+    river["assertion_ids"] = ["rescue_event"]
+    overlay, reviewed = reviewed_fixture()
+    reviewed["story_sha256"] = digest(canonical(plan))
+    quote = digest(TEXT.encode("utf-8"))
+    social = reviewed["npc_social"]
+    social["witnesses"].append({
+        "scene_id": "river", "actor_id": ACTOR, "mode": "present",
+        "source_quote_sha256": quote,
+    })
+    social["item_grants"] = [{
+        "scene_id": "road", "choice_id": "take_rope",
+        "item_id": "rope", "source_quote_sha256": quote,
+    }]
+    social["item_transfers"] = [{
+        "scene_id": "river", "choice_id": "rescue", "item_id": "rope",
+        "from_actor_id": "player", "to_actor_id": ACTOR,
+        "source_quote_sha256": quote,
+    }]
+    social["life_transitions"][0]["scene_id"] = "river"
+    social["life_transitions"][0]["choice_id"] = "rescue"
+    return plan, overlay, reviewed
+
+
 class ReviewedSocialV5Tests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
@@ -138,6 +166,29 @@ class ReviewedSocialV5Tests(unittest.TestCase):
         with self.assertRaises(AuthoringError) as err:
             build_rich(self.root, overlay, target, npc_review_path=review)
         self.assertEqual(err.exception.code, "output_exists")
+
+    def test_source_locked_v5_item_custody_transfer_and_lifecycle(self):
+        plan, overlay, reviewed = reviewed_transfer_fixture()
+        project.submit_story(self.root, plan, replace=True)
+        raw, sidecar = compile_rich_from_project(
+            self.root, overlay, npc_review=reviewed)
+        self.assertEqual(rich.verify(raw)["format_version"], 3)
+        with zipfile.ZipFile(io.BytesIO(raw)) as bundle:
+            blueprint = json.loads(bundle.read("scenario/blueprint.json"))
+            social = json.loads(bundle.read("source/provenance.json"))["npc_social"]
+        self.assertEqual(blueprint["items"], ["rope"])
+        self.assertEqual(social["item_grants"][0]["choice_id"], "take_rope")
+        self.assertEqual(social["item_transfers"][0]["to_actor_id"], ACTOR)
+        self.assertEqual(social["life_transitions"][0]["next_state"], "absent")
+        self.assertNotIn("item_owner", blueprint["initial_state"])
+        forged = deepcopy(reviewed)
+        forged["npc_social"]["item_grants"][0]["source_quote_sha256"] = "f" * 64
+        with self.assertRaises(AuthoringError):
+            compile_rich_from_project(self.root, overlay, npc_review=forged)
+        omitted = deepcopy(reviewed)
+        omitted["npc_social"]["item_grants"] = []
+        with self.assertRaises(AuthoringError):
+            compile_rich_from_project(self.root, overlay, npc_review=omitted)
 
     def test_nonconsensual_stale_forged_and_incomplete_reviews_are_rejected(self):
         variants = (
