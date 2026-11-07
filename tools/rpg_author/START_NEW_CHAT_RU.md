@@ -1,24 +1,46 @@
-**Дополнительный UX-аудит (7 ноября 2026):** [GAME_PANELS_REFERENCE_AUDIT_RU_2026-11-07.md](GAME_PANELS_REFERENCE_AUDIT_RU_2026-11-07.md) — проверенные Narrat, RPG Maker MZ, Quest, Ren'Py, Dialogic, AI Dungeon, Ink/Yarn/Twine и существующие Flutter панели `Герой / Предметы / Журнал`. Предлагаемые изменения UI — только рекомендации для основного чата; код приложения и versioned формат в нашей E6e-ветке не менялись. Не превращать новую технику UI в блокер подготовки полноценной игры из книги.
+# AI Story RPG — актуальная передача нового чата (E6e + генеральный план)
 
-## Подтверждённый CI для E6e (7 ноября 2026)
+**Дата актуализации: 7 ноября 2026.** Для продолжения работ читать **этот верхний раздел**. Ниже после разделителя лежит история E6d/старых main-PR: её старые статусы OPEN DRAFT/CI_PENDING и указание «начать finalize» **не являются текущими задачами**.
 
-**Последний проверенный коммит КОДА:** `bfa4190afec7c0f5e00c70e357898a9660c05450`, внешний генератор `0.3.0a3`. [GitHub Actions run #42297819582](https://github.com/shonentez-afk/AI-Story-RPG/actions/runs/42297819582): **SUCCESS**, оба задания **author-tests SUCCESS** и **dart-parity SUCCESS** на этом же SHA. В составе author-tests прошли новые E6e unit + synthetic end-to-end tests и старые E6d/regression. Проверка pin/application-contract выполнена без отключения. Здесь после зелёного CI добавлена только запись документации с `[skip ci]` — не выдавать её SHA за отдельный проверенный исполняемый код.
+## 1. Рабочая ветка, проверенное состояние и границы
 
-**Вывод:** `contract_drift` для принятого `main`/PR #131 устранён. Новый [Draft PR #132](https://github.com/shonentez-afk/AI-Story-RPG/pull/132) **не принят** и его развивающийся social-контракт не является частью данного E6e gate. При его принятии потребуется новый кодовый parity-probe. Установленный у пользователя навык пока закреплён на прежнем E6d SHA `9849c22...` — не утверждать, что bootstrap уже переведён на E6e: обновление pin делать только отдельным проверенным действием. Реальная книга/Android/Windows E2E по-прежнему не объявлены готовыми.
+- **Единственная актуальная ветка нашего внешнего автора:** [feature/external-rpg-author-e6e-parity-20261107](https://github.com/shonentez-afk/AI-Story-RPG/tree/feature/external-rpg-author-e6e-parity-20261107). Сохранять ход проекта здесь и в tools/rpg_author. Историческую E6d-ветку не продолжать как новую.
+- **Проверенный исполняемый код E6e 0.3.0a3:** SHA bfa4190afec7c0f5e00c70e357898a9660c05450, [GitHub Actions #42297819582](https://github.com/shonentez-afk/AI-Story-RPG/actions/runs/42297819582): **author-tests SUCCESS, dart-parity SUCCESS**. Следующие коммиты в данной ветке изменяют документацию ([skip ci]), поэтому **не называть новые docs-HEAD дополнительно проверенными кодовыми SHA**.
+- **Основная программа на момент снимка:** main 9c9bdc142495e536b5d11ca5e61680948e45f8fe после принятого [PR #131](https://github.com/shonentez-afk/AI-Story-RPG/pull/131); [PR #132](https://github.com/shonentez-afk/AI-Story-RPG/pull/132) по NPC social — **OPEN DRAFT** на момент последней проверки. Перед следующими программными действиями повторно посмотреть HEAD/PR/CI.
+- **Установленный навык ai-story-book-to-rpg всё ещё закреплён на E6d SHA 9849c22d18e2761b49766b0c213b4a3fb3fe053b**, не заменять pin на docs-HEAD. Восстановление/bootstrap навыка только после отдельного тестирования. E6e git branch и установленный навык — не одно и то же.
+- **Граница:** main, apps/, packages/, tools/bookworld/, общий CI и встроенный генератор — только чтение из этой ветки. Не переносить туда документацию/код без нового явного разрешения. Приватные FB2, текст/цитаты, игровые snapshots и API-ключи не коммитить в public GitHub.
+
+## 2. Действующая иерархия крупных планов — без раздвоения roadmap
+
+1. **Генеральный план (главный):** [AI_STORY_RPG_COMPLETE_GAME_UNIFIED_SPEC_RU.md](AI_STORY_RPG_COMPLETE_GAME_UNIFIED_SPEC_RU.md) — вся книга, готовый один game.bworld, NPC, факты, диалоги, события, предметы, процедурные сцены и будущий необязательный редактор. **Обновлён раздел 11.3 и P0/P1-гейты по игровым вкладкам.**
+2. **Технический справочник сторонних идей:** [ENGINE_BEST_PRACTICES_INTEGRATION_PLAN_RU_2026-11-07.md](ENGINE_BEST_PRACTICES_INTEGRATION_PLAN_RU_2026-11-07.md) — source links, один двигатель, правила внедрения, этапы; **добавлен §8.1** по Narrat/Quest/Ren'Py/UI.
+3. **Подробный план внедрения игровых вкладок:** [GAME_PANELS_IMPLEMENTATION_PLAN_RU_2026-11-07.md](GAME_PANELS_IMPLEMENTATION_PLAN_RU_2026-11-07.md) — точные Flutter/core/gateway/BookWorld места подключения, Hero, Inventory, Journal Events/Quests/Knowledge/Dialogue, контракты, безопасность, P0/P1 пакеты и тестовая матрица.
+4. **Основание решений и проверенные аналогии:** [GAME_PANELS_REFERENCE_AUDIT_RU_2026-11-07.md](GAME_PANELS_REFERENCE_AUDIT_RU_2026-11-07.md).
+5. **E6e CLI финализация:** [E6E_FINALIZATION_RU_2026-11-07.md](E6E_FINALIZATION_RU_2026-11-07.md), уже реализована команда python3 -m tools.rpg_author finalize, есть unit и synthetic end-to-end. Команда не выдаёт художественное/устройственное USER_READY без реального независимого прохода.
+
+Все пять документов подчинены **основной цели 1.0**, не означают автоматический запуск P1/P2. У другого основного чата есть [main roadmap](https://github.com/shonentez-afk/AI-Story-RPG/blob/main/docs/ROADMAP_AUTOMATIC_RPG_RU_V2_2026-11-05.md) и [1.0 acceptance](https://github.com/shonentez-afk/AI-Story-RPG/blob/main/docs/PROJECT_COMPLETION_GATE_RU_2026-11-06.md); эти native docs в текущей внешней ветке read-only.
+
+## 3. Что фактически сделано, а что нет
+
+**Сделано:** E6e code синхронизирован с принятым #131 без отключения contract checks; исправления E6d диалогов и регрессионные проверки, источник/сборка/verify, проверки gameplay, dialogue, literary-report coverage; единый finalize, синтетический CI green на exact-head. В приложении уже есть три кнопки Герой/Предметы/Журнал, WorldGameView и replay journal; signed текущие диалоги/локальная history существуют.
+
+**Не сделано и не заявлять готовым:** автоматическая полная адаптация настоящей книги с литературно подтверждёнными NPC и целым сценарным runtime; тесты «Король-лягушонок» + второй FB2 на реальных Android/Windows; full-device E2E; обновление pinned навыка; сам runtime QuestDefinition/ownership/skillcheck; полноценная межсценовая история диалогов; полноценные карточки UI; формат vNext с такими capabilities; social #132 пока не принят.
+
+## 4. Следующие шаги, сгруппированные по приёмке
+
+**A. Немедленная цель P0:** довести действительно полную книгу→игру по актуальному проверенному генератору и подтвердить офлайн Android/Windows, два маршрута, знание/причинность/передачи вещей, сохранения и replay. Закрыть дальнейшую интеграцию NPC social только после принятого API/отдельного parity. Сохранить реальные приватные checkpoint/review/enrichment/dialogues/инвентаризацию тем и итоговые отчёты вне checkout.
+
+**B. Один UI-P0 пакет в основном чате (только после явного разрешения):** расширить чтение WorldGameView через 3 компактные панели без нового .bworld, без нового состояния. Flutter/widget/Windows/Android acceptance. Не плодить PR на каждое поле.
+
+**C. Один следующий GAME-P1 пакет:** item owners/quantity/use/transfer + quests/objectives и optional skill checks — только если они нужны книге; один versioned vNext writer/importer/story_core/SQLite/Flutter/provenance/replay contract, не вставлять молча в v3. NPC знание/социальное состояние подключать в существующий пакет социальной функциональности, не отдельной параллельной моделью.
+
+**D. Позже:** по желанию пиксельные visual recipes, dialogue history всех реально показанных реплик, codex, живые API NPC, необязательный редактор. Эти функции не имеют права задерживать законченную текстовую v3 игру.
+
+**Acceptance и запреты:** одни verified events/state для всех панелей; чужие/будущие сведения не отображать; нельзя использовать/передать отсутствующий предмет, повторить эффект двойным кликом или скрыть ещё нужный важный выбор. Одна настоящая игра и соответствующий импорт лучше десятков новых микрофункций. Конкретные негативные сценарии — в подробном плане.
 
 ---
 
-## E6e — синхронизация с принятым NPC rich-v3 (7 ноября 2026)\n\n**E6e closeout implemented on this branch:** `python3 -m tools.rpg_author finalize`, mandatory literary-review report, fail-closed gameplay quality and exact question-inventory versus dialogue-topic check, source/story/overlay hash binding, immutable JSON report, archive and sidecar verification. New synthetic regression tests: `tests/rpg_author/test_finalize.py`. Full usage and limitations: [E6E_FINALIZATION_RU_2026-11-07.md](E6E_FINALIZATION_RU_2026-11-07.md). **No claim of CI success until final HEAD author-tests and dart-parity are green.** This is not automatic generation of all NPCs or Android/Windows full-book E2E.\n\n
-
-**Новая активная внешняя ветка:** [feature/external-rpg-author-e6e-parity-20261107](https://github.com/shonentez-afk/AI-Story-RPG/tree/feature/external-rpg-author-e6e-parity-20261107), создана поверх `main` после принятого [PR #131](https://github.com/shonentez-afk/AI-Story-RPG/pull/131) (baseline `9c9bdc142495e536b5d11ca5e61680948e45f8fe`).
-
-В одном переносе сохранены изменения E6d исключительно в `tools/rpg_author/` и `tests/rpg_author/`: два исправления аудита диалогов, регрессии и исследовательские документы. Контракты приложения и BookWorld в этой ветке **в точности** унаследованы из уже проверенного `main`; `tools/rpg_author/compatibility.json`, `compatibility.py` и `npc_compatibility_probe.py` также взяты из принятого PR #131. Никакого ручного отключения защиты `contract_drift`, подмены SHA и изменения `apps/packages/tools/bookworld` не делали. Прежнюю E6d-ветку и её закреплённый навык не переписывать.
-
-**Обязательно:** перед любым заявлением о совместимости проверить два задания `External RPG author tests` (author-tests, dart-parity) на точном HEAD новой ветки; после новых коммитов повторить проверку. Пока не подтверждены оба SUCCESS, состояние остаётся `CI_PENDING`, а старый skill pin `9849c22d18e2761b49766b0c213b4a3fb3fe053b` сохраняется. Для [Draft PR #132](https://github.com/shonentez-afk/AI-Story-RPG/pull/132) требуется отдельный parity gate после принятия нового `npc_social`; не обновлять pin автоматически при каждом неподтверждённом контракте.
-
-Дальнейшая E6e задача — единая завершающая команда build→verify→quality→dialogue→literary-review, поддержка корректного snapshot; не объявлять настоящую книжную адаптацию или E2E готовыми без фактического испытания. Этот блок является текущим состоянием, исторические записи ниже относятся к старой ветке.
-
----
+## АРХИВНЫЕ сведения прежнего чата E6d (не использовать статусы/сроки как новые)
 
 # Продолжение внешнего генератора AI Story RPG — E6d
 
