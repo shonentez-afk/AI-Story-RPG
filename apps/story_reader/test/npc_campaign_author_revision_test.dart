@@ -165,22 +165,41 @@ class _NoTransport implements AiHttpTransport {
   }
 }
 
-/// Real tap and real isolate/file work, with a bounded wait rather than an
-/// unbounded pumpAndSettle on an animated progress indicator.
-Future<void> _tapLocalWork(WidgetTester tester, Finder target) async {
-  await tester.ensureVisible(target);
-  await tester.pump();
-  await tester.runAsync(() async {
+/// A lazy-list child may exist in cache outside the viewport. Re-layout and
+/// center the actual target before asserting that a real tap can hit it.
+Future<void> _reveal(WidgetTester tester, Finder target) async {
+  if (target.evaluate().isEmpty) {
+    await tester.scrollUntilVisible(target, 140,
+        scrollable: find.byType(Scrollable).first, maxScrolls: 60);
+  }
+  expect(target, findsOneWidget);
+  for (var attempt = 0; attempt < 3; attempt++) {
+    await Scrollable.ensureVisible(tester.element(target), alignment: 0.5);
+    await tester.pump(const Duration(milliseconds: 100));
+    if (target.hitTestable().evaluate().isNotEmpty) return;
+  }
+  expect(target.hitTestable(), findsOneWidget,
+      reason: 'The intended control must be inside the real phone viewport');
+}
+
+/// Real tap and real isolate/file work. Completion is the expected visible
+/// result, NOT the absence of a lazily unbuilt/offscreen progress indicator.
+Future<void> _tapLocalWork(WidgetTester tester, Finder target,
+    {required bool Function() ready}) async {
+  await _reveal(tester, target);
+  final completed = await tester.runAsync<bool>(() async {
     await tester.tap(target);
-    await tester.pump();
     for (var i = 0; i < 400; i++) {
       await Future<void>.delayed(const Duration(milliseconds: 20));
       await tester.pump();
-      if (find.byType(LinearProgressIndicator).evaluate().isEmpty) return;
+      if (ready()) return true;
     }
-    fail('Local authoring operation did not finish');
+    return false;
   });
-  await tester.pumpAndSettle();
+  expect(completed, true, reason: 'Local authoring operation did not finish');
+  // A confirmation dialog can intentionally keep the editor busy. Avoid an
+  // unbounded pumpAndSettle while its background indicator is animated.
+  await tester.pump(const Duration(milliseconds: 300));
 }
 
 void main() {
@@ -357,6 +376,9 @@ void main() {
       'rejects another editor changing them after final review', (tester) async {
     await tester.binding.setSurfaceSize(const Size(360, 780));
     addTearDown(() => tester.binding.setSurfaceSize(null));
+    final oldHitTestPolicy = WidgetController.hitTestWarningShouldBeFatal;
+    WidgetController.hitTestWarningShouldBeFatal = true;
+    addTearDown(() => WidgetController.hitTestWarningShouldBeFatal = oldHitTestPolicy);
     final repo = MemorySourceAnalysisCheckpointRepository();
     final saved = await _seed(f, repo);
     final gateway = _NoGateway(), transport = _NoTransport();
@@ -364,45 +386,59 @@ void main() {
       index: f.free.index, book: f.free.book, bookMap: f.free.bookMap, draft: f.free.draft,
       gateway: gateway, roleCatalog: _Roles(f.roles), draftStore: NpcWritingStore(repository: repo),
       aiWriter: ZaiNpcCampaignWriting(transport: transport))));
-    await _tapLocalWork(tester, find.byKey(const Key('whole-npc-load-heroes')));
+    await _tapLocalWork(tester, find.byKey(const Key('whole-npc-load-heroes')),
+      ready: () => find.byType(DropdownButtonFormField<String>).evaluate().isNotEmpty);
     for (final key in ['whole-npc-quotes-reviewed', 'whole-npc-private-fiction']) {
       final target = find.byKey(Key(key));
-      await tester.scrollUntilVisible(target, 140, scrollable: find.byType(Scrollable).first);
+      await _reveal(tester, target);
       expect(tester.widget<CheckboxListTile>(target).value, false);
-      await tester.tap(target); await tester.pump();
+      await tester.tap(target);
+      await tester.pump();
+      expect(tester.widget<CheckboxListTile>(target).value, true);
     }
-    await _tapLocalWork(tester, find.byKey(const Key('whole-npc-prepare')));
     final state = find.byKey(const Key('npc-consequences-state'));
-    await tester.scrollUntilVisible(state, 140, scrollable: find.byType(Scrollable).first);
+    await _tapLocalWork(tester, find.byKey(const Key('whole-npc-prepare')),
+      ready: () => state.evaluate().isNotEmpty);
+    await _reveal(tester, state);
     expect(tester.widget<Text>(state).data, contains('Восстановлено эффектов: 2'));
     final restore = find.byKey(const Key('npc-consequences-restore'));
-    await tester.ensureVisible(restore); await tester.tap(restore);
-    await tester.pump(); await tester.pump(const Duration(milliseconds: 300));
+    await _tapLocalWork(tester, restore,
+      ready: () => find.byType(AlertDialog).evaluate().isNotEmpty);
     final consent = find.byKey(const Key('npc-consequences-consent'));
-    await tester.ensureVisible(consent); await tester.pump();
+    await _reveal(tester, consent);
     expect(tester.widget<CheckboxListTile>(consent).value, false);
     expect(tester.widget<FilledButton>(find.byKey(const Key('npc-consequences-accept'))).onPressed, isNull);
-    await tester.tap(find.text('Отмена').last); await tester.pumpAndSettle();
+    final cancel = find.text('Отмена').last;
+    await _reveal(tester, cancel);
+    await tester.tap(cancel);
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.byType(AlertDialog), findsNothing);
     expect(await NpcCampaignConsequenceStore(repository: repo).recordHash(f.source), saved.recordHash);
-    await tester.ensureVisible(restore); await tester.tap(restore);
-    await tester.pump(); await tester.pump(const Duration(milliseconds: 300));
-    await tester.ensureVisible(consent); await tester.tap(consent); await tester.pump();
-    await _tapLocalWork(tester, find.byKey(const Key('npc-consequences-accept')));
-    await tester.ensureVisible(state);
+    await _tapLocalWork(tester, restore,
+      ready: () => find.byType(AlertDialog).evaluate().isNotEmpty);
+    await _reveal(tester, consent);
+    await tester.tap(consent); await tester.pump();
+    expect(tester.widget<CheckboxListTile>(consent).value, true);
+    await _tapLocalWork(tester, find.byKey(const Key('npc-consequences-accept')),
+      ready: () => state.evaluate().isNotEmpty &&
+          tester.widget<Text>(state).data == 'Включено игровых эффектов: 2.');
+    await _reveal(tester, state);
     expect(tester.widget<Text>(state).data, 'Включено игровых эффектов: 2.');
     final review = find.byKey(const Key('whole-npc-review-package'));
-    await tester.scrollUntilVisible(review, 160, scrollable: find.byType(Scrollable).first);
-    await _tapLocalWork(tester, review);
     final approval = find.byKey(const Key('whole-npc-final-approval'));
-    await tester.scrollUntilVisible(approval, 160, scrollable: find.byType(Scrollable).first);
+    await _tapLocalWork(tester, review,
+      ready: () => approval.evaluate().isNotEmpty);
+    await _reveal(tester, approval);
     expect(tester.widget<CheckboxListTile>(approval).value, false);
     final other = NpcCampaignConsequenceStore(repository: repo);
     await other.clear(source: f.source, originalArchive: f.base, roles: f.roles,
       expected: await f.load(other), confirmed: true);
     await tester.tap(approval); await tester.pump();
-    await _tapLocalWork(tester, find.byKey(const Key('whole-npc-start')));
+    expect(tester.widget<CheckboxListTile>(approval).value, true);
     final error = find.byKey(const Key('whole-npc-error'));
-    await tester.scrollUntilVisible(error, 140, scrollable: find.byType(Scrollable).first);
+    await _tapLocalWork(tester, find.byKey(const Key('whole-npc-start')),
+      ready: () => error.evaluate().isNotEmpty);
+    await _reveal(tester, error);
     expect(tester.widget<SelectableText>(error).data, contains('Последствия изменены в другом окне'));
     expect(gateway.calls, 0); expect(transport.calls, 0);
     expect(tester.takeException(), isNull);
