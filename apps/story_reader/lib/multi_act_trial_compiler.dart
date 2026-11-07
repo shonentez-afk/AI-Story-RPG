@@ -3,6 +3,7 @@ import 'package:bookworld_format/bookworld_format.dart';
 import 'book_source_index.dart';
 import 'bookwide_act_planner.dart';
 import 'bookwide_campaign_contract.dart';
+import 'bookwide_npc_arc.dart';
 import 'bookwide_storyplan_composer.dart';
 import 'bookwide_source_encounters.dart';
 import 'branch_continuity_auditor.dart';
@@ -49,10 +50,28 @@ class MultiActTrialCompiler {
     /// A source-anchored, opt-in ROLE -> OBSERVE -> RECALL sequence.
     /// Does not give player any NPC secrets or literary claims.
     bool reviewedHeroSourceAction = false,
+    /// Explicit, source-checked and user-reviewed NPC meeting, never canon.
+    ReviewedHeroRole? npcEncounterRole,
+    bool reviewedNpcEncounter = false,
+    String npcPlayerLine = '',
+    String npcReplyLine = '',
     /// Explicit source-event observations; each is shown before consent.
     Set<String> reviewedInteractiveEventIds = const {},
     List<ReviewedProseSceneApproval> reviewedProse = const [],
   }) async {
+    if (reviewedNpcEncounter &&
+        (npcEncounterRole == null ||
+         npcEncounterRole.sourceFingerprint != index.sourceFingerprint ||
+         npcEncounterRole.characterId == selectedHeroRole?.characterId)) {
+      throw const FormatException(
+          'Нужна отдельная подтверждённая личность NPC, не персонаж игрока.');
+    }
+    if (reviewedNpcEncounter &&
+        (unchangedReview != null || recheckedRepair != null ||
+         reviewedProse.isNotEmpty)) {
+      throw const FormatException(
+          'Диалог NPC меняет сюжет; старый литературный отзыв нужно снять.');
+    }
     if (reviewedHeroSourceAction && selectedHeroRole == null) {
       throw const FormatException(
           'Ролевое действие требует проверенного постоянного character_id.');
@@ -137,12 +156,22 @@ class MultiActTrialCompiler {
     );
     final rolePlan = selectedHeroRole == null ? sourcePlan :
         selectedHeroRole.bindTo(sourcePlan, book);
+    final npcArc = reviewedNpcEncounter ? BookwideNpcArc.review(
+      index: index, book: book, plan: rolePlan,
+      role: npcEncounterRole!, privateFictionConfirmed: true,
+      playerLine: npcPlayerLine, npcLine: npcReplyLine,
+    ) : null;
+    if (reviewedNpcEncounter && npcArc == null) {
+      throw const FormatException(
+          'В двух выбранных событиях нет проверенной встречи с NPC.');
+    }
+    final npcPlan = npcArc?.attach(rolePlan, book) ?? rolePlan;
     final plan = reviewedHeroSourceAction
         ? ReviewedHeroSourceAction.attach(
-            index: index, book: book, plan: rolePlan,
+            index: index, book: book, plan: npcPlan,
             role: selectedHeroRole!,
             explicitlyConfirmedPrivateGameFiction: fictionalTrialAcknowledged)
-        : rolePlan;
+        : npcPlan;
     if (continuity != null &&
         (!continuity.hasEnforcedContinuity ||
          continuity.audit.counterexamples.isNotEmpty ||
@@ -428,7 +457,8 @@ class MultiActTrialCompiler {
         heroName: heroName,
         sceneTitles: {
           for (final scene in plan.situations) scene.id: scene.goal,
-        });
+        },
+        reviewedNpcArc: npcArc?.writerReview);
     final inspected = const RichPrivateBookworldImporter().inspect(archive);
     if (inspected.sourceFingerprint != index.sourceFingerprint ||
         inspected.requiresNetwork ||
@@ -442,7 +472,10 @@ class MultiActTrialCompiler {
              selectedHeroRole.playerIdentityFlag] != true) ||
         (reviewedHeroSourceAction &&
          !inspected.blueprint.initial.flags.containsKey(
-             ReviewedHeroSourceAction.observedFlag))) {
+             ReviewedHeroSourceAction.observedFlag)) ||
+        (npcArc != null &&
+         (!inspected.blueprint.actors.contains(npcArc.role.characterId) ||
+          inspected.npcSocialRulebook == null))) {
       throw const FormatException(
           'Частный многоактовый пакет не прошёл независимую проверку.');
     }
@@ -452,9 +485,21 @@ class MultiActTrialCompiler {
     final campaignReport = CompiledCampaignCausalGate.verify(
       blueprint: inspected.blueprint,
       socialRules: inspected.npcSocialRulebook,
-      requiredChoiceIds: campaignContract.requiredChoiceIds,
+      requiredChoiceIds: [
+        ...campaignContract.requiredChoiceIds,
+        if (npcArc != null) ...npcArc.requiredChoiceIds,
+      ],
     );
     campaignContract.verifyWitnesses(campaignReport);
+    if (npcArc != null) {
+      for (final id in npcArc.requiredChoiceIds) {
+        final witness = campaignReport.choiceWitnesses[id];
+        if (witness == null || witness.isEmpty ||
+            witness.last.choiceId != id) {
+          throw FormatException('Нет исполнимой NPC-реплики: ' + id);
+        }
+      }
+    }
     return StoryPlanTrialCompilation(
       archive: archive,
       sourceFingerprint: index.sourceFingerprint,
@@ -474,6 +519,7 @@ class MultiActTrialCompiler {
       selectedHeroCharacterId: selectedHeroRole?.characterId,
       verifiedSourceChoices: campaignContract.sourceDecisions.length,
       verifiedActBridges: campaignContract.bridgeDecisions.length,
+      verifiedNpcActions: npcArc == null ? 0 : npcArc.requiredChoiceIds.length,
     );
   }
 }

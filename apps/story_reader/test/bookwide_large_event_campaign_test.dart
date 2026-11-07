@@ -4,6 +4,14 @@ import 'package:ai_story_reader/book_import.dart';
 import 'package:ai_story_reader/book_source_index.dart';
 import 'package:ai_story_reader/bookwide_act_planner.dart';
 import 'package:ai_story_reader/bookwide_campaign_contract.dart';
+import 'package:ai_story_reader/bookwide_npc_arc.dart';
+import 'package:ai_story_reader/npc_editorial_notebook.dart';
+import 'package:ai_story_reader/reviewed_hero_role.dart';
+import 'package:ai_story_reader/source_character_dossiers.dart';
+import 'package:ai_story_reader/source_evidence_graph.dart';
+import 'package:ai_story_reader/source_relation_review.dart';
+import 'package:ai_story_reader/source_semantic_catalog.dart';
+import 'package:ai_story_reader/source_semantic_editorial_review.dart';
 import 'package:ai_story_reader/bookwide_source_encounters.dart';
 import 'package:ai_story_reader/bookwide_storyplan_composer.dart';
 import 'package:ai_story_reader/multi_act_trial_compiler.dart';
@@ -23,13 +31,15 @@ import 'package:story_core/story_core.dart';
 /// Synthetic source: six acts, three distinct source windows per chapter,
 /// four independently source-verified proposals per window. No private FB2,
 /// API calls, model inference, or claims of literary truth.
-BookSourceIndex _longIndex({int chapters = 6}) =>
+BookSourceIndex _longIndex({int chapters = 6, bool withNpc = false}) =>
     BookSourceIndexer.index(ImportedBook(
   title: 'Шесть актов — нагрузочная проверка причинных событий',
   author: 'Синтетический стенд',
   chapters: [
     for (var chapter = 0; chapter < chapters; chapter++)
-      List.filled(350, 'Путник нашёл ключ у ворот. ').join(),
+      List.filled(350, withNpc
+          ? 'Артем нашёл ключ у ворот. '
+          : 'Путник нашёл ключ у ворот. ').join(),
   ],
 ));
 
@@ -425,6 +435,139 @@ void main() {
         expect(revision, 31);
         expect(db.loadCampaign(campaign).metadata.revision, 31);
         expect(db.loadCampaign(campaign).coordinator.isTerminal, isTrue);
+      } finally {
+        db.close();
+      }
+    } finally {
+      await dir.delete(recursive: true);
+    }
+  });
+  test('reviewed NPC source -> real choice -> memory -> response -> SQLite',
+      () async {
+    final index = _longIndex(chapters: 2, withNpc: true);
+    final book = await _longBook(index);
+    final map = BookwideActPlanner.build(index: index, book: book);
+    final draft = BookwideStoryPlanComposer.compose(
+      index: index, book: book, bookMap: map,
+      actProposals: [for (var i = 0; i < 2; i++) _actProposal(book, i)],
+    );
+    final eligible = BookwideSourceEncounters.eligibleForAct(
+        index: index, bookMap: map, draft: draft, partIndex: 0);
+    expect(eligible.length, greaterThanOrEqualTo(2));
+    final extras = <String>{eligible[0].id, eligible[1].id};
+    final plan = BookwideSourceEncounters.attach(
+      index: index, book: book, bookMap: map, draft: draft,
+      plan: draft.plan, reviewedEventIds: extras,
+      userConfirmedPrivateAdaptation: true,
+    );
+    final excerpt = eligible.first.source;
+    final mention = SourceEvidence.propose(index,
+        chunkId: excerpt.chunkId, kind: EvidenceKind.character,
+        startUtf16: excerpt.startUtf16,
+        endUtf16: excerpt.startUtf16 + 5);
+    expect(mention.label, 'Артем');
+    var graph = SourceEvidenceGraph.empty(index).addAll(index, [mention]);
+    graph = graph.review(index, mention.id, EvidenceStatus.confirmed);
+    final relations = SourceRelationReviewSession.create(index, graph);
+    final catalog = SourceSemanticCatalog.fromLocalEvidence(index, graph);
+    final editorial = SemanticEditorialReviewSession.create(index, catalog);
+    final dossiers = SourceCharacterDossierIndex.build(
+        index, graph, relations, catalog, editorial);
+    final dossier = dossiers.dossiers.singleWhere(
+        (d) => d.labels.contains('Артем'));
+    final notebook = NpcEditorialNotebook.empty(index)
+        .putProfile(NpcEditorialNotebook.freshProfile(dossier));
+    final role = ReviewedHeroRole.fromReviewedSources(
+      index: index, dossiers: dossiers, graph: graph,
+      catalog: catalog, editorial: editorial, notebook: notebook,
+    ).single;
+    const playerLine = 'Я хочу обсудить ключ и дорогу.';
+    const npcLine = 'Я помню твою просьбу и помогу.';
+    final arc = BookwideNpcArc.review(
+      index: index, book: book, plan: plan, role: role,
+      privateFictionConfirmed: true,
+      playerLine: playerLine, npcLine: npcLine,
+    );
+    expect(arc, isNotNull);
+    expect(arc!.attach(plan, book).flags,
+        contains(BookwideNpcArc.contactFlag));
+    expect(() => BookwideNpcArc.review(
+      index: index, book: book, plan: plan, role: role,
+      privateFictionConfirmed: false,
+      playerLine: playerLine, npcLine: npcLine,
+    ), throwsFormatException);
+    final approved = <String>{
+      ...extras,
+      for (final part in draft.parts) ...[
+        part.setupEventId, part.outcomeEventId,
+      ],
+    };
+    final compiled = await MultiActTrialCompiler.compile(
+      index: index, book: book, bookMap: map, draft: draft,
+      sourceEventIdsReviewedByUser: approved,
+      reviewedInteractiveEventIds: extras,
+      privateUseConfirmed: true, fictionalTrialAcknowledged: true,
+      npcEncounterRole: role, reviewedNpcEncounter: true,
+      npcPlayerLine: playerLine, npcReplyLine: npcLine,
+    );
+    expect(compiled.verifiedNpcActions, 2);
+    expect(compiled.requiresCloudToPlay, false);
+    final imported = const RichPrivateBookworldImporter()
+        .inspect(compiled.archive);
+    expect(imported.blueprint.actors, contains(role.characterId));
+    expect(imported.npcSocialRulebook, isNotNull);
+    expect(imported.presentation['scene_dialogues'],
+        contains(arc.secondSceneId));
+    final report = StoryCampaignCausalAudit.inspect(
+      blueprint: imported.blueprint,
+      socialRules: imported.npcSocialRulebook,
+      requiredChoiceIds: arc.requiredChoiceIds,
+    );
+    expect(report.status, CampaignCausalStatus.playable);
+    expect(report.unprovenRequiredChoiceIds, isEmpty);
+
+    final dir = await Directory.systemTemp.createTemp('bookwide-npc-');
+    try {
+      var db = BookworldCampaignStore.openPrivateDirectory(dir.path);
+      late String campaign;
+      try {
+        final installed = db.installBookworld(compiled.archive);
+        campaign = db.createCampaign(installed.archiveHash);
+        final skippedId = db.createCampaign(installed.archiveHash);
+        expect(db.commitChoice(skippedId, actionId: 'skip',
+          choiceId: arc.firstPassId, expectedRevision: 0).applied, true);
+        final skipped = db.loadCampaign(skippedId).coordinator;
+        expect(skipped.state.knowledge[role.characterId], isEmpty);
+        expect(skipped.choices.singleWhere(
+            (choice) => choice.id == arc.replyChoiceId).enabled, false);
+
+        expect(db.commitChoice(campaign, actionId: 'speak_1',
+          choiceId: arc.listenChoiceId, expectedRevision: 0).applied, true);
+        final listening = db.loadCampaign(campaign).coordinator;
+        expect(listening.state.knowledge[role.characterId],
+            contains(BookwideNpcArc.factId));
+        expect(listening.state.knowledge['player'], isEmpty);
+        expect(listening.choices.singleWhere(
+            (choice) => choice.id == arc.replyChoiceId).enabled, true);
+        final social = NpcSocialLedger.inspect(
+            listening, imported.npcSocialRulebook!);
+        expect(social.hasMemory(role.characterId, BookwideNpcArc.memoryId),
+            true);
+        expect(social.directedScore(role.characterId, 'player'),
+            greaterThan(0));
+      } finally {
+        db.close();
+      }
+      db = BookworldCampaignStore.openPrivateDirectory(dir.path);
+      try {
+        final restored = db.loadCampaign(campaign).coordinator;
+        expect(restored.state.knowledge[role.characterId],
+            contains(BookwideNpcArc.factId));
+        expect(restored.choices.singleWhere(
+            (choice) => choice.id == arc.replyChoiceId).enabled, true);
+        expect(db.commitChoice(campaign, actionId: 'speak_2',
+          choiceId: arc.replyChoiceId, expectedRevision: 1).applied, true);
+        expect(db.loadCampaign(campaign).metadata.revision, 2);
       } finally {
         db.close();
       }

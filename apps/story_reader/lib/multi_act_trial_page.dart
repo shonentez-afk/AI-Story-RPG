@@ -8,6 +8,7 @@ import 'bookwide_source_encounters.dart';
 import 'story_plan.dart';
 import 'reviewed_hero_role.dart';
 import 'reviewed_hero_source_action.dart';
+import 'bookwide_npc_arc.dart';
 import 'cross_act_consequence_gate.dart';
 import 'multi_act_trial_compiler.dart';
 import 'source_locked_prose_preview_page.dart';
@@ -64,6 +65,10 @@ class _MultiActTrialPageState extends State<MultiActTrialPage> {
   List<ReviewedHeroRole> _eligibleHeroes = const [];
   ReviewedHeroRole? _selectedHeroRole;
   bool _reviewedHeroSourceAction = false;
+  ReviewedHeroRole? _selectedNpcRole;
+  bool _reviewedNpcArc = false;
+  String _npcPlayerLine = 'Я хочу поговорить о том, что произошло.';
+  String _npcReplyLine = 'Я помню нашу встречу и отвечу в игровой истории.';
   bool _loadingHeroRoles = false;
   String? _heroNotice;
   String? _error;
@@ -93,6 +98,8 @@ class _MultiActTrialPageState extends State<MultiActTrialPage> {
             r.groupDigest == _selectedHeroRole!.groupDigest &&
             r.displayName == _selectedHeroRole!.displayName)) {
           _selectedHeroRole = null;
+          _selectedNpcRole = null;
+          _reviewedNpcArc = false;
           _reviewedHeroSourceAction = false;
           _heroName = 'Игрок';
           _heroController.text = _heroName;
@@ -112,6 +119,8 @@ class _MultiActTrialPageState extends State<MultiActTrialPage> {
     } catch (error) {
       if (mounted) setState(() {
         _eligibleHeroes = const [];
+        _selectedNpcRole = null;
+        _reviewedNpcArc = false;
         _selectedHeroRole = null;
         _reviewedHeroSourceAction = false;
         _heroName = 'Игрок';
@@ -145,11 +154,34 @@ class _MultiActTrialPageState extends State<MultiActTrialPage> {
     final role = chosen.isEmpty ? null : chosen.single;
     setState(() {
       _selectedHeroRole = role;
+      if (role != null && role.characterId == _selectedNpcRole?.characterId) {
+        _selectedNpcRole = null;
+        _reviewedNpcArc = false;
+      }
       _reviewedHeroSourceAction = false;
       _heroName = role?.displayName ?? 'Игрок';
       _heroController.text = _heroName;
       // Player identity IS part of signed scenario state, so previous
       // role-specific proposals, approvals and prose become stale.
+      _reviewed = false;
+      _gameplaySelection = null;
+      _wholeGameplaySelection = null;
+      _reviewedProse.clear();
+      _recheckedRepair = null;
+      _unchangedReview = null;
+      _error = null;
+    });
+  }
+
+  void _chooseNpc(String? id) {
+    if (_working) return;
+    final found = _eligibleHeroes.where((r) => r.characterId == id).toList();
+    if (id != null && id.isNotEmpty && found.length != 1) return;
+    final next = found.isEmpty ? null : found.single;
+    setState(() {
+      _selectedNpcRole =
+          next?.characterId == _selectedHeroRole?.characterId ? null : next;
+      _reviewedNpcArc = false;
       _reviewed = false;
       _gameplaySelection = null;
       _wholeGameplaySelection = null;
@@ -194,12 +226,22 @@ class _MultiActTrialPageState extends State<MultiActTrialPage> {
       userConfirmedPrivateAdaptation: true,
     );
     final rolePlan = _selectedHeroRole?.bindTo(source, widget.book) ?? source;
+    final npcArc = _reviewedNpcArc
+        ? BookwideNpcArc.review(
+            index: widget.index, book: widget.book, plan: rolePlan,
+            role: _selectedNpcRole!, privateFictionConfirmed: true,
+            playerLine: _npcPlayerLine, npcLine: _npcReplyLine)
+        : null;
+    if (_reviewedNpcArc && npcArc == null) {
+      throw const FormatException('NPC больше не связан с исходной цитатой.');
+    }
+    final npcPlan = npcArc?.attach(rolePlan, widget.book) ?? rolePlan;
     return _reviewedHeroSourceAction
         ? ReviewedHeroSourceAction.attach(
             index: widget.index, book: widget.book,
-            plan: rolePlan, role: _selectedHeroRole!,
+            plan: npcPlan, role: _selectedHeroRole!,
             explicitlyConfirmedPrivateGameFiction: true)
-        : rolePlan;
+        : npcPlan;
   }
 
   /// A single source/plan revision invalidates prior quotes, model digests
@@ -210,6 +252,7 @@ class _MultiActTrialPageState extends State<MultiActTrialPage> {
     setState(() {
       _interactiveEvents..clear()..addAll(next);
       _reviewedHeroSourceAction = false;
+      _reviewedNpcArc = false;
       _reviewed = false;
       _gameplaySelection = null;
       _wholeGameplaySelection = null;
@@ -362,7 +405,7 @@ class _MultiActTrialPageState extends State<MultiActTrialPage> {
     }
     if (_unchangedReview != null &&
         (_recheckedRepair != null || _enforceEarlierOutcome ||
-         _reviewedHeroSourceAction ||
+         _reviewedHeroSourceAction || _reviewedNpcArc ||
          _interactiveEvents.isNotEmpty ||
          _reviewedProse.isNotEmpty || _gameplaySelection != null ||
          _wholeGameplaySelection != null)) {
@@ -385,14 +428,19 @@ class _MultiActTrialPageState extends State<MultiActTrialPage> {
       final continuity = _currentReviewedContinuity();
       // A second local read prevents silently compiling an ID from an
       // NPC notebook deleted or regrouped since the selection was shown.
-      if (_selectedHeroRole != null) {
+      if (_selectedHeroRole != null || _reviewedNpcArc) {
         final fresh = await _roleCatalog.load(widget.index);
-        if (!fresh.any((role) =>
-            role.characterId == _selectedHeroRole!.characterId &&
-            role.groupDigest == _selectedHeroRole!.groupDigest &&
-            role.displayName == _selectedHeroRole!.displayName)) {
-          throw const FormatException(
-              'Карточка героя изменилась после выбора: выберите заново.');
+        for (final selected in [
+          if (_selectedHeroRole != null) _selectedHeroRole!,
+          if (_reviewedNpcArc) _selectedNpcRole!,
+        ]) {
+          if (!fresh.any((role) =>
+              role.characterId == selected.characterId &&
+              role.groupDigest == selected.groupDigest &&
+              role.displayName == selected.displayName)) {
+            throw const FormatException(
+                'Проверенная карточка персонажа изменилась после выбора.');
+          }
         }
       }
       final effectivePlan = _effectivePlan(continuity: continuity);
@@ -414,6 +462,10 @@ class _MultiActTrialPageState extends State<MultiActTrialPage> {
         heroName: _heroName,
         selectedHeroRole: _selectedHeroRole,
         reviewedHeroSourceAction: _reviewedHeroSourceAction,
+        npcEncounterRole: _reviewedNpcArc ? _selectedNpcRole : null,
+        reviewedNpcEncounter: _reviewedNpcArc,
+        npcPlayerLine: _npcPlayerLine,
+        npcReplyLine: _npcReplyLine,
       );
       if (!mounted || compiled.sourceFingerprint !=
           widget.index.sourceFingerprint) return;
@@ -529,6 +581,19 @@ class _MultiActTrialPageState extends State<MultiActTrialPage> {
           plan: activePlan, role: _selectedHeroRole!);
     final coverage = BookwideActPlanner.compareWithStoryPlan(
         bookMap: widget.bookMap, book: widget.book, story: activePlan);
+    BookwideNpcArc? npcAvailable;
+    if (_selectedNpcRole != null &&
+        _selectedNpcRole?.characterId != _selectedHeroRole?.characterId) {
+      try {
+        npcAvailable = BookwideNpcArc.review(
+          index: widget.index, book: widget.book, plan: activePlan,
+          role: _selectedNpcRole!, privateFictionConfirmed: true,
+          playerLine: _npcPlayerLine, npcLine: _npcReplyLine,
+        );
+      } on FormatException {
+        npcAvailable = null;
+      }
+    }
     final validHero = _heroName.isNotEmpty &&
         _heroName.trim() == _heroName && _heroName.length <= 90 &&
         !RegExp(r'[\x00-\x1f\x7f]').hasMatch(_heroName);
@@ -581,7 +646,7 @@ class _MultiActTrialPageState extends State<MultiActTrialPage> {
               onPressed: _working || _loadingHeroRoles
                   ? null : _loadHeroRoles,
               icon: const Icon(Icons.person_search_outlined),
-              label: const Text('Выбрать героя по проверенной карточке NPC'),
+              label: const Text('Загрузить проверенные карточки героя и NPC'),
             ),
             if (_loadingHeroRoles)
               const LinearProgressIndicator(),
@@ -661,6 +726,86 @@ class _MultiActTrialPageState extends State<MultiActTrialPage> {
               ),
               onChanged: (value) => setState(() => _heroName = value),
             ),
+            if (_eligibleHeroes.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              DropdownButtonFormField<String>(
+                key: ValueKey('multiact-npc-identity-' +
+                    (_selectedNpcRole?.characterId ?? 'none')),
+                initialValue: _selectedNpcRole?.characterId ?? '',
+                isExpanded: true,
+                decoration: const InputDecoration(
+                  labelText: 'Собеседник NPC из проверенной карточки',
+                  border: OutlineInputBorder(),
+                ),
+                items: [
+                  const DropdownMenuItem(
+                    value: '', child: Text('Без NPC-диалога'),
+                  ),
+                  for (final role in _eligibleHeroes)
+                    if (role.characterId != _selectedHeroRole?.characterId)
+                      DropdownMenuItem(
+                        value: role.characterId,
+                        child: Text(role.displayName),
+                      ),
+                ],
+                onChanged: _working ? null : _chooseNpc,
+              ),
+              if (_selectedNpcRole != null) ...[
+                const Text('Диалог — частная игровая выдумка. Личность NPC '
+                    'подтверждена редактором, слова не выдаются за канон.'),
+                TextFormField(
+                  key: const Key('multiact-npc-player-line'),
+                  initialValue: _npcPlayerLine,
+                  maxLength: 250,
+                  decoration: const InputDecoration(
+                    labelText: 'Реплика героя (игровая версия)',
+                  ),
+                  onChanged: (value) => setState(() {
+                    _npcPlayerLine = value;
+                    _reviewedNpcArc = false;
+                    _reviewed = false;
+                  }),
+                ),
+                TextFormField(
+                  key: const Key('multiact-npc-reply-line'),
+                  initialValue: _npcReplyLine,
+                  maxLength: 250,
+                  decoration: const InputDecoration(
+                    labelText: 'Реплика NPC (игровая версия)',
+                  ),
+                  onChanged: (value) => setState(() {
+                    _npcReplyLine = value;
+                    _reviewedNpcArc = false;
+                    _reviewed = false;
+                  }),
+                ),
+                CheckboxListTile(
+                  key: const Key('multiact-reviewed-npc-arc'),
+                  value: _reviewedNpcArc,
+                  onChanged: !_working && npcAvailable != null
+                      ? (value) => setState(() {
+                          _reviewedNpcArc = value == true;
+                          _reviewed = false;
+                          _gameplaySelection = null;
+                          _wholeGameplaySelection = null;
+                          _reviewedProse.clear();
+                          _unchangedReview = null;
+                          _recheckedRepair = null;
+                          _error = null;
+                        })
+                      : null,
+                  title: const Text(
+                      'Разрешить NPC-встречу, память и условный ответ'),
+                  subtitle: Text(npcAvailable == null
+                      ? 'Нужны два последовательных выбранных события; '
+                        'в первом требуется дословно подтверждённое '
+                        'упоминание NPC.'
+                      : 'Событие ' + npcAvailable.firstEventId +
+                        ' → разговор → память NPC → ответ в следующем '
+                        'событии. Всё сохранится в автономной игре.'),
+                ),
+              ],
+            ],
             const SizedBox(height: 8),
             Text('Перед запуском проверим ' +
                 (count * 2 + _interactiveEvents.length).toString() +

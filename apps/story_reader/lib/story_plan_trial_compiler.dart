@@ -33,6 +33,7 @@ class StoryPlanTrialCompilation {
     this.selectedHeroCharacterId,
     this.verifiedSourceChoices = 0,
     this.verifiedActBridges = 0,
+    this.verifiedNpcActions = 0,
   });
 
   final Uint8List archive;
@@ -41,6 +42,8 @@ class StoryPlanTrialCompilation {
   /// Verified executable source-bound actions and both outgoing act bridges.
   /// This is NOT approval of the book's literary meaning or chronology.
   final int verifiedSourceChoices, verifiedActBridges;
+  /// Additional source-reviewed NPC conversation actions proven by story_core.
+  final int verifiedNpcActions;
   /// Computed from this exact book/plan during compilation, NOT model claims.
   final int sourceEventsTotal, sourceEventsRepresented;
   final List<String> unrepresentedSourceEventIds;
