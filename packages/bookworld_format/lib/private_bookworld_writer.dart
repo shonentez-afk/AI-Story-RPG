@@ -379,6 +379,8 @@ class RichPrivateBookworldWriter {
     required Map<String, dynamic> blueprint,
     required Map<String, dynamic> provenance,
     required Map<String, dynamic> sourceIndex,
+    /// A separately versioned v4 archive, never a silent upgrade of v3.
+    bool expanded = false,
   }) {
     final checked = StoryBlueprint.fromJson(blueprint);
     if (checked.rightsStatus != 'private_adaptation' ||
@@ -404,13 +406,15 @@ class RichPrivateBookworldWriter {
     }
     final manifest = <String, dynamic>{
       'format': 'ai_story_bookworld',
-      'format_version': 3,
+      'format_version': expanded ? 4 : 3,
       if (provenance.containsKey('npc_knowledge'))
         'npc_knowledge_format':
             RichPrivateBookworldImporter.npcKnowledgeFormat,
       if (provenance.containsKey('npc_social'))
         'npc_social_format': provenance['npc_social'] is Map
             ? (provenance['npc_social'] as Map)['format'] : null,
+      if (expanded && provenance.containsKey('initial_state_review'))
+        'initial_state_review_format': RichPrivateBookworldImporter.initialStateReviewFormat,
       'bookworld_id': checked.bookId,
       'source_fingerprint': checked.sourceFingerprint,
       'title': checked.title,
@@ -420,10 +424,11 @@ class RichPrivateBookworldWriter {
       'scenario_format': 'ai_story_blueprint_v1',
       'scenario_format_version': 1,
       'content_capabilities': blueprint['supported_modes'],
-      'build_status': 'private_rich_structural',
+      'build_status': expanded ? 'private_extended_structural' : 'private_rich_structural',
       'rights_status': 'private_use_only',
       'build_tool': {
-        'name': 'ai_story_private_rich_bookworld', 'version': '3.0',
+        'name': expanded ? 'ai_story_private_extended_bookworld' : 'ai_story_private_rich_bookworld',
+        'version': expanded ? '4.0' : '3.0',
       },
       'model_provenance': provenance['model_provenance'],
       'hashes': hashes,
@@ -439,7 +444,8 @@ class RichPrivateBookworldWriter {
         verified.sourceFingerprint != checked.sourceFingerprint ||
         verified.blueprint.blueprintHash != checked.blueprintHash ||
         verified.canDistributePublicly ||
-        verified.requiresNetwork) {
+        verified.requiresNetwork ||
+        verified.formatVersion != (expanded ? 4 : 3)) {
       throw const FormatException('Нативная сборка v3 не прошла самопроверку');
     }
     return package;
