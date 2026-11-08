@@ -92,3 +92,5 @@ export 'src/zai_causal_choice_notebook.dart';
 export 'src/zai_m2c_source_bridge.dart';
 export 'src/zai_private_compilation_draft.dart';
 export 'src/zai_private_bookworld_compilation.dart';
+export 'src/source_checkpoint_repository.dart';
+export 'src/zai_manual_source_alignment.dart';
