@@ -4,6 +4,7 @@ import 'package:ai_story_reader/book_import.dart';
 import 'package:ai_story_reader/book_source_index.dart';
 import 'package:ai_story_reader/bookwide_act_planner.dart';
 import 'package:ai_story_reader/bookwide_campaign_contract.dart';
+import 'package:ai_story_reader/cross_act_consequence_gate.dart';
 import 'package:ai_story_reader/bookwide_npc_arc.dart';
 import 'package:ai_story_reader/npc_editorial_notebook.dart';
 import 'package:ai_story_reader/reviewed_hero_role.dart';
@@ -115,6 +116,141 @@ StoryDilemmaProposal _actProposal(NarrativeBookModel book, int chapter) {
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  test('18 independently source-reviewed v4 acts retain EVERY persistent'
+      ' outcome, 216 playable source events, 17 cross-act obligations and'
+      ' SQLite save/replay across restart', () async {
+    final index = _longIndex(chapters: 18);
+    final book = await _longBook(index);
+    expect(book.events, hasLength(216));
+    final map = BookwideActPlanner.build(index: index, book: book);
+    expect(map.acts, hasLength(18));
+    final draft = BookwideStoryPlanComposer.compose(
+      index: index, book: book, bookMap: map, expanded: true,
+      actProposals: [
+        for (var i = 0; i < 18; i++) _actProposal(book, i),
+      ],
+    );
+    expect(draft.expanded, true);
+    expect(draft.parts, hasLength(18));
+    expect(draft.plan.flags.length, greaterThan(32));
+    // Formal proof counts only flags relevant to a FUTURE act. The actual
+    // 36 distinct outcome flags are not cleared from StoryWorld or saves.
+    expect(draft.formalAudit.counterexamples, isEmpty);
+    final continuation = CrossActConsequenceGate.applyReviewedActChain(
+      index: index, book: book, bookMap: map, draft: draft,
+      userConfirmedFictionalContinuity: true, expanded: true,
+    );
+    expect(continuation.hasEnforcedContinuity, true);
+    expect(continuation.impacts, hasLength(17));
+    expect(continuation.audit.counterexamples, isEmpty);
+
+    final extras = <String>{};
+    for (var act = 0; act < 18; act++) {
+      final eligible = BookwideSourceEncounters.eligibleForAct(
+        index: index, bookMap: map, draft: draft, partIndex: act,
+      );
+      expect(eligible, hasLength(10));
+      extras.addAll(eligible.map((event) => event.id));
+    }
+    expect(extras, hasLength(180));
+    final reviewed = <String>{
+      for (final part in draft.parts) ...[
+        part.setupEventId, part.outcomeEventId,
+      ],
+      ...extras,
+    };
+    expect(reviewed, hasLength(216));
+    final compiled = await MultiActTrialCompiler.compile(
+      index: index, book: book, bookMap: map, draft: draft,
+      continuity: continuation,
+      reviewedInteractiveEventIds: extras,
+      sourceEventIdsReviewedByUser: reviewed,
+      privateUseConfirmed: true,
+      fictionalTrialAcknowledged: true,
+      expanded: true,
+    );
+    expect(compiled.unrepresentedSourceEventIds, isEmpty);
+    expect(compiled.uncoveredSourceChapters, isEmpty);
+    expect(compiled.verifiedSourceChoices, 216);
+    expect(compiled.verifiedActBridges, 34);
+    expect(compiled.sourceEventsRepresented, 216);
+    final world = const RichPrivateBookworldImporter()
+        .inspect(compiled.archive);
+    expect(world.formatVersion, 4);
+    expect(world.blueprint.scenes.length, greaterThan(192));
+    expect(world.blueprint.initial.flags.length, 39);
+    expect(world.requiresNetwork, false);
+    expect(world.canDistributePublicly, false);
+
+    // The actual production SQLite coordinator does NOT use projected
+    // state. It records all 18 original outcomes, all 216 source passages,
+    // action IDs, hashes and exact event order, even after process restart.
+    final temp = await Directory.systemTemp.createTemp(
+        'ai-rpg-18-act-v4-proof-');
+    var revision = 0;
+    late String campaign;
+    late String beforeRestartHash;
+    try {
+      var store = BookworldCampaignStore.openPrivateDirectory(temp.path);
+      try {
+        final installed = store.installBookworld(compiled.archive);
+        campaign = store.createCampaign(installed.archiveHash);
+        for (var act = 1; act <= 18; act++) {
+          for (var event = 0; event < 10; event++) {
+            final suffix = event == 0 ? '' : '_${event + 1}';
+            final step = store.commitChoice(campaign,
+              actionId: 'extended_event_$revision',
+              choiceId: 'act_${act}_examine_source$suffix',
+              expectedRevision: revision);
+            expect(step.applied, isTrue,
+                reason: 'source event ${act}/${event}');
+            revision++;
+          }
+          for (final decision in [
+            'act_${act}_accept_offer',
+            'act_${act}_honor_condition',
+            if (act < 18) 'act_${act}_continue_original',
+          ]) {
+            final step = store.commitChoice(campaign,
+              actionId: 'extended_event_$revision',
+              choiceId: decision,
+              expectedRevision: revision);
+            expect(step.applied, isTrue, reason: decision);
+            revision++;
+          }
+        }
+        expect(revision, 233);
+        final saved = store.loadCampaign(campaign);
+        expect(saved.coordinator.isTerminal, true);
+        for (var act = 1; act <= 18; act++) {
+          expect(saved.coordinator.state.flags[
+            'act_${act}_original_outcome'], isTrue);
+          expect(saved.coordinator.state.flags[
+            'act_${act}_alternate_outcome'], isFalse);
+        }
+        beforeRestartHash = saved.coordinator.state.stateHash;
+        expect(saved.metadata.revision, revision);
+      } finally {
+        store.close();
+      }
+      store = BookworldCampaignStore.openPrivateDirectory(temp.path);
+      try {
+        final saved = store.loadCampaign(campaign);
+        expect(saved.coordinator.isTerminal, true);
+        expect(saved.metadata.revision, revision);
+        expect(saved.coordinator.state.stateHash, beforeRestartHash);
+        for (var act = 1; act <= 18; act++) {
+          expect(saved.coordinator.state.flags[
+            'act_${act}_original_outcome'], isTrue);
+        }
+      } finally {
+        store.close();
+      }
+    } finally {
+      await temp.delete(recursive: true);
+    }
+  });
 
   test('60 reviewed interactive events across six acts compile, each choice '
       'is playable, and a 77-step SQLite campaign survives reopening',
