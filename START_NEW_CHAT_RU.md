@@ -1,3 +1,22 @@
+## 2026-11-09 — проверенный путь полной прозы через независимый RPG API
+
+В Draft PR #133 код `story_authoring/campaign_prose_contract.dart` теперь
+содержит `CampaignProseManifest`, `CampaignProseRequest`,
+`CampaignProseCheckpointCodec`, `CampaignProseBatchVerifier`,
+`CampaignProseFinalizer`. Публичный `RpgCampaignProseApi` доступен
+Flutter и CLI; `BookToRpgWorkflow` подготавливает **все сцены**
+уже компилированного source-bound мира. Flutter сохраняет только
+файловый порт, CAS, UI, cloud consent/Z.ai и isolate worker.
+Контрольные точки остаются обратносуместимыми, прежние `.bworld`
+и `.bwsave` не мигрируются. Добавлены headless регрессии сцен/финала.
+[Архитектура](docs/RPG_API_CLIENT_BOUNDARY_RU_2026-11-08.md).
+
+**Приёмка нового кода ещё не подтверждена до CI на точном HEAD.**
+Следующие цельные блоки: контекстно-управляемый оркестратор проверенного
+авторства, поддержка CANON/ALTER_FATE и ролевой модели, AI-freeform
+как проверяемое предложение, реальные русские FB2 и Win/Android E2E.
+Main и отдельный E6g не трогать.
+
 ## 2026-11-09 — подтверждённая автономная CLI/API-приёмка (exact-code)
 
 **Кодовый SHA:** `bce9becab8a88d57a01cc4a46c968aca1f1238f7`.

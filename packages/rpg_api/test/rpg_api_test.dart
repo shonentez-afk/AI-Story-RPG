@@ -110,4 +110,35 @@ void main() {
       directory.deleteSync(recursive: true);
     }
   });
+  test('complete-campaign narration API is usable without Flutter', () {
+    const RpgCampaignProseApi api = LocalRpgCampaignProseApi();
+    const request = '{"format":"ai_story_campaign_prose_request_v1",'
+        '"batch_id":"source_scope","scenes":[{"scene_id":"entry"}]}';
+    const prose = 'Старый маяк возник впереди, и его свет постепенно '
+        'становился заметнее. Путник молча оценивал дорогу и ещё '
+        'не принимал никакого решения, наблюдая за тихим морем.';
+    final answer = jsonEncode({
+      'choices': [{
+        'finish_reason': 'stop',
+        'message': {
+          'content': jsonEncode({
+            'batch_id': 'source_scope',
+            'scenes': [{
+              'scene_id': 'entry',
+              'prose': prose,
+              'uncertainty': 'Литературный смысл требует отдельной проверки.',
+            }],
+          }),
+        },
+      }],
+    });
+    final proposal = api.parseBatch(request, answer);
+    expect(proposal.single.origin, 'ai_draft');
+    expect(proposal.single.sceneId, 'entry');
+    expect(() => api.parseBatch(request, answer.replaceFirst(
+        'source_scope', 'forged_scope')), throwsFormatException);
+    expect(LocalRpgCampaignProseApi.systemPrompt,
+        contains('Никаких effects'));
+  });
+
 }
