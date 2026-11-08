@@ -36,6 +36,20 @@ class RussianPublicDomainBookTests(unittest.TestCase):
                 self.assertEqual(len(root.findall(".//" + ns + "section")),
                                  len(spec["sections"]))
 
+    def test_standalone_story_never_joins_alternative_variants(self):
+        for key, spec in SOURCES.items():
+            parts = extract_real_tale(html_for(key), key)
+            picked = [part for part in parts
+                      if part[0] == spec["standalone_variant"]]
+            self.assertEqual(len(picked), 1)
+            single = ET.fromstring(build_fb2(
+                key, picked, book_title=spec["title"] + " — вариант № " +
+                    spec["standalone_variant"]))
+            ns = "{http://www.gribuser.ru/xml/fictionbook/2.0}"
+            self.assertEqual(len(single.findall(".//" + ns + "section")), 1)
+            self.assertIn("вариант №", single.find(".//" + ns +
+                "book-title").text)
+
     def test_reject_partial_sections_even_with_plausible_paragraphs(self):
         for key in SOURCES:
             with self.subTest(key=key):

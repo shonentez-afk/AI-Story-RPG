@@ -338,8 +338,12 @@ jobs:
           path: |
             apps/story_reader/test/fixtures/ru_afanasyev/morozko.fb2
             apps/story_reader/test/fixtures/ru_afanasyev/morozko.json
+            apps/story_reader/test/fixtures/ru_afanasyev/morozko_story.fb2
+            apps/story_reader/test/fixtures/ru_afanasyev/morozko_story.json
             apps/story_reader/test/fixtures/ru_afanasyev/frog_princess.fb2
             apps/story_reader/test/fixtures/ru_afanasyev/frog_princess.json
+            apps/story_reader/test/fixtures/ru_afanasyev/frog_princess_story.fb2
+            apps/story_reader/test/fixtures/ru_afanasyev/frog_princess_story.json
           if-no-files-found: error
           retention-days: 2
       - name: Upload standalone public-domain Frog-Prince benchmark
@@ -361,6 +365,10 @@ jobs:
           AI_RPG_RU_MOROZKO_MANIFEST_PATH: test/fixtures/ru_afanasyev/morozko.json
           AI_RPG_RU_FROG_PRINCESS_FB2_PATH: test/fixtures/ru_afanasyev/frog_princess.fb2
           AI_RPG_RU_FROG_PRINCESS_MANIFEST_PATH: test/fixtures/ru_afanasyev/frog_princess.json
+          AI_RPG_RU_MOROZKO_STORY_FB2_PATH: test/fixtures/ru_afanasyev/morozko_story.fb2
+          AI_RPG_RU_MOROZKO_STORY_MANIFEST_PATH: test/fixtures/ru_afanasyev/morozko_story.json
+          AI_RPG_RU_FROG_PRINCESS_STORY_FB2_PATH: test/fixtures/ru_afanasyev/frog_princess_story.fb2
+          AI_RPG_RU_FROG_PRINCESS_STORY_MANIFEST_PATH: test/fixtures/ru_afanasyev/frog_princess_story.json
         timeout-minutes: 12
         # Building a SHA3-verified SQLite amalgamation adds native compile
         # time to the full widget suite. Keep a finite external watchdog

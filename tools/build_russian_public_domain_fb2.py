@@ -30,6 +30,7 @@ SOURCES = {
         "title": "Морозко",
         "page": PAGE + "Морозко",
         "sections": ("95", "96"),
+        "standalone_variant": "95",
         "markers": ("старик", "старуха"),
         "min_cyrillic": 1500,
     },
@@ -37,6 +38,7 @@ SOURCES = {
         "title": "Царевна-лягушка",
         "page": PAGE + "Царевна-лягушка",
         "sections": ("267", "268", "269"),
+        "standalone_variant": "269",
         "markers": ("иван", "лягуш"),
         "min_cyrillic": 3000,
     },
@@ -198,13 +200,15 @@ def extract_real_tale(html: str, key: str) -> list[tuple[str, list[str]]]:
     return parts
 
 
-def build_fb2(key: str, parts: list[tuple[str, list[str]]]) -> bytes:
+def build_fb2(key: str, parts: list[tuple[str, list[str]]],
+              *, book_title: str | None = None) -> bytes:
     ns = lambda tag: "{" + NAMESPACE + "}" + tag
     ET.register_namespace("", NAMESPACE)
     book = ET.Element(ns("FictionBook"))
     title_info = ET.SubElement(ET.SubElement(
         book, ns("description")), ns("title-info"))
-    ET.SubElement(title_info, ns("book-title")).text = SOURCES[key]["title"]
+    ET.SubElement(title_info, ns("book-title")).text = (
+        book_title or SOURCES[key]["title"])
     author = ET.SubElement(title_info, ns("author"))
     ET.SubElement(author, ns("first-name")).text = "Александр"
     ET.SubElement(author, ns("middle-name")).text = "Николаевич"
@@ -249,6 +253,44 @@ def build_one(key: str, target: Path) -> dict:
     }
     if payload["source_chars"] < SOURCES[key]["min_cyrillic"]:
         raise ValueError("FB2 shorter than the historical source bound")
+
+    # Each original numbered edition is an ALTERNATIVE telling, not the next
+    # chronological act. The playable-input benchmark must select one full
+    # version without silently merging incompatible histories.
+    primary = SOURCES[key]["standalone_variant"]
+    version = [part for part in parts if part[0] == primary]
+    if len(version) != 1:
+        raise ValueError("Selected historical edition is absent")
+    standalone_title = SOURCES[key]["title"] + " — вариант № " + primary
+    single = build_fb2(key, version, book_title=standalone_title)
+    single_file = target.with_name(key + "_story.fb2")
+    single_file.write_bytes(single)
+    single_meta = {
+        "book": key,
+        "title": standalone_title,
+        "source_url": payload["source_url"],
+        "source_sha256": payload["source_sha256"],
+        "parent_fb2_sha256": payload["fb2_sha256"],
+        "fb2_sha256": sha256(single),
+        "selected_variant": primary,
+        "section_numbers": [primary],
+        "chapters": 1,
+        "paragraphs": len(version[0][1]),
+        "source_chars": sum(len(p) for p in version[0][1]),
+        "text_sha256": sha256("\n\n".join(version[0][1]).encode("utf-8")),
+        "language": "ru",
+        "status": "BOOK_ONLY_NOT_PLAYABLE",
+        "ai_calls": 0,
+        "edition_review_required": True,
+    }
+    if single_meta["source_chars"] < 700:
+        raise ValueError("Standalone historical edition is truncated")
+    single_file.with_suffix(".json").write_text(
+        json.dumps(single_meta, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    payload["standalone_variant"] = primary
+    payload["standalone_fb2_sha256"] = single_meta["fb2_sha256"]
     return payload
 
 
@@ -267,7 +309,9 @@ def main() -> None:
         # A strict CI summary should never print original book paragraphs.
         print(key + ": " + str(info["chapters"]) + " original sections, " +
               str(info["paragraphs"]) + " paragraphs, sha256=" +
-              info["fb2_sha256"])
+              info["fb2_sha256"] + "; standalone variant " +
+              info["standalone_variant"] + " sha256=" +
+              info["standalone_fb2_sha256"])
     if metas[0]["fb2_sha256"] == metas[1]["fb2_sha256"]:
         raise ValueError("Two independent source books cannot have same hash")
 

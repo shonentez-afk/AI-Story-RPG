@@ -48,6 +48,8 @@ void main() {
   final books = <ImportedBook>[];
   final indices = <BookSourceIndex>[];
   final manifests = <Map<String, dynamic>>[];
+  final standaloneBooks = <ImportedBook>[];
+  final standaloneIndices = <BookSourceIndex>[];
 
   setUpAll(() async {
     for (final spec in specs) {
@@ -90,11 +92,62 @@ void main() {
       books.add(book);
       indices.add(index);
       manifests.add(info);
+
+      // The authoring pipeline must consume ONE actual edition. Different
+      // variants of a folk tale are parallel retellings, not sequential acts.
+      final singleFile = Platform.environment[spec.id == 'morozko'
+          ? 'AI_RPG_RU_MOROZKO_STORY_FB2_PATH'
+          : 'AI_RPG_RU_FROG_PRINCESS_STORY_FB2_PATH'];
+      final singleManifest = Platform.environment[spec.id == 'morozko'
+          ? 'AI_RPG_RU_MOROZKO_STORY_MANIFEST_PATH'
+          : 'AI_RPG_RU_FROG_PRINCESS_STORY_MANIFEST_PATH'];
+      if (singleFile == null || singleManifest == null) {
+        throw StateError('Source-verified standalone Russian edition missing');
+      }
+      final standaloneRaw = await File(singleFile).readAsBytes();
+      final standInfo = jsonDecode(
+          await File(singleManifest).readAsString()) as Map<String, dynamic>;
+      expect(standInfo['parent_fb2_sha256'], info['fb2_sha256']);
+      expect(standInfo['source_sha256'], info['source_sha256']);
+      expect(standInfo['selected_variant'],
+          spec.id == 'morozko' ? '95' : '269');
+      expect(standInfo['chapters'], 1);
+      expect(standInfo['status'], 'BOOK_ONLY_NOT_PLAYABLE');
+      expect(sha256.convert(standaloneRaw).toString(), standInfo['fb2_sha256']);
+      final standalone = BookImporter.parse(
+          spec.id + '_story.fb2', Uint8List.fromList(standaloneRaw));
+      expect(standalone.chapters, hasLength(1));
+      expect(standalone.title, contains('вариант №'));
+      final selectedIndex = BookSourceIndexer.index(standalone);
+      expect(selectedIndex.chapterCount, 1);
+      expect(selectedIndex.indexedChapterCount, 1);
+      expect(selectedIndex.canPublishBookworld, isFalse);
+      expect(selectedIndex.sourceFingerprint,
+          isNot(index.sourceFingerprint));
+      standaloneBooks.add(standalone);
+      standaloneIndices.add(selectedIndex);
     }
     expect(indices[0].sourceFingerprint,
         isNot(indices[1].sourceFingerprint));
     expect(manifests[0]['source_sha256'],
         isNot(manifests[1]['source_sha256']));
+    expect(standaloneIndices[0].sourceFingerprint,
+        isNot(standaloneIndices[1].sourceFingerprint));
+  });
+
+  test('two standalone historical editions are not falsely concatenated '
+      'or marked as playable', () {
+    expect(standaloneBooks, hasLength(2));
+    for (final index in standaloneIndices) {
+      expect(index.chapterCount, 1);
+      expect(index.textIndexCoverage, 1.0);
+      expect(SourceSemanticWindowPlanner.plan(index), isNotEmpty);
+      expect(index.canPublishBookworld, isFalse);
+      final queue = ZaiWindowReviewQueue.empty(index);
+      expect(queue.results, isEmpty);
+      expect(ZaiSourceSceneBoard.empty(
+          ZaiCrossWindowEvidenceGraph.fromQueue(queue)).scenes, isEmpty);
+    }
   });
 
   test('TWO real original Russian FB2 stay independent and cannot be '
