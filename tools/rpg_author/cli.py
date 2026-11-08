@@ -81,6 +81,18 @@ def parser():
                         help="Optional separately reviewed NPC witnesses, memories, items and life")
     richer.add_argument("--output", required=True, type=Path)
     richer.add_argument("--model-id", choices=["gpt-6"], default=None)
+    native_v4 = commands.add_parser(
+        "build-extended", help="Explicit reviewed v3 source -> native Dart v4, without expanding story-plan limits")
+    native_v4.add_argument("--project", required=True, type=Path)
+    native_v4.add_argument("--enrichment", required=True, type=Path)
+    native_v4.add_argument("--npc-review", type=Path,
+                           help="Optional previously reviewed NPC social v5 overlay")
+    native_v4.add_argument("--output", required=True, type=Path)
+    native_v4.add_argument("--model-id", choices=["gpt-6"], default=None)
+    native_v4_check = commands.add_parser(
+        "verify-extended", help="Require real Dart importer plus private v4 SHA and attribution checks")
+    native_v4_check.add_argument("--input", required=True, type=Path)
+    native_v4_check.add_argument("--attribution", required=True, type=Path)
     richer_check = commands.add_parser("verify", aliases=["verify-rich"],
                                        help="Verify v3 archive and matching attribution")
     richer_check.add_argument("--input", required=True, type=Path)
@@ -161,6 +173,14 @@ def main(argv=None) -> int:
         elif name in ("verify", "verify-rich"):
             from .rich_package import verify_rich_bundle
             result = verify_rich_bundle(args.input, args.attribution)
+        elif name == "build-extended":
+            from .native_v4_bridge import build_extended
+            result = build_extended(args.project, args.enrichment, args.output,
+                                    model_id=args.model_id,
+                                    npc_review_path=args.npc_review)
+        elif name == "verify-extended":
+            from .native_v4_bridge import verify_extended_bundle
+            result = verify_extended_bundle(args.input, args.attribution)
         else:
             check_contract()
             from tools.bookworld import private_bookworld
