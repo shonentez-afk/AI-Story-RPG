@@ -1,5 +1,10 @@
 # P0: автономная подготовка книг и независимый сценарный движок — фактический прогресс
 
+## Автономная подготовка, source-locked ИИ и перенос компилятора (код df592c9)
+
+[**Отчёт по новому функциональному пакету**](P0_AUTONOMOUS_COMPILER_AI_PROPOSALS_RU_2026-11-08.md). В `story_authoring` теперь исходные редакторские NPC/knowledge/item bridges, native v2/v3 compiler на `Isolate.run`, `PortableReviewedDraftCompiler` и pure `StoryProposalValidator` для Z.ai и CLI. Добавлены `review-plan` и `build-draft`: из проверенных source/editorial/scene checkpoints получается частный rich-v3 без Flutter/сети; НЕ автоматически доказанный CANON. Точный кодовый HEAD `df592c97599b9d977e4f8aaf5deac913c024533b`; [CI #42452212594](https://github.com/shonentez-afk/AI-Story-RPG/actions/runs/42452212594): Python/Dart и автономные Dart+Python проверки прошли, полный UI/Windows/Android до окончательного результата не считать PASS; [M0 #42452212571](https://github.com/shonentez-afk/AI-Story-RPG/actions/runs/42452212571) SUCCESS. Один Draft PR #133; E6d/main не трогать. Следующий блок — самостоятельный весь `multi_act_trial_compiler` + `whole_book_npc_campaign` + hero/prose/reviewer + model port и масштабирование >48/192, затем единый GUI по заранее детальному проекту.
+
+
 Дата 8 ноября 2026. **PR #133 (Draft)**, кодовый commit `0ce8ea2f2da81d58885c43d8e8c8f4ff3924f0d5`. Эта запись относится к текущему крупному функциональному пакету, **не объявляет завершение 1.0**.
 
 **Прежде чем менять единый GUI мастер**, прочитать [подробный проект пути «книга → RPG»](DESIGN_UNIFIED_BOOK_TO_RPG_PATH_AND_AUTONOMOUS_AUTHORING_RU_2026-11-08.md) и [матрицу разрывов core → rich-v3 → UI](ENGINE_FORMAT_UI_GAP_AUDIT_RU_2026-11-08.md). Инварианты: **один движок `story_core`**, сохранённые книги и миры, независимое offline исполнение, строгий source lock, защита NPC знания/памяти, 0/1/2 NPC, CANON отдельно от ALTER_FATE, ИИ-черновики не являются игровыми правилами. E6d и `main` не менять.
