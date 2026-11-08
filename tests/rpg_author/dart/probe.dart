@@ -132,6 +132,7 @@ Future<void> main() async {
     }
     stdout.write(jsonEncode({
       'book_id': verified.bookworldId,
+      'format_version': verified.formatVersion,
       'source_fingerprint': verified.sourceFingerprint,
       'archive_sha256': verified.archiveSha256,
       'hero': verified.presentation['hero'],
