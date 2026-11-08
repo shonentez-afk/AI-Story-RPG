@@ -9,17 +9,6 @@ import 'package:story_core/story_core.dart';
 import 'whole_book_npc_campaign.dart';
 
 /// Headless batch narrative authoring. Never perform HTTP, UI, or filesystem IO.
-Map<String, dynamic> _routeReport(Uint8List archive) {
-  final game = const RichPrivateBookworldImporter().inspect(archive);
-  final report = StoryInventoryRouteAudit.inspect(blueprint: game.blueprint,
-      sceneIds: game.blueprint.scenes.keys, socialRulebook: game.npcSocialRulebook);
-  return {
-    'blueprint': game.blueprint.blueprintHash,
-    'inventory': {for (final entry in report.scenes.entries)
-      entry.key: entry.value.toJson()},
-  };
-}
-
 String campaignProseHash(Object? value) =>
     sha256.convert(utf8.encode(canonicalJson(value))).toString();
 

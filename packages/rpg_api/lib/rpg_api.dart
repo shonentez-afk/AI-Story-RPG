@@ -27,7 +27,9 @@ export 'package:story_authoring/story_authoring.dart' show
     SourceLockedGameplayContext, GameplayCandidateDraft,
     SourceLockedProseAuditContext, AiProseFindingKind,
     AiProseFindingSeverity, AiProseAuditVerdict,
-    AiProseAuditFinding, AiProseAuditReport;
+    AiProseAuditFinding, AiProseAuditReport,
+    WholeBookNpcSourcePlan, CampaignProseManifest, CampaignProseEntry,
+    CampaignProseSession, CampaignProseRequest, campaignProseHash;
 export 'package:bookworld_format/bookworld_format.dart' show
     VerifiedRichPrivateBookworld;
 
@@ -262,4 +264,91 @@ final class LocalRpgProposalReviewApi implements RpgProposalReviewApi {
   AiProseAuditReport reviewLiteraryCritique(
           SourceLockedProseAuditContext context, String responseBody) =>
       AiProseAuditVerifier.parse(context, responseBody);
+}
+
+
+/// Standalone complete-campaign narration contract, including checkpoint
+/// integrity, untrusted batch responses and text-only BookWorld finalization.
+abstract interface class RpgCampaignProseApi {
+  Future<CampaignProseManifest> prepare({
+    required WholeBookNpcSourcePlan source,
+    required Uint8List finalArchive,
+    required Future<void> Function() verifyCurrent,
+  });
+  CampaignProseSession decodeCheckpoint(
+      CampaignProseManifest manifest, String? checkpoint);
+  String encodeCheckpoint({
+    required CampaignProseManifest manifest,
+    required int revision,
+    required Iterable<CampaignProseEntry> entries,
+  });
+  CampaignProseRequest request(
+      CampaignProseManifest manifest, CampaignProseSession session);
+  List<CampaignProseEntry> parseBatch(String batch, String responseBody);
+  String review(
+      CampaignProseManifest manifest, CampaignProseSession session);
+  Uint8List compileReviewed({
+    required Uint8List verifiedArchive,
+    required Map<String, dynamic> sourceIndex,
+    required String reviewJson,
+    required String approvedDigest,
+    required bool fullTextReviewed,
+    required bool privateFictionConfirmed,
+  });
+}
+
+final class LocalRpgCampaignProseApi implements RpgCampaignProseApi {
+  const LocalRpgCampaignProseApi();
+  static const systemPrompt = CampaignProseBatchVerifier.systemPrompt;
+
+  @override
+  Future<CampaignProseManifest> prepare({
+    required WholeBookNpcSourcePlan source,
+    required Uint8List finalArchive,
+    required Future<void> Function() verifyCurrent,
+  }) => const BookToRpgWorkflow().prepareCampaignNarration(
+      source: source, finalArchive: finalArchive,
+      verifyCurrent: verifyCurrent);
+
+  @override
+  CampaignProseSession decodeCheckpoint(
+          CampaignProseManifest manifest, String? checkpoint) =>
+      CampaignProseCheckpointCodec.decode(manifest, checkpoint);
+
+  @override
+  String encodeCheckpoint({
+    required CampaignProseManifest manifest,
+    required int revision,
+    required Iterable<CampaignProseEntry> entries,
+  }) => CampaignProseCheckpointCodec.encode(
+      manifest: manifest, revision: revision, entries: entries);
+
+  @override
+  CampaignProseRequest request(
+          CampaignProseManifest manifest, CampaignProseSession session) =>
+      CampaignProseRequest.prepare(manifest, session);
+
+  @override
+  List<CampaignProseEntry> parseBatch(String batch, String responseBody) =>
+      CampaignProseBatchVerifier.parse(batch, responseBody);
+
+  @override
+  String review(CampaignProseManifest manifest, CampaignProseSession session) =>
+      CampaignProseFinalizer.review(manifest, session);
+
+  @override
+  Uint8List compileReviewed({
+    required Uint8List verifiedArchive,
+    required Map<String, dynamic> sourceIndex,
+    required String reviewJson,
+    required String approvedDigest,
+    required bool fullTextReviewed,
+    required bool privateFictionConfirmed,
+  }) => CampaignProseFinalizer.compile(
+      verifiedArchive: verifiedArchive,
+      sourceIndex: sourceIndex,
+      reviewJson: reviewJson,
+      approvedDigest: approvedDigest,
+      fullTextReviewed: fullTextReviewed,
+      privateFictionConfirmed: privateFictionConfirmed);
 }

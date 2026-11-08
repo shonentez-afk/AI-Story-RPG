@@ -180,6 +180,16 @@ def validate() -> list[str]:
                         f"{source.relative_to(ROOT)}:{line_no}: "
                         "CLI import escapes its client package")
 
+    prose_adapter = ROOT / "apps" / "story_reader" / "lib" / "campaign_prose_authoring.dart"
+    prose_code = prose_adapter.read_text(encoding="utf-8") if prose_adapter.is_file() else ""
+    if ("package:rpg_api/rpg_api.dart" not in prose_code or
+            "LocalRpgCampaignProseApi" not in prose_code):
+        issues.append(f"{prose_adapter}: whole-campaign prose must use RPG API")
+    if ("StoryInventoryRouteAudit.inspect" in prose_code or
+            "ReviewedCampaignProseWriter().build(" in prose_code or
+            "CampaignProseManifest._(" in prose_code):
+        issues.append(f"{prose_adapter}: campaign prose rules returned to Flutter")
+
     gateway = ROOT / "apps" / "story_reader" / "lib" / "world_library_gateway.dart"
     workers = ROOT / "apps" / "story_reader" / "lib" / "book_isolate_workers.dart"
     for path in (gateway, workers):
