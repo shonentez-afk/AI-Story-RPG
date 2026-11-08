@@ -76,6 +76,8 @@ class _WholeBookNpcCampaignPageState extends State<WholeBookNpcCampaignPage>
   NpcWritingCatalog? _catalog;
   NpcWritingSession? _session;
   ReviewedBookwideNpcCampaign? _approval;
+  // A zero-NPC campaign approves an exact verified ZIP, not a synthetic NPC.
+  String? _approvedWithoutNpcArchiveHash;
   String? _approvedAuthorRevision;
   ZaiPreviewCancellation? _cancellation;
   Timer? _saveTimer;
@@ -116,7 +118,8 @@ class _WholeBookNpcCampaignPageState extends State<WholeBookNpcCampaignPage>
   }
 
   void _invalidate() {
-    _approval = null; _approvedAuthorRevision = null; _campaignConfirmed = false;
+    _approval = null; _approvedWithoutNpcArchiveHash = null;
+    _approvedAuthorRevision = null; _campaignConfirmed = false;
   }
   List<NpcWritingEdit> _snapshot() => [for (final entry in _edits.entries) NpcWritingEdit(
     id: entry.key, playerLine: entry.value.player.text, npcLine: entry.value.npc.text,
@@ -305,9 +308,7 @@ class _WholeBookNpcCampaignPageState extends State<WholeBookNpcCampaignPage>
       }
       source.verifyCurrentHero(roles);
       final candidates = BookwideNpcCampaignAuthoring.discover(source: source, currentReviewedRoles: roles);
-      if (candidates.isEmpty) throw const FormatException(
-          'Нужны другие подтверждённые NPC с упоминаниями в двух включённых событиях. '
-          'Выбранный герой не может разговаривать с собой.');
+      // Zero NPC is a valid authoring choice; never create a fake speaker.
       final catalog = NpcWritingCatalog(source: source, candidates: candidates);
       _catalog = catalog;
       NpcWritingSession saved;
@@ -559,11 +560,30 @@ class _WholeBookNpcCampaignPageState extends State<WholeBookNpcCampaignPage>
       if (edits.any((e) => !e.complete)) throw const FormatException(
           'Заполните обе реплики каждого выбранного разговора или снимите выбор.');
       final fresh = await _checkAuthorRevision();
-      final review = BookwideNpcCampaignAuthoring.review(source: _source!,
-        verifiedBaseArchive: _archiveForNpc(), currentReviewedRoles: fresh,
-        selectedDrafts: edits.map((e) => e.toDraft()).toList());
+      ReviewedBookwideNpcCampaign? review;
+      String? noNpcHash;
+      if (edits.isEmpty) {
+        // The strict NPC writer requires one or more reviewed episodes.
+        // Keep the existing proven BookWorld unchanged instead.
+        final checked = const RichPrivateBookworldImporter()
+            .inspect(_archiveForNpc());
+        _source!.verifyArchiveHero(checked);
+        if (checked.formatVersion != (_source!.expanded ? 4 : 3) ||
+            checked.blueprint.scenes.length != _source!.plan.situations.length ||
+            checked.requiresNetwork || checked.canDistributePublicly) {
+          throw const FormatException('Сценарий без NPC не соответствует проверенной книге.');
+        }
+        await _source!.narrative?.verifyLive();
+        noNpcHash = checked.archiveSha256;
+      } else {
+        review = BookwideNpcCampaignAuthoring.review(source: _source!,
+          verifiedBaseArchive: _archiveForNpc(), currentReviewedRoles: fresh,
+          selectedDrafts: edits.map((e) => e.toDraft()).toList());
+      }
       if (mounted) setState(() {
-        _roles = fresh; _approval = review; _campaignConfirmed = false;
+        _roles = fresh; _approval = review;
+        _approvedWithoutNpcArchiveHash = noNpcHash;
+        _campaignConfirmed = false;
         _approvedAuthorRevision = _authorRevision;
       });
     } catch (error) { if (mounted) setState(() => _error = error.toString()); }
@@ -572,21 +592,38 @@ class _WholeBookNpcCampaignPageState extends State<WholeBookNpcCampaignPage>
 
   Future<void> _start() async {
     final approval = _approval, source = _source, authorRevision = _approvedAuthorRevision;
-    if (_working || approval == null || source == null || !_campaignConfirmed ||
-        !_quotesReviewed || !_privateFiction || _storageBlocked || _heroBlocked || !_effectsReady) return;
+    if (_working || (approval == null && _approvedWithoutNpcArchiveHash == null) ||
+        source == null || !_campaignConfirmed || !_quotesReviewed ||
+        !_privateFiction || _storageBlocked || _heroBlocked || !_effectsReady) return;
     setState(() { _working = true; _error = null; });
     try {
       await _flush();
       final freshRoles = await _checkAuthorRevision();
       if (authorRevision != _authorRevision) throw const FormatException('Авторская редакция изменилась.');
-      final current = BookwideNpcCampaignAuthoring.review(source: source,
-        verifiedBaseArchive: _archiveForNpc(), currentReviewedRoles: freshRoles,
-        selectedDrafts: approval.selectedDrafts);
-      if (current.approvalDigest != approval.approvalDigest) throw const FormatException(
-          'После одобрения изменились предметы, герой или NPC. Проверьте весь пакет заново.');
-      final built = await BookwideNpcCampaignAuthoring.compile(source: source, approval: approval,
-        freshReviewedRoles: freshRoles, approvedDigest: approval.approvalDigest,
-        explicitlyConfirmedPrivateFiction: _campaignConfirmed);
+      Uint8List finalArchive;
+      if (approval != null) {
+        final current = BookwideNpcCampaignAuthoring.review(source: source,
+          verifiedBaseArchive: _archiveForNpc(), currentReviewedRoles: freshRoles,
+          selectedDrafts: approval.selectedDrafts);
+        if (current.approvalDigest != approval.approvalDigest) throw const FormatException(
+            'После одобрения изменились предметы, герой или NPC. Проверьте весь пакет заново.');
+        final built = await BookwideNpcCampaignAuthoring.compile(source: source, approval: approval,
+          freshReviewedRoles: freshRoles, approvedDigest: approval.approvalDigest,
+          explicitlyConfirmedPrivateFiction: _campaignConfirmed);
+        finalArchive = built.archive;
+      } else {
+        // Same source, hero, effects and author revision as the review.
+        final candidate = _archiveForNpc();
+        final checked = const RichPrivateBookworldImporter().inspect(candidate);
+        source.verifyArchiveHero(checked);
+        await source.narrative?.verifyLive();
+        if (checked.archiveSha256 != _approvedWithoutNpcArchiveHash ||
+            checked.formatVersion != (source.expanded ? 4 : 3) ||
+            checked.requiresNetwork || checked.canDistributePublicly) {
+          throw const FormatException('Игра без NPC изменилась после одобрения.');
+        }
+        finalArchive = candidate;
+      }
       await _checkAuthorRevision();
       if (!mounted || authorRevision != _authorRevision) return;
       // Prose is prepared only AFTER all hero/item/NPC rules are compiled.
@@ -602,7 +639,7 @@ class _WholeBookNpcCampaignPageState extends State<WholeBookNpcCampaignPage>
         }
       }
       final manifest = await CampaignProseManifest.prepare(source: source,
-          finalArchive: built.archive, verifyCurrent: verifyNarrationRevision);
+          finalArchive: finalArchive, verifyCurrent: verifyNarrationRevision);
       if (!mounted) return;
       final selectedArchive = await Navigator.of(context).push<Uint8List>(
         MaterialPageRoute(builder: (_) => CampaignProsePage(manifest: manifest,
@@ -673,6 +710,9 @@ class _WholeBookNpcCampaignPageState extends State<WholeBookNpcCampaignPage>
       child: Scaffold(appBar: AppBar(title: const Text('Герой и разговоры NPC'), leading: BackButton(onPressed: _leave)),
         body: SafeArea(child: ListView(padding: const EdgeInsets.all(16), children: [
           Text(widget.index.title, style: Theme.of(context).textTheme.titleLarge),
+          const Text('Шаги: проверка книги → герой → NPC (необязательно) '
+              'и последствия → текст всех сцен → проверенный .bworld → игра.',
+              key: Key('whole-npc-workflow-route')),
           const Text('Одна автономная кампания. Цитаты не доказывают канон. '
               'Работа сохраняется на устройстве; ИИ требует отдельного согласия.'),
           if (source != null) ...[
@@ -740,6 +780,8 @@ class _WholeBookNpcCampaignPageState extends State<WholeBookNpcCampaignPage>
               ],
             ))),
             Text('Возможных разговоров: ${_candidates.length}; выбрано: ${_edits.length}.'),
+            const Text('NPC необязательны: без собеседников получится '
+                'самостоятельная игра. Выбранные диалоги проверяются отдельно.'),
             Text(_dirty ? 'Изменения ещё сохраняются…' : 'Черновик сохранён локально. Согласия не восстанавливаются.',
                 key: const Key('npc-writing-save-state')),
             Wrap(spacing: 8, runSpacing: 6, children: [
@@ -752,15 +794,15 @@ class _WholeBookNpcCampaignPageState extends State<WholeBookNpcCampaignPage>
                 child: const Text('Подготовить пустые диалоги через ИИ'))]),
             for (final candidate in _candidates) _conversation(candidate),
             OutlinedButton(key: const Key('whole-npc-review-package'),
-              onPressed: !_working && !_storageBlocked && !_heroBlocked && _effectsReady && _edits.isNotEmpty ? _review : null,
-              child: const Text('Проверить героя и весь пакет разговоров')),
+              onPressed: !_working && !_storageBlocked && !_heroBlocked && _effectsReady ? _review : null,
+              child: const Text('Проверить героя, последствия и выбранные NPC')),
           ],
-          if (_approval != null) ...[
-            Text('Герой: ${source!.heroName}. ${_approval!.actorCount} NPC, ${_approval!.episodeCount} разговоров. '
+          if (_approval != null || _approvedWithoutNpcArchiveHash != null) ...[
+            Text('Герой: ${source!.heroName}. ${_approval?.actorCount ?? 0} NPC, ${_approval?.episodeCount ?? 0} разговоров. '
                 'Игровых эффектов: ${_consequences?.effectCount ?? 0}. '
                 'Все пути проверяются вместе перед установкой.'),
             CheckboxListTile(key: const Key('whole-npc-final-approval'), value: _campaignConfirmed,
-              title: const Text('Одобряю именно эту роль, реплики, личности и условия'),
+              title: const Text('Одобряю роль, последствия и выбранные разговоры (включая 0 NPC)'),
               onChanged: _working ? null : (v) => setState(() => _campaignConfirmed = v == true)),
             FilledButton.icon(key: const Key('whole-npc-start'),
               onPressed: !_working && _campaignConfirmed && _quotesReviewed && _privateFiction &&
