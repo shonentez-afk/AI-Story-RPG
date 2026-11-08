@@ -1,5 +1,16 @@
 # AI Story RPG — статус полного сценарного потока
 
+## 2026-11-08 — защита проекции NPC в игре и отображение текущей сцены
+
+**Актуальный КОДОВЫЙ SHA `e397ed4591987d94ff99db2d0d2f80d7b6e4cfeb`**, единый Draft PR #133. [Предыдущий крупный CI #42486852024](https://github.com/shonentez-afk/AI-Story-RPG/actions/runs/42486852024) **COMPLETED SUCCESS**: Python, Dart, M1.7, Flutter/widget, Windows portable и Android APK; M0 #42486852053 SUCCESS. Это подтверждает синтетические source-locked 0/1/2 NPC, реальный SQLite и `.bwsave` roundtrip. Не путать с полным литературным CANON, физическими устройствами или live GLM.
+
+**Новые изменения `e397ed4`:** `WorldLibraryGateway._view` после подписанного NPC dialogue review и SQLite replay выдаёт Flutter только встреченные NPC-имена, текущие life-state и владельцев предметов. Раньше `WorldPlayPage` фильтровал будущих владельцев локально, но сам `WorldGameView` всё ещё содержал future actor/custody/life metadata; теперь безопасный фильтр на границе runtime → UI, независимо от нового экрана. `WorldPlayPage` показывает название ТОЛЬКО достигнутой сцены из importer-verified `sceneNames` — не историю будущих глав. Раздельные Flutter тесты: 280dp и текст 200% с двумя NPC, scrollable NPC card, текущая сцена видна/будущая скрыта. В реальной 1/2-NPC SQLite/portable интеграции добавлены проверки отсутствия будущих имён/владельцев/жизней до события и точного восстановления проекции после хода/импорта. Никаких изменений в `story_core`, sqlite format, `.bworld` или E6d.
+
+**Новая exact-code CI**: https://github.com/shonentez-afk/AI-Story-RPG/actions/runs/42489208304. На момент записи Python reference, Dart engine/scenario SUCCESS, Flutter widget и M1.7 ещё выполняются; M0 https://github.com/shonentez-afk/AI-Story-RPG/actions/runs/42489208295 SUCCESS. НЕ объявлять Windows/Android для этого SHA принятыми до успешных jobs и артефактов. External E6d FAIL отдельно, не менять. При необходимости исправить точную ошибку в этом же Draft PR.
+
+**Дальше крупными пакетами:** после exact-head CI — единый реальный UX-режим с готовой книгой/игрой на Windows и Android, проверка theme/280dp/200%, панели Герой/Предметы/Журнал/NPC, диалоги и локальные портреты, системные backup pickers. Реальные 2 разные русские FB2 с полноценной source-bound причинностью, CANON/ALTER_FATE и live Z.ai с явным consent остаются НЕ готовыми. Цель — полноценно автономный движок и авторство без второго engine. Issue #118 пока открыта, PR #133 Draft, main/E6d не трогать.
+
+
 ## 2026-11-08 — единый UI↔engine NPC acceptance: идентичность, приватность и реальный SQLite
 
 **Последний кодовый SHA [48d58f6](https://github.com/shonentez-afk/AI-Story-RPG/commit/48d58f6c9aed8e05aa2c6f661c62b3944ee6b8ee)**, всё в исходном Draft PR #133, main/E6d не менять. Вошли логически связанные коммиты 0791a8f, 7f4624d, af8feb7, b9aa019, df66621 и исправление контрольной Python-фикстуры 48d58f6. Ни второго движка, ни новых форматов .bworld/.bwsave, ни новых PR.
