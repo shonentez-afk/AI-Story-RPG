@@ -118,6 +118,12 @@ class ReviewedV4ExtensionTests(unittest.TestCase):
                 self.expand(data)
             self.assertEqual(caught.exception.code, code)
         data = proposal(self.bp, 1000)
+        second = deepcopy(proposal(self.bp, 25)["insertions"][0])
+        second["after_choice_id"] = "leave_rope"
+        for scene in second["scenes"]:
+            scene["id"] = "alt_" + scene["id"]
+            scene["choice_id"] = "alt_" + scene["choice_id"]
+        data["insertions"].append(second)
         with self.assertRaises(AuthoringError) as caught:
             self.expand(data)
         self.assertEqual(caught.exception.code, "extended_scene_count")
