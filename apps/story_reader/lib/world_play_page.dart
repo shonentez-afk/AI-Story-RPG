@@ -651,6 +651,14 @@ class _WorldInfoSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // The ledger may contain source-reviewed custodians not yet met in
+    // this branch. Only replay-proven NPC encounters may disclose names
+    // or their owned items to the player.
+    final encounteredNames = <String, String>{
+      for (final npc in view.npcRelations) npc.actorId: npc.displayName,
+    };
+    final visibleNpcItems = view.npcItemOwners.entries
+        .where((item) => encounteredNames.containsKey(item.value)).toList();
     final heading = switch (panel) {
       GamePanel.character => 'Герой',
       GamePanel.inventory => 'Предметы',
@@ -688,20 +696,18 @@ class _WorldInfoSheet extends StatelessWidget {
       ],
       GamePanel.inventory => [
         if (view.inventory.isEmpty)
-          view.npcItemOwners.isEmpty
+          visibleNpcItems.isEmpty
               ? 'Предметов пока нет' : 'У героя сейчас нет предметов',
         if (view.inventory.isNotEmpty) 'У героя:',
         for (final id in view.inventory)
           (view.itemNames[id] ?? id) +
               (view.itemDescriptions[id] == null
                   ? '' : ' — ' + view.itemDescriptions[id]!),
-        if (view.npcItemOwners.isNotEmpty)
-          'У других персонажей (подтверждено событиями):',
-        for (final entry in view.npcItemOwners.entries)
+        if (visibleNpcItems.isNotEmpty)
+          'У встреченных персонажей (подтверждено событиями):',
+        for (final entry in visibleNpcItems)
           (view.itemNames[entry.key] ?? entry.key) + ' — у ' +
-              (view.npcDisplayNames[entry.value] ??
-                  ('NPC ' + (entry.value.length > 12
-                    ? entry.value.substring(4, 12) : entry.value))),
+              encounteredNames[entry.value]!,
         'Предметы и владельцы — только из подтверждённых ходов. '
             'Применение предмета возможно через доступное решение сцены.',
       ],
@@ -778,6 +784,10 @@ class _WorldInfoSheet extends StatelessWidget {
                                   for (final kind in npc.memoryKinds.entries)
                                     Text(_memoryKindName(kind.key) + ': ' +
                                         kind.value.toString()),
+                                  for (final item in visibleNpcItems.where(
+                                      (entry) => entry.value == npc.actorId))
+                                    Text('Предмет у персонажа: ' +
+                                        (view.itemNames[item.key] ?? item.key)),
                                 ],
                               ),
                             ),

@@ -20,14 +20,17 @@ class _Gateway implements WorldLibraryGateway {
 }
 
 WorldGameView _game({required List<NpcRelationView> npcs,
-    Map<String, String> futureLife = const {}}) => WorldGameView(
+    Map<String, String> futureLife = const {},
+    Map<String, String> custody = const {},
+    Map<String, String> itemNames = const {},
+    List<WorldEventView> journal = const []}) => WorldGameView(
   campaignId: 'campaign_a',
   worldTitle: 'Частная история', sceneId: 'canon_end',
   sceneText: 'Сохранённая финальная сцена.', revision: 2, tick: 2,
   isTerminal: true,
   stats: const {}, inventory: const [], flags: const {},
-  knownFacts: const [], choices: const [], journal: const [],
-  npcRelations: npcs,
+  knownFacts: const [], choices: const [], journal: journal,
+  npcRelations: npcs, npcItemOwners: custody, itemNames: itemNames,
   npcLifeStates: futureLife,
   npcDisplayNames: {for (final id in futureLife.keys) id: 'Скрытый персонаж'},
 );
@@ -104,6 +107,62 @@ void main() {
     await tester.tap(find.text('NPC'));
     await tester.pumpAndSettle();
     expect(find.text('Отношение NPC к герою: -10'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('NPC item custody, hero inventory and signed journal stay '
+      'aligned without exposing unencountered owners', (tester) async {
+    final maria = 'npc_' + List.filled(32, 'a').join();
+    final ivan = 'npc_' + List.filled(32, 'b').join();
+    final hidden = 'npc_' + List.filled(32, 'f').join();
+    final view = _game(
+      npcs: [
+        NpcRelationView(
+          actorId: maria, displayName: 'Мария',
+          directedScore: 12, memoryCount: 1,
+          memoryKinds: const {'helped': 1}, lifeState: 'present',
+        ),
+        NpcRelationView(
+          actorId: ivan, displayName: 'Иван',
+          directedScore: -3, memoryCount: 1,
+          memoryKinds: const {'witnessed': 1}, lifeState: 'present',
+        ),
+      ],
+      custody: { 'letter': maria, 'sealed': hidden },
+      itemNames: const { 'letter': 'Письмо', 'sealed': 'Секретный артефакт' },
+      journal: const [
+        WorldEventView(sequence: 1, sceneId: 'gate',
+          sceneTitle: 'Встреча', choiceLabel: 'Передать письмо',
+          changes: ['Передано персонажу: Письмо']),
+      ],
+    );
+    await tester.pumpWidget(MaterialApp(home: WorldPlayPage(
+      gateway: _Gateway(view), campaignId: 'campaign_a',
+    )));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Предметы'));
+    await tester.pumpAndSettle();
+    expect(find.text('Письмо — у Мария'), findsOneWidget);
+    expect(find.textContaining('Секретный артефакт'), findsNothing);
+    expect(tester.takeException(), isNull);
+    await tester.tap(find.byTooltip('Закрыть'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('NPC'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(Key('world-npc-' + maria)), findsOneWidget);
+    expect(find.byKey(Key('world-npc-' + ivan)), findsOneWidget);
+    expect(find.text('Предмет у персонажа: Письмо'), findsOneWidget);
+    expect(find.textContaining('Секретный артефакт'), findsNothing);
+    expect(tester.takeException(), isNull);
+    await tester.tap(find.byTooltip('Закрыть'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Журнал'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Передано персонажу: Письмо'), findsOneWidget);
+    expect(find.textContaining('Секретный артефакт'), findsNothing);
     expect(tester.takeException(), isNull);
   });
 
