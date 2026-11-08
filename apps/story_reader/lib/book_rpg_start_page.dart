@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
 import 'book_import.dart';
+import 'package:story_authoring/story_authoring.dart'
+    show BookSourceSelection;
 import 'book_source_analysis.dart';
 import 'book_isolate_workers.dart';
 import 'source_analysis_checkpoint_repository.dart';
@@ -58,8 +60,28 @@ class _BookRpgStartPageState extends State<BookRpgStartPage> {
   late final SourceAnalysisCheckpointRepository _manualCheckpoints =
       widget.manualCheckpointRepository ??
           const FileSourceAnalysisCheckpointRepository();
+  int? _selectedChapter;
   bool _opening = false;
   String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _selectedChapter = BookSourceSelection.defaultChapter(widget.book);
+  }
+
+  ImportedBook get _activeBook => _selectedChapter == null
+      ? widget.book
+      : BookSourceSelection.selectChapter(widget.book, _selectedChapter!);
+
+  @override
+  void didUpdateWidget(covariant BookRpgStartPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!identical(oldWidget.book, widget.book)) {
+      _selectedChapter = BookSourceSelection.defaultChapter(widget.book);
+      _error = null;
+    }
+  }
 
   Future<void> _openOffline() async {
     if (_opening) return;
@@ -68,9 +90,10 @@ class _BookRpgStartPageState extends State<BookRpgStartPage> {
       _error = null;
     });
     try {
+      final sourceBook = _activeBook;
       await Navigator.of(context).push<void>(MaterialPageRoute(
         builder: (_) => QuickRpgFromBookPage(
-          book: widget.book,
+          book: sourceBook,
           gateway: widget.gateway,
           indexer: widget.indexer,
         ),
@@ -94,10 +117,11 @@ class _BookRpgStartPageState extends State<BookRpgStartPage> {
     try {
       // Both actions use the SAME validated book index and local checkpoint.
       // No network request, stored consent, or revision inference here.
+      final sourceBook = _activeBook;
       final indexer = widget.indexer;
       final index = indexer == null
-          ? await indexImportedBookInWorker(widget.book)
-          : await indexer(widget.book);
+          ? await indexImportedBookInWorker(sourceBook)
+          : await indexer(sourceBook);
       if (!mounted) return;
       var resumeManual = false;
       if (resumeOnly) {
@@ -132,7 +156,7 @@ class _BookRpgStartPageState extends State<BookRpgStartPage> {
       await Navigator.of(context).push<void>(MaterialPageRoute(
         builder: (_) => resumeManual
             ? SourceIndexPreviewPage(
-                book: widget.book, indexer: (_) async => index,
+                book: sourceBook, indexer: (_) async => index,
                 checkpointRepository: _manualCheckpoints,
                 checkpointDecoder: widget.manualCheckpointDecoder,
                 worldGateway: widget.gateway,
@@ -168,6 +192,15 @@ class _BookRpgStartPageState extends State<BookRpgStartPage> {
             Text(widget.book.title,
                 key: const Key('rpg-start-book-title'),
                 style: Theme.of(context).textTheme.titleLarge),
+            if (_selectedChapter != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: Text('Для RPG: ' +
+                    BookSourceSelection.chapterLabel(
+                        widget.book, _selectedChapter!),
+                    key: const Key('rpg-source-selection-summary'),
+                    style: Theme.of(context).textTheme.bodySmall),
+              ),
             const SizedBox(height: 8),
             // Full eager rendering: all three primary actions exist even
             // when 200% text forces them below the phone viewport.
@@ -231,7 +264,9 @@ class _BookRpgStartPageState extends State<BookRpgStartPage> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    Text('Поактовая подготовка всей книги',
+                    Text(_selectedChapter == null
+                        ? 'Поактовая подготовка всей книги'
+                        : 'Подготовка выбранной истории',
                         style: Theme.of(context).textTheme.titleMedium),
                     const Text('Z.ai — только после отдельного согласия.'),
                     const SizedBox(height: 8),
@@ -245,6 +280,70 @@ class _BookRpgStartPageState extends State<BookRpgStartPage> {
                 ),
               ),
             ),
+            if (widget.book.chapters.length > 1) ...[
+              const SizedBox(height: 8),
+              ExpansionTile(
+                key: const Key('rpg-source-scope'),
+                title: const Text('Выбрать отдельную сказку или главу'),
+                subtitle: Text(_selectedChapter == null
+                    ? 'Сейчас: вся книга'
+                    : 'Сейчас: ' + BookSourceSelection.chapterLabel(
+                        widget.book, _selectedChapter!)),
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(12, 0, 12, 14),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        DropdownButtonFormField<int?>(
+                          key: const Key('rpg-source-chapter'),
+                          initialValue: _selectedChapter,
+                          menuMaxHeight: 340,
+                          hint: const Text('Вся книга'),
+                          isExpanded: true,
+                          decoration: const InputDecoration(
+                            labelText: 'Исходный текст для RPG',
+                          ),
+                          items: [
+                            const DropdownMenuItem<int?>(
+                              value: null, child: Text('Вся книга'),
+                            ),
+                            for (var i = 0; i < widget.book.chapters.length; i++)
+                              DropdownMenuItem<int?>(
+                                value: i,
+                                child: Text(
+                                  BookSourceSelection.chapterLabel(
+                                      widget.book, i),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                          ],
+                          onChanged: _opening ? null : (chapter) {
+                            setState(() {
+                              _selectedChapter = chapter;
+                              _error = null;
+                            });
+                          },
+                        ),
+                        const SizedBox(height: 8),
+                        const Text('Выбранная история будет отдельным '
+                            'источником с собственным отпечатком и '
+                            'checkpoint. Исходная книга и сохранения '
+                            'других историй не изменятся. Выбор главы '
+                            'не доказывает полноту литературного сюжета.'),
+                        if (BookSourceSelection.defaultChapter(
+                            widget.book) != null)
+                          const Text('Пронумерованные версии этой '
+                              'сказки — альтернативные редакции, а не '
+                              'последовательные акты. По умолчанию '
+                              'выбрана только первая версия.'),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ],
             const SizedBox(height: 12),
             ExpansionTile(
               key: const Key('rpg-start-details'),

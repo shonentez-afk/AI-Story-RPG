@@ -3,6 +3,8 @@ import 'package:ai_story_reader/book_source_analysis.dart';
 import 'package:ai_story_reader/source_index_preview_page.dart';
 import 'package:ai_story_reader/book_rpg_start_page.dart';
 import 'package:ai_story_reader/book_source_index.dart';
+import 'package:story_authoring/story_authoring.dart'
+    show BookSourceSelection, BookChapter, BookBlock, BookBlockKind;
 import 'package:ai_story_reader/quick_rpg_page.dart';
 import 'package:ai_story_reader/source_analysis_checkpoint_repository.dart';
 import 'package:ai_story_reader/source_semantic_provider.dart';
@@ -344,6 +346,53 @@ void main() {
     expect(find.textContaining('Черновик не удалён'), findsOneWidget);
     expect(await repository.read(index.sourceFingerprint), '{damaged');
     expect(calls, 0);
+  });
+
+  testWidgets('numbered folklore variants default to one exact edition '
+      'and keep the imported collection intact', (tester) async {
+    const book = ImportedBook(
+      title: 'Морозко', author: 'А. Н. Афанасьев',
+      chapters: [
+        'Первая редакция. Старик встретил Морозко и сделал выбор.',
+        'Вторая редакция. Другой рассказ о морозном испытании.',
+      ],
+      structuredChapters: [
+        BookChapter(id: 'one', blocks: [
+          BookBlock(kind: BookBlockKind.heading,
+              text: 'Морозко — вариант № 95'),
+          BookBlock(kind: BookBlockKind.paragraph,
+              text: 'Первая редакция. Старик встретил Морозко и сделал выбор.'),
+        ]),
+        BookChapter(id: 'two', blocks: [
+          BookBlock(kind: BookBlockKind.heading,
+              text: 'Морозко — вариант № 96'),
+          BookBlock(kind: BookBlockKind.paragraph,
+              text: 'Вторая редакция. Другой рассказ о морозном испытании.'),
+        ]),
+      ],
+    );
+    expect(BookSourceSelection.defaultChapter(book), 0);
+    ImportedBook? passed;
+    await tester.pumpWidget(MaterialApp(home: BookRpgStartPage(
+      book: book,
+      gateway: const DeviceWorldLibraryGateway(background: false),
+      indexer: (selected) async {
+        passed = selected;
+        return BookSourceIndexer.index(selected);
+      },
+    )));
+    expect(find.textContaining('Для RPG: Морозко — вариант № 95'),
+        findsOneWidget);
+    final ai = find.byKey(const Key('rpg-start-ai'));
+    await tester.ensureVisible(ai);
+    await tester.tap(ai);
+    await tester.pumpAndSettle();
+    expect(find.byType(ZaiWholeBookAnalysisPage), findsOneWidget);
+    expect(passed, isNotNull);
+    expect(passed!.chapters, hasLength(1));
+    expect(passed!.chapters.single, book.chapters[0]);
+    expect(passed!.title, contains('вариант № 95'));
+    expect(book.chapters, hasLength(2));
   });
 
 }
