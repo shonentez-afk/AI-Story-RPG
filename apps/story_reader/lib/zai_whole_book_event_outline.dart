@@ -1,10 +1,11 @@
+import 'book_event_outline.dart';
 import 'source_semantic_provider.dart';
 import 'zai_auto_whole_book_analysis.dart';
 import 'zai_semantic_review_queue.dart';
 
 /// One EXACT quote with a proposed (unverified) event label.
 /// Position in the book is NOT proof of in-world chronological order.
-class ZaiSourceEventProposal {
+class ZaiSourceEventProposal implements BookEventProposal {
   const ZaiSourceEventProposal({
     required this.id,
     required this.chapterIndex,
@@ -34,7 +35,7 @@ class ZaiSourceEventProposal {
 /// Read-only story coverage report over the existing Z.ai result checkpoint.
 /// No LLM output is allowed to assert an identity, chronology, event truth,
 /// ending, gameplay state or causal edge through this projection.
-class ZaiWholeBookEventOutline {
+class ZaiWholeBookEventOutline implements BookEventOutline {
   ZaiWholeBookEventOutline._({
     required this.sourceFingerprint,
     required this.totalChapters,

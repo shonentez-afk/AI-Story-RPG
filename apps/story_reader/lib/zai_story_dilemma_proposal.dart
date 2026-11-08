@@ -5,28 +5,10 @@ import 'package:crypto/crypto.dart';
 
 import 'ai_connection.dart';
 import 'narrative_book_model.dart';
-import 'story_plan.dart';
 import 'story_plan_dilemma_generator.dart';
+import 'story_dilemma_preview.dart';
+export 'story_dilemma_preview.dart';
 import 'zai_semantic_preview.dart';
-
-/// A user-approved CLOUD PREVIEW of one possible branch. Nothing here
-/// installs a game, writes SQLite, marks source interpretations as true,
-/// or automatically sends a whole book.
-class ZaiStoryDilemmaPreview {
-  const ZaiStoryDilemmaPreview({
-    required this.proposal,
-    required this.plan,
-    required this.sampledEventCount,
-  });
-
-  /// Null means the model found no suitable dilemma, NOT a ready game.
-  final StoryDilemmaProposal? proposal;
-  final StoryPlan? plan;
-  final int sampledEventCount;
-  bool get foundCandidate => proposal != null && plan != null;
-  bool get hasVerifiedLiteraryMeaning => false;
-  bool get isPlayableRpg => false;
-}
 
 /// M2g3b opt-in BYOK semantic proposal. Deliberately sends at most eight
 /// short, source-verified event excerpts, not chapters, full books, keys,
