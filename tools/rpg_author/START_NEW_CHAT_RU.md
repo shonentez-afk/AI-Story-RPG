@@ -1,6 +1,18 @@
-# AI Story RPG — АКТУАЛЬНЫЙ HANDOFF внешнего автора E6f
+# AI Story RPG — АКТУАЛЬНЫЙ HANDOFF E6g / текущий PR #133
 
-**Дата:** 7 ноября 2026. **Читать прежде исторических блоков ниже.** Единственная текущая ветка внешнего Python автора: [feature/external-rpg-author-e6f-npc-social-v5-20261107](https://github.com/shonentez-afk/AI-Story-RPG/tree/feature/external-rpg-author-e6f-npc-social-v5-20261107). E6e и E6d — сохранённая история, **не продолжать их старые base refs как текущий код**.
+**8 ноября 2026 — теперь E6g 0.3.0a5:** рабочая ветка внешнего автора [feature/external-rpg-author-e6g-pr133-compat-20261108](https://github.com/shonentez-afk/AI-Story-RPG/tree/feature/external-rpg-author-e6g-pr133-compat-20261108), **основана непосредственно на native [PR #133](https://github.com/shonentez-afk/AI-Story-RPG/pull/133) кодовом SHA `7c4401c25b77e4643cf23000c28a717cb22dabca`**. Из E6f перенесён внешний Python-автор и его тесты без изменений `main`, `apps/`, `packages/` или native `tools/bookworld/`. Историческая E6f ниже теперь *архив предыдущей реализации*, не текущий pin.
+
+**Читать [E6G_PR133_NATIVE_STORY_AUTHORING_COMPATIBILITY_RU_2026-11-08.md](E6G_PR133_NATIVE_STORY_AUTHORING_COMPATIBILITY_RU_2026-11-08.md) перед дальнейшими действиями.** Зафиксировано 26 blob-level контрактов (новый `compatibility_v2`, `doctor` fail-closed). Dart parity теперь импортирует `package:story_authoring/story_authoring.dart` и зависит от правильного самостоятельного Dart package; прежняя ошибка PR #133 «Couldn't resolve story_authoring» устранена на уровне тестов без копирования исходников. **Только rich-v3 запись через внешний Python-генератор; native v4 — отдельный opt-in и пока не поддержан внешним E6g.**
+
+**Подтверждено CI:** [E6g #42492729690](https://github.com/shonentez-afk/AI-Story-RPG/actions/runs/42492729690) *COMPLETED SUCCESS* (author-tests + Dart parity) на интеграционном коде до повышения версии. [E6g 0.3.0a5 #42493017684](https://github.com/shonentez-afk/AI-Story-RPG/actions/runs/42493017684) — точный последний кодовый SHA `3e0d7c6e2124f2dfe4e57b5e31889cc6842cc336`, при записи ещё шёл Dart parity: **результат перепроверить до принятия**. Любые последующие документационные [skip ci] коммиты не заменяют тестовый SHA.
+
+**Неприкосновенные ограничения:** `tools/rpg_author/`, `tests/rpg_author/` — единственная рабочая область E6g; основной движок read-only, native PR #133 остаётся Draft; не публиковать приватные книги/цитаты/ключи; не сливать в `main` до его приёмки. Старые checkpoint `toolchain_sha256` не переписывать. Установленный навык ChatGPT по-прежнему pinned к E6d 0.3.0a2 и не обновляется автоматически. Цель дальнейшего этапа: реальный 2-книжный литературный E2E, затем отдельно проверенный source-locked native v4 adaptor при необходимости, без фиктивного CANON.
+
+---
+
+## Архив E6f — предыдущая проверенная интеграция
+
+**Дата архива:** 7 ноября 2026. **Историческая ветка внешнего Python автора:** [feature/external-rpg-author-e6f-npc-social-v5-20261107](https://github.com/shonentez-afk/AI-Story-RPG/tree/feature/external-rpg-author-e6f-npc-social-v5-20261107). E6e и E6d — сохранённая история, **не продолжать их старые base refs как текущий код**.
 
 ## 1. Базовая версия и подтверждённая совместимость
 
