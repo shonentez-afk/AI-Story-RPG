@@ -124,7 +124,7 @@ final class BookToRpgWorkflow {
     required BookPreparationSnapshot snapshot,
     required Map<String, dynamic> review,
     bool expanded = false,
-  }) {
+  }) async {
     if (review['source_fingerprint'] != snapshot.sourceFingerprint ||
         !snapshot.source.hasCompleteText ||
         snapshot.scan.evidence.scannedChunks !=
