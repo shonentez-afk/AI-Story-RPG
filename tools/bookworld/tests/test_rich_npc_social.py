@@ -120,14 +120,16 @@ def two_npc_item_social_sample():
     bp["actors"].append(second)
     bp["initial_state"]["knowledge"][second] = []
     entry = bp["scenes"][0]
-    entry["text"] = (
-        "Встреча у ворот.\\n"
-        "Мария: «Я услышала обещание!»\\n"
-        "Иван: «Я тоже видел обещание».\\n"
-        "Игрок: «Обещаю».")
-    prov["presentation"]["scene_dialogues"] = {
-        "entry": rich._exact_scene_dialogue(entry["text"]),
-    }
+    entry["text"] = chr(10).join([
+        "Встреча у ворот.",
+        "Мария: «Я услышала обещание!»",
+        "Иван: «Я тоже видел обещание».",
+        "Игрок: «Обещаю».",
+    ])
+    signed = rich._exact_scene_dialogue(entry["text"])
+    if signed is None or len(signed["turns"]) != 4:
+        raise AssertionError("Two-NPC source dialogue did not tokenize exactly")
+    prov["presentation"]["scene_dialogues"] = {"entry": signed}
     former = prov["presentation"]["scene_dialogue_knowledge"]["entry"]
     player = dict(former[1])
     player["turn_index"] = 3
