@@ -25,6 +25,7 @@ class PortableReviewedDraftCompiler {
   Future<Uint8List> build({
     required SourceLockedBook source,
     required Map<String, dynamic> review,
+    bool expanded = false,
   }) async {
     if (!source.hasCompleteText) {
       throw const FormatException('Не вся исходная книга проиндексирована');
@@ -65,7 +66,7 @@ class PortableReviewedDraftCompiler {
     final draft = IntermediateStoryBlueprint.decode(
         review['draft'] as String);
     final preflight = PrivateAdaptationPreflight.evaluate(
-        index, graph, catalog, editorial, draft);
+        index, graph, catalog, editorial, draft, expanded: expanded);
     if (!preflight.isStructurallyReady) {
       throw const FormatException(
           'Нет подтверждённого частного игрового сценария');
@@ -73,9 +74,15 @@ class PortableReviewedDraftCompiler {
 
     late final Uint8List bytes;
     if (review['npc'] == null) {
-      bytes = await compileReviewedRichPrivateBookworldInWorker(
-          index, graph, catalog, editorial, draft, heroName: hero);
+      bytes = expanded
+          ? await compileReviewedExtendedPrivateBookworldInWorker(
+              index, graph, catalog, editorial, draft, heroName: hero)
+          : await compileReviewedRichPrivateBookworldInWorker(
+              index, graph, catalog, editorial, draft, heroName: hero);
     } else {
+      if (expanded) throw const FormatException(
+          'Расширенные NPC-гранты требуют отдельной полной проверки v4; '
+          'используйте подтверждённую кампанию или обычный rich-v3 путь');
       final npc = review['npc'];
       if (npc is! Map<String, dynamic>) {
         throw const FormatException('Пакет NPC должен быть объектом');
@@ -151,7 +158,8 @@ class PortableReviewedDraftCompiler {
     // A different, strict importer is the final authority; no "accepted"
     // or "AI completed" flag from the bundle overrides the game engine.
     final verified = const RichPrivateBookworldImporter().inspect(bytes);
-    if (verified.sourceFingerprint != index.sourceFingerprint ||
+    if (verified.formatVersion != (expanded ? 4 : 3) ||
+        verified.sourceFingerprint != index.sourceFingerprint ||
         verified.blueprint.scenes.length != draft.scenes.length ||
         verified.canDistributePublicly || verified.requiresNetwork) {
       throw const FormatException(

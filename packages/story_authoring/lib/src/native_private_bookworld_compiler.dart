@@ -109,6 +109,58 @@ Future<Uint8List> compileReviewedRichPrivateBookworldInWorker(
   return archive;
 }
 
+/// Native, source-checked v4 source translator -> the SAME rich writer and
+/// strict ZIP/SQLite importer as the shorter v3 path. No v2 archive is used:
+/// the v2 scene cap must never truncate an explicitly expanded review.
+Uint8List _compileExtendedSourceWorld(Map<String, dynamic> payload) {
+  return const RichPrivateBookworldWriter().buildReviewedExtended(
+    blueprint: Map<String, dynamic>.from(payload['blueprint'] as Map),
+    provenance: Map<String, dynamic>.from(payload['provenance'] as Map),
+    sourceIndex: Map<String, dynamic>.from(payload['source_index'] as Map),
+    heroName: payload['hero_name'] as String,
+    sceneTitles: Map<String, String>.from(payload['scene_titles'] as Map),
+    reviewedNpcArc: payload['reviewed_npc_arc'] == null ? null
+        : Map<String, dynamic>.from(payload['reviewed_npc_arc'] as Map),
+  );
+}
+
+/// A reviewed extended scenario is compiled independently of Flutter and
+/// cloud models, using the exact evidence, semantic editorial decisions and
+/// bounded preflight already required by the ordinary compiler.
+Future<Uint8List> compileReviewedExtendedPrivateBookworldInWorker(
+  BookSourceIndex index,
+  SourceEvidenceGraph evidence,
+  SourceSemanticCatalog catalog,
+  SemanticEditorialReviewSession editorial,
+  IntermediateStoryBlueprint draft, {
+  String heroName = 'Игрок',
+  Map<String, String> sceneTitles = const {},
+  Map<String, dynamic>? reviewedNpcArc,
+}) async {
+  final translated = PrivateClassicScenarioTranslator.translate(
+      index, evidence, catalog, editorial, draft, expanded: true);
+  if (!translated.preflight.isStructurallyReady) {
+    throw const FormatException('Не подтверждён расширенный сценарий');
+  }
+  final payload = <String, dynamic>{
+    'blueprint': translated.blueprintJson,
+    'provenance': translated.provenanceJson,
+    'source_index': Map<String, dynamic>.from(index.toJson()),
+    'hero_name': heroName,
+    'scene_titles': sceneTitles,
+    'reviewed_npc_arc': reviewedNpcArc,
+  };
+  final archive = await Isolate.run(() => _compileExtendedSourceWorld(payload));
+  final inspected = const RichPrivateBookworldImporter().inspect(archive);
+  if (inspected.formatVersion != 4 ||
+      inspected.sourceFingerprint != index.sourceFingerprint ||
+      inspected.blueprint.scenes.length != draft.scenes.length ||
+      inspected.requiresNetwork || inspected.canDistributePublicly) {
+    throw const FormatException('Мир v4 не прошёл независимый контроль');
+  }
+  return archive;
+}
+
 /* One source-reviewed functional pipeline, not a new compiler/engine.
  *
  * The caller must supply an explicit, user-confirmed quotation for every

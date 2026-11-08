@@ -95,7 +95,8 @@ Future<void> main(List<String> args) async {
         'events': outline.events.length,
         'is_playable': false,
       }));
-    } else if (args.length == 4 && args[0] == 'build-draft') {
+    } else if (args.length == 4 &&
+        (args[0] == 'build-draft' || args[0] == 'build-draft-extended')) {
       // This portable bundle is exported from the SAME user-reviewed source,
       // semantic and NPC editors. It is not an LLM-generated shortcut.
       final source = engine.parseAndIndex(
@@ -111,14 +112,17 @@ Future<void> main(List<String> args) async {
             'Нужен JSON проверок и выходной файл .bworld');
       }
       final archive = await const PortableReviewedDraftCompiler().build(
-          source: source, review: raw);
+          source: source, review: raw,
+          expanded: args[0] == 'build-draft-extended');
       final inspected = engine.inspectPrivateWorld(archive);
       final out = File(args[3]);
       final partial = File(out.path + '.pending');
       await partial.writeAsBytes(archive, flush: true);
       await partial.rename(out.path);
       stdout.writeln(jsonEncode({
-        'result': 'PRIVATE_RICH_V3_VERIFIED',
+        'result': inspected.formatVersion == 4
+            ? 'PRIVATE_EXTENDED_V4_VERIFIED' : 'PRIVATE_RICH_V3_VERIFIED',
+        'format_version': inspected.formatVersion,
         'source_fingerprint': inspected.sourceFingerprint,
         'archive_sha256': inspected.archiveSha256,
         'scenes': inspected.blueprint.scenes.length,
@@ -179,6 +183,7 @@ Future<void> main(List<String> args) async {
       stderr.writeln('  dart run bin/author_book.dart build-reviewed source.fb2 review.json game.bworld');
       stderr.writeln('  dart run bin/author_book.dart build-extended source.fb2 reviewed_v4.json game.bworld');
       stderr.writeln('  dart run bin/author_book.dart build-draft source.fb2 reviewed_checkpoints.json game.bworld');
+      stderr.writeln('  dart run bin/author_book.dart build-draft-extended source.fb2 reviewed_checkpoints.json full.bworld');
       stderr.writeln('  dart run bin/author_book.dart verify-world game.bworld');
       exitCode = 64;
     }

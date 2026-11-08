@@ -138,3 +138,21 @@ The input `reviewed_v4.json` has the same two keys as `build-reviewed`:
 Legacy `build-reviewed` keeps v3 output exactly, and a v4 world never uses
 the old E6d authoring schema. This extends the format/runtime capacity; the
 full-book literary author and UI remain separate unfinished acceptance gates.
+
+## Reviewed full-scene authoring now targets v4 without passing through v2
+
+`dart run bin/author_book.dart build-draft-extended source.fb2 reviewed_checkpoints.json full.bworld`
+uses the SAME decoded evidence/catalog/editorial/IntermediateStoryBlueprint
+checkpoints as `build-draft`, but explicitly enables the separate 1024-scene,
+64-flag M2c preflight and compiles directly into tagged private rich-v4.
+The old `build-draft`/v3 conversion is unchanged. All executable effects,
+claims and scene origins are verified by the original rich importer; no
+book text or AI proposal may directly alter the event ledger. Advanced NPC
+knowledge grants in the portable JSON envelope are not silently upgraded:
+that optional input currently **fails closed** in expanded mode until the
+version-specific NPC social contract has a full acceptance path. The
+existing reviewed one-NPC multi-act arc can use the extended writer.
+
+Even a 1024-scene structural game is private and *not* certified literary
+CANON. The author cannot silently skip source events, and an overflowing
+causal state graph is rejected rather than pruned into an unsafe result.
