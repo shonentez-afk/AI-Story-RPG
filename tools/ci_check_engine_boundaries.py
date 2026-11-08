@@ -31,6 +31,10 @@ RUNTIME_DEPS = {
         "story_core", "bookworld_format", "campaign_manager",
         "story_engine", "crypto",
     },
+    "rpg_api": {
+        "rpg_gameplay", "story_authoring", "campaign_manager",
+        "bookworld_format",
+    },
 }
 IMPORT = re.compile(r"^\s*(?:import|export|part)\s+['\"]([^'\"]+)['\"]")
 PUBSPEC_DEP = re.compile(r"^  ([a-z][a-z0-9_]*):(?:\s|$)")
@@ -84,7 +88,7 @@ def validate() -> list[str]:
                 where = str(source.relative_to(ROOT)) + ":" + str(line_no)
                 if target.startswith("dart:"):
                     if target == "dart:ui" or (
-                            package == "story_core" and
+                            package in {"story_core", "rpg_api"} and
                             target not in DART_CORE_ALLOWED):
                         issues.append(f"{where}: forbidden SDK dependency {target}")
                 elif target.startswith("package:"):
@@ -121,7 +125,7 @@ def main() -> int:
     if issues:
         return 1
     print(
-        "Architecture boundary PASS: 6 versioned pure-Dart packages; "
+        "Architecture boundary PASS: 7 versioned pure-Dart packages; "
         "story_core is service-independent; no engine -> app imports"
     )
     return 0

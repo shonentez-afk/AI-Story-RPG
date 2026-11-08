@@ -1,0 +1,20 @@
+name: rpg_api
+description: Stable Flutter-independent client API for AI Story RPG gameplay and reviewed authoring
+publish_to: none
+version: 0.1.0
+
+environment:
+  sdk: '>=3.11.0 <4.0.0'
+
+dependencies:
+  bookworld_format:
+    path: ../bookworld_format
+  campaign_manager:
+    path: ../campaign_manager
+  rpg_gameplay:
+    path: ../rpg_gameplay
+  story_authoring:
+    path: ../story_authoring
+
+dev_dependencies:
+  test: ^1.25.15

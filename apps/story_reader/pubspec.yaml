@@ -14,6 +14,8 @@ dependencies:
     path: ../../packages/campaign_manager
   rpg_gameplay:
     path: ../../packages/rpg_gameplay
+  rpg_api:
+    path: ../../packages/rpg_api
   bookworld_format:
     path: ../../packages/bookworld_format
   story_authoring:

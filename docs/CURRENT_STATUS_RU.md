@@ -1,5 +1,23 @@
 # AI Story RPG — статус полного сценарного потока
 
+## 2026-11-08 — Flutter как клиент, самостоятельный RPG API (архитектурный пакет)
+
+Принято принципиальное решение: **движок предоставляет API**, Flutter — только один клиент.
+Новый `packages/rpg_api` описывает независимые контракты `RpgGameApi` и
+`RpgAuthoringApi`; локальные реализации делегируют в прежние
+`rpg_gameplay` и `story_authoring`, не создавая второй логики и форматов.
+Flutter `DeviceWorldLibraryGateway` и `book_isolate_workers` теперь используют API.
+CI получил проверку седьмого pure-Dart пакета, отдельный без-Flutter API E2E
+и verified SQLite source hook. Документ:
+[docs/RPG_API_CLIENT_BOUNDARY_RU_2026-11-08.md](docs/RPG_API_CLIENT_BOUNDARY_RU_2026-11-08.md).
+
+**НЕ объявлять CI PASS до фактического результата нового коммита.**
+Открыто: перенести остальные не-платформенные проверки и сценарный
+оркестратор из Flutter, формализовать CANON/ALTER_FATE/роль и единый workflow,
+испытать независимых клиентов и реальные книги. PR #133 оставить Draft,
+main и внешний E6d не трогать.
+
+
 ## 2026-11-08 — RPG-движок и авторство отделены от Flutter (код 480c0e4)
 
 Главный документ: [docs/ENGINE_AUTONOMOUS_RPG_COMPLETION_RU_2026-11-08.md](docs/ENGINE_AUTONOMOUS_RPG_COMPLETION_RU_2026-11-08.md).

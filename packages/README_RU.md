@@ -23,7 +23,7 @@ dart run example/standalone_rpg.dart ../../artifacts/bookworld/manor_m17_origina
 
 ## Автономная игровая часть (2026-11-08)
 
-В составе **шесть** независимых Dart-пакетов. Библиотека/читалка
+В составе **семь** независимых Dart-пакетов. Библиотека/читалка
 `apps/story_reader` теперь **клиент**, а не владелец RPG-правил.
 
 | Пакет | Граница ответственности |
@@ -34,6 +34,7 @@ dart run example/standalone_rpg.dart ../../artifacts/bookworld/manor_m17_origina
 | `campaign_manager` | Транзакционная SQLite, повторные действия, `.bwsave` v2 |
 | `rpg_gameplay` | **Полная RPG-проекция:** герой, сцены, разрешённые решения, NPC, доверие, социальная память, личные знания, портретная идентичность, предметы/владельцы, журнал из настоящего event replay, ограничения AI/free text и сохранение |
 | `story_authoring` | Индексация FB2/источников, подготовка событий, сценариев, NPC/инвентаря, проверка достижимости, причинность, компиляция проверенной `.bworld` — без Flutter |
+| `rpg_api` | **Публичная граница клиентов:** версии/контракты `RpgGameApi` и `RpgAuthoringApi`, локальная делегация в тот же движок без повторной логики |
 
 В `apps/story_reader/lib/world_library_gateway.dart` остался исключительно
 путь к каталогу данных и запуск isolate. В приложении остались экраны,
@@ -64,3 +65,8 @@ dart run example/standalone_gameplay.dart ../../artifacts/bookworld/book_private
 пакетов. При этом наличие полностью автономных правил ещё **не**
 доказывает полный сюжет по любой книге: CANON/ALTER_FATE,
 полно-книжная причинность и живой провайдер ИИ продолжают развиваться.
+
+## Flutter — клиент API, не центр движка
+
+С 2026-11-08 единая входная точка клиентов — `package:rpg_api/rpg_api.dart`.
+Flutter `DeviceWorldLibraryGateway` вызывает `LocalRpgGameApi`, а операции импорта/индекса изолята — `LocalRpgAuthoringApi`. Внешний клиент может использовать тот же SDK без Flutter. Полный путь авторства ещё переносится; см. `docs/RPG_API_CLIENT_BOUNDARY_RU_2026-11-08.md`.

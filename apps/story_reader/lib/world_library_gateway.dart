@@ -4,15 +4,15 @@ import 'dart:typed_data';
 
 import 'package:campaign_manager/campaign_manager.dart';
 import 'package:path_provider/path_provider.dart';
-import 'package:rpg_gameplay/rpg_gameplay.dart';
+import 'package:rpg_api/rpg_api.dart';
 
-export 'package:rpg_gameplay/rpg_gameplay.dart' show
+export 'package:rpg_api/rpg_api.dart' show
     WorldLibraryItem, WorldCampaignItem, WorldSavePreview,
     WorldChoiceView, WorldEventView, NpcRelationView, WorldGameView,
     WorldChoiceResult, WorldLibraryGateway;
 
 /// Platform transport only. It owns application storage path and isolate
-/// scheduling; ALL game, NPC, journal and save logic is in rpg_gameplay.
+/// scheduling; game/NPC/journal/save rules belong to the independent API.
 /// The same headless RpgGameplayEngine powers tests, CLI and Flutter.
 class DeviceWorldLibraryGateway implements WorldLibraryGateway {
   const DeviceWorldLibraryGateway({this.background = true});
@@ -21,7 +21,7 @@ class DeviceWorldLibraryGateway implements WorldLibraryGateway {
   /// explicitly use the same real SQLite store inline.
   final bool background;
 
-  Future<T> _execute<T>(T Function(RpgGameplayEngine engine) action) async {
+  Future<T> _execute<T>(T Function(RpgGameApi engine) action) async {
     final support = await getApplicationSupportDirectory();
     final privateDirectory =
         support.path + Platform.pathSeparator + 'ai_story_bookworld';
@@ -29,7 +29,7 @@ class DeviceWorldLibraryGateway implements WorldLibraryGateway {
       final store = BookworldCampaignStore.openPrivateDirectory(
           privateDirectory);
       try {
-        return action(RpgGameplayEngine(store));
+        return action(LocalRpgGameApi(store));
       } finally {
         store.close();
       }

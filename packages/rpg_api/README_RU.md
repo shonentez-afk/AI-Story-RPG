@@ -1,0 +1,28 @@
+# Публичный API движка AI Story RPG
+
+`rpg_api` — единая граница для клиентов. **Это локальный Dart SDK/API, не HTTP-сервер.** Один и тот же исходный движок можно подключить из Flutter, командной строки или будущего сервиса/другого GUI. Если понадобится сетевой сервер, он будет отдельным адаптером этого же API, а не новой копией игровых правил.
+
+- `RpgGameApi` / `LocalRpgGameApi` — миры, кампании, ходы, NPC, герой, инвентарь, журнал, SQLite, `.bwsave`; конкретное исполнение делегирует в `rpg_gameplay`, `story_core` и `campaign_manager`.
+- `RpgAuthoringApi` / `LocalRpgAuthoringApi` — импорт, индекс, офлайн-проверка текста, подтверждённая компиляция v3/v4. Делегирует в `story_authoring` и `bookworld_format`.
+- `RpgApiContract` — версия API и честные возможности: полный литературный CANON и динамический AI-GM пока **не заявлены**.
+
+API не знает Flutter, `path_provider`, ключей Z.ai, HTTP, `SharedPreferences` и `FilePicker`. Хранилище SQLite открывается клиентом в приватном каталоге и закрывается им. Согласие на облачный запрос выдаёт клиент; ответ модели проверяется, но никогда не становится авторитетным игровым состоянием напрямую.
+
+## Flutter — первый клиент
+
+`apps/story_reader/lib/world_library_gateway.dart` реализует прежний асинхронный `WorldLibraryGateway` через `LocalRpgGameApi`, сохраняя isolate и тот же файл SQLite. Импорт и индексирование из `book_isolate_workers.dart` идут через `LocalRpgAuthoringApi`. Остальные существующие экраны мигрируют по мере завершения независимого authoring workflow — без второй игровой реализации.
+
+## Приёмка
+
+```sh
+cd packages/rpg_api
+dart pub get
+dart analyze
+dart test --reporter expanded
+```
+
+Тест RPG использует **реальный source-reviewed** BookWorld из M1.7 CI, проигрывает два хода, проверяет запрет хода, повтор SQLite и импорт `.bwsave`. Тест авторства — source-bound офлайн scan и checkpoint без Flutter, сети и SDK ключей. Для CI с нативным SQLite применяется прежний verified-source hook.
+
+## Оставшиеся задачи
+
+Это API-граница v0.1, не объявление полного SDK 1.0. Нужны: перенос чистых семантических/сценарных правил из Flutter, единый управляемый `BookToRpgWorkflow`, формальные режимы CANON/ALTER_FATE, дальнейшая спецификация ролей и начальных знаний, стабильная семантическая версия API и один независимый клиентский E2E на двух реальных русских FB2. Внешний E6d не трогать, `main` не менять.

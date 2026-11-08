@@ -101,6 +101,7 @@ def prepare(repo: pathlib.Path, projects: list[str]) -> None:
         "packages/bookworld_format",
         "packages/campaign_manager",
         "packages/story_authoring",
+        "packages/rpg_api",
     }
     if any(project not in allowed for project in projects):
         raise ValueError("Refusing to write outside approved Dart workspaces")
