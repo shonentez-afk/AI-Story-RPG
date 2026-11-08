@@ -400,6 +400,7 @@ class MultiActTrialCompiler {
       book: book,
       finalPlan: plan,
       approvals: reviewedProse,
+      expanded: expanded,
     );
 
     final sourceSceneIds = <String>{

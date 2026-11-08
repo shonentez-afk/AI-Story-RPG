@@ -88,13 +88,14 @@ class ReviewedProseSceneOverlay {
     required NarrativeBookModel book,
     required StoryPlan finalPlan,
     required List<ReviewedProseSceneApproval> approvals,
+    bool expanded = false,
   }) {
     if (approvals.isEmpty) return const {};
     if (approvals.length > 64 ||
         index.sourceFingerprint != book.sourceFingerprint ||
         finalPlan.sourceFingerprint != index.sourceFingerprint ||
         finalPlan.title != book.title ||
-        !finalPlan.validate(book).isStructurallySound) {
+        !finalPlan.validate(book, expanded: expanded).isStructurallySound) {
       throw const FormatException(
           'Художественные сцены относятся к чужому игровому плану.');
     }

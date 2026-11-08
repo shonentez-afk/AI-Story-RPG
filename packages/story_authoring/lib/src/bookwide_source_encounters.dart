@@ -247,7 +247,7 @@ class BookwideSourceEncounters {
         }
       }
     }
-    if (updatedScenes.length > maxComposedScenes ||
+    if (updatedScenes.length > (expanded ? 1024 : maxComposedScenes) ||
         updatedScenes.map((s) => s.id).toSet().length != updatedScenes.length) {
       throw const FormatException('Слишком много сцен или повторён ID сцены.');
     }

@@ -136,7 +136,7 @@ class BookwideStoryPlanComposer {
         bookMap.sourceEvents != book.events.length ||
         actProposals.length < 2 ||
         actProposals.length > (expanded ? maxExtendedDraftActs : maxDraftActs)) {
-      throw const FormatException(
+      throw FormatException(
           'Для многоактового черновика нужны 2–' +
           (expanded ? maxExtendedDraftActs : maxDraftActs).toString() +
           ' разных предложений этой книги.');
