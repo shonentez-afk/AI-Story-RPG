@@ -6,7 +6,7 @@ import 'package:path_provider/path_provider.dart';
 import 'source_analysis_checkpoint_repository.dart';
 import 'package:story_authoring/npc_campaign_writing_session.dart'
     show npcWritingHash, NpcWritingCatalog, NpcWritingEdit,
-        NpcWritingSession, NpcWritingRequest, NpcWritingDraftRules;
+        NpcWritingSession, NpcWritingDraftRules;
 
 export 'package:story_authoring/npc_campaign_writing_session.dart'
     show npcWritingHash, NpcWritingCatalog, NpcWritingEdit,

@@ -2,7 +2,7 @@
 """CI architectural gate for reusable, UI-independent Dart RPG packages.
 
 This does not claim a new engine exists. It checks source dependency direction
-for the four EXISTING engine packages and their pubspec runtime dependencies.
+for the independent engine packages and their pubspec runtime dependencies.
 The application can import packages; these packages cannot import the app.
 """
 from __future__ import annotations
@@ -23,6 +23,13 @@ RUNTIME_DEPS = {
     "campaign_manager": {
         "story_core", "story_runtime_adapter", "bookworld_format",
         "crypto", "sqlite3",
+    },
+    # All view models, NPC evidence, replayed journal, inventory ownership,
+    # choice authorization and save gates belong to this headless service.
+    # No Flutter, path_provider, cloud provider or app may cross this edge.
+    "rpg_gameplay": {
+        "story_core", "bookworld_format", "campaign_manager",
+        "story_engine", "crypto",
     },
 }
 IMPORT = re.compile(r"^\s*(?:import|export|part)\s+['\"]([^'\"]+)['\"]")
@@ -114,7 +121,7 @@ def main() -> int:
     if issues:
         return 1
     print(
-        "Architecture boundary PASS: 5 versioned pure-Dart packages; "
+        "Architecture boundary PASS: 6 versioned pure-Dart packages; "
         "story_core is service-independent; no engine -> app imports"
     )
     return 0
