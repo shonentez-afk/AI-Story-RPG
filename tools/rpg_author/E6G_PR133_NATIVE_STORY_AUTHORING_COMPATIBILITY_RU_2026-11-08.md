@@ -1,5 +1,7 @@
 # E6g — согласование внешнего RPG-автора с самостоятельным движком PR #133
 
+**ИСТОРИЧЕСКИЙ baseline E6g 0.3.0a5.** Для текущего E6g `0.3.0a6` с реально исполняемым native v4 `build-extended` / `verify-extended` см. [E6G_NATIVE_V4_BRIDGE_RU_2026-11-08.md](E6G_NATIVE_V4_BRIDGE_RU_2026-11-08.md). Утверждение ниже «v4 не реализован» относится исключительно к старой редакции и не должно использоваться как текущий статус. Ограничение E6g StoryPlan ≤192 и отсутствие source-reviewed initial-state v4 остаются.
+
 **Дата:** 8 ноября 2026. **Генератор:** `0.3.0a5`. **База независимого движка:** [7c4401c25b77e4643cf23000c28a717cb22dabca](https://github.com/shonentez-afk/AI-Story-RPG/commit/7c4401c25b77e4643cf23000c28a717cb22dabca) — рабочая ветка [PR #133](https://github.com/shonentez-afk/AI-Story-RPG/pull/133), **Draft**, не main. **Интеграционная ветка:** [feature/external-rpg-author-e6g-pr133-compat-20261108](https://github.com/shonentez-afk/AI-Story-RPG/tree/feature/external-rpg-author-e6g-pr133-compat-20261108).
 
 ## Изменения в коде (только независимый внешний генератор)
