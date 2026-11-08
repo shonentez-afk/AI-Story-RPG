@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'book_import.dart';
+import 'book_source_analysis.dart';
 import 'book_isolate_workers.dart';
 import 'source_analysis_checkpoint_repository.dart';
 import 'source_index_preview_page.dart';
@@ -24,6 +25,7 @@ class BookRpgStartPage extends StatefulWidget {
     this.indexer,
     this.analysis,
     this.manualCheckpointRepository,
+    this.manualCheckpointDecoder,
   });
 
   final ImportedBook book;
@@ -38,6 +40,11 @@ class BookRpgStartPage extends StatefulWidget {
   /// Same private scope used by the existing local source editor.
   /// Inject only for deterministic offline tests; no extra format is stored.
   final SourceAnalysisCheckpointRepository? manualCheckpointRepository;
+
+  /// Test seam only. Normal operation validates the same immutable source
+  /// data in a worker; tests can validate synchronously with the same core.
+  final Future<SourceAnalysisSession> Function(BookSourceIndex, String)?
+      manualCheckpointDecoder;
 
   @override
   State<BookRpgStartPage> createState() => _BookRpgStartPageState();
@@ -109,7 +116,9 @@ class _BookRpgStartPageState extends State<BookRpgStartPage> {
                 '«Расширенный редактор». В Z.ai ничего не отправлено.');
             return;
           }
-          final checked = await decodeSourceAnalysisInWorker(index, raw);
+          final checked = await (widget.manualCheckpointDecoder == null
+              ? decodeSourceAnalysisInWorker(index, raw)
+              : widget.manualCheckpointDecoder!(index, raw));
           if (checked.processedCount == 0 && checked.mentions.isEmpty) {
             setState(() => _error =
                 'Локальная подготовка ещё не содержит сохранённых '
@@ -125,6 +134,7 @@ class _BookRpgStartPageState extends State<BookRpgStartPage> {
             ? SourceIndexPreviewPage(
                 book: widget.book, indexer: (_) async => index,
                 checkpointRepository: _manualCheckpoints,
+                checkpointDecoder: widget.manualCheckpointDecoder,
                 worldGateway: widget.gateway,
               )
             : ZaiWholeBookAnalysisPage(
@@ -149,119 +159,133 @@ class _BookRpgStartPageState extends State<BookRpgStartPage> {
   Widget build(BuildContext context) => Scaffold(
     appBar: AppBar(title: const Text('Создать RPG по книге')),
     body: SafeArea(
-      child: ListView(
+      child: SingleChildScrollView(
+        key: const Key('rpg-start-scroll'),
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 28),
-        children: [
-          Text(widget.book.title,
-              key: const Key('rpg-start-book-title'),
-              style: Theme.of(context).textTheme.titleLarge),
-          const SizedBox(height: 8),
-          // Resume is a primary action, not the last item in a long card.
-          // At 320dp / 200% font it must stay discoverable above both modes.
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(12),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  FilledButton.tonalIcon(
-                    key: const Key('rpg-start-resume'),
-                    onPressed: _opening ? null :
-                        () => _openWholeBook(resumeOnly: true),
-                    icon: const Icon(Icons.history_rounded),
-                    label: const Text('Продолжить создание RPG'),
-                  ),
-                  const SizedBox(height: 6),
-                  const Text('Проверим сохранённую подготовку именно '
-                      'этой редакции книги. Локальный анализ и '
-                      'проверенные части ИИ восстанавливаются без '
-                      'повторной отправки и без сохранённого согласия '
-                      'на новые запросы.'),
-                ],
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(widget.book.title,
+                key: const Key('rpg-start-book-title'),
+                style: Theme.of(context).textTheme.titleLarge),
+            const SizedBox(height: 8),
+            // Full eager rendering: all three primary actions exist even
+            // when 200% text forces them below the phone viewport.
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    FilledButton.tonalIcon(
+                      key: const Key('rpg-start-resume'),
+                      onPressed: _opening ? null :
+                          () => _openWholeBook(resumeOnly: true),
+                      icon: const Icon(Icons.history_rounded),
+                      label: const Text('Продолжить создание RPG'),
+                    ),
+                    const SizedBox(height: 5),
+                    const Text('Проверим локальные сохранения именно '
+                        'этой редакции книги. Без запросов к ИИ.'),
+                  ],
+                ),
               ),
             ),
-          ),
-          const SizedBox(height: 8),
-          const Text('Один вход в создание RPG: сначала выберите '
-              'офлайн-пробу либо поактовую подготовку. Затем проверьте '
-              'источник, героя, последствия, NPC (можно 0), текст '
-              'прохождения и итоговый .bworld. Книга остаётся в '
-              'библиотеке, существующие игры не заменяются.'),
-          const SizedBox(height: 8),
-          const Text('Быстрая проба использует свободного игрока. В '
-              'расширенной подготовке можно выбрать героя с проверенным '
-              'постоянным character_id и подключить NPC, предметы, '
-              'последствия и художественное повествование. '
-              'Знания персонажа не выдаются автоматически.'),
-          const SizedBox(height: 16),
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(14),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('Быстрая офлайн-проба',
-                      style: Theme.of(context).textTheme.titleMedium),
-                  const SizedBox(height: 6),
-                  const Text('Короткая игра по проверяемым фрагментам '
-                      'без обращения к ИИ. Внутри можно выбрать '
-                      '«Сохранить сюжет» или «Менять сюжет», '
-                      'но это не полный CANON / ALTER_FATE.'),
-                  const SizedBox(height: 12),
-                  FilledButton.icon(
-                    key: const Key('rpg-start-offline'),
-                    onPressed: _opening ? null : _openOffline,
-                    icon: const Icon(Icons.offline_bolt_outlined),
-                    label: const Text('Начать офлайн-пробу'),
-                  ),
-                ],
+            if (_error != null) ...[
+              const SizedBox(height: 8),
+              Text(_error!, key: const Key('rpg-start-error'),
+                  style: TextStyle(
+                      color: Theme.of(context).colorScheme.error)),
+            ],
+            if (_opening) ...[
+              const SizedBox(height: 8),
+              const LinearProgressIndicator(
+                  key: Key('rpg-start-opening-progress')),
+              const Text('Проверяем книгу и сохранённую подготовку…'),
+            ],
+            const SizedBox(height: 6),
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text('Быстрая офлайн-проба',
+                        style: Theme.of(context).textTheme.titleMedium),
+                    const Text('Без сети и ИИ; короткая история по книге.'),
+                    const SizedBox(height: 8),
+                    FilledButton.icon(
+                      key: const Key('rpg-start-offline'),
+                      onPressed: _opening ? null : _openOffline,
+                      icon: const Icon(Icons.offline_bolt_outlined),
+                      label: const Text('Начать офлайн-пробу'),
+                    ),
+                  ],
+                ),
               ),
             ),
-          ),
-          const SizedBox(height: 8),
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(14),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('Анализ всей книги через ИИ',
-                      style: Theme.of(context).textTheme.titleMedium),
-                  const SizedBox(height: 6),
-                  const Text('Сначала локально индексируем текст, затем '
-                      'показываем объём и просим согласие на передачу '
-                      'частей книги в Z.ai. Можно прервать и возобновить. '
-                      'Следующие этапы пока создают пробную адаптацию, '
-                      'а не литературно подтверждённую полную RPG.'),
-                  const SizedBox(height: 12),
-                  OutlinedButton.icon(
-                    key: const Key('rpg-start-ai'),
-                    onPressed: _opening ? null : () => _openWholeBook(),
-                    icon: const Icon(Icons.auto_awesome_outlined),
-                    label: const Text('Подготовить книгу через ИИ'),
-                  ),
-                ],
+            const SizedBox(height: 6),
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text('Поактовая подготовка всей книги',
+                        style: Theme.of(context).textTheme.titleMedium),
+                    const Text('Z.ai — только после отдельного согласия.'),
+                    const SizedBox(height: 8),
+                    OutlinedButton.icon(
+                      key: const Key('rpg-start-ai'),
+                      onPressed: _opening ? null : () => _openWholeBook(),
+                      icon: const Icon(Icons.auto_awesome_outlined),
+                      label: const Text('Подготовить книгу через ИИ'),
+                    ),
+                  ],
+                ),
               ),
             ),
-          ),
-          const SizedBox(height: 10),
-          const Text('Полный CANON, свободный выбор книжного героя '
-              'и автоматическая завершённая RPG ещё разрабатываются. '
-              'Эти возможности не выдаются за готовые режимы.'),
-          if (_opening) ...[
-            const SizedBox(height: 14),
-            const LinearProgressIndicator(
-                key: Key('rpg-start-opening-progress')),
-            const Text('Открываем выбранный способ подготовки…'),
-          ],
-          if (_error != null) ...[
             const SizedBox(height: 12),
-            Text(_error!,
-                key: const Key('rpg-start-error'),
-                style: TextStyle(
-                    color: Theme.of(context).colorScheme.error)),
+            ExpansionTile(
+              key: const Key('rpg-start-details'),
+              title: const Text('Возможности и ограничения режимов'),
+              children: [
+                const Padding(
+                  padding: EdgeInsets.fromLTRB(12, 0, 12, 14),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Единый путь: подготовка книги → проверка '
+                          'источника → выбор героя → предметы и '
+                          'последствия → NPC (можно 0) → '
+                          'проверенная компиляция → автономная игра.'),
+                      SizedBox(height: 8),
+                      Text('В быстрой пробе используется свободный '
+                          'игрок. Режимы «Сохранить сюжет» и «Менять '
+                          'сюжет» пока ограничены коротким сценарием, '
+                          'а не полными CANON / ALTER_FATE.'),
+                      SizedBox(height: 8),
+                      Text('В расширенной подготовке можно выбрать '
+                          'проверенного героя с постоянным '
+                          'character_id. Секреты и знания NPC не '
+                          'переходят к игроку автоматически.'),
+                      SizedBox(height: 8),
+                      Text('Всё индексируется локально. Перед отправкой '
+                          'частей книги в Z.ai показываем объём и '
+                          'запрашиваем отдельное согласие. Прогресс '
+                          'сохраняется по проверенным фрагментам.'),
+                      SizedBox(height: 8),
+                      Text('Полный литературный CANON, автоматическая '
+                          'сборка законченной RPG из любой книги и '
+                          'динамический AI-мастер ещё разрабатываются. '
+                          'Чтение и существующие прохождения не меняются.'),
+                    ],
+                  ),
+                ),
+              ],
+            ),
           ],
-        ],
+        ),
       ),
     ),
   );

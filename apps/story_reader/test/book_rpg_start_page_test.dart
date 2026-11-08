@@ -74,6 +74,7 @@ void main() {
     // Primary Resume must be physically tappable in the first viewport.
     final rect = tester.getRect(find.byKey(const Key('rpg-start-resume')));
     expect(rect.center.dy, lessThan(tester.view.physicalSize.height));
+    expect(find.byKey(const Key('rpg-start-details')), findsOneWidget);
     expect(indexingCalls, 0);
     expect(networkCalls, 0);
 
@@ -272,6 +273,8 @@ void main() {
       indexer: (_) async => index,
       analysis: analysis,
       manualCheckpointRepository: localStore,
+      manualCheckpointDecoder: (source, raw) async =>
+          SourceAnalysisSession.decode(source, raw),
     )));
     final resume = find.byKey(const Key('rpg-start-resume'));
     await tester.ensureVisible(resume);
@@ -300,6 +303,8 @@ void main() {
       indexer: (_) async => index,
       analysis: ZaiAutoWholeBookAnalysis(repository: _MemoryCheckpoint()),
       manualCheckpointRepository: localStore,
+      manualCheckpointDecoder: (source, raw) async =>
+          SourceAnalysisSession.decode(source, raw),
     )));
     await tester.ensureVisible(find.byKey(const Key('rpg-start-resume')));
     await tester.tap(find.byKey(const Key('rpg-start-resume')));
