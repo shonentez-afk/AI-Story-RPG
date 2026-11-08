@@ -73,6 +73,52 @@ void main() {
       throwsFormatException);
   });
 
+  test('extended v4 is explicit, private and does not change v3 defaults',
+      () {
+    final fixture = object(jsonDecode(File(fixturePath).readAsStringSync()));
+    final rawSource = object(fixture['source_index']);
+    final chapters = (rawSource['chunks'] as List)
+        .map((row) => (row as Map)['text'] as String).toList();
+    final bp = object(fixture['blueprint']);
+    final provenance = object(fixture['provenance']);
+    final source = engine.indexImported(ImportedBook(
+      title: provenance['source_title'] as String,
+      author: provenance['source_author'] as String,
+      chapters: chapters,
+    ));
+    bp['source_fingerprint'] = source.index.sourceFingerprint;
+    provenance['source_fingerprint'] = source.index.sourceFingerprint;
+    provenance['format'] = 'ai_story_private_provenance_v2';
+    provenance['model_provenance'] = {
+      'provider': 'none', 'model_id': null,
+      'model_id_status': 'not_applicable',
+      'tool': 'none', 'method': 'local_fixture',
+    };
+    provenance['presentation'] = {
+      'hero': {'name': 'Игрок', 'description': 'Частная история'},
+      'item_names': <String, String>{},
+      'item_descriptions': <String, String>{},
+      'stat_names': <String, String>{},
+      'fact_names': <String, String>{},
+      'scene_names': {'entry': 'Вход', 'canon_end': 'Дом', 'alternate_end': 'Двор'},
+    };
+    for (final row in provenance['scene_origins'] as List) {
+      final origin = row as Map<String, dynamic>;
+      for (final ref in origin['source_refs'] as List) {
+        (ref as Map<String, dynamic>)['chunk_id'] = source.index.chunks
+            .singleWhere((c) => c.chapterIndex == ref['chapter_index']).id;
+      }
+    }
+    final old = engine.buildReviewedPrivateWorld(
+        source: source, blueprint: bp, provenance: provenance);
+    final newer = engine.buildReviewedPrivateWorld(
+        source: source, blueprint: bp, provenance: provenance,
+        expanded: true);
+    expect(engine.inspectPrivateWorld(old).formatVersion, 3);
+    expect(engine.inspectPrivateWorld(newer).formatVersion, 4);
+    expect(engine.inspectPrivateWorld(newer).requiresNetwork, false);
+  });
+
   test('forged source fingerprint is rejected before authoring', () {
     final src = engine.parseAndIndex('book.txt', bytes('Начало.'));
     expect(() => engine.buildReviewedPrivateWorld(

@@ -118,3 +118,23 @@ checked results are written per window before progress is reported.
 No provider candidate is automatically canon, character identity, evidence of
 NPC knowledge or a permitted game-state change. Real book-wide literary
 meaning and cross-act causality remain separate reviewed build gates.
+
+## Opt-in extended private .bworld v4 (no breaking v3 change)
+
+`dart run bin/author_book.dart build-extended book.fb2 reviewed_v4.json full.bworld`
+uses the SAME strict source-index reader, SQL state verifier and deterministic
+`story_core`, but opts into a separately tagged `format_version:4` archive
+with up to 1024 reachable scenes, 64 story flags, 96 items and 128 facts.
+The reader validates bounded **state + time** reachability, dead ends,
+separate endings, and the original UTF-16 quotes. Nonempty initial inventory,
+actor-specific knowledge or a nonzero initial tick require the explicit
+`initial_state_review` with a source-anchored quote visible at the start,
+positive human consent and `literary_canon_verified:false`.
+Neither unsupported CANON mode nor a cloud-controlled dynamic game master is
+silently enabled by the new archive format.
+
+The input `reviewed_v4.json` has the same two keys as `build-reviewed`:
+`blueprint` and `provenance` (with extended review only where needed).
+Legacy `build-reviewed` keeps v3 output exactly, and a v4 world never uses
+the old E6d authoring schema. This extends the format/runtime capacity; the
+full-book literary author and UI remain separate unfinished acceptance gates.

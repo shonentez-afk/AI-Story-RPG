@@ -56,6 +56,8 @@ class BookAuthoringEngine {
     required SourceLockedBook source,
     required Map<String, dynamic> blueprint,
     required Map<String, dynamic> provenance,
+    /// Explicit opt-in to reviewed extended v4; v3 remains the default.
+    bool expanded = false,
   }) {
     final index = source.index;
     if (!source.hasCompleteText ||
@@ -77,11 +79,13 @@ class BookAuthoringEngine {
       blueprint: blueprint,
       provenance: provenance,
       sourceIndex: Map<String, dynamic>.from(index.toJson()),
+      expanded: expanded,
     );
     final verified = const RichPrivateBookworldImporter().inspect(bytes);
     if (verified.sourceFingerprint != index.sourceFingerprint ||
         verified.blueprint.blueprintHash != proof.blueprintHash ||
-        verified.requiresNetwork || verified.canDistributePublicly) {
+        verified.requiresNetwork || verified.canDistributePublicly ||
+        verified.formatVersion != (expanded ? 4 : 3)) {
       throw const FormatException(
           'Автономная сборка не прошла независимую проверку');
     }

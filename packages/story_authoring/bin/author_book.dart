@@ -125,7 +125,8 @@ Future<void> main(List<String> args) async {
         'requires_network': false,
         'can_distribute_publicly': false,
       }));
-    } else if (args.length == 4 && args[0] == 'build-reviewed') {
+    } else if (args.length == 4 &&
+        (args[0] == 'build-reviewed' || args[0] == 'build-extended')) {
       final source = engine.parseAndIndex(
           args[1], await File(args[1]).readAsBytes());
       final raw = jsonDecode(await File(args[2]).readAsString());
@@ -144,12 +145,15 @@ Future<void> main(List<String> args) async {
         source: source,
         blueprint: Map<String, dynamic>.from(raw['blueprint'] as Map),
         provenance: Map<String, dynamic>.from(raw['provenance'] as Map),
+        expanded: args[0] == 'build-extended',
       );
       final verified = engine.inspectPrivateWorld(archive);
       // Never touch the output before all source+runtime validation passes.
       await File(args[3]).writeAsBytes(archive, flush: true);
       stdout.writeln(jsonEncode({
-        'result': 'PRIVATE_RICH_V3_VERIFIED',
+        'result': verified.formatVersion == 4
+            ? 'PRIVATE_EXTENDED_V4_VERIFIED' : 'PRIVATE_RICH_V3_VERIFIED',
+        'format_version': verified.formatVersion,
         'archive_sha256': verified.archiveSha256,
         'source_fingerprint': verified.sourceFingerprint,
         'scenes': verified.blueprint.scenes.length,
@@ -173,6 +177,7 @@ Future<void> main(List<String> args) async {
       stderr.writeln('  dart run bin/author_book.dart scan-source source.fb2 [--checkpoint private/scan.json]');
       stderr.writeln('  dart run bin/author_book.dart review-plan book.fb2 events.json model_reply.json plan_review.json');
       stderr.writeln('  dart run bin/author_book.dart build-reviewed source.fb2 review.json game.bworld');
+      stderr.writeln('  dart run bin/author_book.dart build-extended source.fb2 reviewed_v4.json game.bworld');
       stderr.writeln('  dart run bin/author_book.dart build-draft source.fb2 reviewed_checkpoints.json game.bworld');
       stderr.writeln('  dart run bin/author_book.dart verify-world game.bworld');
       exitCode = 64;
