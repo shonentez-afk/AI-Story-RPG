@@ -21,7 +21,7 @@
 
 - [Базовый E6f CI #42341605734](https://github.com/shonentez-afk/AI-Story-RPG/actions/runs/42341605734): SUCCESS (Python автор + Dart parity, SQLite, social v5) на **старом main**.
 - [Новый E6g CI #42492729690](https://github.com/shonentez-afk/AI-Story-RPG/actions/runs/42492729690): **COMPLETED SUCCESS** — `author-tests` и `dart-parity` на **реальной ветке PR #133** после замены импортов и контентного замка. Точный SHA `a38aa1be67461cc8fa5bb2fb6013b72d18f78700`.
-- [Полный E6g 0.3.0a5 + lock-regression CI #42493017684](https://github.com/shonentez-afk/AI-Story-RPG/actions/runs/42493017684): точный SHA `3e0d7c6e2124f2dfe4e57b5e31889cc6842cc336`; на момент записи `author-tests SUCCESS`, `dart-parity` выполняется. **Перепроверить финальное conclusion**, не объявлять полный SUCCESS заранее.
+- [Полный E6g 0.3.0a5 + lock-regression CI #42493017684](https://github.com/shonentez-afk/AI-Story-RPG/actions/runs/42493017684): точный SHA `3e0d7c6e2124f2dfe4e57b5e31889cc6842cc336`; **COMPLETED SUCCESS** — `author-tests` и `dart-parity` оба SUCCESS. Подтверждённый exact-code SHA `3e0d7c6e2124f2dfe4e57b5e31889cc6842cc336`.
 - Основной PR #133 держать Draft; его самостоятельный Android/Windows/Flutter CI зависит от отдельной native работы и **не является целью E6g**.
 
 ## Что делать дальше
