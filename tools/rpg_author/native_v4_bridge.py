@@ -40,10 +40,22 @@ def _native(operation: str, *args: Path) -> dict:
             "Dart SDK is required for native v4 build/verification")
     require(operation in ("build-extended", "verify-world"), "invalid_native_operation",
             "Unsupported native compiler command")
-    command = ["dart", "run", "story_authoring:author_book", operation,
-               *(str(p) for p in args)]
+    # Native BookImporter derives TXT title from the *filename argument*.
+    # Its independent source fingerprint must exactly match the Python
+    # project. Passing '/tmp/private/book.txt' would turn the temporary path
+    # into a false book title, so invoke Dart from the private book directory
+    # with 'book.txt', never weaken the title or provenance gate.
+    package_dir = ROOT / "packages/story_authoring"
+    script = package_dir / "bin/author_book.dart"
+    require(script.is_file() and bool(args), "native_dart_unavailable",
+            "Missing pinned standalone authoring command")
+    workdir = args[0].parent.resolve()
+    require(all(p.parent.resolve() == workdir and p.is_absolute() for p in args),
+            "invalid_native_paths", "All native compiler files must share one private directory")
+    command = ["dart", f"--packages={_PACKAGE_CONFIG}", str(script),
+               operation, *(p.name for p in args)]
     try:
-        result = subprocess.run(command, cwd=_NATIVE_PROBE,
+        result = subprocess.run(command, cwd=workdir,
                                 stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                                 text=True, encoding="utf-8", timeout=180)
     except (OSError, subprocess.TimeoutExpired) as error:
