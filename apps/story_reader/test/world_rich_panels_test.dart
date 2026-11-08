@@ -157,7 +157,13 @@ void main() {
         findsOneWidget);
     expect(find.text('Смелость: 4'), findsOneWidget);
     expect(find.text('Наблюдательность: 1'), findsOneWidget);
-    expect(find.textContaining('Мальчик спасён у реки'), findsWidgets);
+    // The hero sheet deliberately virtualizes its rows on compact devices.
+    // Source-confirmed facts must remain reachable by physical scrolling.
+    final fact = find.textContaining('Мальчик спасён у реки');
+    await tester.scrollUntilVisible(fact, 90,
+        scrollable: find.byType(Scrollable).last);
+    await tester.pumpAndSettle();
+    expect(fact, findsWidgets);
     expect(tester.takeException(), isNull);
   });
 

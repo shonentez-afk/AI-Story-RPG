@@ -37,6 +37,10 @@ class BookRpgStartPage extends StatefulWidget {
 }
 
 class _BookRpgStartPageState extends State<BookRpgStartPage> {
+  // One service and one source index for both start and resume. The service
+  // only reads local validated checkpoints until the downstream consent UI.
+  late final ZaiAutoWholeBookAnalysis _analysis =
+      widget.analysis ?? ZaiAutoWholeBookAnalysis();
   bool _opening = false;
   String? _error;
 
@@ -64,32 +68,48 @@ class _BookRpgStartPageState extends State<BookRpgStartPage> {
     }
   }
 
-  Future<void> _openWholeBook() async {
+  Future<void> _openWholeBook({bool resumeOnly = false}) async {
     if (_opening) return;
     setState(() {
       _opening = true;
       _error = null;
     });
     try {
-      // No cloud call here. A new book revision must be indexed and verified
-      // before any source-locked consent can be offered.
+      // Both actions use the SAME validated book index and local checkpoint.
+      // No network request, stored consent, or revision inference here.
       final indexer = widget.indexer;
       final index = indexer == null
           ? await indexImportedBookInWorker(widget.book)
           : await indexer(widget.book);
       if (!mounted) return;
+      if (resumeOnly) {
+        // PortableWholeBookAnalyzer.read verifies the exact source window
+        // manifest, fingerprint, all saved excerpts and their checksum.
+        // A mismatched or corrupt checkpoint is never overwritten.
+        final restored = await _analysis.read(index);
+        if (restored.progress.completed == 0) {
+          setState(() => _error =
+              'Для этой редакции книги нет сохранённого анализа. '
+              'Выберите «Подготовить книгу через ИИ» для нового запуска. '
+              'В Z.ai ничего не отправлено.');
+          return;
+        }
+      }
+      if (!mounted) return;
       await Navigator.of(context).push<void>(MaterialPageRoute(
         builder: (_) => ZaiWholeBookAnalysisPage(
           index: index,
-          analysis: widget.analysis,
+          analysis: _analysis,
           gateway: widget.gateway,
         ),
       ));
     } catch (error) {
       if (mounted) {
-        setState(() => _error =
-            'Не удалось открыть анализ книги: ' + error.toString() +
-            '. Книга и ранее созданные игры не изменены.');
+        setState(() => _error = resumeOnly
+            ? 'Не удалось проверить сохранённую подготовку: $error. '
+              'Черновик не удалён, повторной отправки в ИИ не было.'
+            : 'Не удалось открыть анализ книги: $error. '
+              'Книга и ранее созданные игры не изменены.');
       }
     } finally {
       if (mounted) setState(() => _opening = false);
@@ -161,10 +181,24 @@ class _BookRpgStartPageState extends State<BookRpgStartPage> {
                   const SizedBox(height: 12),
                   OutlinedButton.icon(
                     key: const Key('rpg-start-ai'),
-                    onPressed: _opening ? null : _openWholeBook,
+                    onPressed: _opening ? null : () => _openWholeBook(),
                     icon: const Icon(Icons.auto_awesome_outlined),
                     label: const Text('Подготовить книгу через ИИ'),
                   ),
+                  const SizedBox(height: 8),
+                  FilledButton.tonalIcon(
+                    key: const Key('rpg-start-resume'),
+                    onPressed: _opening ? null :
+                        () => _openWholeBook(resumeOnly: true),
+                    icon: const Icon(Icons.history_rounded),
+                    label: const Text('Продолжить создание RPG'),
+                  ),
+                  const SizedBox(height: 6),
+                  const Text('Проверим сохранённую подготовку именно этой '
+                      'редакции книги. Если она есть, восстановим '
+                      'подтверждённые фрагменты и черновой сюжет без '
+                      'повторной отправки. Новое согласие на ИИ всегда '
+                      'запрашивается отдельно.'),
                 ],
               ),
             ),

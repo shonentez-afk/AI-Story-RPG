@@ -3,6 +3,9 @@ import 'package:ai_story_reader/book_rpg_start_page.dart';
 import 'package:ai_story_reader/book_source_index.dart';
 import 'package:ai_story_reader/quick_rpg_page.dart';
 import 'package:ai_story_reader/source_analysis_checkpoint_repository.dart';
+import 'package:ai_story_reader/source_semantic_provider.dart';
+import 'package:ai_story_reader/source_semantic_window.dart';
+import 'package:ai_story_reader/zai_semantic_preview.dart';
 import 'package:ai_story_reader/world_library_gateway.dart';
 import 'package:ai_story_reader/zai_auto_whole_book_analysis.dart';
 import 'package:ai_story_reader/zai_whole_book_analysis_page.dart';
@@ -10,19 +13,19 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 class _MemoryCheckpoint implements SourceAnalysisCheckpointRepository {
-  String? raw;
+  final saved = <String, String>{};
 
   @override
-  Future<String?> read(String fingerprint) async => raw;
+  Future<String?> read(String fingerprint) async => saved[fingerprint];
 
   @override
   Future<void> write(String fingerprint, String text) async {
-    raw = text;
+    saved[fingerprint] = text;
   }
 
   @override
   Future<void> delete(String fingerprint) async {
-    raw = null;
+    saved.remove(fingerprint);
   }
 }
 
@@ -146,4 +149,118 @@ void main() {
     expect(ai, findsOneWidget);
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets('resume reads exact local checkpoint and never repeats a POST',
+      (tester) async {
+    final index = BookSourceIndexer.index(_book);
+    final repository = _MemoryCheckpoint();
+    var previewCalls = 0;
+    final analysis = ZaiAutoWholeBookAnalysis(
+      repository: repository,
+      preview: (source, window, token, includeTitle) async {
+        previewCalls++;
+        final chunk = window.chunks.first;
+        return ZaiSemanticPreviewResult(
+          batch: SemanticCandidateBatch(
+            providerId: ZaiSemanticPreviewService.providerId,
+            providerVersion: ZaiSemanticPreviewService.providerVersion,
+            sourceFingerprint: source.sourceFingerprint,
+            chunkIds: [for (final c in window.chunks) c.id],
+            candidates: [
+              SemanticCandidate.propose(source, chunk,
+                category: SemanticCategory.event,
+                startUtf16: chunk.startUtf16,
+                endUtf16: chunk.startUtf16 + 60,
+                label: 'Встреча из книги',
+                uncertainty: 'Редактор не проверил интерпретацию.'),
+            ],
+          ),
+          totalSuggestions: 1,
+          rejectedCount: 0, rejectedNonRussian: 0,
+        );
+      },
+    );
+    final manifest = ZaiWholeBookConsentManifest.fromIndex(index);
+    final previous = await analysis.analyze(index: index,
+      approvedManifestDigest: manifest.approvalDigest,
+      explicitWholeBookConsent: true, maxWindowsPerRun: 1);
+    expect(previous.progress.completed, 1);
+    expect(previewCalls, 1);
+    await tester.pumpWidget(MaterialApp(home: BookRpgStartPage(
+      book: _book,
+      gateway: const DeviceWorldLibraryGateway(background: false),
+      indexer: (_) async => index,
+      analysis: analysis,
+    )));
+    final resume = find.byKey(const Key('rpg-start-resume'));
+    await tester.ensureVisible(resume);
+    await tester.tap(resume);
+    await tester.pumpAndSettle();
+    expect(find.byType(ZaiWholeBookAnalysisPage), findsOneWidget);
+    expect(previewCalls, 1); // Reading is never a model POST.
+    expect(repository.saved, contains(index.sourceFingerprint));
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('absent and foreign edition checkpoints never claim Resume',
+      (tester) async {
+    final index = BookSourceIndexer.index(_book);
+    final repository = _MemoryCheckpoint();
+    var calls = 0;
+    final analysis = ZaiAutoWholeBookAnalysis(
+      repository: repository,
+      preview: (source, window, token, title) async {
+        calls++;
+        throw StateError('No silent model traffic');
+      },
+    );
+    // Same title does not equate two source editions.
+    final other = BookSourceIndexer.index(const ImportedBook(
+      title: 'Проверочная книга', author: 'Автор',
+      chapters: ['Совершенно другая редакция сказки.'],
+    ));
+    await repository.write(other.sourceFingerprint, '{"old":"edition"}');
+    await tester.pumpWidget(MaterialApp(home: BookRpgStartPage(
+      book: _book,
+      gateway: const DeviceWorldLibraryGateway(background: false),
+      indexer: (_) async => index,
+      analysis: analysis,
+    )));
+    await tester.ensureVisible(find.byKey(const Key('rpg-start-resume')));
+    await tester.tap(find.byKey(const Key('rpg-start-resume')));
+    await tester.pumpAndSettle();
+    expect(find.byType(BookRpgStartPage), findsOneWidget);
+    expect(find.textContaining('нет сохранённого анализа'), findsOneWidget);
+    expect(calls, 0);
+    expect(repository.saved[other.sourceFingerprint], '{"old":"edition"}');
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('corrupt same-edition checkpoint is preserved, never sent',
+      (tester) async {
+    final index = BookSourceIndexer.index(_book);
+    final repository = _MemoryCheckpoint();
+    await repository.write(index.sourceFingerprint, '{damaged');
+    var calls = 0;
+    final analysis = ZaiAutoWholeBookAnalysis(
+      repository: repository,
+      preview: (source, window, token, title) async {
+        calls++;
+        throw StateError('No auto retry');
+      },
+    );
+    await tester.pumpWidget(MaterialApp(home: BookRpgStartPage(
+      book: _book, indexer: (_) async => index,
+      gateway: const DeviceWorldLibraryGateway(background: false),
+      analysis: analysis,
+    )));
+    await tester.ensureVisible(find.byKey(const Key('rpg-start-resume')));
+    await tester.tap(find.byKey(const Key('rpg-start-resume')));
+    await tester.pumpAndSettle();
+    expect(find.byType(BookRpgStartPage), findsOneWidget);
+    expect(find.textContaining('Черновик не удалён'), findsOneWidget);
+    expect(await repository.read(index.sourceFingerprint), '{damaged');
+    expect(calls, 0);
+  });
+
 }

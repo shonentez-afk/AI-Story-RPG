@@ -558,9 +558,35 @@ void main() {
     await tap('whole-npc-quotes-reviewed');
     await tap('whole-npc-private-fiction');
     await tap('whole-npc-prepare');
-    await tester.pumpAndSettle();
+    // Source.compileBase runs in a real Dart isolate. The fake widget clock
+    // must yield to that isolate instead of pumpAndSettle-spinning while the
+    // progress animation remains active. Never mock the actual compiler.
+    for (var attempt = 0; attempt < 100; attempt++) {
+      await tester.runAsync(() async {
+        await Future<void>.delayed(const Duration(milliseconds: 100));
+      });
+      await tester.pump();
+      if (find.byKey(const Key('npc-consequences-state')).evaluate().isNotEmpty) {
+        break;
+      }
+    }
+    expect(find.byKey(const Key('whole-npc-error')), findsNothing);
+    final consequences = find.byKey(const Key('npc-consequences-state'));
+    await tester.scrollUntilVisible(consequences, 120,
+        scrollable: find.byType(Scrollable).first);
+    expect(consequences, findsOneWidget);
     expect(find.textContaining('Возможных разговоров: 0'), findsWidgets);
     await tap('whole-npc-review-package');
+    for (var attempt = 0; attempt < 100; attempt++) {
+      await tester.runAsync(() async {
+        await Future<void>.delayed(const Duration(milliseconds: 100));
+      });
+      await tester.pump();
+      if (find.byKey(const Key('whole-npc-final-approval')).evaluate().isNotEmpty) {
+        break;
+      }
+    }
+    expect(find.byKey(const Key('whole-npc-error')), findsNothing);
     final consent = find.byKey(const Key('whole-npc-final-approval'));
     await tester.scrollUntilVisible(consent, 120,
         scrollable: find.byType(Scrollable).first);
