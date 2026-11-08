@@ -551,13 +551,14 @@ void main() {
       final finder = find.byKey(Key(key));
       await tester.scrollUntilVisible(finder, 120,
           scrollable: find.byType(Scrollable).first);
-      await tester.pumpAndSettle();
+      await tester.pump();
       await tester.tap(finder);
-      await tester.pumpAndSettle();
+      await tester.pump(const Duration(milliseconds: 350));
     }
     await tap('whole-npc-quotes-reviewed');
     await tap('whole-npc-private-fiction');
     await tap('whole-npc-prepare');
+    await tester.pumpAndSettle();
     expect(find.textContaining('Возможных разговоров: 0'), findsWidgets);
     await tap('whole-npc-review-package');
     final consent = find.byKey(const Key('whole-npc-final-approval'));
@@ -568,7 +569,7 @@ void main() {
     expect(tester.widget<FilledButton>(
         find.byKey(const Key('whole-npc-start'))).onPressed, isNull);
     await tester.tap(consent);
-    await tester.pumpAndSettle();
+    await tester.pump(const Duration(milliseconds: 350));
     expect(tester.widget<FilledButton>(
         find.byKey(const Key('whole-npc-start'))).onPressed, isNotNull);
     expect(tester.takeException(), isNull);

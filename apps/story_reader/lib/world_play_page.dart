@@ -568,8 +568,7 @@ class _WorldPlayPageState extends State<WorldPlayPage> {
                                       title: const Text(
                                           'Свободное действие'),
                                       subtitle: const Text(
-                                          'Подбор предусмотренного сценарием хода; '
-                                          'ИИ не создаёт новых правил'),
+                                          'Офлайн или ИИ: только доступные ходы'),
                                       initiallyExpanded: false,
                                       children: [
                                         FreeTextActionPanel(
@@ -704,21 +703,20 @@ class _WorldInfoSheet extends StatelessWidget {
               (view.npcDisplayNames[entry.value] ??
                   ('NPC ' + (entry.value.length > 12
                     ? entry.value.substring(4, 12) : entry.value))),
+        'Предметы и владельцы — только из подтверждённых ходов. '
+            'Применение предмета возможно через доступное решение сцены.',
       ],
-      GamePanel.journal => view.journal.isEmpty
-          ? <String>['Решений пока нет']
-          : [
-              for (final entry in view.journal)
-                entry.sequence.toString() + '. ' +
-                    (entry.sceneTitle == null
-                        ? ''
-                        : entry.sceneTitle! + ': ') +
-                    entry.choiceLabel +
-                    (entry.changes.isEmpty
-                        ? ''
-                        : '\n' + entry.changes
-                            .map((change) => '• ' + change).join('\n')),
-            ],
+      GamePanel.journal => [
+        if (view.journal.isEmpty) 'Решений пока нет',
+        for (final entry in view.journal)
+          entry.sequence.toString() + '. ' +
+              (entry.sceneTitle == null ? '' : entry.sceneTitle! + ': ') +
+              entry.choiceLabel +
+              (entry.changes.isEmpty ? '' :
+                  '\n' + entry.changes.map((change) => '• ' + change).join('\n')),
+        'Журнал содержит только подтверждённые решения и последствия '
+            'из SQLite. Свободная фраза не заменяет сохранённый выбор.',
+      ],
       GamePanel.npc => const <String>[],
     };
     return SafeArea(
@@ -742,21 +740,8 @@ class _WorldInfoSheet extends StatelessWidget {
                 ),
               ]),
               const SizedBox(height: 8),
-              if (panel == GamePanel.character && _selectedHeroCharacterId != null)
-                ExpansionTile(
-                  key: const Key('world-hero-diagnostics'),
-                  title: const Text('Техническая диагностика роли'),
-                  children: [
-                    SelectableText('Постоянный ID: ${_selectedHeroCharacterId!}'),
-                  ],
-                ),
-              if (panel == GamePanel.inventory)
-                const Text('Предметы и владельцы — только из подтверждённых '
-                    'игровых действий. Использовать предмет можно через '
-                    'доступное решение сцены.'),
-              if (panel == GamePanel.journal)
-                const Text('Записаны только подтверждённые решения и последствия '
-                    'из SQLite. Исходная свободная фраза не заменяет запись хода.'),
+              // Everything below the title scrolls. An expanded role ID
+              // or 200% text may never push the last journal row off-screen.
               Flexible(child: panel == GamePanel.npc
                   ? ListView(
                       key: const Key('world-npc-relation-list'),
@@ -802,11 +787,28 @@ class _WorldInfoSheet extends StatelessWidget {
                     )
                   : ListView.builder(
                       shrinkWrap: true,
-                      itemCount: entries.length,
-                      itemBuilder: (_, index) => Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 7),
-                        child: Text(entries[index]),
-                      ),
+                      itemCount: entries.length +
+                          (panel == GamePanel.character &&
+                                  _selectedHeroCharacterId != null ? 1 : 0),
+                      itemBuilder: (_, index) {
+                        final diagnosis = panel == GamePanel.character &&
+                            _selectedHeroCharacterId != null;
+                        if (diagnosis && index == 1) {
+                          return ExpansionTile(
+                            key: const Key('world-hero-diagnostics'),
+                            title: const Text('Техническая диагностика роли'),
+                            children: [
+                              SelectableText('Постоянный ID: '
+                                  '${_selectedHeroCharacterId!}'),
+                            ],
+                          );
+                        }
+                        final row = diagnosis && index > 1 ? index - 1 : index;
+                        return Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 7),
+                          child: Text(entries[row]),
+                        );
+                      },
                     )),
             ],
           ),

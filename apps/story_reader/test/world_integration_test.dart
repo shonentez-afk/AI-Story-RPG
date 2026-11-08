@@ -323,7 +323,14 @@ void main() {
     );
     await tester.tap(tile);
     await settleWorker(tester);
-    await tester.enterText(find.byKey(const Key('free-text-input')), label);
+    // The form grows below the current viewport after ExpansionTile opens.
+    // Move the physical scene scroll before typing, as a player must do.
+    await tester.drag(find.byKey(const ValueKey('world-scene-scroll')),
+        const Offset(0, -210));
+    await settleWorker(tester);
+    final input = find.byKey(const Key('free-text-input'));
+    await tester.ensureVisible(input);
+    await tester.enterText(input, label);
     final scroll = find.descendant(
       of: find.byKey(const ValueKey('world-scene-scroll')),
       matching: find.byType(Scrollable),
@@ -380,6 +387,9 @@ void main() {
       ).first,
     );
     await tester.tap(tile);
+    await settleWorker(tester);
+    await tester.drag(find.byKey(const ValueKey('world-scene-scroll')),
+        const Offset(0, -210));
     await settleWorker(tester);
     final input = find.byKey(const Key('free-text-input'));
     await tester.ensureVisible(input);

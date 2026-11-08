@@ -145,6 +145,12 @@ void main() {
     expect(find.text('Герой: Лена'), findsOneWidget);
     expect(find.text('Роль: проверенная карточка персонажа'),
         findsOneWidget);
+    // A stable actor ID is useful for troubleshooting, not normal prose.
+    // The user can explicitly expand it without reading future NPC metadata.
+    final diagnostics = find.byKey(const Key('world-hero-diagnostics'));
+    await tester.ensureVisible(diagnostics);
+    await tester.tap(diagnostics);
+    await tester.pumpAndSettle();
     expect(find.textContaining('Постоянный ID: npc_01234567'),
         findsOneWidget);
     expect(find.textContaining('Знания и секреты NPC не присваиваются'),

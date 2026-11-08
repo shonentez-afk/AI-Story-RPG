@@ -261,11 +261,9 @@ class _FreeTextActionPanelState extends State<FreeTextActionPanel> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Text('Опишите желаемое действие. Офлайн и Z.ai подбирают '
-              'только уже разрешённые решения текущей сцены, без новых '
-              'предметов, диалогов и событий. ИИ получает вашу фразу и '
-              'подписи допустимых ходов лишь после отдельного согласия. '
-              'Игровой ход сохраняется только после подтверждения.'),
+          const Text('Опишите действие. Офлайн и ИИ подбирают только '
+              'разрешённые ходы, не создавая новых событий. '
+              'Отправка в Z.ai и сам ход требуют отдельных подтверждений.'),
           const SizedBox(height: 8),
           TextField(
             key: const Key('free-text-input'), controller: _input,
