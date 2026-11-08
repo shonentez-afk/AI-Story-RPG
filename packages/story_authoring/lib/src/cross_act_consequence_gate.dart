@@ -112,6 +112,7 @@ class CrossActConsequenceGate {
     required BookwideActPlan bookMap,
     required MultiActStoryPlanDraft draft,
     required bool userConfirmedFictionalContinuity,
+    bool expanded = false,
   }) {
     if (!userConfirmedFictionalContinuity || draft.parts.length < 2) {
       throw const FormatException(
@@ -122,6 +123,7 @@ class CrossActConsequenceGate {
       book: book,
       bookMap: bookMap,
       draft: draft,
+      expanded: expanded,
       rules: [
         for (var i = 1; i < draft.parts.length; i++)
           CrossActConsequenceRule(
@@ -151,6 +153,7 @@ class CrossActConsequenceGate {
     required BookwideActPlan bookMap,
     required MultiActStoryPlanDraft draft,
     required List<CrossActConsequenceRule> rules,
+    bool expanded = false,
   }) {
     if (!book.analysisComplete ||
         index.sourceFingerprint != book.sourceFingerprint ||
@@ -160,7 +163,7 @@ class CrossActConsequenceGate {
         draft.plan.title != book.title ||
         !draft.formalRulesPassed ||
         draft.parts.length < 2 ||
-        rules.isEmpty || rules.length > 12) {
+        rules.isEmpty || rules.length > (expanded ? 32 : 12)) {
       throw const FormatException(
           'Нужен проверенный многоактовый черновик этой редакции.');
     }
@@ -179,7 +182,7 @@ class CrossActConsequenceGate {
         decisions[choice.id] = (scene.id, choice);
       }
     }
-    if (!draft.plan.validate(book).isStructurallySound) {
+    if (!draft.plan.validate(book, expanded: expanded).isStructurallySound) {
       throw const FormatException(
           'Исходный план имеет нарушения игровых условий.');
     }
@@ -284,7 +287,7 @@ class CrossActConsequenceGate {
       initialFlags: draft.plan.initialFlags,
       situations: revisedScenes,
     );
-    final structure = revised.validate(book);
+    final structure = revised.validate(book, expanded: expanded);
     if (!structure.isStructurallySound ||
         structure.terminalSituations != 2 ||
         !structure.branchChangesState) {
@@ -366,7 +369,7 @@ class CrossActConsequenceGate {
     final seen = <String>{};
     var allowed = 0, blocked = 0;
     for (var i = 0; i < states.length; i++) {
-      if (states.length > 2500) {
+      if (states.length > (expanded ? 8000 : 2500)) {
         throw const FormatException('Слишком много состояний для проверки.');
       }
       final state = states[i];

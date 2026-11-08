@@ -81,7 +81,8 @@ class ReviewedHeroRole {
   /// Bind to actual engine state. An id cannot be silently swapped when
   /// a user changes a displayed label. The game starts without any
   /// artificially inferred facts from the original NPC.
-  StoryPlan bindTo(StoryPlan plan, NarrativeBookModel book) {
+  StoryPlan bindTo(StoryPlan plan, NarrativeBookModel book,
+      {bool expanded = false}) {
     if (sourceFingerprint != book.sourceFingerprint ||
         plan.sourceFingerprint != book.sourceFingerprint ||
         displayName.trim().isEmpty ||
@@ -97,7 +98,7 @@ class ReviewedHeroRole {
       initialFlags: [...plan.initialFlags, playerIdentityFlag],
       situations: plan.situations,
     );
-    final audit = next.validate(book);
+    final audit = next.validate(book, expanded: expanded);
     if (!audit.isStructurallySound ||
         audit.terminalSituations < 2 ||
         !audit.branchChangesState) {

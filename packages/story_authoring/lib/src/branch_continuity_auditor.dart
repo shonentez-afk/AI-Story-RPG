@@ -105,14 +105,15 @@ class BranchContinuityAuditor {
     required NarrativeBookModel book,
     required StoryPlan plan,
     required List<BranchContinuityRule> rules,
+    bool expanded = false,
   }) {
     if (index.sourceFingerprint != book.sourceFingerprint ||
         index.title != book.title ||
         plan.sourceFingerprint != index.sourceFingerprint ||
         plan.title != book.title ||
         !book.analysisComplete ||
-        rules.isEmpty || rules.length > maxRules ||
-        !plan.validate(book).isStructurallySound) {
+        rules.isEmpty || rules.length > (expanded ? 32 : maxRules) ||
+        !plan.validate(book, expanded: expanded).isStructurallySound) {
       throw const FormatException('Непроверенный план или чужая редакция.');
     }
     final events = {for (final e in book.events) e.id: e};
@@ -228,7 +229,7 @@ class BranchContinuityAuditor {
     }
 
     for (var cursor = 0; cursor < queue.length; cursor++) {
-      if (queue.length > maxStates) {
+      if (queue.length > (expanded ? 8000 : maxStates)) {
         throw const FormatException('Слишком много состояний игрового мира.');
       }
       final node = queue[cursor];

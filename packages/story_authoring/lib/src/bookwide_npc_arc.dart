@@ -41,6 +41,7 @@ class BookwideNpcArc {
     required StoryPlan plan, required ReviewedHeroRole role,
     required bool privateFictionConfirmed,
     required String playerLine, required String npcLine,
+    bool expanded = false,
   }) {
     if (!privateFictionConfirmed ||
         index.sourceFingerprint != book.sourceFingerprint ||
@@ -48,7 +49,7 @@ class BookwideNpcArc {
         role.sourceFingerprint != index.sourceFingerprint ||
         !CharacterId.isValidNpc(role.characterId) ||
         role.confirmedMentions.isEmpty || plan.flags.contains(contactFlag) ||
-        plan.flags.length >= 32) {
+        plan.flags.length >= (expanded ? 64 : 32)) {
       throw const FormatException('Не подтверждены NPC, книга или игровая встреча.');
     }
     if (!RegExp(r'^[А-ЯЁA-Z][А-Яа-яЁёA-Za-z0-9 .-]{0,49}$',
@@ -111,7 +112,8 @@ class BookwideNpcArc {
     return null;
   }
 
-  StoryPlan attach(StoryPlan plan, NarrativeBookModel book) {
+  StoryPlan attach(StoryPlan plan, NarrativeBookModel book,
+      {bool expanded = false}) {
     if (role.sourceFingerprint != plan.sourceFingerprint ||
         plan.flags.length >= 32 || plan.flags.contains(contactFlag)) {
       throw const FormatException('NPC-версия сценария изменилась.');
@@ -152,7 +154,7 @@ class BookwideNpcArc {
           ),
       ],
     );
-    final audit = result.validate(book);
+    final audit = result.validate(book, expanded: expanded);
     if (!audit.isStructurallySound || !audit.branchChangesState ||
         audit.terminalSituations != 2) {
       throw const FormatException('Разговор NPC нарушает игровые маршруты.');

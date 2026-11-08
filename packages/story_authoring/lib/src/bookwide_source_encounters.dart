@@ -61,8 +61,8 @@ class BookwideSourceEncounters {
   static const maxReviewedEventsPerAct = 24;
   static const maxComposedScenes = 192;
 
-  static int remainingSceneCapacity(StoryPlan plan) =>
-      maxComposedScenes - plan.situations.length;
+  static int remainingSceneCapacity(StoryPlan plan, {bool expanded = false}) =>
+      (expanded ? 1024 : maxComposedScenes) - plan.situations.length;
 
   /// Candidate events in one source-validated act, apart from its 2 anchors.
   /// Book text order is not a claim about the in-world chronology.
@@ -101,10 +101,11 @@ class BookwideSourceEncounters {
     required StoryPlan plan,
     required Set<String> reviewedEventIds,
     required bool userConfirmedPrivateAdaptation,
+    bool expanded = false,
   }) {
     if (reviewedEventIds.isEmpty) return plan;
     if (!userConfirmedPrivateAdaptation ||
-        reviewedEventIds.length > remainingSceneCapacity(plan) ||
+        reviewedEventIds.length > remainingSceneCapacity(plan, expanded: expanded) ||
         reviewedEventIds.length >
             draft.parts.length * maxReviewedEventsPerAct ||
         index.sourceFingerprint != book.sourceFingerprint ||
@@ -259,7 +260,7 @@ class BookwideSourceEncounters {
       initialFlags: plan.initialFlags,
       situations: updatedScenes,
     );
-    final check = result.validate(book);
+    final check = result.validate(book, expanded: expanded);
     if (!check.isStructurallySound ||
         !check.branchChangesState || check.terminalSituations != 2) {
       throw const FormatException(

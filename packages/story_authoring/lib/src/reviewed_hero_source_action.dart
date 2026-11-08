@@ -135,10 +135,11 @@ class ReviewedHeroSourceAction {
     required StoryPlan plan,
     required ReviewedHeroRole role,
     required bool explicitlyConfirmedPrivateGameFiction,
+    bool expanded = false,
   }) {
     if (!explicitlyConfirmedPrivateGameFiction ||
         plan.flags.contains(observedFlag) ||
-        plan.flags.length >= 32) {
+        plan.flags.length >= (expanded ? 64 : 32)) {
       throw const FormatException(
           'Ролевое действие не подтверждено или превышен лимит состояний.');
     }
@@ -202,7 +203,7 @@ class ReviewedHeroSourceAction {
       initialFlags: plan.initialFlags,
       situations: output,
     );
-    final audit = result.validate(book);
+    final audit = result.validate(book, expanded: expanded);
     if (!audit.isStructurallySound ||
         audit.terminalSituations < 2 ||
         !audit.branchChangesState ||

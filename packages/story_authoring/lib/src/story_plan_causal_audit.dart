@@ -118,8 +118,9 @@ class StoryPlanCausalAuditor {
     required StoryPlan plan,
     required NarrativeBookModel book,
     required StoryCausalContract contract,
+    bool expanded = false,
   }) {
-    final basic = plan.validate(book);
+    final basic = plan.validate(book, expanded: expanded);
     if (!basic.isStructurallySound) {
       throw const FormatException('StoryPlan не прошёл проверку состояний.');
     }
@@ -243,7 +244,7 @@ class StoryPlanCausalAuditor {
     }
 
     for (var cursor = 0; cursor < queue.length; cursor++) {
-      if (queue.length > maxExploredStates) {
+      if (queue.length > (expanded ? 8000 : maxExploredStates)) {
         throw const FormatException('Слишком много проверяемых состояний.');
       }
       final node = queue[cursor];
