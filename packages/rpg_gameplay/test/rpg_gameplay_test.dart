@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -97,8 +98,12 @@ void main() {
       final reopened = game.load(id);
       expect(reopened.revision, 2);
       expect(reopened.npcItemOwners, committed.npcItemOwners);
-      expect(reopened.journal.map((entry) => entry.changes),
-          orderedEquals(committed.journal.map((entry) => entry.changes)));
+      expect(
+          jsonEncode(reopened.journal
+              .map((entry) => entry.changes.toList()).toList()),
+          jsonEncode(committed.journal
+              .map((entry) => entry.changes.toList()).toList()),
+          reason: 'Replayed journal must match exact event order and text');
       final imported = game.importSave(portable,
           expectedWorldHash: installed.archiveHash);
       expect(imported, isNot(id));
