@@ -465,6 +465,11 @@ class RichPrivateBookworldWriter {
   }) {
     final original = const PrivateBookworldImporter()
         .inspect(verifiedPrivateV2Archive);
+    final entries = BworldZipV1.readPrivate(verifiedPrivateV2Archive);
+    final bp = Map<String, dynamic>.from(
+        jsonDecode(utf8.decode(entries['scenario/blueprint.json']!)) as Map);
+    final origin = Map<String, dynamic>.from(
+        jsonDecode(utf8.decode(entries['source/provenance.json']!)) as Map);
     return _buildReviewedSourceMaps(
       bp: bp,
       origin: origin,
@@ -542,11 +547,6 @@ class RichPrivateBookworldWriter {
       throw const FormatException('Некорректные сведения выбранного героя');
     }
 
-    final entries = BworldZipV1.readPrivate(verifiedPrivateV2Archive);
-    final bp = Map<String, dynamic>.from(
-        jsonDecode(utf8.decode(entries['scenario/blueprint.json']!)) as Map);
-    final origin = Map<String, dynamic>.from(
-        jsonDecode(utf8.decode(entries['source/provenance.json']!)) as Map);
     final state = Map<String, dynamic>.from(bp['initial_state'] as Map);
     if ((bp['items'] as List).isNotEmpty ||
         (bp['facts'] as List).isNotEmpty ||
