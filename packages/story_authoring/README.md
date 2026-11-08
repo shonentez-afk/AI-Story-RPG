@@ -102,3 +102,19 @@ The NPC ZIP compiler uses Dart `Isolate.run`, not Flutter `compute`.
 source claims, scenario/role and provenance. Z.ai network/consent UI and
 checkpoint file adapters remain outside the pure Dart library. The strict
 format limit (e.g. 192 scenes) and CANON/role-mode rules remain unchanged.
+
+## Complete-book AI analysis is a portable model callback, not a Flutter loop
+
+`PortableWholeBookAnalyzer`, `ZaiWholeBookConsentManifest`,
+`SourceSemanticWindowPlanner`, the exact SHA-locked
+`ZaiWindowReviewQueue` and event coverage projection live in pure Dart.
+The Flutter `ZaiAutoWholeBookAnalysis` is now only the Z.ai HTTP/OS storage
+adapter. A local model can implement the same bounded
+`PortableWholeBookWindowPreview` callback without importing Flutter or
+copying the editor's queue algorithm. Each invocation requires explicit
+consent to the full source-window manifest; cancellation stops further calls;
+checked results are written per window before progress is reported.
+
+No provider candidate is automatically canon, character identity, evidence of
+NPC knowledge or a permitted game-state change. Real book-wide literary
+meaning and cross-act causality remain separate reviewed build gates.

@@ -10,7 +10,7 @@ void main() {
     expect(BookwideNpcCampaignAuthoring.compile, isNotNull);
     expect(BookwideNpcCampaignAuthoring.discover, isNotNull);
     expect(WholeStoryLiteraryReviewManifest.fromEvidence, isNotNull);
-    expect(WholeStoryLiteraryReviewReport.fromJson, isNotNull);
+    expect(WholeLiteraryReviewReport.fromJson, isNotNull);
     expect(ReviewedProseSceneOverlay.validate, isNotNull);
     expect(SourceLockedProseContext.forSituation, isNotNull);
     expect(ReviewedHeroRole.fromReviewedSources, isNotNull);
