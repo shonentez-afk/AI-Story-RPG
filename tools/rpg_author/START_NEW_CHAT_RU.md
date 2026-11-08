@@ -9,8 +9,7 @@ Python и Dart/SQLite контракты. Подробности:
 не заявляется. Новый native PR #133 продвинулся по сравнению с
 закреплённым SHA `233c6c3`; контракт не обновлять вслепую.
 Никаких изменений `apps/`, `packages/`, `main`, `tools/bookworld/`.
-До exact-head CI обеих задач `author-tests` и `dart-parity`
-не объявлять этап принятым. Встроенный ChatGPT skill остаётся старым
+**E6h CI ПРИНЯТ:** [External RPG author tests #42516846711](https://github.com/shonentez-afk/AI-Story-RPG/actions/runs/42516846711), проверенный код SHA c4334298c3e3eb5b512a73631d6c11281d0a1cba — оба job author-tests и dart-parity COMPLETED SUCCESS. Лог Dart подтверждает 203 source-locked сцены, обе завершённые ветви, native v4 компиляцию/импорт и проверенный initial item/tick. Это синтетический механический тест, НЕ автоматически написанная длинная литературная игра. Для новой версии PR #133 потребуется отдельная повторная сверка 27 pinned blobs. Встроенный ChatGPT skill остаётся старым
 E6d, его pin не изменён.
 
 ---
