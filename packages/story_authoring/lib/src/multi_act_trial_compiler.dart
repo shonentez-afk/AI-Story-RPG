@@ -58,6 +58,8 @@ class MultiActTrialCompiler {
     /// Explicit source-event observations; each is shown before consent.
     Set<String> reviewedInteractiveEventIds = const {},
     List<ReviewedProseSceneApproval> reviewedProse = const [],
+    /// Explicit v4: never silently promote ordinary v3 campaigns.
+    bool expanded = false,
   }) async {
     if (reviewedNpcEncounter &&
         (npcEncounterRole == null ||
@@ -107,7 +109,10 @@ class MultiActTrialCompiler {
         index.indexedTextUtf16 != index.totalTextUtf16 ||
         !book.analysisComplete ||
         draft.parts.length < 2 ||
-        draft.parts.length > BookwideStoryPlanComposer.maxDraftActs ||
+        draft.expanded != expanded ||
+        draft.parts.length > (expanded
+            ? BookwideStoryPlanComposer.maxExtendedDraftActs
+            : BookwideStoryPlanComposer.maxDraftActs) ||
         !draft.formalRulesPassed ||
         draft.formalAudit.counterexamples.isNotEmpty) {
       throw const FormatException(
@@ -153,24 +158,28 @@ class MultiActTrialCompiler {
       draft: draft, plan: basePlan,
       reviewedEventIds: reviewedInteractiveEventIds,
       userConfirmedPrivateAdaptation: fictionalTrialAcknowledged,
+      expanded: expanded,
     );
     final rolePlan = selectedHeroRole == null ? sourcePlan :
-        selectedHeroRole.bindTo(sourcePlan, book);
+        selectedHeroRole.bindTo(sourcePlan, book, expanded: expanded);
     final npcArc = reviewedNpcEncounter ? BookwideNpcArc.review(
       index: index, book: book, plan: rolePlan,
       role: npcEncounterRole!, privateFictionConfirmed: true,
       playerLine: npcPlayerLine, npcLine: npcReplyLine,
+      expanded: expanded,
     ) : null;
     if (reviewedNpcEncounter && npcArc == null) {
       throw const FormatException(
           'В двух выбранных событиях нет проверенной встречи с NPC.');
     }
-    final npcPlan = npcArc?.attach(rolePlan, book) ?? rolePlan;
+    final npcPlan = npcArc?.attach(rolePlan, book,
+        expanded: expanded) ?? rolePlan;
     final plan = reviewedHeroSourceAction
         ? ReviewedHeroSourceAction.attach(
             index: index, book: book, plan: npcPlan,
             role: selectedHeroRole!,
-            explicitlyConfirmedPrivateGameFiction: fictionalTrialAcknowledged)
+            explicitlyConfirmedPrivateGameFiction: fictionalTrialAcknowledged,
+            expanded: expanded)
         : npcPlan;
     if (continuity != null &&
         (!continuity.hasEnforcedContinuity ||
@@ -179,7 +188,7 @@ class MultiActTrialCompiler {
       throw const FormatException(
           'Переходы между актами не прошли проверку последствий.');
     }
-    final result = plan.validate(book);
+    final result = plan.validate(book, expanded: expanded);
     if (!result.isStructurallySound ||
         !result.branchChangesState ||
         result.terminalSituations != 2) {
@@ -189,6 +198,13 @@ class MultiActTrialCompiler {
     // cached count or a model-provided readiness flag.
     final coverage = BookwideActPlanner.compareWithStoryPlan(
         bookMap: bookMap, book: book, story: plan);
+    // Extended campaigns must represent ALL confirmed source events through
+    // real executable source decisions. No silent first-48 subset or citation
+    // shortcut may be called a full-book game.
+    if (expanded && (!coverage.allDetectedEventsReferenced ||
+        !coverage.allChaptersCovered)) {
+      throw const FormatException('Полная RPG v4 не покрывает события или главы книги');
+    }
     if (coverage.referencedEvents < 2 ||
         draft.parts.any((part) =>
             !bookMap.acts.any((act) =>
@@ -344,7 +360,8 @@ class MultiActTrialCompiler {
         ));
       }
       final continuityCheck = BranchContinuityAuditor.audit(
-        index: index, book: book, plan: plan, rules: promiseRules);
+        index: index, book: book, plan: plan, rules: promiseRules,
+        expanded: expanded);
       if (!continuityCheck.passedFormalStateAudit ||
           continuityCheck.verifiesBookMeaning ||
           continuityCheck.canPublishCanonicalRpg) {
@@ -452,15 +469,21 @@ class MultiActTrialCompiler {
     // are REQUIRED; no upload/publication or mutation of existing campaigns.
     // Same source-reviewed multi-act plan, now packaged in ONE rich v3
     // format. No forced/fabricated items, stats, knowledge or cloud calls.
-    final archive = await compileReviewedRichPrivateBookworldInWorker(
-        index, evidence, catalog, editorial, intermediate,
-        heroName: heroName,
-        sceneTitles: {
-          for (final scene in plan.situations) scene.id: scene.goal,
-        },
-        reviewedNpcArc: npcArc?.writerReview);
+    final sceneTitles = {
+      for (final scene in plan.situations) scene.id: scene.goal,
+    };
+    final archive = expanded
+        ? await compileReviewedExtendedPrivateBookworldInWorker(
+            index, evidence, catalog, editorial, intermediate,
+            heroName: heroName, sceneTitles: sceneTitles,
+            reviewedNpcArc: npcArc?.writerReview)
+        : await compileReviewedRichPrivateBookworldInWorker(
+            index, evidence, catalog, editorial, intermediate,
+            heroName: heroName, sceneTitles: sceneTitles,
+            reviewedNpcArc: npcArc?.writerReview);
     final inspected = const RichPrivateBookworldImporter().inspect(archive);
-    if (inspected.sourceFingerprint != index.sourceFingerprint ||
+    if (inspected.formatVersion != (expanded ? 4 : 3) ||
+        inspected.sourceFingerprint != index.sourceFingerprint ||
         inspected.requiresNetwork ||
         inspected.canDistributePublicly ||
         inspected.blueprint.scenes.length != scenes.length ||
