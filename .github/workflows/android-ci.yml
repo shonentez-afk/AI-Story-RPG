@@ -173,6 +173,8 @@ jobs:
         run: |
           test -s artifacts/bookworld/book_private_extended_dart.bworld
           python3 tools/ci_verify_private_extended.py artifacts/bookworld/book_private_extended_dart.bworld
+          test -s artifacts/bookworld/story_authoring_extended_review_fixture.bworld
+          python3 tools/ci_verify_private_extended.py artifacts/bookworld/story_authoring_extended_review_fixture.bworld
       - name: Independently verify native Dart-created private BookWorld with Python
         run: |
           test -s artifacts/bookworld/book_private_sample_dart.bworld

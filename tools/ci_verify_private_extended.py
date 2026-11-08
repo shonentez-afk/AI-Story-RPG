@@ -58,16 +58,22 @@ def verify(path: Path) -> dict[str, object]:
         raise ValueError("Source/scene ordering corrupted")
     review = provenance.get("initial_state_review")
     state = bp["initial_state"]
-    if (manifest.get("initial_state_review_format") != "ai_story_private_initial_state_review_v1"
-            or not isinstance(review, dict)
-            or review["user_confirmed"] is not True
-            or review["literary_canon_verified"] is not False
-            or review["source_fingerprint"] != bp["source_fingerprint"]
-            or review["initial_tick"] != state["tick"]
-            or {i["item_id"] for i in review["item_grants"]} != set(state["inventory"])
-            or {(x["actor_id"], x["fact_id"]) for x in review["fact_grants"]}
-                != {(actor, fact) for actor, facts in state["knowledge"].items() for fact in facts}):
-        raise ValueError("Initial state custody/knowledge review mismatch")
+    has_initial_data = bool(state["inventory"]) or bool(
+        [fact for facts in state["knowledge"].values() for fact in facts]
+    ) or state["tick"] > 0
+    if has_initial_data:
+        if (manifest.get("initial_state_review_format") != "ai_story_private_initial_state_review_v1"
+                or not isinstance(review, dict)
+                or review["user_confirmed"] is not True
+                or review["literary_canon_verified"] is not False
+                or review["source_fingerprint"] != bp["source_fingerprint"]
+                or review["initial_tick"] != state["tick"]
+                or {i["item_id"] for i in review["item_grants"]} != set(state["inventory"])
+                or {(x["actor_id"], x["fact_id"]) for x in review["fact_grants"]}
+                    != {(actor, fact) for actor, facts in state["knowledge"].items() for fact in facts}):
+            raise ValueError("Initial state custody/knowledge review mismatch")
+    elif review is not None or "initial_state_review_format" in manifest:
+        raise ValueError("Extra initial review on empty authoring world")
     with tempfile.TemporaryDirectory(prefix="ai_story_v4_py_") as folder:
         db_path = Path(folder) / "world.sqlite"
         db_path.write_bytes(files["world.sqlite"])
