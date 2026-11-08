@@ -6,8 +6,7 @@ import 'package:story_core/story_core.dart';
 import 'package:bookworld_format/bookworld_format.dart';
 import 'package:campaign_manager/campaign_manager.dart';
 
-import '../../../apps/story_reader/lib/book_import.dart';
-import '../../../apps/story_reader/lib/book_source_index.dart';
+import 'package:story_authoring/story_authoring.dart';
 
 Future<void> main() async {
   final input = jsonDecode(await stdin.transform(utf8.decoder).join())
