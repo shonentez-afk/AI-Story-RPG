@@ -104,6 +104,9 @@ def compile_extended_from_project(root: Path, enrichment: dict,
     check_contract()
     root = outside_repository(root)
     source_root, state, index, _, _ = load_project(root)
+    require(state["chunk_size_utf16"] == 4096, "native_chunk_size_mismatch",
+            "Native author_book.dart uses 4096 UTF-16 source chunks; "
+            "rebuild the private author project with the same source index")
     # The independent v3 authoring/evidence/gameplay proof runs FIRST. It
     # refuses future/unreviewed rules and never invents v4 initial possessions.
     checked_v3, _ = compile_rich_from_project(
