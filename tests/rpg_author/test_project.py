@@ -190,7 +190,7 @@ class ProjectTests(unittest.TestCase):
                 self.assertEqual(error.exception.code, "contract_drift")
 
     def test_e6g_lock_checks_migrated_native_dart_authoring_and_v4_reader(self):
-        # E6g is pinned to actual PR #133 files, not historical Flutter
+        # E6g is pinned to the reviewed PR #133 sync head, not Flutter
         # re-export wrappers alone. A wrong Git object cannot be blessed
         # by changing a version label or a derived toolchain ID.
         from tools.rpg_author import compatibility
@@ -198,7 +198,7 @@ class ProjectTests(unittest.TestCase):
         self.assertEqual(lock["format"], "rpg_author_compatibility_v2")
         self.assertEqual(lock["digest_algorithm"], "git_blob_sha1")
         self.assertEqual(lock["application_baseline"],
-                         "7c4401c25b77e4643cf23000c28a717cb22dabca")
+                         "233c6c31abeae0768c36a60c4dd3add94916ec03")
         pinned = (
             "packages/story_authoring/lib/story_authoring.dart",
             "packages/story_authoring/lib/src/book_import.dart",
