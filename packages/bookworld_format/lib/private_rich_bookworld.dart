@@ -252,7 +252,7 @@ class RichPrivateBookworldImporter {
       blueprint.initial.flags.entries.where((e) => e.value).map((e) => e.key).toSet(),
       expanded ? Set<String>.of(blueprint.initial.inventory) : <String>{},
       Map<String, int>.of(blueprint.initial.stats),
-      {for (final actor in blueprint.actors) actor: expanded ? Set<String>.of(blueprint.initial.knowledge[actor] ?? const {}) : <String>{}},
+      {for (final actor in blueprint.actors) actor: expanded ? Set<String>.of(blueprint.initial.knowledge[actor] ?? const <String>{}) : <String>{}},
       expanded ? blueprint.initial.tick : 0,
     );
     String keyOf((String, Set<String>, Set<String>, Map<String, int>, Map<String, Set<String>>, int) state) => canonicalJson({
@@ -291,7 +291,8 @@ class RichPrivateBookworldImporter {
         final flags = Set<String>.of(s.$2), items = Set<String>.of(s.$3);
         final stats = Map<String, int>.of(s.$4);
         final facts = s.$5.map((actor, known) => MapEntry(actor, Set<String>.of(known)));
-        var tick = s.$6;
+        var tick = s.$6 + 1;
+        if (tick > 100000000) throw const FormatException('Переполнение времени');
         for (final effect in choice.effects) {
           switch (effect.op) {
             case 'set_flag':
