@@ -256,6 +256,106 @@ void main() {
     expect((await gateway.load(other)).journal.length, 2);
   });
 
+
+  testWidgets('one and two signed NPCs keep identity, item custody, '
+      'journal and portraits after real SQLite save/import', (tester) async {
+    // Both worlds are built by the existing Python rich-v3 compiler in CI.
+    // Every operation below uses DeviceWorldLibraryGateway and real SQLite,
+    // not an invented Flutter model, mock engine or network request.
+    for (final expectedCount in [1, 2]) {
+      final file = expectedCount == 1
+          ? '../../artifacts/bookworld/rich_v3/NPC_One_Rich_Items_v3.bworld'
+          : '../../artifacts/bookworld/rich_v3/NPC_Two_Rich_Items_v3.bworld';
+      final bytes = Uint8List.fromList(File(file).readAsBytesSync());
+      final installed = await gateway.install(bytes);
+      final id = await gateway.start(installed.archiveHash);
+      final before = await gateway.load(id);
+      expect(before.revision, 0);
+      expect(before.npcRelations, isEmpty);
+      expect(before.sceneSpeakerIdentityReviewed, isTrue);
+      expect(before.sceneDialogueTurns, isNotNull);
+      expect(before.sceneDialogueTurns![1].speaker, isNull,
+          reason: 'A gated future NPC must not reveal their identity');
+      expect(before.visibleSpeakerActorIds, isEmpty);
+      final forbidden = await gateway.choose(id,
+        actionId: 'blocked_help_$expectedCount', choiceId: 'help',
+        expectedRevision: 0);
+      expect(forbidden.applied, isFalse);
+      expect((await gateway.load(id)).journal, isEmpty);
+
+      final promise = await gateway.choose(id,
+        actionId: 'promise_$expectedCount', choiceId: 'wait',
+        expectedRevision: 0);
+      expect(promise.applied, isTrue);
+      final met = await gateway.load(id);
+      expect(met.revision, 1);
+      expect(met.npcRelations, hasLength(expectedCount));
+      expect(met.visibleSpeakerActorIds['Мария'], 'npc_' + 'c' * 32);
+      expect(met.sceneDialogueTurns![1].speaker, 'Мария');
+      if (expectedCount == 2) {
+        expect(met.visibleSpeakerActorIds['Иван'], 'npc_' + 'd' * 32);
+        expect(met.sceneDialogueTurns![2].speaker, 'Иван');
+      } else {
+        expect(met.visibleSpeakerActorIds.containsKey('Иван'), isFalse);
+      }
+      expect(met.inventory, contains('map'));
+      expect(met.journal, hasLength(1));
+
+      final given = await gateway.choose(id,
+        actionId: 'give_map_$expectedCount', choiceId: 'give_map',
+        expectedRevision: 1);
+      expect(given.applied, isTrue);
+      final committed = await gateway.load(id);
+      expect(committed.revision, 2);
+      expect(committed.inventory, isNot(contains('map')));
+      expect(committed.npcItemOwners['map'], 'npc_' + 'c' * 32);
+      expect(committed.journal.last.changes,
+          contains('Передано персонажу: Карта'));
+
+      final saved = await gateway.exportSave(id);
+      final restoreId = await gateway.importSave(saved,
+          expectedWorldHash: installed.archiveHash);
+      final reopened = await gateway.load(restoreId);
+      expect(reopened.revision, committed.revision);
+      expect(reopened.journal.map((e) => e.changes).toList(),
+          committed.journal.map((e) => e.changes).toList());
+      expect(reopened.npcItemOwners, committed.npcItemOwners);
+      expect(reopened.npcRelations.map((e) => e.actorId).toSet(),
+          committed.npcRelations.map((e) => e.actorId).toSet());
+      expect(reopened.visibleSpeakerActorIds,
+          committed.visibleSpeakerActorIds);
+
+      await tester.pumpWidget(MaterialApp(
+        home: WorldPlayPage(gateway: gateway, campaignId: restoreId),
+      ));
+      await settleWorker(tester);
+      await tester.tap(find.text('NPC'));
+      await settleWorker(tester);
+      expect(find.text('Мария'), findsOneWidget);
+      if (expectedCount == 2) {
+        expect(find.text('Иван'), findsOneWidget);
+      }
+      expect(find.text('Предмет у персонажа: Карта'), findsOneWidget);
+      await tester.tap(find.byTooltip('Закрыть'));
+      await settleWorker(tester);
+
+      await tester.tap(find.text('Предметы'));
+      await settleWorker(tester);
+      expect(find.text('Карта — у Мария'), findsOneWidget);
+      await tester.tap(find.byTooltip('Закрыть'));
+      await settleWorker(tester);
+      await tester.tap(find.text('Журнал'));
+      await settleWorker(tester);
+      expect(find.textContaining('Передано персонажу: Карта'),
+          findsOneWidget);
+      await tester.tap(find.byTooltip('Закрыть'));
+      await settleWorker(tester);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    }
+  }, timeout: const Timeout(Duration(seconds: 90)));
+
   testWidgets('one library imports and displays verified worlds separately '
       'from legacy books and reading', (tester) async {
     final world = await install();

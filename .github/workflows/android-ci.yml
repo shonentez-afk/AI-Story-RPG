@@ -297,6 +297,25 @@ jobs:
           mkdir -p artifacts/bookworld/rich_v3
           cp "$RUNNER_TEMP/rich-v3-fixture/River_Rich_Hero_v3.bworld" artifacts/bookworld/rich_v3/River_Rich_Hero_v3.bworld
           python3 -c "from pathlib import Path; from tools.bookworld.private_rich_bookworld import verify; p=Path('artifacts/bookworld/rich_v3/River_Rich_Hero_v3.bworld'); assert verify(p.read_bytes())['format_version'] == 3"
+      - name: Build source-verified one/two-NPC custody worlds for SQLite UI
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          from tools.bookworld.private_rich_bookworld import build, verify
+          from tools.bookworld.tests.test_rich_npc_social import (
+              item_social_sample, two_npc_item_social_sample,
+          )
+          root = Path('artifacts/bookworld/rich_v3')
+          root.mkdir(parents=True, exist_ok=True)
+          for filename, fixture in (
+              ('NPC_One_Rich_Items_v3.bworld', item_social_sample),
+              ('NPC_Two_Rich_Items_v3.bworld', two_npc_item_social_sample),
+          ):
+              blueprint, provenance, source_index = fixture()
+              data = build(blueprint, provenance, source_index)
+              assert verify(data)['format_version'] == 3
+              (root / filename).write_bytes(data)
+          PY
       - name: Build real COMPLETE public-domain Grimm FB2 (62 tales)
         # Full original text is fetched only by CI and stays in the runner.
         # Never silently SKIP or replace a failed download with fake text.
