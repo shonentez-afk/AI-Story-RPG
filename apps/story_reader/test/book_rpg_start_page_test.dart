@@ -386,7 +386,15 @@ void main() {
     final ai = find.byKey(const Key('rpg-start-ai'));
     await tester.ensureVisible(ai);
     await tester.tap(ai);
-    await tester.pumpAndSettle();
+    // The route below the newly pushed analysis screen keeps a real
+    // LinearProgressIndicator while Navigator.push is pending. It must NOT
+    // make this test wait for every animation on every route to settle.
+    // Pump the route transition only; still inspect the actual destination,
+    // the edition supplied to the indexer and the unmodified source book.
+    for (var attempt = 0; attempt < 20 &&
+        find.byType(ZaiWholeBookAnalysisPage).evaluate().isEmpty; attempt++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
     expect(find.byType(ZaiWholeBookAnalysisPage), findsOneWidget);
     expect(passed, isNotNull);
     expect(passed!.chapters, hasLength(1));
