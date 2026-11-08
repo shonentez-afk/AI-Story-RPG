@@ -1,5 +1,25 @@
 # AI Story RPG — статус полного сценарного потока
 
+## 2026-11-08 — RPG-движок и авторство отделены от Flutter (код 480c0e4)
+
+Главный документ: [docs/ENGINE_AUTONOMOUS_RPG_COMPLETION_RU_2026-11-08.md](docs/ENGINE_AUTONOMOUS_RPG_COMPLETION_RU_2026-11-08.md).
+Работы в **одном Draft PR #133**. Кодовый SHA `480c0e448a818e624809936a7c7485683c5a4adc`.
+`rpg_gameplay` держит все игровые RPG-проекции/FreeText/журнал/социальную
+память и SQLite-переходы; `story_authoring` — полный исходный сценарный
+конвейер, NPC и предметные последствия, source review, причинность,
+ручную привязку и приватную компиляцию. App — платформа, экран, ключи/consent,
+путь SQLite, файлы и cloud-адаптер, не второй движок.
+
+Мандат в CI: `tools/ci_check_engine_boundaries.py` (6 пакетов),
+`packages/rpg_gameplay/test`, standalone CLI, `packages/story_authoring/test/headless_*`.
+Exact-code CI #42497799413 пока идёт; не объявлять финальную приёмку
+и Windows/Android успешными до фактических jobs. E6d отдельно,
+main не менять, Issue #118 не закрывать. Следом две реальные русские FB2,
+литературный CANON/ALTER_FATE, live GLM только с согласием,
+реальный Win/Android UX.
+
+
+
 ## 2026-11-08 — защита проекции NPC в игре и отображение текущей сцены
 
 **Актуальный КОДОВЫЙ SHA `e397ed4591987d94ff99db2d0d2f80d7b6e4cfeb`**, единый Draft PR #133. [Предыдущий крупный CI #42486852024](https://github.com/shonentez-afk/AI-Story-RPG/actions/runs/42486852024) **COMPLETED SUCCESS**: Python, Dart, M1.7, Flutter/widget, Windows portable и Android APK; M0 #42486852053 SUCCESS. Это подтверждает синтетические source-locked 0/1/2 NPC, реальный SQLite и `.bwsave` roundtrip. Не путать с полным литературным CANON, физическими устройствами или live GLM.
