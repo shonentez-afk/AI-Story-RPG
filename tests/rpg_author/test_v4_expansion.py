@@ -49,7 +49,7 @@ class ReviewedV4ExtensionTests(unittest.TestCase):
         self.dir = tempfile.TemporaryDirectory()
         self.addCleanup(self.dir.cleanup)
         self.base = Path(self.dir.name)
-        path = self.base / "book.txt"
+        path = self.base / "test_story.txt"
         path.write_text(TEXT, encoding="utf-8")
         self.project = self.base / "project"
         project.init_project(self.project, path)
