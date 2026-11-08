@@ -88,3 +88,17 @@ literary rights, consent and source constraints are preserved. The output is
 a playable PRIVATE structural adaptation, **not** automatically accepted
 literary CANON. External/freeform model proposals have no automatic access
 to this build path.
+
+## Complete source-locked multi-act/NPC assembly is a pure Dart API
+
+The original `StoryPlanTrialCompiler`, `MultiActTrialCompiler` and
+`BookwideNpcCampaignAuthoring` now live here. The Flutter app reexports
+**the same types**. Causal/chronology/cross-act source audits, role identity,
+confirmed literary concerns, approved scene prose and all-route NPC dialogue
+use the same `bookworld_format` and `story_core` rules, without an app import.
+The NPC ZIP compiler uses Dart `Isolate.run`, not Flutter `compute`.
+
+**Not a complete book automator yet:** CLI still requires author-reviewed
+source claims, scenario/role and provenance. Z.ai network/consent UI and
+checkpoint file adapters remain outside the pure Dart library. The strict
+format limit (e.g. 192 scenes) and CANON/role-mode rules remain unchanged.

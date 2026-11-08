@@ -65,3 +65,6 @@ export 'src/bookwide_campaign_contract.dart';
 export 'src/bookwide_npc_arc.dart';
 export 'src/bookwide_unified_story.dart';
 export 'src/reviewed_story_narrative.dart';
+export 'src/story_plan_trial_compiler.dart';
+export 'src/multi_act_trial_compiler.dart';
+export 'src/whole_book_npc_campaign.dart';
