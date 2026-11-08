@@ -306,7 +306,8 @@ void main() {
   });
 
   test('concurrent paid batches are rejected; an intervening manual save wins over late AI', () async {
-    final store = NpcWritingStore(repository: MemorySourceAnalysisCheckpointRepository());
+    final repository = MemorySourceAnalysisCheckpointRepository();
+    final store = NpcWritingStore(repository: repository);
     final state = await store.save(fixture.catalog, edits: fixture.empty, expectedRevision: 0);
     final request = NpcWritingRequest.prepare(fixture.catalog, state);
     final started = Completer<void>(), response = Completer<AiHttpResponse>();
@@ -316,19 +317,27 @@ void main() {
     });
     final pending = _writer(transport).generate(catalog: fixture.catalog, store: store,
       request: request, approvedDigest: request.approvalDigest, explicitCloudConsent: true);
-    final failed = expectLater(pending, throwsFormatException);
+    // The author-revision guard now rejects this conflict BEFORE store.save.
+    // Assert the public error and its cause, not a broad exception matcher.
+    final failed = expectLater(pending, throwsA(isA<AiSetupException>().having(
+        (error) => error.toString(), 'stale-draft reason',
+        contains('В другом окне изменён черновик'))));
     await started.future;
     await expectLater(_writer(transport).generate(catalog: fixture.catalog, store: store,
       request: request, approvedDigest: request.approvalDigest, explicitCloudConsent: true),
       throwsA(isA<AiSetupException>()));
-    await store.save(fixture.catalog, edits: [
+    final manual = await store.save(fixture.catalog, edits: [
       NpcWritingEdit(id: fixture.ids.first, playerLine: 'Более новая ручная правка'),
       ...fixture.empty.skip(1),
     ], expectedRevision: state.revision);
+    final manualBytes = await repository.read(fixture.catalog.storageKey);
     response.complete(_answer(transmitted!));
     await failed;
     expect(transport.bodies.length, 1);
-    expect((await store.load(fixture.catalog)).edits[fixture.ids.first]!.playerLine,
-        'Более новая ручная правка');
+    final preserved = await store.load(fixture.catalog);
+    expect(preserved.edits[fixture.ids.first]!.playerLine, 'Более новая ручная правка');
+    expect(preserved.revision, manual.revision);
+    expect(preserved.snapshotDigest, manual.snapshotDigest);
+    expect(await repository.read(fixture.catalog.storageKey), manualBytes);
   });
 }
