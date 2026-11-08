@@ -71,3 +71,5 @@ export 'src/whole_book_npc_campaign.dart';
 export 'src/source_semantic_window.dart';
 export 'src/semantic_preview_models.dart';
 export 'src/zai_semantic_review_queue.dart';
+export 'src/bookwide_semantic_authoring.dart';
+export 'src/zai_whole_book_event_outline.dart';
