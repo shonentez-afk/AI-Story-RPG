@@ -156,8 +156,11 @@ def compile_rich_from_project(root: Path, enrichment: dict,
     return raw, canonical(_attribution(raw, digest(canonical(blueprint)), provenance))
 
 
-def _attribution(archive: bytes, blueprint_sha256: str, provenance: dict) -> dict:
+def _attribution(archive: bytes, blueprint_sha256: str, provenance: dict,
+                 *, format_version: int = 3) -> dict:
     """Disclose only verified archive data; neither hashes nor labels attest a model."""
+    require(format_version in (3, 4), "invalid_format_version",
+            "Attribution is available only for private rich v3/v4")
     return {
         "format": "ai_story_external_attribution_v2",
         "bookworld_sha256": digest(archive),
@@ -166,8 +169,9 @@ def _attribution(archive: bytes, blueprint_sha256: str, provenance: dict) -> dic
         "scenario_generation": dict(provenance["model_provenance"]),
         "bookworld_packaging": {
             "method": "local_compiler",
-            "build_tool": "ai_story_private_rich_bookworld",
-            "version": "3.0",
+            "build_tool": ("ai_story_private_extended_bookworld"
+                           if format_version == 4 else "ai_story_private_rich_bookworld"),
+            "version": "4.0" if format_version == 4 else "3.0",
             "authorship_also_in_package": True,
         },
         "rights_status": "private_use_only",
