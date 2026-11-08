@@ -426,6 +426,21 @@ class _WorldPlayPageState extends State<WorldPlayPage> {
                                       )),
                                   const SizedBox(height: 12),
                                 ],
+                                // Show only the currently reached,
+                                // source-reviewed scene name. The rest of
+                                // sceneNames may describe future chapters.
+                                if (view.sceneNames[view.sceneId] != null &&
+                                    view.sceneNames[view.sceneId]!
+                                        .trim().isNotEmpty) ...[
+                                  Text(view.sceneNames[view.sceneId]!,
+                                      key: const ValueKey(
+                                          'world-current-scene-title'),
+                                      style: readerText.copyWith(
+                                        fontWeight: FontWeight.w600,
+                                        fontSize: prefs.fontSize + 3,
+                                      )),
+                                  const SizedBox(height: 10),
+                                ],
                                 Wrap(spacing: 8, runSpacing: 6, children: [
                                   Chip(
                                     label: Text(dialogue == null ? 'Классический режим' : 'Диалог',

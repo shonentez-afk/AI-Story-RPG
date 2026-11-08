@@ -197,11 +197,13 @@ class WorldGameView {
     return matching.isEmpty ? speaker : matching.single;
   }
 
-  /// Item -> NPC character_id, derived only from verified committed events.
+  /// Item -> encountered NPC character_id, derived only from replayed
+  /// committed events. Future custodians remain in the trusted engine ledger
+  /// but are NEVER copied into the public reader projection.
   final Map<String, String> npcItemOwners;
-  /// Source-reviewed signed speakers where available; not guessed from names.
+  /// Only encountered or presently speaking reviewed NPC identities.
   final Map<String, String> npcDisplayNames;
-  /// Event-replayed NPC life states only for worlds with v5 annotations.
+  /// Event-replayed NPC life states, only for already encountered actors.
   final Map<String, String> npcLifeStates;
   /// Only already-met actors with signed NPC witness/event evidence.
   /// Derived from the committed SQLite event chain, never cloud prose.
@@ -592,20 +594,31 @@ class DeviceWorldLibraryGateway implements WorldLibraryGateway {
       sceneDialogueTurns: signedTurns,
       sceneSpeakerIdentityReviewed: hasReviewedNpcTurns,
       visibleSpeakerActorIds: visibleSpeakerActorIds,
+      // Public reader projections must not contain future NPC spoilers at
+      // all, even for a new caller that forgets to filter its own widgets.
+      // The authoritative social state remains untouched in story_core.
       npcItemOwners: Map.unmodifiable({
         if (social != null)
           for (final item in blueprint.items)
             if (social.itemOwner(item) != null &&
-                social.itemOwner(item) != 'player')
+                social.itemOwner(item) != 'player' &&
+                npcRelations.any((npc) =>
+                    npc.actorId == social.itemOwner(item)))
               item: social.itemOwner(item)!,
       }),
-      npcDisplayNames: Map.unmodifiable(npcDisplayNames),
+      npcDisplayNames: Map.unmodifiable({
+        for (final npc in npcRelations) npc.actorId: npc.displayName,
+        for (final actor in visibleSpeakers)
+          if (npcDisplayNames.containsKey(actor))
+            actor: npcDisplayNames[actor]!,
+      }),
       npcRelations: List.unmodifiable(npcRelations),
       npcLifeStates: Map.unmodifiable({
         if (social != null && socialRules != null)
-          for (final actor in socialRules.lifeTransitions
-              .map((event) => event.actorId).toSet())
-            actor: social.lifeState(actor).name,
+          for (final npc in npcRelations)
+            if (socialRules.lifeTransitions.any((transition) =>
+                transition.actorId == npc.actorId))
+              npc.actorId: social.lifeState(npc.actorId).name,
       }),
     );
   }

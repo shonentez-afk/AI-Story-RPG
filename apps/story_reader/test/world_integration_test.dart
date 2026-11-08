@@ -163,6 +163,7 @@ void main() {
     final initial = await gateway.load(id);
     expect(initial.heroName, 'Лена');
     expect(initial.heroDescription, contains('Путешественница'));
+    expect(initial.sceneNames[initial.sceneId], isNotEmpty);
     expect(initial.stats['courage'], 1);
     expect(initial.inventory, isEmpty);
 
@@ -272,6 +273,12 @@ void main() {
       final before = await gateway.load(id);
       expect(before.revision, 0);
       expect(before.npcRelations, isEmpty);
+      expect(before.npcDisplayNames, isEmpty,
+          reason: 'No future NPC identity in the public world view');
+      expect(before.npcItemOwners, isEmpty,
+          reason: 'No future custodians in the public world view');
+      expect(before.npcLifeStates, isEmpty,
+          reason: 'No future life events in the public world view');
       expect(before.sceneSpeakerIdentityReviewed, isTrue);
       expect(before.sceneDialogueTurns, isNotNull);
       expect(before.sceneDialogueTurns![1].speaker, isNull,
@@ -290,6 +297,8 @@ void main() {
       final met = await gateway.load(id);
       expect(met.revision, 1);
       expect(met.npcRelations, hasLength(expectedCount));
+      expect(met.npcDisplayNames.keys.toSet(),
+          met.npcRelations.map((npc) => npc.actorId).toSet());
       expect(met.visibleSpeakerActorIds['Мария'], 'npc_' + List.filled(32, 'c').join());
       expect(met.sceneDialogueTurns![1].speaker, 'Мария');
       if (expectedCount == 2) {
@@ -324,6 +333,8 @@ void main() {
           committed.npcRelations.map((e) => e.actorId).toSet());
       expect(reopened.visibleSpeakerActorIds,
           committed.visibleSpeakerActorIds);
+      expect(reopened.npcDisplayNames, committed.npcDisplayNames);
+      expect(reopened.npcLifeStates, committed.npcLifeStates);
 
       await tester.pumpWidget(MaterialApp(
         home: WorldPlayPage(gateway: gateway, campaignId: restoreId),

@@ -23,6 +23,7 @@ WorldGameView _game({required List<NpcRelationView> npcs,
     Map<String, String> futureLife = const {},
     Map<String, String> custody = const {},
     Map<String, String> itemNames = const {},
+    Map<String, String> sceneNames = const {},
     List<WorldEventView> journal = const []}) => WorldGameView(
   campaignId: 'campaign_a',
   worldTitle: 'Частная история', sceneId: 'canon_end',
@@ -31,7 +32,7 @@ WorldGameView _game({required List<NpcRelationView> npcs,
   stats: const {}, inventory: const [], flags: const {},
   knownFacts: const [], choices: const [], journal: journal,
   npcRelations: npcs, npcItemOwners: custody, itemNames: itemNames,
-  npcLifeStates: futureLife,
+  sceneNames: sceneNames, npcLifeStates: futureLife,
   npcDisplayNames: {for (final id in futureLife.keys) id: 'Скрытый персонаж'},
 );
 
@@ -81,6 +82,62 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('NPC'), findsNothing);
     expect(find.text('Журнал'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('280dp and 200% text keep the reached scene and NPC card '
+      'accessible without future scene titles', (tester) async {
+    tester.view.physicalSize = const Size(280, 640);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+    final maria = 'npc_' + List.filled(32, 'a').join();
+    final ivan = 'npc_' + List.filled(32, 'b').join();
+    final current = _game(
+      npcs: [
+        NpcRelationView(
+          actorId: maria, displayName: 'Мария',
+          directedScore: 3, memoryCount: 1,
+          memoryKinds: const {'witnessed': 1},
+        ),
+        NpcRelationView(
+          actorId: ivan, displayName: 'Иван',
+          directedScore: 2, memoryCount: 1,
+          memoryKinds: const {'helped': 1},
+        ),
+      ],
+      sceneNames: const {
+        'canon_end': 'Текущая развязка',
+        'future_chapter': 'Секретная будущая глава',
+      },
+    );
+    await tester.pumpWidget(MaterialApp(
+      builder: (context, child) => MediaQuery(
+        data: MediaQuery.of(context).copyWith(
+          textScaler: const TextScaler.linear(2),
+        ),
+        child: child!,
+      ),
+      home: WorldPlayPage(gateway: _Gateway(current),
+          campaignId: 'campaign_a'),
+    ));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('world-current-scene-title')),
+        findsOneWidget);
+    expect(find.text('Текущая развязка'), findsOneWidget);
+    expect(find.text('Секретная будущая глава'), findsNothing);
+    expect(find.text('NPC'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    await tester.tap(find.text('NPC'));
+    await tester.pumpAndSettle();
+    final firstCard = find.byKey(Key('world-npc-' + maria));
+    expect(firstCard, findsOneWidget);
+    await tester.scrollUntilVisible(
+        find.byKey(Key('world-npc-' + ivan)), 80,
+        scrollable: find.byKey(const Key('world-npc-relation-list')));
+    expect(find.byKey(Key('world-npc-' + ivan)), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
