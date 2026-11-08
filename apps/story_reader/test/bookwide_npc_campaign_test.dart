@@ -165,8 +165,16 @@ Future<_Fixture> _prepare({bool expanded = false}) async {
     index: index, dossiers: dossiers, graph: graph,
     catalog: catalog, editorial: editorial, notebook: notebook,
   );
-  final candidates = BookwideNpcCampaignAuthoring.discover(
+  final available = BookwideNpcCampaignAuthoring.discover(
       source: source, currentReviewedRoles: roles);
+  // Twelve source suggestions per act produce several adjacent encounter
+  // pairs for each role. The author must select explicit episodes, not
+  // silently compile every AI/synthetically proposed conversation.
+  final candidates = expanded ? <BookwideNpcConversationCandidate>[
+    for (final role in roles)
+      available.firstWhere((candidate) =>
+          candidate.role.characterId == role.characterId),
+  ] : available;
   expect(candidates.length, 3);
   expect(candidates.map((c) => c.role.characterId).toSet().length, 3);
   final base = await source.compileBase(
