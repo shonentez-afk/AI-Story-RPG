@@ -65,3 +65,26 @@ Flutter can supply UI checkpoints and consent, but cannot bypass the independent
 compiler, and a cloud model answer is never treated as an accepted NPC claim.
 Full bookwide prose/hero selection and all model adapters are still being
 migrated; this step alone does **not** certify a generated game as CANON.
+
+## Import a reviewed editor project and compile without the app
+
+```sh
+dart run bin/author_book.dart build-draft /private/book.fb2 \
+  /private/reviewed_checkpoints.json /private/game.bworld
+```
+
+`reviewed_checkpoints.json` is a PRIVATE JSON envelope
+`ai_story_portable_reviewed_draft_v1` containing the exact
+`source_fingerprint`, `evidence`, `catalog`, `editorial`, `draft`
+checkpoint strings and `hero_name`. Those fields must already have passed
+the **existing human editorial** process. Optional `npc` holds confirmed
+identity relations, notebook, knowledge rules, signed quote hashes, items,
+social mechanics and reviewed dialogue turns. Zero-NPC worlds omit this field.
+
+The compiler re-opens each checkpoint against the exact imported book, runs
+the original editorial / state preflight, executes the SAME native v2/v3
+writer in Dart isolates, and reopens the final rich-v3 archive. Private
+literary rights, consent and source constraints are preserved. The output is
+a playable PRIVATE structural adaptation, **not** automatically accepted
+literary CANON. External/freeform model proposals have no automatic access
+to this build path.

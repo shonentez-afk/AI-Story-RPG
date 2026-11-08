@@ -165,6 +165,10 @@ jobs:
       - name: Independent Python check of Dart source-locked authoring output
         run: |
           python3 -c "from pathlib import Path; from tools.bookworld.private_rich_bookworld import verify; p = Path('artifacts/bookworld/story_authoring_sourcebound_fixture.bworld'); assert verify(p.read_bytes())['format_version'] == 3"
+      - name: Independent Python check of standalone reviewed-editor compiler
+        run: |
+          test -s artifacts/bookworld/story_authoring_review_bundle_fixture.bworld
+          python3 -c "from pathlib import Path; from tools.bookworld.private_rich_bookworld import verify; p = Path('artifacts/bookworld/story_authoring_review_bundle_fixture.bworld'); assert verify(p.read_bytes())['format_version'] == 3"
       - name: Independently verify native Dart-created private BookWorld with Python
         run: |
           test -s artifacts/bookworld/book_private_sample_dart.bworld

@@ -95,6 +95,36 @@ Future<void> main(List<String> args) async {
         'events': outline.events.length,
         'is_playable': false,
       }));
+    } else if (args.length == 4 && args[0] == 'build-draft') {
+      // This portable bundle is exported from the SAME user-reviewed source,
+      // semantic and NPC editors. It is not an LLM-generated shortcut.
+      final source = engine.parseAndIndex(
+          args[1], await File(args[1]).readAsBytes());
+      final reviewFile = File(args[2]);
+      if (await reviewFile.length() > 40 * 1024 * 1024) {
+        throw const FormatException('Редакторские записи превышают лимит');
+      }
+      final raw = jsonDecode(await reviewFile.readAsString());
+      if (raw is! Map<String, dynamic> ||
+          !args[3].toLowerCase().endsWith('.bworld')) {
+        throw const FormatException(
+            'Нужен JSON проверок и выходной файл .bworld');
+      }
+      final archive = await const PortableReviewedDraftCompiler().build(
+          source: source, review: raw);
+      final inspected = engine.inspectPrivateWorld(archive);
+      final out = File(args[3]);
+      final partial = File(out.path + '.pending');
+      await partial.writeAsBytes(archive, flush: true);
+      await partial.rename(out.path);
+      stdout.writeln(jsonEncode({
+        'result': 'PRIVATE_RICH_V3_VERIFIED',
+        'source_fingerprint': inspected.sourceFingerprint,
+        'archive_sha256': inspected.archiveSha256,
+        'scenes': inspected.blueprint.scenes.length,
+        'requires_network': false,
+        'can_distribute_publicly': false,
+      }));
     } else if (args.length == 4 && args[0] == 'build-reviewed') {
       final source = engine.parseAndIndex(
           args[1], await File(args[1]).readAsBytes());
@@ -143,6 +173,7 @@ Future<void> main(List<String> args) async {
       stderr.writeln('  dart run bin/author_book.dart scan-source source.fb2 [--checkpoint private/scan.json]');
       stderr.writeln('  dart run bin/author_book.dart review-plan book.fb2 events.json model_reply.json plan_review.json');
       stderr.writeln('  dart run bin/author_book.dart build-reviewed source.fb2 review.json game.bworld');
+      stderr.writeln('  dart run bin/author_book.dart build-draft source.fb2 reviewed_checkpoints.json game.bworld');
       stderr.writeln('  dart run bin/author_book.dart verify-world game.bworld');
       exitCode = 64;
     }

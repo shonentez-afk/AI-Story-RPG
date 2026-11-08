@@ -45,3 +45,5 @@ export 'src/reviewed_book_item_bridge.dart';
 export 'src/npc_knowledge_rich_world_bridge.dart';
 export 'src/private_classic_scenario_translator.dart';
 export 'src/native_private_bookworld_compiler.dart';
+export 'src/reviewed_story_composer.dart';
+export 'src/portable_reviewed_draft_compiler.dart';
