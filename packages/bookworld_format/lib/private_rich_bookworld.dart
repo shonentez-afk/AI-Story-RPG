@@ -21,11 +21,14 @@ class VerifiedRichPrivateBookworld {
     required this.provenanceSha256,
     required this.presentation,
     this.npcSocialRulebook,
+    this.formatVersion = 3,
   });
   final StoryBlueprint blueprint;
   final String sourceFingerprint, archiveSha256, provenanceSha256;
   final Map<String, dynamic> presentation;
   final NpcSocialRulebook? npcSocialRulebook;
+  /// 3 is the unchanged rich format; 4 is opt-in, strictly reviewed.
+  final int formatVersion;
   String get bookworldId => blueprint.bookId;
   bool get canDistributePublicly => false;
   bool get requiresNetwork => false;
@@ -183,15 +186,19 @@ class RichPrivateBookworldImporter {
 
   /// Exact bounded state exploration includes each actor's knowledge and
   /// inventory. It also rejects closed loops through reverse reachability.
-  void _causality(StoryBlueprint blueprint) {
-    if (blueprint.scenes.length < 3 || blueprint.scenes.length > 192 ||
-        blueprint.items.length > 32 || blueprint.facts.length > 64 ||
-        blueprint.initial.stats.length > 8 || blueprint.initial.flags.length > 32 ||
+  void _causality(StoryBlueprint blueprint, {bool expanded = false}) {
+    if (blueprint.scenes.length < 3 ||
+        blueprint.scenes.length > (expanded ? 1024 : 192) ||
+        blueprint.items.length > (expanded ? 96 : 32) ||
+        blueprint.facts.length > (expanded ? 128 : 64) ||
+        blueprint.initial.stats.length > (expanded ? 16 : 8) ||
+        blueprint.initial.flags.length > (expanded ? 64 : 32) ||
         blueprint.actors.length > 16 || !blueprint.actors.contains('player') ||
-        blueprint.initial.inventory.isNotEmpty ||
+        (!expanded && blueprint.initial.inventory.isNotEmpty) ||
+        (!expanded && blueprint.initial.tick != 0) ||
         blueprint.initial.knowledge.length != blueprint.actors.length ||
         !blueprint.initial.knowledge.keys.toSet().containsAll(blueprint.actors) ||
-        blueprint.initial.knowledge.values.any((facts) => facts.isNotEmpty) ||
+        (!expanded && blueprint.initial.knowledge.values.any((facts) => facts.isNotEmpty)) ||
         blueprint.initial.stats.values.any((v) => v < 0 || v > 1000)) {
       throw const FormatException('Некорректные каталоги RPG v3');
     }
@@ -209,6 +216,8 @@ class RichPrivateBookworldImporter {
               if (!blueprint.initial.stats.containsKey(condition.id)) throw const FormatException('Неизвестная характеристика');
             case 'knows_fact':
               if (!blueprint.facts.contains(condition.id) || !blueprint.actors.contains(condition.actor)) throw const FormatException('Чужое знание нельзя использовать');
+            case 'tick_at_least':
+              if (!expanded || condition.amount == null || condition.amount! < 0 || condition.amount! > 100000000) throw const FormatException('Недопустимое игровое время');
             default: throw const FormatException('Недопустимое условие RPG v3');
           }
         }
@@ -227,31 +236,37 @@ class RichPrivateBookworldImporter {
             case 'learn_fact':
               if (!blueprint.facts.contains(effect.id) || !blueprint.actors.contains(effect.actor)) throw const FormatException('Непроверенное знание');
               seenFactGrants.add(effect.id!);
+            case 'advance_time':
+              if (!expanded || effect.amount == null || effect.amount! < 1 || effect.amount! > 1000) throw const FormatException('Недопустимое продвижение времени');
             default: throw const FormatException('Недопустимый эффект RPG v3');
           }
         }
       }
     }
-    if (!seenItemGrants.containsAll(blueprint.items) || !seenFactGrants.containsAll(blueprint.facts)) {
+    if (!seenItemGrants.union(expanded ? blueprint.initial.inventory : const <String>{}).containsAll(blueprint.items) ||
+        !seenFactGrants.union(expanded ? blueprint.initial.knowledge.values.expand((known) => known).toSet() : const <String>{}).containsAll(blueprint.facts)) {
       throw const FormatException('Каталог не связан с игровыми действиями');
     }
     final start = (
       blueprint.entrySceneId,
       blueprint.initial.flags.entries.where((e) => e.value).map((e) => e.key).toSet(),
-      <String>{}, Map<String, int>.of(blueprint.initial.stats),
-      {for (final actor in blueprint.actors) actor: <String>{}},
+      expanded ? Set<String>.of(blueprint.initial.inventory) : <String>{},
+      Map<String, int>.of(blueprint.initial.stats),
+      {for (final actor in blueprint.actors) actor: expanded ? Set<String>.of(blueprint.initial.knowledge[actor] ?? const {}) : <String>{}},
+      expanded ? blueprint.initial.tick : 0,
     );
-    String keyOf((String, Set<String>, Set<String>, Map<String, int>, Map<String, Set<String>>) state) => canonicalJson({
+    String keyOf((String, Set<String>, Set<String>, Map<String, int>, Map<String, Set<String>>, int) state) => canonicalJson({
       'scene': state.$1, 'flags': state.$2.toList()..sort(),
       'inventory': state.$3.toList()..sort(), 'stats': state.$4,
       'knowledge': {for (final actor in blueprint.actors) actor: state.$5[actor]!.toList()..sort()},
+      'tick': state.$6,
     });
     final seen = <String>{keyOf(start)}, visited = <String>{};
     final parent = <String, Set<String>>{};
     final terminals = <String>{}, endings = <String>{};
     final queue = [start];
     for (var cursor = 0; cursor < queue.length; cursor++) {
-      if (seen.length > 2500) throw const FormatException('Превышено число состояний RPG v3');
+      if (seen.length > (expanded ? 8000 : 2500)) throw const FormatException('Превышено число игровых состояний');
       final s = queue[cursor];
       final scene = blueprint.scenes[s.$1]!;
       final here = keyOf(s);
@@ -266,6 +281,7 @@ class RichPrivateBookworldImporter {
             'has_item' => s.$3.contains(condition.id),
             'stat_at_least' => s.$4[condition.id!]! >= condition.amount!,
             'knows_fact' => s.$5[condition.actor!]!.contains(condition.id),
+            'tick_at_least' => expanded && s.$6 >= condition.amount!,
             _ => false,
           };
           if (!meets) { allowed = false; break; }
@@ -275,6 +291,7 @@ class RichPrivateBookworldImporter {
         final flags = Set<String>.of(s.$2), items = Set<String>.of(s.$3);
         final stats = Map<String, int>.of(s.$4);
         final facts = s.$5.map((actor, known) => MapEntry(actor, Set<String>.of(known)));
+        var tick = s.$6;
         for (final effect in choice.effects) {
           switch (effect.op) {
             case 'set_flag':
@@ -287,10 +304,13 @@ class RichPrivateBookworldImporter {
               if (updated < 0 || updated > 1000000) throw const FormatException('Характеристика вне границ');
               stats[effect.id!] = updated;
             case 'learn_fact': facts[effect.actor!]!.add(effect.id!);
+            case 'advance_time':
+              if (!expanded || tick + effect.amount! > 100000000) throw const FormatException('Переполнение игрового времени');
+              tick += effect.amount!;
             default: throw const FormatException('Непредусмотренный игровой эффект');
           }
         }
-        final next = (choice.nextSceneId, flags, items, stats, facts);
+        final next = (choice.nextSceneId, flags, items, stats, facts, tick);
         final dest = keyOf(next);
         parent.putIfAbsent(dest, () => <String>{}).add(here);
         if (seen.add(dest)) queue.add(next);
@@ -385,6 +405,90 @@ class RichPrivateBookworldImporter {
     return Set<String>.unmodifiable(reviewed);
   }
 
+
+  static const initialStateReviewFormat = 'ai_story_private_initial_state_review_v1';
+
+  /// Exactly source-witnessed, explicitly confirmed INITIAL possession and
+  /// actor-specific knowledge. Review cannot assert literary canon.
+  void _initialReview(Map<String, dynamic> source,
+      Map<String, dynamic> manifest, StoryBlueprint bp,
+      {required bool expanded}) {
+    final init = bp.initial;
+    final knowledge = <String>{
+      for (final entry in init.knowledge.entries)
+        for (final fact in entry.value) entry.key + '|' + fact,
+    };
+    final required = init.inventory.isNotEmpty ||
+        knowledge.isNotEmpty || init.tick != 0;
+    final review = source['initial_state_review'];
+    if (!expanded || !required) {
+      if (review != null || manifest.containsKey('initial_state_review_format')) {
+        throw const FormatException('Неожиданная редактура исходного состояния');
+      }
+      return;
+    }
+    if (review is! Map<String, dynamic> ||
+        manifest['initial_state_review_format'] != initialStateReviewFormat) {
+      throw const FormatException('Начальные предметы и знания требуют редакторской приёмки');
+    }
+    _fields(review, {
+      'format', 'source_fingerprint', 'review_scope', 'user_confirmed',
+      'literary_canon_verified', 'initial_tick', 'item_grants', 'fact_grants',
+    }, 'initial v4 review');
+    if (review['format'] != initialStateReviewFormat ||
+        review['source_fingerprint'] != bp.sourceFingerprint ||
+        review['review_scope'] != 'user_declared_private_game_fiction' ||
+        review['user_confirmed'] != true ||
+        review['literary_canon_verified'] != false ||
+        review['initial_tick'] != init.tick ||
+        review['item_grants'] is! List || review['fact_grants'] is! List) {
+      throw const FormatException('Начальное состояние не подтверждено');
+    }
+    // The authoring writer already verifies exact UTF-16 text for every
+    // scene quote. Only original passage quotes visible at start qualify.
+    final hashes = <String>{};
+    for (final o in source['scene_origins'] as List) {
+      if (o is! Map || o['origin'] != 'SOURCE_PASSAGE' ||
+          o['chapter_index'] != 0) continue;
+      for (final q in o['source_refs'] as List) {
+        if (q is Map && q['chapter_index'] == 0 &&
+            q['visible_after_chapter'] == 0 &&
+            q['quote_sha256'] is String) {
+          hashes.add(q['quote_sha256'] as String);
+        }
+      }
+    }
+    final itemIds = <String>{};
+    for (final g in review['item_grants'] as List) {
+      if (g is! Map<String, dynamic>) throw const FormatException('Некорректный исходный предмет');
+      _fields(g, {'item_id', 'source_quote_sha256'}, 'initial item');
+      final id = g['item_id'];
+      if (id is! String || !init.inventory.contains(id) ||
+          !itemIds.add(id) || !hashes.contains(g['source_quote_sha256'])) {
+        throw const FormatException('Чужое исходное владение');
+      }
+    }
+    final factIds = <String>{};
+    for (final g in review['fact_grants'] as List) {
+      if (g is! Map<String, dynamic>) throw const FormatException('Некорректное исходное знание');
+      _fields(g, {'actor_id', 'fact_id', 'source_quote_sha256'}, 'initial fact');
+      final actor = g['actor_id'];
+      final fact = g['fact_id'];
+      if (actor is! String || fact is! String ||
+          !factIds.add(actor + '|' + fact) ||
+          !knowledge.contains(actor + '|' + fact) ||
+          !hashes.contains(g['source_quote_sha256'])) {
+        throw const FormatException('Чужое или преждевременное знание');
+      }
+    }
+    if (itemIds.length != init.inventory.length ||
+        factIds.length != knowledge.length ||
+        !itemIds.containsAll(init.inventory) ||
+        !factIds.containsAll(knowledge)) {
+      throw const FormatException('Не все исходные предметы и знания проверены');
+    }
+  }
+
   void _model(Map<String, dynamic> source, Map<String, dynamic> manifest) {
     final model = source['model_provenance'];
     if (model is! Map<String, dynamic>) throw const FormatException('Нет происхождения игрового текста');
@@ -472,22 +576,29 @@ class RichPrivateBookworldImporter {
     final bpRaw = _object(files['scenario/blueprint.json']!, 'blueprint');
     final blueprint = StoryBlueprint.fromJson(bpRaw);
     if (blueprint.rightsStatus != 'private_adaptation' || blueprint.sourceFingerprint == null) throw const FormatException('Не является приватной RPG по книге');
-    _causality(blueprint);
+    final manifest = _object(files['manifest.json']!, 'manifest');
+    final version = manifest['format_version'];
+    if (version != 3 && version != 4) throw const FormatException('Неподдерживаемая версия игры');
+    final expanded = version == 4;
+    _causality(blueprint, expanded: expanded);
     final source = _object(files['source/provenance.json']!, 'provenance');
     final hasGameplayReview = source.containsKey('gameplay_review');
     final knownSource = Map<String, dynamic>.of(source)
-      ..remove('gameplay_review')..remove('npc_knowledge')..remove('npc_social');
+      ..remove('gameplay_review')..remove('npc_knowledge')..remove('npc_social')
+      ..remove('initial_state_review');
     _fields(knownSource, {'format', 'bookworld_id', 'source_fingerprint', 'source_title',
       'source_author', 'source_chapters_total', 'source_chapters_indexed',
       'semantic_catalog_sha256', 'intermediate_draft_sha256', 'rights_status',
       'publication_authorized', 'model_provenance', 'scene_origins', 'presentation'}, 'source provenance v3');
     if (source['format'] != 'ai_story_private_provenance_v2') throw const FormatException('Неверная версия происхождения v3');
-    final manifest = _object(files['manifest.json']!, 'manifest');
-    if (manifest['format_version'] != 3 || manifest['build_status'] != 'private_rich_structural' ||
-        !_same(manifest['build_tool'], {'name': 'ai_story_private_rich_bookworld', 'version': '3.0'})) {
+    if (manifest['build_status'] != (expanded ? 'private_extended_structural' : 'private_rich_structural') ||
+        !_same(manifest['build_tool'], expanded
+            ? {'name': 'ai_story_private_extended_bookworld', 'version': '4.0'}
+            : {'name': 'ai_story_private_rich_bookworld', 'version': '3.0'})) {
       throw const FormatException('Неподдерживаемая версия RPG v3');
     }
     _model(source, manifest);
+    _initialReview(source, manifest, blueprint, expanded: expanded);
     final socialRulebook = RichNpcSocialContract.inspect(source, manifest, blueprint);
     final presentation = _presentation(source, blueprint, socialRules: socialRulebook);
     final verifiedNpcGrants = _npcKnowledge(source, manifest, blueprint);
@@ -502,12 +613,14 @@ class RichPrivateBookworldImporter {
           verifiedNpcGrants: verifiedNpcGrants);
     }
     final originV2 = Map<String, dynamic>.of(source)
-      ..remove('presentation')..remove('gameplay_review')..remove('npc_knowledge')..remove('npc_social');
+      ..remove('presentation')..remove('gameplay_review')..remove('npc_knowledge')..remove('npc_social')
+      ..remove('initial_state_review');
     originV2['format'] = 'ai_story_private_provenance_v1';
     originV2['model_provenance'] = {'provider': 'none', 'model_id': null};
     _provenance(originV2, blueprint);
     final manifestV2 = Map<String, dynamic>.of(manifest)
-      ..remove('npc_knowledge_format')..remove('npc_social_format');
+      ..remove('npc_knowledge_format')..remove('npc_social_format')
+      ..remove('initial_state_review_format');
     manifestV2['format_version'] = 2;
     manifestV2['build_status'] = 'private_classic_structural';
     manifestV2['build_tool'] = {'name': 'ai_story_private_bookworld', 'version': '2.0'};
@@ -519,6 +632,7 @@ class RichPrivateBookworldImporter {
       archiveSha256: sha256.convert(data).toString(),
       provenanceSha256: sha256.convert(files['source/provenance.json']!).toString(),
       presentation: presentation, npcSocialRulebook: socialRulebook,
+      formatVersion: version as int,
     );
   }
 }
