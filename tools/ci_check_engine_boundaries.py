@@ -19,6 +19,7 @@ RUNTIME_DEPS = {
     "story_core": {"crypto"},
     "story_runtime_adapter": {"story_core", "story_engine"},
     "bookworld_format": {"story_core", "crypto", "sqlite3"},
+    "story_authoring": {"archive", "xml", "crypto", "story_core", "bookworld_format"},
     "campaign_manager": {
         "story_core", "story_runtime_adapter", "bookworld_format",
         "crypto", "sqlite3",
@@ -66,7 +67,7 @@ def validate() -> list[str]:
             issues.append(f"{package}: forbidden runtime dependency {forbidden}")
 
         library = folder / "lib"
-        for source in (*library.rglob("*.dart"), *(folder / "example").rglob("*.dart")):
+        for source in (*library.rglob("*.dart"), *(folder / "example").rglob("*.dart"), *(folder / "bin").rglob("*.dart")):
             for line_no, line in enumerate(
                     source.read_text(encoding="utf-8").splitlines(), 1):
                 match = IMPORT.match(line)
@@ -113,7 +114,7 @@ def main() -> int:
     if issues:
         return 1
     print(
-        "Architecture boundary PASS: 4 versioned pure-Dart packages; "
+        "Architecture boundary PASS: 5 versioned pure-Dart packages; "
         "story_core is service-independent; no engine -> app imports"
     )
     return 0

@@ -14,6 +14,8 @@ dependencies:
     path: ../../packages/campaign_manager
   bookworld_format:
     path: ../../packages/bookworld_format
+  story_authoring:
+    path: ../../packages/story_authoring
   story_core:
     path: ../../packages/story_core
   shared_preferences: ^2.5.3

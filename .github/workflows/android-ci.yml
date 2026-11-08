@@ -96,7 +96,7 @@ jobs:
           sdk: stable
       - name: Prepare verified native SQLite source for Linux test workspaces
         run: |
-          python3 tools/ci_prepare_verified_sqlite.py --project packages/bookworld_format --project packages/campaign_manager
+          python3 tools/ci_prepare_verified_sqlite.py --project packages/bookworld_format --project packages/campaign_manager --project packages/story_authoring
       - name: Verify reusable Dart engine dependency direction
         run: python3 tools/ci_check_engine_boundaries.py
       - name: Analyze pure Dart story_core
@@ -155,6 +155,16 @@ jobs:
           dart pub get
           dart analyze
           dart test --reporter expanded
+      - name: Verify standalone book authoring without Flutter or network
+        run: |
+          dart pub get
+          dart analyze
+          dart test --reporter expanded
+          dart run bin/author_book.dart verify-world ../../artifacts/bookworld/story_authoring_sourcebound_fixture.bworld
+        working-directory: packages/story_authoring
+      - name: Independent Python check of Dart source-locked authoring output
+        run: |
+          python3 -c "from pathlib import Path; from tools.bookworld.private_rich_bookworld import verify; p = Path('artifacts/bookworld/story_authoring_sourcebound_fixture.bworld'); assert verify(p.read_bytes())['format_version'] == 3"
       - name: Independently verify native Dart-created private BookWorld with Python
         run: |
           test -s artifacts/bookworld/book_private_sample_dart.bworld
