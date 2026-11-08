@@ -4,7 +4,6 @@ import 'dart:convert';
 
 import 'ai_connection.dart';
 import 'zai_semantic_preview.dart';
-import 'zai_source_locked_prose_preview.dart';
 
 import 'package:rpg_api/rpg_api.dart' show
     LocalRpgProposalReviewApi, SourceLockedProseAuditContext,

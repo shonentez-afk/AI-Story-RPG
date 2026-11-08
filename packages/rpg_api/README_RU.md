@@ -4,6 +4,7 @@
 
 - `RpgGameApi` / `LocalRpgGameApi` — миры, кампании, ходы, NPC, герой, инвентарь, журнал, SQLite, `.bwsave`; конкретное исполнение делегирует в `rpg_gameplay`, `story_core` и `campaign_manager`.
 - `RpgAuthoringApi` / `LocalRpgAuthoringApi` — импорт, индекс, офлайн-проверка текста, подтверждённая компиляция v3/v4. Делегирует в `story_authoring` и `bookworld_format`.
+- `RpgProposalReviewApi` / `LocalRpgProposalReviewApi` — чистая проверка NPC-реплик, художественных сцен, предметов/знаний и литературного аудита без Flutter или сети.
 - `RpgApiContract` — версия API и честные возможности: полный литературный CANON и динамический AI-GM пока **не заявлены**.
 
 API не знает Flutter, `path_provider`, ключей Z.ai, HTTP, `SharedPreferences` и `FilePicker`. Хранилище SQLite открывается клиентом в приватном каталоге и закрывается им. Согласие на облачный запрос выдаёт клиент; ответ модели проверяется, но никогда не становится авторитетным игровым состоянием напрямую.
