@@ -1,6 +1,8 @@
 import 'dart:typed_data';
 
 import 'authoring_engine.dart';
+import 'whole_book_npc_campaign.dart';
+import 'campaign_prose_contract.dart';
 import 'book_import.dart';
 import 'book_source_selection.dart';
 import 'offline_book_analyzer.dart';
@@ -135,4 +137,14 @@ final class BookToRpgWorkflow {
     return const PortableReviewedDraftCompiler().build(
         source: snapshot.source, review: review, expanded: expanded);
   }
+
+  /// All-scene narrative context is built from the already verified BookWorld.
+  /// An unfinished book plan cannot invoke this phase.
+  Future<CampaignProseManifest> prepareCampaignNarration({
+    required WholeBookNpcSourcePlan source,
+    required Uint8List finalArchive,
+    required Future<void> Function() verifyCurrent,
+  }) => CampaignProseManifest.prepare(
+      source: source, finalArchive: finalArchive,
+      verifyCurrent: verifyCurrent);
 }

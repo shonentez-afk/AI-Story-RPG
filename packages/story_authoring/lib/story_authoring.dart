@@ -50,6 +50,7 @@ export 'src/native_private_bookworld_compiler.dart';
 export 'src/reviewed_story_composer.dart';
 export 'src/portable_reviewed_draft_compiler.dart';
 export 'src/book_to_rpg_workflow.dart';
+export 'src/campaign_prose_contract.dart';
 export 'src/npc_dialogue_cloud_contract.dart';
 export 'src/source_locked_prose_response_verifier.dart';
 export 'src/gameplay_candidate_proposal_verifier.dart';
