@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'ai_connection.dart';
 import 'zai_semantic_preview.dart';
 import 'package:story_authoring/source_locked_gameplay_candidates.dart'
-    show GameplayChoiceAnchor, SourceLockedGameplayContext,
+    show SourceLockedGameplayContext,
         GameplayCandidate, GameplayCandidateDraft;
 
 export 'package:story_authoring/source_locked_gameplay_candidates.dart'
