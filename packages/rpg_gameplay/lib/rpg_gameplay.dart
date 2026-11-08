@@ -7,6 +7,10 @@ import 'package:story_core/story_core.dart';
 
 import 'src/free_text_action_gate.dart';
 export 'src/free_text_action_gate.dart';
+export 'src/legacy_pilot_progress.dart';
+export 'src/legacy_pilot_save_record.dart';
+export 'src/legacy_pilot_save_codec.dart';
+export 'src/scene_dialogue_script.dart';
 
 /// Flutter-independent RPG application API.
 ///

@@ -14,6 +14,7 @@ dependencies:
   story_core:
     path: ../story_core
   crypto: ^3.0.6
+  story_engine: 0.1.0-alpha.1
 
 dev_dependencies:
   test: ^1.25.15
