@@ -273,8 +273,7 @@ void main() {
       sceneId: 'gate', sceneText: 'Только проверенные реплики',
       sceneDialogueTurns: const [
         RichDialogueTurn(speaker: 'Лена', text: 'Ты меня слышишь?'),
-        RichDialogueTurn(speaker: 'Страж',
-          text: RichNpcDialogueKnowledge.unavailableLine),
+        RichDialogueTurn(text: RichNpcDialogueKnowledge.unavailableLine),
       ],
       sceneSpeakerIdentityReviewed: true,
       visibleSpeakerActorIds: {'Лена': actor},
@@ -296,10 +295,14 @@ void main() {
         findsOneWidget);
     await tester.tap(find.byKey(const ValueKey('dialogue-next')));
     await tester.pumpAndSettle();
-    expect(find.text('Страж'), findsOneWidget);
+    expect(find.text('Страж'), findsNothing);
+    expect(find.text('Скрытая реплика'), findsOneWidget);
     expect(find.text(RichNpcDialogueKnowledge.unavailableLine),
         findsOneWidget);
     expect(find.byKey(const ValueKey('dialogue-set-portrait')), findsNothing);
+    await tester.tap(find.byKey(const ValueKey('dialogue-history-toggle')));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Страж'), findsNothing);
     expect(gateway.commits, 0);
     expect(tester.takeException(), isNull);
   });

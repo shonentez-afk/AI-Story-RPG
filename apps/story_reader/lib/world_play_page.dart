@@ -84,8 +84,10 @@ class _WorldPlayPageState extends State<WorldPlayPage> {
       if (address == null) continue;
       var bytes = await _portraitStore.read(
           campaignId: widget.campaignId, speaker: address);
-      if (bytes == null && address != speaker) {
-        // Legacy local portraits remain visible after switching to actor IDs.
+      if (bytes == null && address != speaker &&
+          !view.sceneSpeakerIdentityReviewed) {
+        // Only old v1/v2 scenes may read portrait PNGs by a display name.
+        // Rich reviewed NPC IDs must never fall back to another actor's PNG.
         bytes = await _portraitStore.read(
             campaignId: widget.campaignId, speaker: speaker);
       }

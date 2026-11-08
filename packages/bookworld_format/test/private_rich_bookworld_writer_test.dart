@@ -944,6 +944,8 @@ void main() {
     final blockedWords = RichNpcDialogueKnowledge.redact(
         signed, reviewed, world.state.knowledge);
     expect(blockedWords[1].text, RichNpcDialogueKnowledge.unavailableLine);
+    expect(blockedWords[1].speaker, isNull,
+        reason: 'Future NPC identity must not leak with gated words');
     expect(blockedWords[2].text, 'Я слушаю');
     final denied = world.apply(actionId: 'too_soon', choiceId: 'help');
     expect(denied.applied, isFalse);
@@ -951,9 +953,11 @@ void main() {
     expect(world.actorKnowsFact(npcId, 'npc_secret'), isFalse);
     expect(world.apply(actionId: 'talk', choiceId: 'wait').applied, isTrue);
     expect(world.actorKnowsFact(npcId, 'npc_secret'), isTrue);
-    expect(RichNpcDialogueKnowledge.redact(
-        signed, reviewed, world.state.knowledge)[1].text,
-        'Мне известен секрет!');
+    final afterLearning = RichNpcDialogueKnowledge.redact(
+        signed, reviewed, world.state.knowledge);
+    expect(afterLearning[1].text, 'Мне известен секрет!');
+    expect(afterLearning[1].speaker, signed[1].speaker,
+        reason: 'Verified event restores the exact signed speaker');
     expect(world.actorKnowsFact('player', 'npc_secret'), isFalse);
     expect(world.factLearningEvents(npcId, 'npc_secret').single.actionId,
         'talk');

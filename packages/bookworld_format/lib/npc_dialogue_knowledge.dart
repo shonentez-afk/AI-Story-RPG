@@ -321,8 +321,12 @@ class RichNpcDialogueKnowledge {
                 (threshold == null ||
                  (threshold is int && social != null &&
                   social.directedScore(actor, 'player') >= threshold));
-            return allowed ? turns[i] : RichDialogueTurn(
-              speaker: turns[i].speaker, text: unavailableLine,
+            // Do not reveal the NPC's NAME before the signed knowledge,
+            // presence, memory and causal gates are all satisfied. Passing
+            // speaker=null deliberately keeps portrait/identity controls
+            // closed, while preserving the exact number/order of beats.
+            return allowed ? turns[i] : const RichDialogueTurn(
+              text: unavailableLine,
             );
           })(),
     ]);

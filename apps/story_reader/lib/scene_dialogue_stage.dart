@@ -183,14 +183,18 @@ class _DialogueStageState extends State<DialogueStage> {
   }
 
   Widget _avatar(SceneDialogueTurn turn, Color accent) {
+    final hidden = turn.speaker == null &&
+        turn.text == RichNpcDialogueKnowledge.unavailableLine;
     final portrait = turn.speaker == null
         ? null : widget.portraitFor?.call(turn.speaker!);
     final placeholder = Center(
-      child: Icon(turn.isNarration ? Icons.menu_book_outlined
+      child: Icon(hidden ? Icons.lock_outline
+          : turn.isNarration ? Icons.menu_book_outlined
           : Icons.person_outline_rounded, size: 42, color: accent),
     );
     return Semantics(
-      label: turn.isNarration
+      label: hidden ? 'Скрытая реплика'
+          : turn.isNarration
           ? 'Повествование'
           : (portrait == null
               ? 'Портрет не предоставлен: ' + turn.speaker!
@@ -226,7 +230,9 @@ class _DialogueStageState extends State<DialogueStage> {
       widget.textColor.withValues(alpha: 0.055),
       widget.pageColor,
     );
-    final name = current.speaker ?? 'Повествование';
+    final name = current.speaker ??
+        (current.text == RichNpcDialogueKnowledge.unavailableLine
+            ? 'Скрытая реплика' : 'Повествование');
     return Semantics(
       container: true,
       label: 'Диалог, реплика ' + (index + 1).toString() +
@@ -299,7 +305,10 @@ class _DialogueStageState extends State<DialogueStage> {
                     Padding(
                       padding: const EdgeInsets.symmetric(vertical: 5),
                       child: Text(
-                        (turns[i].speaker ?? 'Повествование') +
+                        (turns[i].speaker ??
+                            (turns[i].text ==
+                                    RichNpcDialogueKnowledge.unavailableLine
+                                ? 'Скрытая реплика' : 'Повествование')) +
                           ': ' + turns[i].text,
                         style: TextStyle(color: accent,
                             fontSize: widget.fontSize * 0.84),
