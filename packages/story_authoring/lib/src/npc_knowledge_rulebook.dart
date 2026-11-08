@@ -1,0 +1,486 @@
+import 'dart:convert';
+
+import 'package:crypto/crypto.dart';
+
+import 'book_source_index.dart';
+import 'intermediate_story_blueprint.dart';
+import 'multi_scene_draft_workbench.dart';
+import 'npc_editorial_notebook.dart';
+import 'source_character_dossiers.dart';
+import 'source_evidence_graph.dart';
+import 'source_semantic_catalog.dart';
+import 'source_semantic_editorial_review.dart';
+
+/// Explicit action of the editor. These rules are NOT guessed from a book
+/// and do not convert an unreviewed claim or a character name to world canon.
+enum KnowledgeRecipient { ownerNpc, player }
+
+class NpcKnowledgeRule {
+  const NpcKnowledgeRule({
+    required this.id,
+    required this.dossierId,
+    required this.groupDigest,
+    required this.noteId,
+    required this.noteDigest,
+    required this.choiceId,
+    required this.choiceDigest,
+    required this.recipient,
+    required this.playerApproval,
+  });
+
+  final String id;
+  final String dossierId;
+  final String groupDigest;
+  final String noteId;
+  final String noteDigest;
+  final String choiceId;
+  final String choiceDigest;
+  final KnowledgeRecipient recipient;
+
+  /// Explicit per-rule approval, not an implicit setting or AI recommendation.
+  final bool playerApproval;
+
+  bool get publishesNoteText => false;
+  bool get canSendToCloud => false;
+
+  Map<String, Object> toJson() => {
+    'id': id,
+    'dossier_id': dossierId,
+    'group_digest': groupDigest,
+    'note_id': noteId,
+    'note_digest': noteDigest,
+    'choice_id': choiceId,
+    'choice_digest': choiceDigest,
+    'recipient': recipient.name.toUpperCase(),
+    'player_approval': playerApproval,
+  };
+
+  static NpcKnowledgeRule fromJson(Map<String, dynamic> raw) {
+    const keys = {
+      'id', 'dossier_id', 'group_digest', 'note_id', 'note_digest',
+      'choice_id', 'choice_digest', 'recipient', 'player_approval',
+    };
+    if (raw.length != keys.length || !raw.keys.toSet().containsAll(keys)) {
+      throw const FormatException('Лишние поля или отсутствует правило знания');
+    }
+    try {
+      return NpcKnowledgeRule(
+        id: raw['id'] as String,
+        dossierId: raw['dossier_id'] as String,
+        groupDigest: raw['group_digest'] as String,
+        noteId: raw['note_id'] as String,
+        noteDigest: raw['note_digest'] as String,
+        choiceId: raw['choice_id'] as String,
+        choiceDigest: raw['choice_digest'] as String,
+        recipient: KnowledgeRecipient.values.singleWhere(
+            (v) => v.name.toUpperCase() == raw['recipient']),
+        playerApproval: raw['player_approval'] as bool,
+      );
+    } on FormatException {
+      rethrow;
+    } catch (_) {
+      throw const FormatException('Повреждённое правило знания NPC');
+    }
+  }
+}
+
+/// Manually reviewed prerequisite. Only rule IDs and hashes are stored here;
+/// the fact, actor and secret text are resolved from the validated grant.
+class NpcKnowledgeGate {
+  const NpcKnowledgeGate({
+    required this.id,
+    required this.grantRuleId,
+    required this.grantDigest,
+    required this.choiceId,
+    required this.choiceDigest,
+  });
+  final String id;
+  final String grantRuleId;
+  final String grantDigest;
+  final String choiceId;
+  final String choiceDigest;
+
+  Map<String, Object> toJson() => {
+    'id': id,
+    'grant_rule_id': grantRuleId,
+    'grant_digest': grantDigest,
+    'choice_id': choiceId,
+    'choice_digest': choiceDigest,
+  };
+
+  static NpcKnowledgeGate fromJson(Map<String, dynamic> raw) {
+    const keys = {
+      'id', 'grant_rule_id', 'grant_digest', 'choice_id', 'choice_digest',
+    };
+    if (raw.length != keys.length || !raw.keys.toSet().containsAll(keys)) {
+      throw const FormatException('Повреждено условие знания NPC');
+    }
+    try {
+      return NpcKnowledgeGate(
+        id: raw['id'] as String,
+        grantRuleId: raw['grant_rule_id'] as String,
+        grantDigest: raw['grant_digest'] as String,
+        choiceId: raw['choice_id'] as String,
+        choiceDigest: raw['choice_digest'] as String,
+      );
+    } catch (_) {
+      throw const FormatException('Некорректное условие знания NPC');
+    }
+  }
+}
+
+class NpcKnowledgeRulebook {
+  NpcKnowledgeRulebook._(
+      this.sourceFingerprint, List<NpcKnowledgeRule> rules,
+      [List<NpcKnowledgeGate> gates = const []])
+      : rules = List.unmodifiable(rules), gates = List.unmodifiable(gates);
+
+  // Unchanged v1 serialization for previously saved rules without gates.
+  static const format = 'ai_story_npc_knowledge_rules_m2e5b3b1_v1';
+  static const gatedFormat = 'ai_story_npc_knowledge_rules_m2e5b3b2b2_v2';
+  static const maxBytes = 256 * 1024;
+  static const maxRules = 128;
+  static const maxGates = 128;
+  static final RegExp _ruleId = RegExp(r'^npc_rule_[1-9][0-9]{0,5}$');
+  static final RegExp _gateId = RegExp(r'^npc_gate_[1-9][0-9]{0,5}$');
+  static final RegExp _sha = RegExp(r'^[a-f0-9]{64}$');
+
+  final String sourceFingerprint;
+  final List<NpcKnowledgeRule> rules;
+  final List<NpcKnowledgeGate> gates;
+  bool get isAutogeneratedFromBook => false;
+  bool get canSendToCloud => false;
+
+  factory NpcKnowledgeRulebook.empty(BookSourceIndex index) =>
+      NpcKnowledgeRulebook._(index.sourceFingerprint, const []);
+
+  static String digest(String text) =>
+      sha256.convert(utf8.encode(text)).toString();
+
+  static String noteDigest(NpcDraftNote note) =>
+      digest(jsonEncode(note.toJson()));
+
+  static String choiceDigest(DraftScene scene, DraftChoice choice) =>
+      digest(jsonEncode({
+        'scene_id': scene.id,
+        'scene_chapter': scene.chapterIndex,
+        'scene_text': scene.text,
+        'choice': choice.toJson(),
+      }));
+
+  static String actorId(SourceCharacterDossier dossier,
+      String sourceFingerprint) =>
+      'npc_${digest('$sourceFingerprint|${NpcEditorialNotebook.mentionIds(dossier).join("|")}').substring(0, 20)}';
+
+  /// Use the permanent authored character ID when one exists. The
+  /// citation-hash path remains only for older test/editorial profiles that
+  /// predate full NPC cards; no existing world IDs are silently migrated.
+  static String profileActorId(
+      NpcDraftProfile profile,
+      SourceCharacterDossier dossier,
+      String sourceFingerprint) {
+    if (profile.dossierId != dossier.id) {
+      throw const FormatException('Карточка NPC привязана к другой группе');
+    }
+    profile.card?.validate();
+    return profile.characterId ?? actorId(dossier, sourceFingerprint);
+  }
+
+  static String factId(String sourceFingerprint, String groupDigest,
+          NpcDraftNote note) =>
+      'fact_${digest('$sourceFingerprint|$groupDigest|${note.id}|${noteDigest(note)}').substring(0, 24)}';
+
+  /// Never use label-only matching. All links are exact source groups,
+  /// exact review notes and exact scene choices, not fuzzy NPC names.
+  static NpcKnowledgeRule compose({
+    required String id,
+    required BookSourceIndex index,
+    required SourceCharacterDossier dossier,
+    required NpcDraftNote note,
+    required DraftScene scene,
+    required DraftChoice choice,
+    required KnowledgeRecipient recipient,
+    required bool playerApproval,
+  }) =>
+      NpcKnowledgeRule(
+        id: id,
+        dossierId: dossier.id,
+        groupDigest: NpcEditorialNotebook.groupDigest(dossier),
+        noteId: note.id,
+        noteDigest: noteDigest(note),
+        choiceId: choice.id,
+        choiceDigest: choiceDigest(scene, choice),
+        recipient: recipient,
+        playerApproval: playerApproval,
+      );
+
+  NpcKnowledgeRulebook withRule(NpcKnowledgeRule item) =>
+      NpcKnowledgeRulebook._(sourceFingerprint, [
+        for (final rule in rules)
+          if (rule.id != item.id) rule,
+        item,
+      ], gates);
+
+  NpcKnowledgeRulebook withoutRule(String id) =>
+      NpcKnowledgeRulebook._(sourceFingerprint, [
+        for (final rule in rules) if (rule.id != id) rule,
+      ], gates);
+
+  NpcKnowledgeRulebook withGate(NpcKnowledgeGate item) =>
+      NpcKnowledgeRulebook._(sourceFingerprint, rules, [
+        for (final gate in gates) if (gate.id != item.id) gate,
+        item,
+      ]);
+
+  NpcKnowledgeRulebook withoutGate(String id) =>
+      NpcKnowledgeRulebook._(sourceFingerprint, rules, [
+        for (final gate in gates) if (gate.id != id) gate,
+      ]);
+
+  static NpcKnowledgeGate composeGate({
+    required String id,
+    required NpcKnowledgeRule grant,
+    required DraftScene scene,
+    required DraftChoice choice,
+  }) => NpcKnowledgeGate(
+    id: id,
+    grantRuleId: grant.id,
+    grantDigest: digest(jsonEncode(grant.toJson())),
+    choiceId: choice.id,
+    choiceDigest: choiceDigest(scene, choice),
+  );
+
+  String nextGateId() {
+    final ids = {for (final gate in gates) gate.id};
+    for (var i = 1; i <= 999999; i++) {
+      final id = 'npc_gate_$i';
+      if (!ids.contains(id)) return id;
+    }
+    throw const FormatException('Исчерпан лимит условий NPC');
+  }
+
+  String nextRuleId() {
+    final used = {for (final rule in rules) rule.id};
+    for (var i = 1; i <= 999999; i++) {
+      final id = 'npc_rule_$i';
+      if (!used.contains(id)) return id;
+    }
+    throw const FormatException('Исчерпан лимит ID правил NPC');
+  }
+
+  /// Invalidated note edits, changed SAME/DIFFERENT, moved choices,
+  /// rejected provenance, source-future spoilers and tampered approvals
+  /// fail closed. No automatic restoration from an old group to a new NPC.
+  void validate({
+    required BookSourceIndex index,
+    required SourceCharacterDossierIndex dossiers,
+    required SourceEvidenceGraph graph,
+    required SourceSemanticCatalog catalog,
+    required SemanticEditorialReviewSession editorial,
+    required NpcEditorialNotebook notebook,
+    required IntermediateStoryBlueprint scenario,
+  }) {
+    notebook.validate(index, dossiers, graph, catalog, editorial);
+    MultiSceneDraftWorkbench.checkSafeCheckpoint(index, scenario);
+    if (sourceFingerprint != index.sourceFingerprint ||
+        rules.length > maxRules || gates.length > maxGates) {
+      throw const FormatException('Чужой источник или лимит правил NPC');
+    }
+
+    final groups = {for (final d in dossiers.dossiers) d.id: d};
+    final profiles = {for (final p in notebook.profiles) p.dossierId: p};
+    final scenes = <String, DraftScene>{};
+    final choices = <String, DraftChoice>{};
+    for (final scene in scenario.scenes) {
+      for (final choice in scene.choices) {
+        if (choices.containsKey(choice.id)) {
+          throw const FormatException('Повтор выбора в сценарии');
+        }
+        scenes[choice.id] = scene;
+        choices[choice.id] = choice;
+      }
+    }
+    final claims = {for (final c in catalog.assertions) c.id: c};
+    final quotes = {for (final e in graph.records) e.id: e};
+    final usedIds = <String>{};
+    final usedEffects = <String>{};
+    for (final rule in rules) {
+      final group = groups[rule.dossierId];
+      final profile = profiles[rule.dossierId];
+      final choice = choices[rule.choiceId];
+      final scene = scenes[rule.choiceId];
+      if (!_ruleId.hasMatch(rule.id) || !usedIds.add(rule.id) ||
+          !_sha.hasMatch(rule.groupDigest) ||
+          !_sha.hasMatch(rule.noteDigest) ||
+          !_sha.hasMatch(rule.choiceDigest) ||
+          group == null || profile == null ||
+          choice == null || scene == null ||
+          rule.groupDigest != NpcEditorialNotebook.groupDigest(group) ||
+          rule.choiceDigest != choiceDigest(scene, choice)) {
+        throw const FormatException('Правило ссылается на изменённую сцену или NPC');
+      }
+      NpcDraftNote? note;
+      for (final candidate in profile.notes) {
+        if (candidate.id == rule.noteId) {
+          note = candidate;
+          break;
+        }
+      }
+      if (note == null ||
+          (note.field != NpcDraftField.secret &&
+              note.field != NpcDraftField.knowledge) ||
+          noteDigest(note) != rule.noteDigest) {
+        throw const FormatException('Отсутствует или изменено знание/тайна NPC');
+      }
+      if (scene.chapterIndex < group.firstChapter) {
+        throw const FormatException(
+            'Нельзя получить знание до первого подтверждённого появления NPC');
+      }
+      if (note.sourceAssertionId != null) {
+        final assertion = claims[note.sourceAssertionId];
+        if (assertion == null || assertion.evidenceIds.isEmpty) {
+          throw const FormatException('Не найден первоисточник знания');
+        }
+        for (final quoteId in assertion.evidenceIds) {
+          final quote = quotes[quoteId];
+          if (quote == null ||
+              quote.status != EvidenceStatus.confirmed ||
+              quote.spoilerGate != EvidenceSpoilerGate.chapter ||
+              quote.visibleAfterChapter > scene.chapterIndex) {
+            throw const FormatException(
+                'Знание из будущей главы или неподтверждённой цитаты');
+          }
+          quote.validate(index);
+        }
+      }
+      if (rule.recipient == KnowledgeRecipient.player) {
+        if (!rule.playerApproval) {
+          throw const FormatException('Не подтверждено правило знания игрока');
+        }
+      } else if (rule.playerApproval) {
+        throw const FormatException('Согласие игрока не относится к NPC');
+      }
+      // A fact can be gained on distinct choices, but not duplicated on
+      // the same choice to the same recipient.
+      final effect = '${rule.choiceId}|${rule.dossierId}|${rule.noteId}|${rule.recipient.name}';
+      if (!usedEffects.add(effect)) {
+        throw const FormatException('Повторное раскрытие одного факта');
+      }
+    }
+    // Reject changed grant recipient, secret, choice or source before saving.
+    // The independent BookWorld importer will additionally prove that every
+    // gated choice is reachable after the corresponding learn_fact action.
+    final grantsById = {for (final grant in rules) grant.id: grant};
+    final usedGateIds = <String>{};
+    final usedGateSlots = <String>{};
+    for (final gate in gates) {
+      final grant = grantsById[gate.grantRuleId];
+      final choice = choices[gate.choiceId];
+      final scene = scenes[gate.choiceId];
+      final grantScene = grant == null ? null : scenes[grant.choiceId];
+      if (!_gateId.hasMatch(gate.id) || !usedGateIds.add(gate.id) ||
+          !_sha.hasMatch(gate.grantDigest) ||
+          !_sha.hasMatch(gate.choiceDigest) ||
+          grant == null || choice == null || scene == null ||
+          grantScene == null ||
+          gate.grantDigest != digest(jsonEncode(grant.toJson())) ||
+          gate.choiceDigest != choiceDigest(scene, choice) ||
+          gate.choiceId == grant.choiceId ||
+          scene.chapterIndex < grantScene.chapterIndex) {
+        throw const FormatException(
+            'Условие ссылается на изменённое или будущее знание NPC');
+      }
+      final slot = '${gate.choiceId}|${grant.dossierId}|'
+          '${grant.noteId}|${grant.recipient.name}';
+      if (!usedGateSlots.add(slot)) {
+        throw const FormatException('Повтор условия знания в одном выборе');
+      }
+    }
+    if (utf8.encode(encode()).length > maxBytes) {
+      throw const FormatException('Превышен размер правил знаний NPC');
+    }
+  }
+
+  String encode() {
+    final payload = <String, Object>{
+      'source_fingerprint': sourceFingerprint,
+      'editorial_only': true,
+      'automatic_publication': false,
+      'rules': [for (final rule in rules) rule.toJson()],
+      if (gates.isNotEmpty)
+        'gates': [for (final gate in gates) gate.toJson()],
+    };
+    final raw = jsonEncode({
+      'format': gates.isEmpty ? format : gatedFormat,
+      'payload': payload,
+      'sha256': digest(jsonEncode(payload)),
+    });
+    if (utf8.encode(raw).length > maxBytes) {
+      throw const FormatException('Слишком большой файл правил NPC');
+    }
+    return raw;
+  }
+
+  static NpcKnowledgeRulebook decode({
+    required BookSourceIndex index,
+    required SourceCharacterDossierIndex dossiers,
+    required SourceEvidenceGraph graph,
+    required SourceSemanticCatalog catalog,
+    required SemanticEditorialReviewSession editorial,
+    required NpcEditorialNotebook notebook,
+    required IntermediateStoryBlueprint scenario,
+    required String raw,
+  }) {
+    if (utf8.encode(raw).length > maxBytes) {
+      throw const FormatException('Превышен размер правил NPC');
+    }
+    try {
+      final root = Map<String, dynamic>.from(jsonDecode(raw) as Map);
+      final payload = Map<String, dynamic>.from(root['payload'] as Map);
+      final isGated = root['format'] == gatedFormat;
+      const oldKeys = {
+        'source_fingerprint', 'editorial_only',
+        'automatic_publication', 'rules',
+      };
+      final keys = {...oldKeys, if (isGated) 'gates'};
+      if (root.length != 3 ||
+          !root.keys.toSet().containsAll({'format', 'payload', 'sha256'}) ||
+          (root['format'] != format && !isGated) ||
+          payload.length != keys.length ||
+          !payload.keys.toSet().containsAll(keys) ||
+          payload['source_fingerprint'] != index.sourceFingerprint ||
+          payload['editorial_only'] != true ||
+          payload['automatic_publication'] != false ||
+          root['sha256'] != digest(jsonEncode(payload))) {
+        throw const FormatException('Повреждён или подменён файл правил NPC');
+      }
+      final items = payload['rules'] as List;
+      if (items.length > maxRules) {
+        throw const FormatException('Слишком много правил NPC');
+      }
+      final gateItems = isGated ? payload['gates'] as List : const [];
+      if (gateItems.length > maxGates) {
+        throw const FormatException('Слишком много условий NPC');
+      }
+      final book = NpcKnowledgeRulebook._(index.sourceFingerprint, [
+        for (final item in items)
+          NpcKnowledgeRule.fromJson(Map<String, dynamic>.from(item as Map)),
+      ], [
+        for (final item in gateItems)
+          NpcKnowledgeGate.fromJson(Map<String, dynamic>.from(item as Map)),
+      ]);
+      book.validate(
+        index: index, dossiers: dossiers, graph: graph, catalog: catalog,
+        editorial: editorial, notebook: notebook, scenario: scenario,
+      );
+      if (raw != book.encode()) {
+        throw const FormatException('Неканоническая запись правил NPC');
+      }
+      return book;
+    } on FormatException {
+      rethrow;
+    } catch (_) {
+      throw const FormatException('Некорректные поля правил NPC');
+    }
+  }
+}

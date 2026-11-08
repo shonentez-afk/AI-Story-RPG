@@ -33,3 +33,15 @@ export 'src/bookwide_storyplan_composer.dart';
 export 'src/bookwide_source_encounters.dart';
 export 'src/source_locked_event_outline.dart';
 export 'src/story_proposal_validator.dart';
+
+// Source-reviewed NPC, item and native BookWorld compilation.
+export 'src/npc_character_card.dart';
+export 'src/npc_editorial_notebook.dart';
+export 'src/private_adaptation_preflight.dart';
+export 'src/multi_scene_draft_workbench.dart';
+export 'src/npc_knowledge_rulebook.dart';
+export 'src/npc_knowledge_world_bridge.dart';
+export 'src/reviewed_book_item_bridge.dart';
+export 'src/npc_knowledge_rich_world_bridge.dart';
+export 'src/private_classic_scenario_translator.dart';
+export 'src/native_private_bookworld_compiler.dart';

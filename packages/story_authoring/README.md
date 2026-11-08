@@ -49,3 +49,19 @@ positions, model-selected event allowlist and scenario effects. A formal
 success is still `DRAFT_NEEDS_EDITORIAL_REVIEW`: human proof of literary
 meaning and the native strict BookWorld compiler are separate gates.
 No API key, secret, network permission, or full-book upload is involved.
+
+## Native compilation and NPC authoring independent of Flutter
+
+The original strict `PrivateClassicScenarioTranslator`, `NpcEditorialNotebook`,
+`NpcKnowledgeRulebook`, source-locked item/NPC bridges and
+`compileReviewed*BookworldInWorker` live in this Dart package. These are
+**the same exact code paths** previously hosted in Flutter. The mobile/desktop
+application imports compatibility exports; the standalone compiler uses
+`dart:isolate` to perform CPU-heavy ZIP/SQLite operations without Flutter
+`compute`. All source, social knowledge, item custody, signed dialogue and
+private-only checks remain enforced by the existing format writer/importer.
+
+Flutter can supply UI checkpoints and consent, but cannot bypass the independent
+compiler, and a cloud model answer is never treated as an accepted NPC claim.
+Full bookwide prose/hero selection and all model adapters are still being
+migrated; this step alone does **not** certify a generated game as CANON.
