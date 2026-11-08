@@ -326,6 +326,55 @@ def main():
         assert npc_v4_save["restart_ok"] and npc_v4_save["save_import_ok"]
         assert npc_v4_save["fork_ok"]
         assert json.loads(npc_v4_attribution)["bookworld_packaging"]["version"] == "4.0"
+        # E6h: synthetic 203-scene source-locked, editor-confirmed
+        # bridge. The real Dart importer/SQLite must accept both endings.
+        # This is deliberately NOT a claim about a complete novel.
+        from tests.rpg_author.test_v4_expansion import proposal
+        from tools.rpg_author.rich_package import compile_rich_from_project
+        import io
+        import zipfile
+        v3_for_ext, _ = compile_rich_from_project(checkpoint, enrichment())
+        with zipfile.ZipFile(io.BytesIO(v3_for_ext)) as base_archive:
+            base_bp = json.loads(base_archive.read("scenario/blueprint.json"))
+        expansion = proposal(base_bp)
+        long_world, long_attr = compile_extended_from_project(
+            checkpoint, enrichment(), extension=expansion)
+        with zipfile.ZipFile(io.BytesIO(long_world)) as zip_world:
+            long_bp = json.loads(zip_world.read("scenario/blueprint.json"))
+            long_origin = json.loads(zip_world.read("source/provenance.json"))
+        assert len(long_bp["scenes"]) == 203
+        assert len(long_origin["scene_origins"]) == 203
+        long_path = ["take_rope"] + [
+            f"pass_next_{i:03d}" for i in range(199)] + ["rescue"]
+        long_dart = dart({
+            "operation": "rich_private",
+            "data": base64.b64encode(long_world).decode("ascii"),
+            "paths": [long_path, ["leave_rope", "go_for_help"]],
+        })
+        assert long_dart["format_version"] == 4 and all(
+            j["replay_ok"] and j["terminal"] for j in long_dart["journeys"]), long_dart
+        long_extended_path = root / "long_v4.bworld"
+        long_extended_sidecar = root / "long_v4.attribution.json"
+        long_extended_path.write_bytes(long_world)
+        long_extended_sidecar.write_bytes(long_attr)
+        assert verify_extended_bundle(long_extended_path,
+                                      long_extended_sidecar)["native_dart_verified"]
+        # Initial item grants and clock need witnessed chapter-zero source,
+        # never invented catalog items or an unreviewed provenance field.
+        expansion_with_state = proposal(base_bp, 1)
+        expansion_with_state["initial_state"] = {
+            "tick": 3,
+            "items": [{"item_id": "rope", "assertion_id": "rescue_event"}],
+            "facts": [],
+        }
+        initial_bytes, _ = compile_extended_from_project(
+            checkpoint, enrichment(), extension=expansion_with_state)
+        with zipfile.ZipFile(io.BytesIO(initial_bytes)) as reviewed_zip:
+            initial_bp = json.loads(reviewed_zip.read("scenario/blueprint.json"))
+            initial_src = json.loads(reviewed_zip.read("source/provenance.json"))
+        assert initial_bp["initial_state"]["inventory"] == ["rope"]
+        assert initial_bp["initial_state"]["tick"] == 3
+        assert initial_src["initial_state_review"]["user_confirmed"] is True
     print(json.dumps({"source_comparisons": checked, "candidate_accepted_by_dart_blueprint": True,
                       "known_lossy_source_forms_refused": 1,
                       "application_modified": False,
@@ -343,7 +392,9 @@ def main():
                        "native_v4_python_reviewed_dart_compiled_and_imported": True,
                        "native_v4_sqlite_replay_and_save": True,
                        "native_v4_npc_v5_dart_sqlite": True,
-                       "native_v4_attribution_mismatch_rejected": True}))
+                       "native_v4_attribution_mismatch_rejected": True,
+                       "native_v4_203_source_locked_scenes_replayed": True,
+                       "native_v4_initial_item_and_tick_review_verified": True}))
 
 
 if __name__ == "__main__":

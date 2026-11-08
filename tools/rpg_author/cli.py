@@ -89,6 +89,14 @@ def parser():
                            help="Optional previously reviewed NPC social v5 overlay")
     native_v4.add_argument("--output", required=True, type=Path)
     native_v4.add_argument("--model-id", choices=["gpt-6"], default=None)
+    native_v4.add_argument("--extension", type=Path,
+                           help="Opt-in source-locked v4 scene batches and initial state")
+    ext_audit = commands.add_parser("audit-extended",
+                                    help="Read-only v4 extension preflight; not native/semantic approval")
+    ext_audit.add_argument("--project", required=True, type=Path)
+    ext_audit.add_argument("--enrichment", required=True, type=Path)
+    ext_audit.add_argument("--extension", required=True, type=Path)
+    ext_audit.add_argument("--npc-review", type=Path)
     native_v4_check = commands.add_parser(
         "verify-extended", help="Require real Dart importer plus private v4 SHA and attribution checks")
     native_v4_check.add_argument("--input", required=True, type=Path)
@@ -177,7 +185,16 @@ def main(argv=None) -> int:
             from .native_v4_bridge import build_extended
             result = build_extended(args.project, args.enrichment, args.output,
                                     model_id=args.model_id,
-                                    npc_review_path=args.npc_review)
+                                    npc_review_path=args.npc_review,
+                                    extension_path=args.extension)
+        elif name == "audit-extended":
+            from .native_v4_bridge import audited_extension
+            from .common import outside_repository
+            result = audited_extension(
+                args.project, read_json(outside_repository(args.enrichment)),
+                read_json(outside_repository(args.extension)),
+                npc_review=read_json(outside_repository(args.npc_review))
+                if args.npc_review is not None else None)
         elif name == "verify-extended":
             from .native_v4_bridge import verify_extended_bundle
             result = verify_extended_bundle(args.input, args.attribution)

@@ -1,3 +1,20 @@
+# E6h 0.3.0a7 — внешняя ветка, source-locked v4 расширение (9 ноября 2026)
+
+**Новый функциональный пакет:** `tools/rpg_author/v4_expansion.py`,
+`build-extended --extension`, `audit-extended`, 203+ сцены,
+редакторское подтверждение начального состояния v4, реальные
+Python и Dart/SQLite контракты. Подробности:
+[E6H_V4_SOURCE_LOCKED_EXPANSION_RU_2026-11-09.md](E6H_V4_SOURCE_LOCKED_EXPANSION_RU_2026-11-09.md).
+Новый `audit-extended` — только preflight; готовность литературы
+не заявляется. Новый native PR #133 продвинулся по сравнению с
+закреплённым SHA `233c6c3`; контракт не обновлять вслепую.
+Никаких изменений `apps/`, `packages/`, `main`, `tools/bookworld/`.
+До exact-head CI обеих задач `author-tests` и `dart-parity`
+не объявлять этап принятым. Встроенный ChatGPT skill остаётся старым
+E6d, его pin не изменён.
+
+---
+
 # Актуальное продолжение E6g — синхронизация с PR #133 (8 ноября 2026)
 
 **Ветка:** [feature/external-rpg-author-e6g-pr133-compat-20261108](https://github.com/shonentez-afk/AI-Story-RPG/tree/feature/external-rpg-author-e6g-pr133-compat-20261108). **Текущая интеграция:** native PR #133 HEAD `233c6c31abeae0768c36a60c4dd3add94916ec03`; E6g merge `8ce1017426c809c677a7c2de8db2c1e1c848a756`, исправление regression expectation `f2caf69ab6c932cbe660c912554e4c74e24130af`. Основной PR остаётся Draft, изменений `main` нет.

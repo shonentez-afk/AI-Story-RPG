@@ -22,6 +22,7 @@ from .common import (AuthoringError, ROOT, atomic_write, canonical, digest,
 from .compatibility import check_contract
 from .project import _get, load_project
 from .rich_package import _attribution, compile_rich_from_project
+from .v4_expansion import extend_reviewed_world
 
 _NATIVE_PROBE = ROOT / "tests/rpg_author/dart"
 _PACKAGE_CONFIG = _NATIVE_PROBE / ".dart_tool/package_config.json"
@@ -115,11 +116,12 @@ def _inspect_v4(raw: bytes) -> tuple[dict, bytes, dict]:
 
 def compile_extended_from_project(root: Path, enrichment: dict,
                                   *, model_id: str | None = None,
-                                  npc_review: dict | None = None) -> tuple[bytes, bytes]:
+                                  npc_review: dict | None = None,
+                                  extension: dict | None = None) -> tuple[bytes, bytes]:
     """Produce only native-verified v4; no implicit v3 -> v4 schema migration."""
     check_contract()
     root = outside_repository(root)
-    source_root, state, index, _, _ = load_project(root)
+    source_root, state, index, analyses, story = load_project(root)
     require(state["chunk_size_utf16"] == 4096, "native_chunk_size_mismatch",
             "Native author_book.dart uses 4096 UTF-16 source chunks; "
             "rebuild the private author project with the same source index")
@@ -132,11 +134,13 @@ def compile_extended_from_project(root: Path, enrichment: dict,
         provenance = parse_json(existing.read("source/provenance.json"))
     require(type(blueprint) is dict and type(provenance) is dict,
             "invalid_reviewed_authoring", "Missing reviewed v3 blueprint")
-    # Only v3-reviewed initial state is representable here. Rich-v4
-    # initial_state_review, tick, and >192 scenes remain a separate feature.
-    require(not provenance.get("initial_state_review"),
+    if extension is not None:
+        blueprint, provenance, _ = extend_reviewed_world(
+            blueprint, provenance, story, enrichment, index, analyses, extension)
+    # Only a reviewed extension is allowed to add initial possessions/ticks.
+    require(extension is not None or not provenance.get("initial_state_review"),
             "unsupported_extended_initial_state",
-            "Initial-state v4 review is not supported by this bridge")
+            "Initial-state v4 review requires an explicit source-locked extension")
     original = _get(source_root, state["source_bytes_sha256"])
     with tempfile.TemporaryDirectory(prefix="ai_rpg_native_v4_") as temp:
         private = Path(temp)
@@ -166,7 +170,8 @@ def compile_extended_from_project(root: Path, enrichment: dict,
 
 def build_extended(root: Path, enrichment_path: Path, output: Path,
                    *, model_id: str | None = None,
-                   npc_review_path: Path | None = None) -> dict:
+                   npc_review_path: Path | None = None,
+                   extension_path: Path | None = None) -> dict:
     root = outside_repository(root)
     output = outside_repository(output)
     require(output.suffix.lower() == ".bworld" and output != root
@@ -179,19 +184,27 @@ def build_extended(root: Path, enrichment_path: Path, output: Path,
         root, read_json(outside_repository(enrichment_path)),
         model_id=model_id,
         npc_review=read_json(outside_repository(npc_review_path))
-        if npc_review_path is not None else None)
+        if npc_review_path is not None else None,
+        extension=read_json(outside_repository(extension_path))
+        if extension_path is not None else None)
     atomic_write(sidecar, disclosure)
     try:
         atomic_write(output, raw)
     except BaseException:
         sidecar.unlink(missing_ok=True)
         raise
+    with zipfile.ZipFile(io.BytesIO(raw)) as archive:
+        checked_blueprint = parse_json(archive.read("scenario/blueprint.json"))
     return {
         "status": "private_extended_v4_built",
+        "scenes": len(checked_blueprint["scenes"]),
+        "source_locked_extension_applied": extension_path is not None,
         "format_version": 4,
         "package": str(output), "attribution": str(sidecar),
         "archive_sha256": digest(raw), "private_only": True,
-        "authoring_bounds": "E6g v3-reviewed StoryPlan; no enlarged scene or initial-state authoring",
+        "authoring_bounds": ("Reviewed source-linked v4 scene insertions and initial state"
+                             if extension_path is not None else
+                             "E6g v3-reviewed StoryPlan; no enlarged scene or initial-state authoring"),
         "device_playtest_completed": False,
     }
 
@@ -220,3 +233,21 @@ def verify_extended_bundle(package: Path, attribution: Path) -> dict:
         "semantic_review_completed": False,
         "device_playtest_completed": False,
     }
+
+
+def audited_extension(root: Path, enrichment: dict, extension: dict,
+                      *, npc_review: dict | None = None) -> dict:
+    """Read-only source-bound preflight; cannot claim a verified v4 package."""
+    check_contract()
+    root = outside_repository(root)
+    _, state, index, analyses, story = load_project(root)
+    require(state["chunk_size_utf16"] == 4096, "native_chunk_size_mismatch",
+            "Native Dart v4 requires source chunks of 4096 UTF-16 units")
+    checked, _ = compile_rich_from_project(root, enrichment,
+                                          npc_review=npc_review)
+    with zipfile.ZipFile(io.BytesIO(checked)) as archive:
+        bp = parse_json(archive.read("scenario/blueprint.json"))
+        prov = parse_json(archive.read("source/provenance.json"))
+    _, _, report = extend_reviewed_world(bp, prov, story, enrichment,
+                                         index, analyses, extension)
+    return report
