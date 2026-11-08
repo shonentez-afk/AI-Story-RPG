@@ -1,0 +1,19 @@
+name: rpg_gameplay
+description: Portable RPG mechanics and verified SQLite game-view projection without Flutter or AI
+publish_to: none
+version: 0.1.0
+
+environment:
+  sdk: '>=3.11.0 <4.0.0'
+
+dependencies:
+  bookworld_format:
+    path: ../bookworld_format
+  campaign_manager:
+    path: ../campaign_manager
+  story_core:
+    path: ../story_core
+  crypto: ^3.0.6
+
+dev_dependencies:
+  test: ^1.25.15
