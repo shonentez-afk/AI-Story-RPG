@@ -1,11 +1,14 @@
 import 'dart:async';
 import 'dart:typed_data';
 
+import 'package:bookworld_format/bookworld_format.dart';
 import 'package:flutter/material.dart';
 
 import 'book_source_index.dart';
 import 'bookwide_act_planner.dart';
 import 'bookwide_storyplan_composer.dart';
+import 'campaign_prose_authoring.dart';
+import 'campaign_prose_page.dart';
 import 'narrative_book_model.dart';
 import 'npc_campaign_consequence_store.dart';
 import 'npc_campaign_consequences.dart';
@@ -586,8 +589,31 @@ class _WholeBookNpcCampaignPageState extends State<WholeBookNpcCampaignPage>
         explicitlyConfirmedPrivateFiction: _campaignConfirmed);
       await _checkAuthorRevision();
       if (!mounted || authorRevision != _authorRevision) return;
-      final installed = await widget.gateway.install(built.archive);
-      if (installed.archiveHash != built.archiveSha256) throw const FormatException('Установленный мир отличается от проверенного.');
+      // Prose is prepared only AFTER all hero/item/NPC rules are compiled.
+      // Returning or cancelling this stage does not install a partial world.
+      Future<void> verifyNarrationRevision() async {
+        if (!mounted || !_campaignConfirmed || authorRevision != _authorRevision) {
+          throw const FormatException('Авторская редакция закрыта или изменена.');
+        }
+        await _checkAuthorRevision();
+        await source.narrative?.verifyLive();
+        if (!mounted || authorRevision != _authorRevision) {
+          throw const FormatException('Сюжет изменился во время подготовки текста.');
+        }
+      }
+      final manifest = await CampaignProseManifest.prepare(source: source,
+          finalArchive: built.archive, verifyCurrent: verifyNarrationRevision);
+      if (!mounted) return;
+      final selectedArchive = await Navigator.of(context).push<Uint8List>(
+        MaterialPageRoute(builder: (_) => CampaignProsePage(manifest: manifest,
+            store: CampaignProseStore(repository: _store.repository))));
+      if (selectedArchive == null) return;
+      await verifyNarrationRevision();
+      if (!mounted) return;
+      final checked = const RichPrivateBookworldImporter().inspect(selectedArchive);
+      source.verifyArchiveHero(checked);
+      final installed = await widget.gateway.install(selectedArchive);
+      if (installed.archiveHash != checked.archiveSha256) throw const FormatException('Установленный мир отличается от проверенного.');
       final campaignId = await widget.gateway.start(installed.archiveHash);
       if (!mounted) return;
       await Navigator.of(context).push<void>(MaterialPageRoute(
@@ -740,6 +766,8 @@ class _WholeBookNpcCampaignPageState extends State<WholeBookNpcCampaignPage>
               onPressed: !_working && _campaignConfirmed && _quotesReviewed && _privateFiction &&
                   !_heroBlocked && !_storageBlocked && _effectsReady ? _start : null,
               icon: const Icon(Icons.play_arrow), label: const Text('Собрать и начать новую кампанию')),
+            const Text('Перед установкой можно подготовить и проверить текст всего '
+                'прохождения либо оставить уже собранный текст без обращения к ИИ.'),
           ],
           if (_working) ...[
             const LinearProgressIndicator(),
