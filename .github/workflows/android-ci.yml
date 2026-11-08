@@ -325,6 +325,23 @@ jobs:
             --manifest apps/story_reader/test/fixtures/grimm_ci.json \
             --single-output apps/story_reader/test/fixtures/frog_prince_ci.fb2 \
             --single-manifest apps/story_reader/test/fixtures/frog_prince_ci.json
+      - name: Fetch and verify TWO original Russian Afanasyev FB2 books
+        # Historical public-domain texts downloaded from Wikisource by CI,
+        # never from private user files or AI-written stand-ins.
+        run: |
+          python3 tools/build_russian_public_domain_fb2.py \
+            --output-dir apps/story_reader/test/fixtures/ru_afanasyev
+      - name: Upload two authentic Russian public-domain FB2 benchmarks
+        uses: actions/upload-artifact@v4
+        with:
+          name: AI-Story-RPG-Russian-Afanasyev-Two-FB2
+          path: |
+            apps/story_reader/test/fixtures/ru_afanasyev/morozko.fb2
+            apps/story_reader/test/fixtures/ru_afanasyev/morozko.json
+            apps/story_reader/test/fixtures/ru_afanasyev/frog_princess.fb2
+            apps/story_reader/test/fixtures/ru_afanasyev/frog_princess.json
+          if-no-files-found: error
+          retention-days: 2
       - name: Upload standalone public-domain Frog-Prince benchmark
         uses: actions/upload-artifact@v4
         with:
@@ -340,6 +357,10 @@ jobs:
           AI_RPG_GRIMM_PUBLIC_MANIFEST_PATH: test/fixtures/grimm_ci.json
           AI_RPG_FROG_PRINCE_FB2_PATH: test/fixtures/frog_prince_ci.fb2
           AI_RPG_FROG_PRINCE_MANIFEST_PATH: test/fixtures/frog_prince_ci.json
+          AI_RPG_RU_MOROZKO_FB2_PATH: test/fixtures/ru_afanasyev/morozko.fb2
+          AI_RPG_RU_MOROZKO_MANIFEST_PATH: test/fixtures/ru_afanasyev/morozko.json
+          AI_RPG_RU_FROG_PRINCESS_FB2_PATH: test/fixtures/ru_afanasyev/frog_princess.fb2
+          AI_RPG_RU_FROG_PRINCESS_MANIFEST_PATH: test/fixtures/ru_afanasyev/frog_princess.json
         timeout-minutes: 12
         # Building a SHA3-verified SQLite amalgamation adds native compile
         # time to the full widget suite. Keep a finite external watchdog
