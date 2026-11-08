@@ -47,3 +47,6 @@ export 'src/private_classic_scenario_translator.dart';
 export 'src/native_private_bookworld_compiler.dart';
 export 'src/reviewed_story_composer.dart';
 export 'src/portable_reviewed_draft_compiler.dart';
+export 'src/reviewed_hero_role.dart';
+export 'src/source_locked_prose_models.dart';
+export 'src/whole_story_literary_review.dart';
