@@ -1,3 +1,15 @@
+# Актуальное продолжение E6g — синхронизация с PR #133 (8 ноября 2026)
+
+**Ветка:** [feature/external-rpg-author-e6g-pr133-compat-20261108](https://github.com/shonentez-afk/AI-Story-RPG/tree/feature/external-rpg-author-e6g-pr133-compat-20261108). **Текущая интеграция:** native PR #133 HEAD `233c6c31abeae0768c36a60c4dd3add94916ec03`; E6g merge `8ce1017426c809c677a7c2de8db2c1e1c848a756`, исправление regression expectation `f2caf69ab6c932cbe660c912554e4c74e24130af`. Основной PR остаётся Draft, изменений `main` нет.
+
+- Сопоставлены 27 exact Git blobs; 25 без изменений, изменились только `world_library_gateway.dart` (перенос Flutter/gameplay facade в независимый `rpg_gameplay`) и `story_authoring.dart` (новые экспорты authoring API без удаления старых). Контрактные хэши заменены **после анализа диффа**, защита fail-closed сохранена.
+- Все файлы внешнего генератора/тестов E6g перенесены поверх **настоящего HEAD** PR #133 объединяющим коммитом с двумя родителями. Другие native папки не редактировались.
+- Первичный [CI #42502499413](https://github.com/shonentez-afk/AI-Story-RPG/actions/runs/42502499413): Python 120/121 успешны, один тест ожидал исторический baseline `7c4401c`, исправлен без ослабления хеш-проверки. Последующий тестовый exact-code SHA `f2caf69`: [CI #42502540208](https://github.com/shonentez-afk/AI-Story-RPG/actions/runs/42502540208) — `author-tests` **SUCCESS**; `dart-parity` **ещё выполнялся на момент записи**, считать приёмкой только после фактического SUCCESS обоих заданий.
+- Аудит и продолжение: [E6G_PR133_HEAD_SYNC_AUDIT_RU_2026-11-08.md](E6G_PR133_HEAD_SYNC_AUDIT_RU_2026-11-08.md). Проверка `doctor` на объединённом дереве прошла; исходная атрибуция E6g native-v4: [E6G_NATIVE_V4_BRIDGE_RU_2026-11-08.md](E6G_NATIVE_V4_BRIDGE_RU_2026-11-08.md).
+- Встроенный ChatGPT skill всё ещё старый E6d. Реальный >192 StoryPlan, source-locked initial-state/tick v4, 2 FB2 + device E2E **не сделаны**. Не пересматривать legacy checkpoints, не копировать приватные книги в GitHub, не сливать в `main` до приёмки native PR #133.
+
+---
+
 # AI Story RPG — актуальный handoff E6g, native v4 (8 ноября 2026)
 
 **Текущая версия внешнего генератора:** `0.3.0a6`. **Единственная текущая ветка:** [feature/external-rpg-author-e6g-pr133-compat-20261108](https://github.com/shonentez-afk/AI-Story-RPG/tree/feature/external-rpg-author-e6g-pr133-compat-20261108). **Native dependency:** рабочий код [PR #133](https://github.com/shonentez-afk/AI-Story-RPG/pull/133), проверенная база `7c4401c25b77e4643cf23000c28a717cb22dabca`, Draft (последующий PR #133 двигается, требуется актуальная re-pin проверка при интеграции).
