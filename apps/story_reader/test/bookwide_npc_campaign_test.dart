@@ -175,6 +175,10 @@ Future<_Fixture> _prepare({bool expanded = false}) async {
       available.firstWhere((candidate) =>
           candidate.role.characterId == role.characterId),
   ] : available;
+  // Approval prerequisites are chronological, never character_id order.
+  candidates.sort((a, b) =>
+      a.firstEvent.narrativePosition.compareTo(
+          b.firstEvent.narrativePosition));
   expect(candidates.length, 3);
   expect(candidates.map((c) => c.role.characterId).toSet().length, 3);
   final base = await source.compileBase(
