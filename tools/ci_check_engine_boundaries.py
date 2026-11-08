@@ -115,6 +115,33 @@ def validate() -> list[str]:
                     issues.append(
                         f"story_core: core cannot declare service {forbidden}"
                     )
+    # No other client may silently reintroduce the four extracted rules.
+    # An alias file must remain an export-only compatibility shim.
+    pure_authoring = {
+        "npc_continuity_audit",
+        "draft_scene_graph_overview",
+        "cross_act_source_evidence_packet",
+        "preparation_readiness_report",
+    }
+    for name in sorted(pure_authoring):
+        shim = ROOT / "apps" / "story_reader" / "lib" / (name + ".dart")
+        text = shim.read_text(encoding="utf-8") if shim.is_file() else ""
+        active = [line.strip() for line in text.splitlines()
+                  if line.strip() and not line.lstrip().startswith("//")]
+        if len(active) < 1 or not active[0].startswith(
+                "export 'package:story_authoring/story_authoring.dart' show") or (
+                any(line.startswith(("class ", "enum ", "import ", "typedef "))
+                    for line in active)):
+            issues.append(f"{shim}: Flutter must re-export pure authoring rules")
+        if len(text) > 800:
+            issues.append(f"{shim}: compatibility shim contains too much code")
+
+    gateway = ROOT / "apps" / "story_reader" / "lib" / "world_library_gateway.dart"
+    workers = ROOT / "apps" / "story_reader" / "lib" / "book_isolate_workers.dart"
+    for path in (gateway, workers):
+        if not path.is_file() or "package:rpg_api/rpg_api.dart" not in path.read_text(
+                encoding="utf-8"):
+            issues.append(f"{path}: Flutter must use the public RPG API")
     return issues
 
 

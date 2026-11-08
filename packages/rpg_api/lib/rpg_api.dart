@@ -18,7 +18,10 @@ export 'package:rpg_gameplay/rpg_gameplay.dart' show
     WorldChoiceResult, WorldLibraryGateway;
 export 'package:story_authoring/story_authoring.dart' show
     ImportedBook, BookSourceIndex, SourceLockedBook,
-    OfflineSourceReview, OfflineScanCheckpoint;
+    OfflineSourceReview, OfflineScanCheckpoint,
+    BookPreparationSnapshot, BookToRpgWorkflow,
+    NpcContinuityAudit, DraftSceneGraphOverview,
+    CrossActSourceEvidencePacket, PreparationReadinessReport;
 export 'package:bookworld_format/bookworld_format.dart' show
     VerifiedRichPrivateBookworld;
 
@@ -119,6 +122,13 @@ final class LocalRpgGameApi implements RpgGameApi {
 /// separately reviewed source-bound compiler accepts them.
 abstract interface class RpgAuthoringApi {
   ImportedBook parseBook(String filename, Uint8List bytes);
+  SourceLockedBook openSource(String filename, Uint8List bytes,
+      {int? selectedChapter});
+  Future<BookPreparationSnapshot> prepareBook(SourceLockedBook source, {
+    OfflineScanCheckpoint? resume,
+    void Function(OfflineScanCheckpoint checkpoint)? onCheckpoint,
+    bool Function()? shouldStop,
+  });
   BookSourceIndex indexBook(ImportedBook book);
   SourceLockedBook inspectSource(String filename, Uint8List bytes);
   Future<OfflineSourceReview> scanSource(SourceLockedBook source, {
@@ -150,6 +160,21 @@ final class LocalRpgAuthoringApi implements RpgAuthoringApi {
   @override
   ImportedBook parseBook(String filename, Uint8List bytes) =>
       BookImporter.parse(filename, bytes);
+
+  @override
+  SourceLockedBook openSource(String filename, Uint8List bytes,
+      {int? selectedChapter}) =>
+      const BookToRpgWorkflow().openSource(
+          filename, bytes, selectedChapter: selectedChapter);
+
+  @override
+  Future<BookPreparationSnapshot> prepareBook(SourceLockedBook source, {
+    OfflineScanCheckpoint? resume,
+    void Function(OfflineScanCheckpoint checkpoint)? onCheckpoint,
+    bool Function()? shouldStop,
+  }) => const BookToRpgWorkflow().prepare(source,
+      resume: resume, onCheckpoint: onCheckpoint,
+      shouldStop: shouldStop);
 
   @override
   BookSourceIndex indexBook(ImportedBook book) =>

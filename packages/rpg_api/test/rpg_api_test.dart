@@ -28,8 +28,39 @@ void main() {
     expect(saved, isNotNull);
     final replay = await api.scanSource(source, resume: saved);
     expect(replay.summary, scan.summary);
+    final prepared = await api.prepareBook(source);
+    expect(prepared.status['is_playable_rpg'], false);
+    expect(prepared.status['requires_cloud'], false);
+    expect(prepared.readiness.canStartPlayableBook, isFalse);
+    expect(prepared.sourceFingerprint, index.sourceFingerprint);
     expect(RpgApiContract.arbitraryBookCanon, isFalse);
     expect(RpgApiContract.dynamicAiGameMaster, isFalse);
+  });
+
+  test('one-book/one-tale API scopes source without changing library book',
+      () async {
+    const RpgAuthoringApi api = LocalRpgAuthoringApi();
+    final fb2 = _bytes('<?xml version="1.0" encoding="UTF-8"?>'
+        '<FictionBook xmlns="http://www.gribuser.ru/xml/fictionbook/2.0">'
+        '<description><title-info><book-title>Сказки</book-title>'
+        '</title-info></description><body>'
+        '<section><p>Первая история.</p></section>'
+        '<section><p>Вторая история.</p></section>'
+        '</body></FictionBook>');
+    final complete = api.openSource('tales.fb2', fb2);
+    final scoped = api.openSource('tales.fb2', fb2, selectedChapter: 1);
+    expect(complete.index.chapterCount, 2);
+    expect(scoped.index.chapterCount, 1);
+    expect(scoped.sourceFingerprint, isNot(complete.sourceFingerprint));
+    OfflineScanCheckpoint? cp;
+    final prepared = await api.prepareBook(scoped,
+        onCheckpoint: (value) => cp = value);
+    expect(prepared.status['stage'], 'BOOK_SOURCE_PREPARED_NEEDS_REVIEW');
+    expect(cp, isNotNull);
+    final repeat = await api.prepareBook(scoped, resume: cp);
+    expect(repeat.status, prepared.status);
+    await expectLater(api.prepareBook(complete, resume: cp),
+        throwsFormatException);
   });
 
   test('public game API keeps signed choices, SQLite replay and portable saves',
