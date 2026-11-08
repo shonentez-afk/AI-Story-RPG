@@ -23,7 +23,8 @@ def check_contract() -> dict:
             and algorithm in ("sha256", "git_blob_sha1")
             and (fmt != "rpg_author_compatibility_v2"
                  or algorithm == "git_blob_sha1")
-            and type(lock.get("application_baseline")) is str
+            and (fmt != "rpg_author_compatibility_v2"
+                 or type(lock.get("application_baseline")) is str)
             and type(lock.get("files")) is dict
             and bool(lock["files"]),
             "invalid_compatibility_lock", "Unrecognized upstream compatibility lock")
