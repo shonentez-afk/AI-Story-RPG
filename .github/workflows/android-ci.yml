@@ -258,6 +258,13 @@ jobs:
       - name: Standalone RPG engine smoke without Flutter or AI
         working-directory: packages/campaign_manager
         run: dart run example/standalone_rpg.dart ../../artifacts/bookworld/manor_m17_original_demo.bworld
+      - name: Verify COMPLETE headless RPG gameplay and authoring, without Flutter
+        working-directory: packages/rpg_gameplay
+        run: |
+          dart pub get
+          dart analyze
+          dart test --reporter expanded
+          dart run example/standalone_gameplay.dart ../../artifacts/bookworld/book_private_rich_items_python.bworld
       - name: Upload test BookWorld artifact
         uses: actions/upload-artifact@v4
         with:
