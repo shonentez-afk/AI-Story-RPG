@@ -95,7 +95,7 @@ Future<_Fixture> _prepare({bool expanded = false}) async {
       // Distinct overlapping 150-unit excerpts keep the reviewed name in
       // both encounters without bypassing any production source checks.
       final candidates = [
-        for (var i = 0; i < (expanded ? 12 : 4); i++)
+        for (var i = 0; i < (expanded ? 8 : 4); i++)
           SemanticCandidate.propose(source, chunk,
             category: SemanticCategory.event,
             startUtf16: chunk.startUtf16 + i * 10,
@@ -123,7 +123,7 @@ Future<_Fixture> _prepare({bool expanded = false}) async {
   expect(analyzed.complete, true);
   final book = NarrativeBookModel.fromExisting(
       index: index, outline: ZaiWholeBookEventOutline.build(analyzed));
-  expect(book.events.length, expanded ? 216 : 12);
+  expect(book.events.length, expanded ? 144 : 12);
   final map = BookwideActPlanner.build(index: index, book: book);
   final draft = BookwideStoryPlanComposer.compose(
     index: index, book: book, bookMap: map,
@@ -132,7 +132,7 @@ Future<_Fixture> _prepare({bool expanded = false}) async {
   );
   final source = WholeBookNpcSourcePlan.fromBook(
       index: index, book: book, bookMap: map, draft: draft);
-  expect(source.coverage.referencedEvents, expanded ? 216 : 12);
+  expect(source.coverage.referencedEvents, expanded ? 144 : 12);
   expect(source.coverage.allDetectedEventsReferenced, true);
   var graph = SourceEvidenceGraph.empty(index);
   final mentions = <SourceEvidence>[];
@@ -167,7 +167,7 @@ Future<_Fixture> _prepare({bool expanded = false}) async {
   );
   final available = BookwideNpcCampaignAuthoring.discover(
       source: source, currentReviewedRoles: roles);
-  // Twelve source suggestions per act produce several adjacent encounter
+  // Eight wire-compliant source suggestions per act produce several adjacent encounter
   // pairs for each role. The author must select explicit episodes, not
   // silently compile every AI/synthetically proposed conversation.
   final candidates = <BookwideNpcConversationCandidate>[
@@ -202,12 +202,12 @@ void main() {
   late _Fixture fixture;
   setUpAll(() async { fixture = await _prepare(); });
 
-  test('18-act v4: 216 reviewed events, three permanent NPCs and'
-      ' knowledge/memory survive 233 offline actions, replay and SQLite'
+  test('18-act v4: 144 reviewed events, three permanent NPCs and'
+      ' knowledge/memory survive 161 offline actions, replay and SQLite'
       ' restart without granting unearned dialogue', () async {
     final extended = await _prepare(expanded: true);
     expect(extended.source.expanded, true);
-    expect(extended.source.reviewedEventIds, hasLength(216));
+    expect(extended.source.reviewedEventIds, hasLength(144));
     expect(extended.base.sceneCount, greaterThan(192));
     final original = const RichPrivateBookworldImporter()
         .inspect(extended.base.archive);
@@ -224,8 +224,8 @@ void main() {
       approvedDigest: approval.approvalDigest,
       explicitlyConfirmedPrivateFiction: true,
     );
-    expect(built.sourceEventsRepresented, 216);
-    expect(built.sourceEventsTotal, 216);
+    expect(built.sourceEventsRepresented, 144);
+    expect(built.sourceEventsTotal, 144);
     final imported = const RichPrivateBookworldImporter()
         .inspect(built.archive);
     expect(imported.formatVersion, 4);
@@ -273,7 +273,7 @@ void main() {
     }
 
     for (var act = 1; act <= 18; act++) {
-      for (var sourceEvent = 0; sourceEvent < 10; sourceEvent++) {
+      for (var sourceEvent = 0; sourceEvent < 6; sourceEvent++) {
         if (act <= extended.candidates.length && sourceEvent < 2) {
           final episode = extended.candidates[act - 1];
           take(sourceEvent == 0
@@ -290,7 +290,7 @@ void main() {
       take('act_${act}_honor_condition');
       if (act < 18) take('act_${act}_continue_original');
     }
-    expect(steps, hasLength(233));
+    expect(steps, hasLength(161));
     expect(game.isTerminal, true);
     for (var act = 1; act <= 18; act++) {
       expect(game.state.flags['act_${act}_original_outcome'], true);
