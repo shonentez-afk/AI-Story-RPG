@@ -246,6 +246,20 @@ void main() {
     final reply = ReviewedNpcCampaignBookworldWriter.replyChoiceId(first.id);
     expect(unearned.choiceLockReason(reply), isNotNull);
     expect(unearned.state.knowledge[first.role.characterId], isEmpty);
+    final signed = RichSceneDialogue.verify(
+        (imported.presentation['scene_dialogues'] as Map)[first.responseSceneId],
+        imported.blueprint.scenes[first.responseSceneId]!.text);
+    final reviewedTurns = (imported.presentation['scene_dialogue_knowledge']
+        as Map)[first.responseSceneId] as List;
+    final hidden = RichNpcDialogueKnowledge.redact(
+      signed, reviewedTurns, unearned.state.knowledge,
+      social: NpcSocialLedger.inspect(unearned, imported.npcSocialRulebook!),
+      committedEvents: unearned.events, sceneId: first.responseSceneId,
+    );
+    expect(hidden.any((turn) => turn.text == extended.drafts.first.npcLine),
+        false, reason: 'Unmet NPC must not leak an authored future line');
+    expect(hidden.any((turn) =>
+        turn.text == RichNpcDialogueKnowledge.unavailableLine), true);
 
     final game = StoryWorld(imported.blueprint,
         socialRulebook: imported.npcSocialRulebook);
