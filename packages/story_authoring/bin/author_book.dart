@@ -38,6 +38,63 @@ Future<void> main(List<String> args) async {
         },
       );
       stdout.writeln(jsonEncode(report.summary));
+    } else if (args.length == 5 && args[0] == 'review-plan') {
+      // The event outline is an UNTRUSTED model/editor result. It must name
+      // every source chunk and contain only literal, source-bound quotes.
+      final source = engine.parseAndIndex(
+          args[1], await File(args[1]).readAsBytes());
+      final candidateRaw = jsonDecode(await File(args[2]).readAsString());
+      final responseRaw = jsonDecode(await File(args[3]).readAsString());
+      if (candidateRaw is! Map<String, dynamic> ||
+          responseRaw is! Map<String, dynamic>) {
+        throw const FormatException('Нужны два JSON-объекта без команд модели');
+      }
+      final outline = SourceLockedEventOutline.fromJson(
+          source.index, candidateRaw);
+      final book = NarrativeBookModel.fromExisting(
+          index: source.index, outline: outline);
+      final selected = book.events.length <= 8
+          ? book.events : [
+              for (var i = 0; i < 8; i++)
+                book.events[((book.events.length - 1) * i / 7).round()],
+            ];
+      final result = StoryProposalValidator.validate(
+        book: book, allowedEvents: selected, proposedJson: responseRaw,
+      );
+      final artifact = <String, Object?>{
+        'format': 'ai_story_untrusted_story_plan_review_v1',
+        'source_fingerprint': source.index.sourceFingerprint,
+        'model_provenance': 'not_attested',
+        'is_literary_canon': false,
+        'is_playable': false,
+        'source_events': outline.events.length,
+        'chapters_with_event_candidates':
+            outline.chaptersWithEventProposals,
+        'total_chapters': outline.totalChapters,
+      };
+      if (result.foundCandidate) {
+        final quality = StoryPlanQualityGate.assess(
+            book: book, preview: result);
+        artifact['status'] = 'DRAFT_NEEDS_EDITORIAL_REVIEW';
+        artifact['formal_readiness'] = quality.toReadinessJson();
+        artifact['story_plan'] = jsonDecode(quality.plan.encode());
+      } else {
+        artifact['status'] = 'NO_APPLICABLE_PROPOSAL';
+      }
+      if (!args[4].toLowerCase().endsWith('.json')) {
+        throw const FormatException('Промежуточный отчёт должен быть .json');
+      }
+      // Never overwrite the destination on a validation failure.
+      final output = File(args[4]);
+      final partial = File(output.path + '.pending');
+      await partial.writeAsString(jsonEncode(artifact), flush: true);
+      await partial.rename(output.path);
+      stdout.writeln(jsonEncode({
+        'status': artifact['status'],
+        'source_fingerprint': source.index.sourceFingerprint,
+        'events': outline.events.length,
+        'is_playable': false,
+      }));
     } else if (args.length == 4 && args[0] == 'build-reviewed') {
       final source = engine.parseAndIndex(
           args[1], await File(args[1]).readAsBytes());
@@ -84,6 +141,7 @@ Future<void> main(List<String> args) async {
       stderr.writeln('Команды:');
       stderr.writeln('  dart run bin/author_book.dart inspect-source source.fb2');
       stderr.writeln('  dart run bin/author_book.dart scan-source source.fb2 [--checkpoint private/scan.json]');
+      stderr.writeln('  dart run bin/author_book.dart review-plan book.fb2 events.json model_reply.json plan_review.json');
       stderr.writeln('  dart run bin/author_book.dart build-reviewed source.fb2 review.json game.bworld');
       stderr.writeln('  dart run bin/author_book.dart verify-world game.bworld');
       exitCode = 64;

@@ -5,8 +5,8 @@ import 'package:crypto/crypto.dart';
 
 import 'ai_connection.dart';
 import 'narrative_book_model.dart';
-import 'story_plan_dilemma_generator.dart';
 import 'story_dilemma_preview.dart';
+import 'package:story_authoring/story_authoring.dart' show StoryProposalValidator;
 export 'story_dilemma_preview.dart';
 import 'zai_semantic_preview.dart';
 
@@ -165,43 +165,21 @@ class ZaiStoryDilemmaProposalService {
   static ZaiStoryDilemmaPreview _validateAnswer(
       NarrativeBookModel book, List<NarrativeEvent> selected,
       Map<String, dynamic> answer) {
-    if (answer['applicable'] == false && answer.length == 1) {
-      return ZaiStoryDilemmaPreview(
-        proposal: null, plan: null, sampledEventCount: selected.length);
-    }
-    const keys = {
-      'applicable', 'setup_event_id', 'outcome_event_id',
-      'kind', 'dilemma', 'accept_intent', 'refuse_intent',
-      'followup_goal', 'finish_original_intent', 'original_ending',
-      'alternative_search_goal', 'search_intent',
-      'alternative_discovery', 'use_discovery_intent', 'alternative_ending',
-    };
-    if (answer['applicable'] != true ||
-        answer.keys.toSet().length != keys.length ||
-        !answer.keys.toSet().containsAll(keys)) {
-      throw const AiSetupException(
-          'ИИ не соблюдал контракт игрового предложения.');
-    }
-    final allowedIds = {for (final e in selected) e.id};
-    if (!allowedIds.contains(answer['setup_event_id']) ||
-        !allowedIds.contains(answer['outcome_event_id'])) {
-      throw const AiSetupException(
-          'ИИ сослался на событие вне разрешённых цитат.');
-    }
     try {
-      final proposal = StoryDilemmaProposal.decode(jsonEncode({
-        'format': StoryDilemmaProposal.format,
-        'status': 'UNREVIEWED_PROPOSAL',
-        'source_fingerprint': book.sourceFingerprint,
-        for (final field in keys)
-          if (field != 'applicable') field: answer[field],
-      }));
-      final plan = StoryPlanDilemmaGenerator.propose(book, proposal);
-      return ZaiStoryDilemmaPreview(
-        proposal: proposal,
-        plan: plan,
-        sampledEventCount: selected.length,
+      return StoryProposalValidator.validate(
+        book: book, allowedEvents: selected, proposedJson: answer,
       );
+    } on FormatException catch (error) {
+      if (error.message == 'Событие вне разрешённых цитат') {
+        throw const AiSetupException(
+            'ИИ сослался на событие вне разрешённых цитат.');
+      }
+      if (error.message == 'Нарушен контракт ответа модели') {
+        throw const AiSetupException(
+            'ИИ не соблюдал контракт игрового предложения.');
+      }
+      throw const AiSetupException(
+          'Предложение ИИ не прошло проверку источников и игровых условий.');
     } catch (_) {
       throw const AiSetupException(
           'Предложение ИИ не прошло проверку источников и игровых условий.');

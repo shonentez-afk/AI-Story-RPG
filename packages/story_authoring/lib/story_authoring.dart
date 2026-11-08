@@ -31,3 +31,5 @@ export 'src/story_plan_quality_gate.dart';
 export 'src/bookwide_act_planner.dart';
 export 'src/bookwide_storyplan_composer.dart';
 export 'src/bookwide_source_encounters.dart';
+export 'src/source_locked_event_outline.dart';
+export 'src/story_proposal_validator.dart';

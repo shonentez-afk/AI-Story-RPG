@@ -27,3 +27,25 @@ Literary event/character review, long-book StoryPlan, and UI checkpoints still
 live inside the Flutter app. They must move to this Dart package without a
 parallel compiler before calling the COMPLETE creator autonomous.
 ```
+
+## A portable AI / human proposal path (no provider dependency)
+
+Generate the **source-only** JSON from the already indexed book using
+`SourceLockedEventOutline.emptyDraft(index)`. Fill `events` with literal
+quotes and UTF-16 offsets; the `scanned_chunks` list must cover EVERY chunk
+in order and match the source hashes. The `label` is an **untrusted
+interpretation** even when its quote is genuine.
+
+```sh
+dart run bin/author_book.dart review-plan /private/book.fb2 \
+  /private/events.json /private/model_reply.json /private/plan_review.json
+```
+
+The third argument is a structured model or human proposal using the same
+15-key contract as the existing Z.ai plot-dilemma service (or
+`{"applicable":false}`). The **same pure-Dart validator** is now used by
+the app's Z.ai adapter and this CLI; the local pipeline checks exact quote
+positions, model-selected event allowlist and scenario effects. A formal
+success is still `DRAFT_NEEDS_EDITORIAL_REVIEW`: human proof of literary
+meaning and the native strict BookWorld compiler are separate gates.
+No API key, secret, network permission, or full-book upload is involved.
