@@ -330,7 +330,6 @@ def main():
         # bridge. The real Dart importer/SQLite must accept both endings.
         # This is deliberately NOT a claim about a complete novel.
         from tests.rpg_author.test_v4_expansion import proposal
-        from tools.rpg_author.rich_package import compile_rich_from_project
         import io
         import zipfile
         v3_for_ext, _ = compile_rich_from_project(checkpoint, enrichment())
