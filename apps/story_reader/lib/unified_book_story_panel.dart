@@ -8,11 +8,11 @@ import 'bookwide_storyplan_composer.dart';
 import 'bookwide_unified_story.dart';
 import 'narrative_book_model.dart';
 import 'reviewed_hero_role.dart';
+import 'reviewed_story_narrative.dart';
 import 'zai_semantic_preview.dart';
 import 'zai_unified_book_story.dart';
 
-/// The same authoring flow: this sheet returns an ordinary multi-act draft
-/// to the existing hero/items/NPC editor. It never installs or starts a game.
+/// The same authoring flow: no install or hidden request on opening.
 class UnifiedBookStoryPanel extends StatefulWidget {
   const UnifiedBookStoryPanel({super.key, required this.index, required this.book,
     required this.bookMap, required this.onAccepted,
@@ -68,7 +68,7 @@ class _UnifiedBookStoryPanelState extends State<UnifiedBookStoryPanel> {
           children: [
             Text('Будут отправлены ${source.eventCount} показанных цитат из '
                 '${source.actCount} частей и перечисленные карточки персонажей. '
-                'Это не полный файл книги. Название книги, тайны из карточек, '
+                'Это не полный файл книги. Название, тайны из карточек, '
                 'сохранения игры и ключ в содержимое запроса не включаются.'),
             const Text('Один запрос, до трёх одинаковых попыток при временном сбое. '
                 'Модель предлагает общий конфликт, мотивы и зависимости; '
@@ -97,19 +97,32 @@ class _UnifiedBookStoryPanelState extends State<UnifiedBookStoryPanel> {
   }
 
   Future<void> _accept() async {
-    if (_working || _context == null || _draft == null ||
-        !_quotesReviewed || !_fictionReviewed) return;
+    final source = _context, draft = _draft;
+    if (_working || source == null || draft == null || !_quotesReviewed || !_fictionReviewed) return;
     setState(() { _working = true; _error = null; });
     try {
-      final current = await _store.load(_context!);
-      if (current.draft?.reviewDigest != _draft!.reviewDigest) {
+      // Capture services and immutable data, NOT Flutter State or its context.
+      // This guard survives navigation but is never sent through a worker.
+      final store = _store, roleCatalog = _roles;
+      final current = await store.load(source);
+      if (current.draft?.reviewDigest != draft.reviewDigest) {
         throw const FormatException('Сохранённый сюжет изменён после просмотра.');
       }
-      final accepted = _draft!.accept(context: _context!,
-        freshRoles: await _roles.load(widget.index),
-        approvedReviewDigest: _draft!.reviewDigest,
+      final recordHash = current.recordHash;
+      Future<void> verifySavedRevision() async {
+        source.verifyCurrent(await roleCatalog.load(source.index));
+        final saved = await store.load(source);
+        if (saved.recordHash != recordHash || saved.draft?.reviewDigest != draft.reviewDigest) {
+          throw const FormatException('Общий сюжет изменён в другом окне. '
+              'Повторно проверьте цель, мотивы и зависимости.');
+        }
+      }
+      final accepted = ReviewedStoryNarrative.accept(context: source, proposal: draft,
+        freshRoles: await roleCatalog.load(source.index), approvedReviewDigest: draft.reviewDigest,
         allShownQuotesAndStoryReviewed: _quotesReviewed,
-        fictionalConsequencesConfirmed: _fictionReviewed);
+        fictionalConsequencesConfirmed: _fictionReviewed,
+        verifySavedRevision: verifySavedRevision);
+      await verifySavedRevision();
       if (!mounted) return;
       widget.onAccepted(accepted);
     } catch (error) {
@@ -132,11 +145,9 @@ class _UnifiedBookStoryPanelState extends State<UnifiedBookStoryPanel> {
       if (source != null) ...[
         Text('В контексте: ${source.actCount} актов, ${source.eventCount} событий.'),
         ExpansionTile(key: const Key('unified-story-source-map'),
-          title: const Text('Проверить исходную карту и цитаты'),
-          children: [SelectableText(source.shownText)]),
-        if (draft == null) OutlinedButton.icon(
-          key: const Key('unified-story-generate'), onPressed: _working ? null : _generate,
-          icon: const Icon(Icons.auto_stories_outlined),
+          title: const Text('Проверить исходную карту и цитаты'), children: [SelectableText(source.shownText)]),
+        if (draft == null) OutlinedButton.icon(key: const Key('unified-story-generate'),
+          onPressed: _working ? null : _generate, icon: const Icon(Icons.auto_stories_outlined),
           label: const Text('Подготовить один общий сюжет через ИИ')),
       ],
       if (draft != null && !draft.applicable)
@@ -176,8 +187,9 @@ class _UnifiedBookStoryPanelState extends State<UnifiedBookStoryPanel> {
         FilledButton(key: const Key('unified-story-accept'),
           onPressed: !_working && _quotesReviewed && _fictionReviewed ? _accept : null,
           child: const Text('Проверить связи и продолжить в общем редакторе')),
-        const Text('Герой, предметы и разговоры настраиваются в существующем редакторе. '
-            'Сама проверка этого предложения ещё не устанавливает игру.'),
+        const Text('Принятая цель и мотивы сохраняются в контексте редактора. '
+            'Перед отправкой для диалогов они будут показаны снова с отдельным согласием. '
+            'Это не раскрывает NPC секреты и не устанавливает игру.'),
       ],
       if (_working) ...[
         const LinearProgressIndicator(),

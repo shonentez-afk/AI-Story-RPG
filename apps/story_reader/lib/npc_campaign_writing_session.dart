@@ -12,65 +12,70 @@ import 'whole_book_npc_campaign.dart';
 
 String npcWritingHash(Object value) => sha256.convert(utf8.encode(canonicalJson(value))).toString();
 
-/// Exact authoring inputs, with a separate, shown protagonist identity.
-/// Free-player catalogs keep their existing bytes and storage addresses.
+/// Exact authoring inputs. Legacy per-act catalogs keep their original
+/// hashes/addresses; accepted story text has a separate explicit binding.
 class NpcWritingCatalog {
   NpcWritingCatalog._(this.source, this.candidates, this.digest, this.storageKey);
   final WholeBookNpcSourcePlan source;
   final Map<String, BookwideNpcConversationCandidate> candidates;
   final String digest, storageKey;
 
-  factory NpcWritingCatalog({
-    required WholeBookNpcSourcePlan source,
-    required List<BookwideNpcConversationCandidate> candidates,
-  }) {
+  factory NpcWritingCatalog({required WholeBookNpcSourcePlan source,
+    required List<BookwideNpcConversationCandidate> candidates}) {
     final sorted = [...candidates]..sort((a, b) => a.id.compareTo(b.id));
     if (sorted.map((c) => c.id).toSet().length != sorted.length) {
       throw const FormatException('Повторён разговор NPC.');
     }
+    final narrative = source.narrative;
+    if (narrative != null) source.verifyCurrentHero(narrative.context.roles);
     for (final c in sorted) {
-      c.firstEvent.source.validate(source.index);
-      c.responseEvent.source.validate(source.index);
+      c.firstEvent.source.validate(source.index); c.responseEvent.source.validate(source.index);
       if (c.role.sourceFingerprint != source.index.sourceFingerprint ||
           c.role.characterId == source.selectedHeroRole?.characterId) {
         throw const FormatException('NPC относится к другой книге или совпадает с героем.');
+      }
+      if (narrative != null) {
+        final roles = narrative.context.roles.where((role) => role.characterId == c.role.characterId).toList();
+        if (roles.length != 1 || WholeBookNpcSourcePlan.roleDigest(roles.single) !=
+            WholeBookNpcSourcePlan.roleDigest(c.role)) {
+          throw const FormatException('Карточка собеседника не совпала с принятой историей.');
+        }
+        narrative.forConversation(characterId: c.role.characterId,
+          firstEventId: c.firstEvent.id, responseEventId: c.responseEvent.id);
       }
     }
     final digest = npcWritingHash({
       'format': 'npc_writing_catalog_v1',
       'source': source.index.sourceFingerprint, 'plan': source.planDigest,
       if (source.selectedHeroRole != null) 'hero_review': source.heroReviewDigest,
+      if (narrative != null) 'accepted_story_review': narrative.reviewDigest,
       'candidates': [for (final c in sorted) {
         'id': c.id, 'actor': c.role.characterId, 'name': c.role.displayName,
-        'group': c.role.groupDigest,
-        'first_scene': c.firstSceneId, 'response_scene': c.responseSceneId,
+        'group': c.role.groupDigest, 'first_scene': c.firstSceneId, 'response_scene': c.responseSceneId,
         'first_quote': c.firstEvent.source.quote, 'response_quote': c.responseEvent.source.quote,
       }],
     });
     return NpcWritingCatalog._(source,
       Map.unmodifiable({for (final c in sorted) c.id: c}), digest,
       npcWritingHash({'scope': 'npc_authoring_v1',
-        'source': source.index.sourceFingerprint, 'plan': source.planDigest}),
+        'source': source.index.sourceFingerprint, 'plan': source.planDigest,
+        if (narrative != null) 'accepted_story_review': narrative.reviewDigest}),
     );
   }
 }
 
-/// Durable writing, never durable permission to transmit or install.
 class NpcWritingEdit {
-  NpcWritingEdit({
-    required this.id, this.playerLine = '', this.npcLine = '',
+  NpcWritingEdit({required this.id, this.playerLine = '', this.npcLine = '',
     Iterable<String> dependencies = const [], this.uncertainty = '',
-    this.origin = 'manual', this.noSuggestion = false,
-  }) : dependencies = List.unmodifiable(dependencies);
+    this.origin = 'manual', this.noSuggestion = false})
+      : dependencies = List.unmodifiable(dependencies);
   final String id, playerLine, npcLine, uncertainty, origin;
   final List<String> dependencies;
   final bool noSuggestion;
   bool get isBlank => playerLine.isEmpty && npcLine.isEmpty && !noSuggestion;
   bool get complete => !noSuggestion && playerLine.trim().length >= 4 && npcLine.trim().length >= 4;
   NpcCampaignDialogueDraft toDraft() => NpcCampaignDialogueDraft(
-    candidateId: id, playerLine: playerLine.trim(), npcLine: npcLine.trim(),
-    requiresCandidateIds: dependencies,
-  );
+    candidateId: id, playerLine: playerLine.trim(), npcLine: npcLine.trim(), requiresCandidateIds: dependencies);
   Map<String, dynamic> toJson() => {
     'id': id, 'player_line': playerLine, 'npc_line': npcLine,
     'dependencies': dependencies.toList()..sort(),
@@ -104,8 +109,7 @@ class NpcWritingStore {
   static final _queues = <String, Future<void>>{};
 
   static void validateEdits(NpcWritingCatalog catalog, Iterable<NpcWritingEdit> values) {
-    final rows = values.toList();
-    final byId = {for (final e in rows) e.id: e};
+    final rows = values.toList(), byId = {for (final e in values) e.id: e};
     if (rows.length > 32 || byId.length != rows.length) {
       throw const FormatException('Слишком много или повторены разговоры.');
     }
@@ -166,8 +170,7 @@ class NpcWritingStore {
 
   Future<T> _locked<T>(String key, Future<T> Function() operation) async {
     final previous = _queues[key] ?? Future<void>.value();
-    final release = Completer<void>();
-    _queues[key] = release.future;
+    final release = Completer<void>(); _queues[key] = release.future;
     await previous;
     try { return await operation(); }
     finally {
@@ -178,14 +181,11 @@ class NpcWritingStore {
 
   Future<NpcWritingSession> save(NpcWritingCatalog catalog, {
     required Iterable<NpcWritingEdit> edits, required int expectedRevision,
-    String? expectedSnapshotDigest,
-    Future<void> Function()? beforeWrite,
+    String? expectedSnapshotDigest, Future<void> Function()? beforeWrite,
   }) {
     final snapshot = List<NpcWritingEdit>.unmodifiable(edits);
     validateEdits(catalog, snapshot);
     return _locked(catalog.storageKey, () async {
-      // Revalidate a model response AFTER acquiring this writing lock. This
-      // does not claim a transaction over separate hero/effect files.
       if (beforeWrite != null) await beforeWrite();
       final before = await load(catalog);
       if (before.revision != expectedRevision ||
@@ -212,28 +212,30 @@ class NpcWritingStore {
   }
 }
 
-/// Only blank selected conversations are transmitted. The typed inventory
-/// report is included in BOTH the shown bytes and the approval digest.
+/// Only blank selected conversations are transmitted. Inventory AND accepted
+/// story context are present in the exact displayed bytes and approval hash.
 class NpcWritingRequest {
   NpcWritingRequest._(this.catalogDigest, this.revision, this.batches,
-      this.approvalDigest, this.candidateCount, this.inventoryContext);
+      this.approvalDigest, this.candidateCount, this.inventoryContext, this.storyReviewDigest);
   final String catalogDigest, approvalDigest;
   final int revision, candidateCount;
   final List<String> batches;
   final NpcInventoryWritingContext? inventoryContext;
+  final String? storyReviewDigest;
+  bool get hasStoryContext => storyReviewDigest != null;
   int get requestCount => batches.length;
   int get maximumAttempts => requestCount * 3;
   String get shownText => batches.map((b) =>
       const JsonEncoder.withIndent('  ').convert(jsonDecode(b))).join('\n\n');
 
   static NpcWritingRequest prepare(NpcWritingCatalog catalog,
-      NpcWritingSession session, {int perRequest = 3,
-      NpcInventoryWritingContext? inventoryContext}) {
+      NpcWritingSession session, {int perRequest = 3, NpcInventoryWritingContext? inventoryContext}) {
     if (session.catalogDigest != catalog.digest || perRequest < 1 || perRequest > 4) {
       throw const FormatException('Неверная редакция подготовки NPC.');
     }
     inventoryContext?.validateSource(catalog.source);
     NpcWritingStore.validateEdits(catalog, session.edits.values);
+    final narrative = catalog.source.narrative;
     final pending = session.edits.values.where((e) => e.isBlank).toList()
       ..sort((a, b) => a.id.compareTo(b.id));
     if (pending.isEmpty) throw const FormatException('Нет пустых разговоров для ИИ. '
@@ -244,11 +246,12 @@ class NpcWritingRequest {
         final c = catalog.candidates[edit.id]!;
         return <String, dynamic>{
           'candidate_id': c.id, 'actor_id': c.role.characterId, 'speaker': c.role.displayName,
-          'first_chapter': c.firstEvent.source.chapterIndex,
-          'response_chapter': c.responseEvent.source.chapterIndex,
+          'first_chapter': c.firstEvent.source.chapterIndex, 'response_chapter': c.responseEvent.source.chapterIndex,
           'first_quote': c.firstEvent.source.quote, 'response_quote': c.responseEvent.source.quote,
           'requires_episodes': edit.dependencies,
           if (inventoryContext != null) 'player_inventory_routes': inventoryContext.forConversation(c),
+          if (narrative != null) 'story_guidance': narrative.forConversation(
+            characterId: c.role.characterId, firstEventId: c.firstEvent.id, responseEventId: c.responseEvent.id),
           'game_rule': 'The NPC remembers only this approved private game meeting; '
               'do not invent source truth, objects, secrets, actions or new actors.',
         };
@@ -258,6 +261,7 @@ class NpcWritingRequest {
         'status': 'UNTRUSTED_PRIVATE_GAME_FICTION',
         if (catalog.source.selectedHeroRole != null) 'player_role': catalog.source.heroCloudContext,
         if (inventoryContext != null) 'inventory_context': inventoryContext.cloudHeader,
+        if (narrative != null) 'accepted_story_context': narrative.cloudHeader,
         'conversations': rows,
       };
       payload['batch_id'] = npcWritingHash({'catalog': catalog.digest, 'payload': payload});
@@ -266,22 +270,19 @@ class NpcWritingRequest {
     for (var offset = 0; offset < pending.length;) {
       var count = pending.length - offset < perRequest ? pending.length - offset : perRequest;
       var encoded = encode(pending.skip(offset).take(count).toList());
-      // Never silently omit inventory or a conversation to meet a limit.
-      // Split into more explicitly shown requests instead.
+      // Split, never discard approved story, inventory, evidence or a speaker.
       while (utf8.encode(encoded).length > 10 * 1024 && count > 1) {
-        count--;
-        encoded = encode(pending.skip(offset).take(count).toList());
+        count--; encoded = encode(pending.skip(offset).take(count).toList());
       }
       if (utf8.encode(encoded).length > 10 * 1024) {
         throw const FormatException('Передаваемые фрагменты превышают лимит запроса.');
       }
-      batches.add(encoded);
-      offset += count;
+      batches.add(encoded); offset += count;
     }
     final immutable = List<String>.unmodifiable(batches);
     return NpcWritingRequest._(catalog.digest, session.revision, immutable,
       npcWritingHash({'format': 'npc_writing_consent_v1',
         'catalog': catalog.digest, 'revision': session.revision, 'batches': immutable}),
-      pending.length, inventoryContext);
+      pending.length, inventoryContext, narrative?.reviewDigest);
   }
 }

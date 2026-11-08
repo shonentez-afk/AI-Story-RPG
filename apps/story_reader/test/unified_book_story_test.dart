@@ -143,8 +143,7 @@ class Transport implements AiHttpTransport {
   final bodies = <String>[];
   @override Future<AiHttpResponse> send({required Uri uri,
     required Map<String, String> headers, required String body}) async {
-    expect(uri, ZaiModel.endpoint); bodies.add(body);
-    return respond(body, bodies.length);
+    expect(uri, ZaiModel.endpoint); bodies.add(body); return respond(body, bodies.length);
   }
 }
 AiHttpResponse response(Object output) => AiHttpResponse(200, jsonEncode({
@@ -165,12 +164,11 @@ void main() {
     expect(context.eventCount, 12); expect(context.actCount, 3);
     final data = context.shownData;
     expect((data['acts'] as List).expand((a) => a['events'] as List), hasLength(12));
-    for (final event in context.book.events) expect(context.shownText, contains(event.source.quote));
+    for (final event in context.book.events) { expect(context.shownText, contains(event.source.quote)); }
     expect(context.shownText, isNot(contains(context.index.title)));
     expect(context.shownText, isNot(contains('private_note')));
     expect(UnifiedBookStoryContext.create(index: context.index, book: context.book,
-      bookMap: context.bookMap, roles: context.roles.reversed.toList()).approvalDigest,
-      context.approvalDigest);
+      bookMap: context.bookMap, roles: context.roles.reversed.toList()).approvalDigest, context.approvalDigest);
   });
 
   test('single story proposal makes real causal dependencies and continues through existing hero items NPC compiler SQLite and alternate endings', () async {
@@ -181,15 +179,13 @@ void main() {
     expect(linked.formalRulesPassed, true);
     expect(linked.toDiagnosticJson()['enforced_story_links'], 2);
     expect(linked.plan.situations.expand((s) => s.decisions)
-        .singleWhere((d) => d.id == 'act_2_accept_offer').requires,
-        contains('act_1_original_outcome'));
+        .singleWhere((d) => d.id == 'act_2_accept_offer').requires, contains('act_1_original_outcome'));
     final hero = context.roles.singleWhere((r) => r.displayName == 'Артем');
     final source = WholeBookNpcSourcePlan.fromBook(index: context.index, book: context.book,
       bookMap: context.bookMap, draft: linked, selectedHeroRole: hero);
     expect(source.coverage.allDetectedEventsReferenced, true);
     final base = await source.compileBase(approvedPlanDigest: source.planDigest,
-      approvedHeroDigest: source.heroReviewDigest,
-      allShownQuotesReviewed: true, privateFictionConfirmed: true);
+      approvedHeroDigest: source.heroReviewDigest, allShownQuotesReviewed: true, privateFictionConfirmed: true);
     final manifest = WholePlanGameplayBatchManifest.fromPlan(index: source.index,
         book: source.book, plan: source.plan, maxNewRequestsPerRun: 2);
     final proposals = [for (final ctx in manifest.contexts) GameplayCandidateDraft(
@@ -215,8 +211,7 @@ void main() {
       selectedDrafts: [for (final npc in npcs) NpcCampaignDialogueDraft(candidateId: npc.id,
         playerLine: 'Обсудим дальнейший путь к маяку.', npcLine: 'Я помню нашу игровую встречу у ворот.')]);
     final built = await BookwideNpcCampaignAuthoring.compile(source: source, approval: reviewed,
-      freshReviewedRoles: context.roles, approvedDigest: reviewed.approvalDigest,
-      explicitlyConfirmedPrivateFiction: true);
+      freshReviewedRoles: context.roles, approvedDigest: reviewed.approvalDigest, explicitlyConfirmedPrivateFiction: true);
     final world = const RichPrivateBookworldImporter().inspect(built.archive);
     expect(world.requiresNetwork, false);
     final path = <String>['act_1_pass_source', 'act_1_pass_source_2',
@@ -229,20 +224,23 @@ void main() {
     }
     final direct = StoryWorld(world.blueprint, socialRulebook: world.npcSocialRulebook);
     for (var i = 0; i < path.length; i++) {
-      expect(direct.apply(actionId: 'step_$i', choiceId: path[i], expectedRevision: i).applied,
-          true, reason: path[i]);
+      expect(direct.apply(actionId: 'step_$i', choiceId: path[i], expectedRevision: i).applied, true, reason: path[i]);
     }
     expect(direct.isTerminal, true); expect(direct.state.inventory, isEmpty);
     expect(direct.state.knowledge['player'], isEmpty);
     final alternative = StoryWorld(world.blueprint, socialRulebook: world.npcSocialRulebook);
     void alt(String choice) => expect(alternative.apply(
-      actionId: 'alt_${alternative.state.revision}', choiceId: choice).applied, true);
+      actionId: 'alt_${alternative.state.revision}', choiceId: choice).applied, true, reason: choice);
     for (var act = 1; act <= 3; act++) {
       alt('act_${act}_pass_source'); alt('act_${act}_pass_source_2');
       if (act > 1) {
         expect(alternative.apply(actionId: 'denied_$act', choiceId: 'act_${act}_accept_offer').applied, false);
       }
       alt('act_${act}_refuse_offer'); alt('act_${act}_explore'); alt('act_${act}_use_discovery');
+      expect(alternative.state.sceneId, 'act_${act}_alternate_resolution');
+      // This is an actual mandatory action, not a test-only shortcut.
+      alt('act_${act}_end_alternative');
+      expect(alternative.state.sceneId, 'act_${act}_alternate_ending');
       if (act < 3) alt('act_${act}_continue_alternative');
     }
     expect(alternative.isTerminal, true);
@@ -272,8 +270,7 @@ void main() {
 
   test('incomplete acts, counterfeit identities, invented canon and backwards story dependencies never become a plan', () {
     final mutations = <void Function(Map<String, dynamic>)>[
-      (v) => (v['acts'] as List).removeLast(),
-      (v) => v['canon_verified'] = true,
+      (v) => (v['acts'] as List).removeLast(), (v) => v['canon_verified'] = true,
       (v) => (v['motivations'] as List).first['character_id'] = 'npc_invented',
       (v) => (v['motivations'] as List).clear(),
       (v) => (v['acts'] as List).first['proposal']['setup_event_id'] = 'invented_event',
@@ -282,7 +279,10 @@ void main() {
       (v) => (v['acts'] as List).first['proposal']['effects'] = ['teleport'],
     ];
     for (final mutate in mutations) {
-      final raw = answer(context); mutate(raw);
+      // Decoding gives real untrusted JSON types. A typed Map<String,String>
+      // fixture must not throw BEFORE the parser sees a malicious List value.
+      final raw = jsonDecode(jsonEncode(answer(context))) as Map<String, dynamic>;
+      mutate(raw);
       expect(() => UnifiedBookStoryDraft.parse(context, jsonEncode(raw)), throwsFormatException);
     }
     final draft = UnifiedBookStoryDraft.parse(context, jsonEncode(answer(context)));
@@ -295,15 +295,12 @@ void main() {
   });
 
   test('one consent covers identical bounded retries; a saved complete storyline reopens without another API call', () async {
-    final repo = MemorySourceAnalysisCheckpointRepository();
-    final store = UnifiedBookStoryStore(repository: repo);
+    final repo = MemorySourceAnalysisCheckpointRepository(), store = UnifiedBookStoryStore(repository: repo);
     final transport = Transport((body, count) async => count == 1
       ? const AiHttpResponse(429, '{}', retryAfter: '0') : response(answer(context)));
-    final service = ZaiUnifiedBookStory(preferences: Prefs(), vault: Vault(),
-      transport: transport, retryWait: (_) async {});
+    final service = ZaiUnifiedBookStory(preferences: Prefs(), vault: Vault(), transport: transport, retryWait: (_) async {});
     final saved = await service.generate(context: context, store: store,
-      approvedDigest: context.approvalDigest, explicitCloudConsent: true,
-      loadCurrentRoles: () async => context.roles);
+      approvedDigest: context.approvalDigest, explicitCloudConsent: true, loadCurrentRoles: () async => context.roles);
     expect(transport.bodies, hasLength(2)); expect(transport.bodies.toSet(), hasLength(1));
     final sent = jsonDecode(transport.bodies.first) as Map;
     expect((sent['messages'] as List).last['content'], context.shownText);
@@ -311,9 +308,8 @@ void main() {
     expect(reopened.draft!.reviewDigest, saved.draft!.reviewDigest);
     expect(reopened.cloudConsent, false); expect(reopened.consequencesApproved, false);
     expect(reopened.draft!.canInstallDirectly, false);
-    await service.generate(context: context, store: store,
-      approvedDigest: context.approvalDigest, explicitCloudConsent: true,
-      loadCurrentRoles: () async => context.roles);
+    await service.generate(context: context, store: store, approvedDigest: context.approvalDigest,
+      explicitCloudConsent: true, loadCurrentRoles: () async => context.roles);
     expect(transport.bodies, hasLength(2));
     final bytes = await repo.read(context.storageKey);
     expect(bytes, isNot(contains('not-a-real-key')));
@@ -333,8 +329,7 @@ void main() {
     await expectLater(run(), throwsA(isA<AiSetupException>()));
     prefs.enabled = true; vault.key = null;
     await expectLater(run(), throwsA(isA<AiSetupException>()));
-    expect(transport.bodies, isEmpty);
-    expect((await store.load(context)).draft, isNull);
+    expect(transport.bodies, isEmpty); expect((await store.load(context)).draft, isNull);
   });
 
   test('source card change during retry blocks another POST; cancellation and bad JSON never persist progress', () async {
@@ -360,26 +355,22 @@ void main() {
   });
 
   test('in-flight duplicate, write failure and corruption preserve a complete saved draft rather than re-paying silently', () async {
-    final repo = MemorySourceAnalysisCheckpointRepository();
-    final store = UnifiedBookStoryStore(repository: repo);
+    final repo = MemorySourceAnalysisCheckpointRepository(), store = UnifiedBookStoryStore(repository: repo);
     final draft = UnifiedBookStoryDraft.parse(context, jsonEncode(answer(context)));
     repo.failNextWrite = true;
-    await expectLater(store.save(context: context, draft: draft, expectedRecordHash: null),
-        throwsA(isA<FileSystemException>()));
+    await expectLater(store.save(context: context, draft: draft, expectedRecordHash: null), throwsA(isA<FileSystemException>()));
     expect((await store.load(context)).draft, isNull);
     final started = Completer<void>(), delayed = Completer<AiHttpResponse>();
     final transport = Transport((_, __) { started.complete(); return delayed.future; });
     final service = ZaiUnifiedBookStory(preferences: Prefs(), vault: Vault(), transport: transport);
     final pending = service.generate(context: context, store: store,
-      approvedDigest: context.approvalDigest, explicitCloudConsent: true,
-      loadCurrentRoles: () async => context.roles);
+      approvedDigest: context.approvalDigest, explicitCloudConsent: true, loadCurrentRoles: () async => context.roles);
     await started.future;
     await expectLater(service.generate(context: context, store: store,
       approvedDigest: context.approvalDigest, explicitCloudConsent: true,
       loadCurrentRoles: () async => context.roles), throwsA(isA<AiSetupException>()));
     delayed.complete(response(answer(context)));
-    final saved = await pending;
-    final bytes = await repo.read(context.storageKey);
+    final saved = await pending, bytes = await repo.read(context.storageKey);
     await expectLater(store.save(context: context, draft: draft, expectedRecordHash: null), throwsFormatException);
     expect(await repo.read(context.storageKey), bytes);
     final envelope = jsonDecode(bytes!) as Map<String, dynamic>;
@@ -394,8 +385,7 @@ void main() {
     await tester.binding.setSurfaceSize(const Size(360, 800));
     addTearDown(() => tester.binding.setSurfaceSize(null));
     final store = UnifiedBookStoryStore(repository: MemorySourceAnalysisCheckpointRepository());
-    await store.save(context: context, draft: UnifiedBookStoryDraft.parse(context, jsonEncode(answer(context))),
-      expectedRecordHash: null);
+    await store.save(context: context, draft: UnifiedBookStoryDraft.parse(context, jsonEncode(answer(context))), expectedRecordHash: null);
     final transport = Transport((_, __) async => throw StateError('No cloud request is authorized'));
     MultiActStoryPlanDraft? accepted;
     await tester.pumpWidget(MaterialApp(home: Scaffold(body: UnifiedBookStoryPanel(
@@ -410,8 +400,7 @@ void main() {
       await tester.scrollUntilVisible(control, 160, scrollable: find.byType(Scrollable).first);
       await Scrollable.ensureVisible(tester.element(control), alignment: 0.5);
       await tester.pump();
-      expect(tester.widget<CheckboxListTile>(control).value, false);
-      expect(accepted, isNull);
+      expect(tester.widget<CheckboxListTile>(control).value, false); expect(accepted, isNull);
       await tester.tap(control); await tester.pump();
       expect(tester.widget<CheckboxListTile>(control).value, true);
     }
@@ -420,7 +409,6 @@ void main() {
     await tester.tap(button); await tester.pumpAndSettle();
     expect(accepted, isNotNull);
     expect(accepted!.toDiagnosticJson()['enforced_story_links'], 2);
-    expect(transport.bodies, isEmpty);
-    expect(tester.takeException(), isNull);
+    expect(transport.bodies, isEmpty); expect(tester.takeException(), isNull);
   });
 }
