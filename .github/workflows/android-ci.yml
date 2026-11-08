@@ -110,7 +110,7 @@ jobs:
           sdk: stable
       - name: Prepare verified native SQLite source for Linux test workspaces
         run: |
-          python3 tools/ci_prepare_verified_sqlite.py --project packages/bookworld_format --project packages/campaign_manager --project packages/story_authoring --project packages/rpg_api
+          python3 tools/ci_prepare_verified_sqlite.py --project packages/bookworld_format --project packages/campaign_manager --project packages/story_authoring --project packages/rpg_api --project apps/rpg_cli
       - name: Verify reusable Dart engine dependency direction
         run: python3 tools/ci_check_engine_boundaries.py
       - name: Analyze pure Dart story_core
@@ -271,6 +271,13 @@ jobs:
           dart pub get
           dart analyze
           dart test --reporter expanded
+      - name: Verify runnable second RPG client through public API
+        working-directory: apps/rpg_cli
+        run: |
+          dart pub get
+          dart analyze
+          dart test --reporter expanded
+          dart run bin/rpg_cli.dart --help
       - name: Upload test BookWorld artifact
         uses: actions/upload-artifact@v4
         with:

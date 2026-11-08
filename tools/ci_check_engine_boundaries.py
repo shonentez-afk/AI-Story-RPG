@@ -152,6 +152,34 @@ def validate() -> list[str]:
                 "RichSceneDialogue.verify" in content):
             issues.append(f"{adapter}: source rules still in Flutter")
 
+    # A real second application must use the public RPG API, not the engine.
+    cli = ROOT / "apps" / "rpg_cli"
+    allowed_cli = {"rpg_api", "campaign_manager"}
+    pubspec = cli / "pubspec.yaml"
+    if not pubspec.is_file():
+        issues.append("Standalone RPG CLI is missing")
+    elif pubspec_runtime_dependencies(pubspec.read_text(encoding="utf-8")) != allowed_cli:
+        issues.append("rpg_cli must depend only on public API and SQLite client port")
+    for source in (*(cli / "lib").rglob("*.dart"), *(cli / "bin").rglob("*.dart")):
+        for line_no, line in enumerate(
+                source.read_text(encoding="utf-8").splitlines(), 1):
+            match = IMPORT.match(line)
+            if match is None:
+                continue
+            target = match.group(1)
+            if target.startswith("package:"):
+                pkg = target[8:].split("/", 1)[0]
+                if pkg not in allowed_cli | {"ai_story_rpg_cli"}:
+                    issues.append(
+                        f"{source.relative_to(ROOT)}:{line_no}: "
+                        f"CLI must use public RPG API instead of {target}")
+            elif not target.startswith("dart:"):
+                resolved = (source.parent / target).resolve()
+                if not resolved.is_relative_to(cli.resolve()):
+                    issues.append(
+                        f"{source.relative_to(ROOT)}:{line_no}: "
+                        "CLI import escapes its client package")
+
     gateway = ROOT / "apps" / "story_reader" / "lib" / "world_library_gateway.dart"
     workers = ROOT / "apps" / "story_reader" / "lib" / "book_isolate_workers.dart"
     for path in (gateway, workers):

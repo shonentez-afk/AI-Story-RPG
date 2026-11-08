@@ -1,3 +1,19 @@
+## 2026-11-09 — второй автономный клиент RPG API (приёмка в PR #133)
+
+Добавлен `apps/rpg_cli`: настоящий клиент независимого `RpgGameApi` и
+`RpgAuthoringApi`, без Flutter, второго движка и облачных вызовов.
+Поддерживает `prepare`, `install`, `worlds`, `campaigns`, `start`, `view`,
+`choose`, `export-save`, `import-save`. CI проверяет реальные replay и
+save roundtrip (source-reviewed synthetic NPC+items), смену SQLite соединений,
+FB2/выбор отдельной сказки, строгую ревизию и отказ от перезаписи.
+`tools/ci_check_engine_boundaries.py` запрещает импорт внутренних движковых
+пакетов из CLI; pinned SQLite hook расширен для нового Dart-клиента.
+
+**CI нового коммита ещё не прошёл, не объявлять SUCCESS без exact SHA.**
+Это доказывает самостоятельность игрового API, но НЕ полный автоматический
+CANON, длинную книгу >192 сцен, свободный AI-GM или реальный device E2E.
+Один Draft PR #133, `main` и параллельный E6g не трогать.
+
 # AI Story RPG — продолжение полного сценарного потока
 
 ## 2026-11-09 — Модельные предложения проверяются автономным RPG API
