@@ -21,7 +21,13 @@ export 'package:story_authoring/story_authoring.dart' show
     OfflineSourceReview, OfflineScanCheckpoint,
     BookPreparationSnapshot, BookToRpgWorkflow,
     NpcContinuityAudit, DraftSceneGraphOverview,
-    CrossActSourceEvidencePacket, PreparationReadinessReport;
+    CrossActSourceEvidencePacket, PreparationReadinessReport,
+    NpcDialogueDraftContext, NpcDialogueCloudDraft,
+    SourceLockedProseContext, SourceLockedProseDraft,
+    SourceLockedGameplayContext, GameplayCandidateDraft,
+    SourceLockedProseAuditContext, AiProseFindingKind,
+    AiProseFindingSeverity, AiProseAuditVerdict,
+    AiProseAuditFinding, AiProseAuditReport;
 export 'package:bookworld_format/bookworld_format.dart' show
     VerifiedRichPrivateBookworld;
 
@@ -214,4 +220,46 @@ final class LocalRpgAuthoringApi implements RpgAuthoringApi {
   @override
   VerifiedRichPrivateBookworld inspectPrivateWorld(Uint8List bytes) =>
       _author.inspectPrivateWorld(bytes);
+}
+
+/// Validates consent-bound AI proposals without owning any model transport.
+abstract interface class RpgProposalReviewApi {
+  NpcDialogueCloudDraft reviewNpcDialogue(
+      NpcDialogueDraftContext context, String responseBody);
+  SourceLockedProseDraft reviewSceneProse(
+      SourceLockedProseContext context, String responseBody);
+  GameplayCandidateDraft reviewGameplaySuggestions(
+      SourceLockedGameplayContext context, String responseBody);
+  AiProseAuditReport reviewLiteraryCritique(
+      SourceLockedProseAuditContext context, String responseBody);
+}
+
+/// All clients apply the SAME pure source-bound checks and prompts.
+final class LocalRpgProposalReviewApi implements RpgProposalReviewApi {
+  const LocalRpgProposalReviewApi();
+
+  static const npcSystemPrompt = NpcDialogueCloudVerifier.systemPrompt;
+  static const proseSystemPrompt = SourceLockedProseResponseVerifier.systemPrompt;
+  static const gameplaySystemPrompt = GameplayCandidateProposalVerifier.systemPrompt;
+  static const auditSystemPrompt = AiProseAuditVerifier.systemPrompt;
+
+  @override
+  NpcDialogueCloudDraft reviewNpcDialogue(
+          NpcDialogueDraftContext context, String responseBody) =>
+      NpcDialogueCloudVerifier.parseForTest(context, responseBody);
+
+  @override
+  SourceLockedProseDraft reviewSceneProse(
+          SourceLockedProseContext context, String responseBody) =>
+      SourceLockedProseResponseVerifier.parse(context, responseBody);
+
+  @override
+  GameplayCandidateDraft reviewGameplaySuggestions(
+          SourceLockedGameplayContext context, String responseBody) =>
+      GameplayCandidateProposalVerifier.parse(context, responseBody);
+
+  @override
+  AiProseAuditReport reviewLiteraryCritique(
+          SourceLockedProseAuditContext context, String responseBody) =>
+      AiProseAuditVerifier.parse(context, responseBody);
 }

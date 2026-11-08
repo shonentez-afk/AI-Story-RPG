@@ -136,6 +136,22 @@ def validate() -> list[str]:
         if len(text) > 800:
             issues.append(f"{shim}: compatibility shim contains too much code")
 
+    llm_adapters = (
+        "zai_npc_dialogue_draft.dart",
+        "zai_source_locked_prose_preview.dart",
+        "zai_source_locked_gameplay_candidates.dart",
+        "zai_source_locked_prose_audit.dart",
+    )
+    for filename in llm_adapters:
+        adapter = ROOT / "apps" / "story_reader" / "lib" / filename
+        content = adapter.read_text(encoding="utf-8") if adapter.is_file() else ""
+        if ("LocalRpgProposalReviewApi" not in content or
+                "package:rpg_api/rpg_api.dart" not in content):
+            issues.append(f"{adapter}: AI proposals must use pure API")
+        if ("RichNpcDialogueKnowledge.validate" in content or
+                "RichSceneDialogue.verify" in content):
+            issues.append(f"{adapter}: source rules still in Flutter")
+
     gateway = ROOT / "apps" / "story_reader" / "lib" / "world_library_gateway.dart"
     workers = ROOT / "apps" / "story_reader" / "lib" / "book_isolate_workers.dart"
     for path in (gateway, workers):
