@@ -5,6 +5,7 @@ library;
 export 'src/book_model.dart';
 export 'src/book_text_decoder.dart';
 export 'src/book_import.dart';
+export 'src/book_source_selection.dart';
 export 'src/book_source_index.dart';
 export 'src/authoring_engine.dart';
 export 'src/offline_book_analyzer.dart';
