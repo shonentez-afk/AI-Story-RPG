@@ -56,3 +56,20 @@ Flutter в `story_authoring` **без изменения алгоритмов**;
 4. E2E другой клиент без Flutter + текущие Windows/Android, 0/1/2 NPC, SQLite/backup, source-locked реальные русские FB2, CI на точном SHA. Внешний E6d отдельно.
 
 **Граница настоящей приёмки:** установка и прохождение одного и того же проверенного мира двумя независимыми клиентами при идентичных событиях и сохранениях; сценарный конвейер при этом запускается без Flutter. Не путать эту архитектурную приёмку с литературной правдивостью или живым Z.ai.
+
+## 9 ноября 2026 — второй клиент реализован и проверен
+
+[Исходники CLI](../apps/rpg_cli/README_RU.md) используют только
+`package:rpg_api` и клиентский `campaign_manager` для SQLite.
+Публичный `RpgGameApi` исполняет установки миров, игровой выбор,
+replay, NPC, предметы и переносимый `.bwsave`; `RpgAuthoringApi`
+выполняет offline FB2/TXT подготовку. Клиент не содержит копий
+`story_core`/`rpg_gameplay` и не обращается к Flutter/ИИ.
+`tools/ci_check_engine_boundaries.py` проверяет это статически,
+а M1.7 проверяет поведение с реальной SQLite.
+
+**Acceptance** на `bce9bec`: [M1.7 #42513354448](https://github.com/shonentez-afk/AI-Story-RPG/actions/runs/42513354448)
+COMPLETED SUCCESS. Реальная литературная двухкнижная приёмка не проведена.
+Это **локальный Dart API**, без встроенного HTTP/gRPC сервера;
+`campaign_manager` использует `dart:io`/SQLite и для будущего
+web-player требуется отдельная адаптация хранения.

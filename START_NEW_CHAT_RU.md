@@ -1,3 +1,27 @@
+## 2026-11-09 — подтверждённая автономная CLI/API-приёмка (exact-code)
+
+**Кодовый SHA:** `bce9becab8a88d57a01cc4a46c968aca1f1238f7`.
+[Основной CI #42513354448](https://github.com/shonentez-afk/AI-Story-RPG/actions/runs/42513354448) — задача
+**M1.7 deterministic world and schema contracts: COMPLETED SUCCESS**,
+включая `dart analyze`, `dart test` и запуск нового
+`apps/rpg_cli` с offline FB2, реальным verified NPC/Item BookWorld,
+SQLite reopen и portable save. Python reference и Dart engine/scenario
+тоже SUCCESS; Flutter widget-suite на момент этой записи ещё
+выполнялся, полное Windows/Android CI **не объявлять**.
+[M0 #42513354382](https://github.com/shonentez-afk/AI-Story-RPG/actions/runs/42513354382) — COMPLETED SUCCESS.
+
+Отдельный `External RPG author tests` на PR #133 сохраняет старый
+`compatibility` pin, работает в параллельном E6g; его FAIL
+**не равен** провалу независимого игрового движка. Для PR #133 статус
+Draft, `main` без изменений. Граница: 7 чистых Dart-пакетов
+(включая `rpg_api`), два клиента Flutter/CLI; это локальный SDK,
+не HTTP service и не гарантированная литературная RPG по любой книге.
+Открыты: source-locked v4 >192, reviewed initial state/time,
+CANON/ALTER_FATE/hero role, full AI workflow + consent, реальные
+RU FB2 и Win/Android device QA. Следующий цельный пакет:
+довести `BookToRpgWorkflow` до валидируемой компиляции полного
+романа и согласовать внешнего автора E6g с актуальным native HEAD.
+
 ## 2026-11-09 — второй автономный клиент RPG API (приёмка в PR #133)
 
 Добавлен `apps/rpg_cli`: настоящий клиент независимого `RpgGameApi` и

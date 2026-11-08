@@ -122,3 +122,24 @@ SQLite-тесте; тест скорректирован без изменени
 физический UX Windows/Android, backup/restore и accessibility.
 Issue #118 оставить открытым, PR #133 Draft. E6d отдельный проектный
 контракт, не менять без согласования.
+
+## Архитектурная ревизия 9 ноября 2026 (PR #133)
+
+Семь независимых Dart-пакетов составляют 2 headless подсистемы:
+1. Исполнение `story_core` / `story_runtime_adapter` /
+   `bookworld_format` / `campaign_manager` / `rpg_gameplay`.
+2. Книжное авторство `story_authoring`, доступ к обоим через
+   `rpg_api`. Сетевые сервисы остаются адаптерами, не ядром.
+
+Отдельный `apps/rpg_cli` — доказательный второй клиент через API.
+Модульные и sqlite/replay/save CLI тесты прошли M1.7 в
+[CI #42513354448](https://github.com/shonentez-afk/AI-Story-RPG/actions/runs/42513354448)
+на exact code SHA `bce9becab8a88d57a01cc4a46c968aca1f1238f7`.
+Flutter остаётся первым клиентом с файлами, GUI, Android/Windows,
+показом реплик, consent и необязательным HTTP adapter.
+
+**Точная оценка автономности:** исполнение завершено в рамках Dart VM
+без Flutter и ИИ; автономный сценарный анализ и проверенная сборка
+существуют, но полный самообслуживаемый "любая длинная книга → CANON RPG"
+остаётся неготовым. Web не готов из-за `dart:io`/SQLite;
+AI-freeform не создаёт произвольные действия мира.
