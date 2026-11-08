@@ -133,10 +133,18 @@ void main() {
     await tester.tap(find.text('NPC'));
     await tester.pumpAndSettle();
     final firstCard = find.byKey(Key('world-npc-' + maria));
+    // At 280dp/200% the explanation and long cards occupy more than
+    // one sheet viewport: build and reach them by actual user scrolling.
+    final list = find.descendant(
+      of: find.byKey(const Key('world-npc-relation-list')),
+      matching: find.byType(Scrollable),
+    );
+    await tester.scrollUntilVisible(firstCard, 80, scrollable: list);
+    await tester.pumpAndSettle();
     expect(firstCard, findsOneWidget);
     await tester.scrollUntilVisible(
         find.byKey(Key('world-npc-' + ivan)), 80,
-        scrollable: find.byKey(const Key('world-npc-relation-list')));
+        scrollable: list);
     expect(find.byKey(Key('world-npc-' + ivan)), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
