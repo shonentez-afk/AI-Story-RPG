@@ -290,10 +290,10 @@ void main() {
       final met = await gateway.load(id);
       expect(met.revision, 1);
       expect(met.npcRelations, hasLength(expectedCount));
-      expect(met.visibleSpeakerActorIds['Мария'], 'npc_' + 'c' * 32);
+      expect(met.visibleSpeakerActorIds['Мария'], 'npc_' + List.filled(32, 'c').join());
       expect(met.sceneDialogueTurns![1].speaker, 'Мария');
       if (expectedCount == 2) {
-        expect(met.visibleSpeakerActorIds['Иван'], 'npc_' + 'd' * 32);
+        expect(met.visibleSpeakerActorIds['Иван'], 'npc_' + List.filled(32, 'd').join());
         expect(met.sceneDialogueTurns![2].speaker, 'Иван');
       } else {
         expect(met.visibleSpeakerActorIds.containsKey('Иван'), isFalse);
@@ -308,7 +308,7 @@ void main() {
       final committed = await gateway.load(id);
       expect(committed.revision, 2);
       expect(committed.inventory, isNot(contains('map')));
-      expect(committed.npcItemOwners['map'], 'npc_' + 'c' * 32);
+      expect(committed.npcItemOwners['map'], 'npc_' + List.filled(32, 'c').join());
       expect(committed.journal.last.changes,
           contains('Передано персонажу: Карта'));
 
