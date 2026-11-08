@@ -25,6 +25,7 @@ from .rich_package import _attribution, compile_rich_from_project
 
 _NATIVE_PROBE = ROOT / "tests/rpg_author/dart"
 _PACKAGE_CONFIG = _NATIVE_PROBE / ".dart_tool/package_config.json"
+_AUTHOR_PACKAGE_CONFIG = ROOT / "packages/story_authoring/.dart_tool/package_config.json"
 _MEMBER_NAMES = {
     "manifest.json", "scenario/blueprint.json", "source/provenance.json",
     "world.sqlite",
@@ -34,8 +35,11 @@ _MAX_V4_BYTES = 20 * 1024 * 1024
 
 def _native(operation: str, *args: Path) -> dict:
     """Invoke only the pinned, platform-independent native story_authoring CLI."""
-    require(_PACKAGE_CONFIG.is_file(), "native_dart_not_resolved",
-            "Run 'dart pub get' in tests/rpg_author/dart before native v4 packaging")
+    package_config = (_AUTHOR_PACKAGE_CONFIG if _AUTHOR_PACKAGE_CONFIG.is_file()
+                      else _PACKAGE_CONFIG)
+    require(package_config.is_file(), "native_dart_not_resolved",
+            "Run 'dart pub get' in packages/story_authoring "
+            "(or tests/rpg_author/dart) before native v4 packaging")
     require(shutil.which("dart") is not None, "native_dart_unavailable",
             "Dart SDK is required for native v4 build/verification")
     require(operation in ("build-extended", "verify-world"), "invalid_native_operation",
@@ -52,7 +56,7 @@ def _native(operation: str, *args: Path) -> dict:
     workdir = args[0].parent.resolve()
     require(all(p.parent.resolve() == workdir and p.is_absolute() for p in args),
             "invalid_native_paths", "All native compiler files must share one private directory")
-    command = ["dart", f"--packages={_PACKAGE_CONFIG}", str(script),
+    command = ["dart", f"--packages={package_config}", str(script),
                operation, *(p.name for p in args)]
     try:
         result = subprocess.run(command, cwd=workdir,
