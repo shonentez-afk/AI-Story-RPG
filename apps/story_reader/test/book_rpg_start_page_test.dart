@@ -1,4 +1,6 @@
 import 'package:ai_story_reader/book_import.dart';
+import 'package:ai_story_reader/book_source_analysis.dart';
+import 'package:ai_story_reader/source_index_preview_page.dart';
 import 'package:ai_story_reader/book_rpg_start_page.dart';
 import 'package:ai_story_reader/book_source_index.dart';
 import 'package:ai_story_reader/quick_rpg_page.dart';
@@ -224,6 +226,7 @@ void main() {
       gateway: const DeviceWorldLibraryGateway(background: false),
       indexer: (_) async => index,
       analysis: analysis,
+      manualCheckpointRepository: repository,
     )));
     await tester.ensureVisible(find.byKey(const Key('rpg-start-resume')));
     await tester.tap(find.byKey(const Key('rpg-start-resume')));
@@ -232,6 +235,73 @@ void main() {
     expect(find.textContaining('нет сохранённого анализа'), findsOneWidget);
     expect(calls, 0);
     expect(repository.saved[other.sourceFingerprint], '{"old":"edition"}');
+    expect(tester.takeException(), isNull);
+  });
+
+
+  testWidgets('Resume reopens the same local editor if only offline source '
+      'checkpoint exists, without Z.ai consent or model calls',
+      (tester) async {
+    final index = BookSourceIndexer.index(_book);
+    final aiStore = _MemoryCheckpoint();
+    final localStore = _MemoryCheckpoint();
+    final session = SourceAnalysisSession.create(index)
+        .processBatch(index, limit: 1);
+    expect(session.processedCount, 1);
+    await localStore.write(index.sourceFingerprint, session.encode());
+    var cloudCalls = 0;
+    final analysis = ZaiAutoWholeBookAnalysis(
+      repository: aiStore,
+      preview: (source, window, token, title) async {
+        cloudCalls++;
+        throw StateError('Resume must be local');
+      },
+    );
+    await tester.pumpWidget(MaterialApp(home: BookRpgStartPage(
+      book: _book,
+      gateway: const DeviceWorldLibraryGateway(background: false),
+      indexer: (_) async => index,
+      analysis: analysis,
+      manualCheckpointRepository: localStore,
+    )));
+    final resume = find.byKey(const Key('rpg-start-resume'));
+    await tester.ensureVisible(resume);
+    await tester.tap(resume);
+    await tester.pump();
+    // Workers validate the saved source evidence independently.
+    await tester.runAsync(() async {
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+    });
+    await tester.pump(const Duration(milliseconds: 250));
+    expect(find.byType(SourceIndexPreviewPage), findsOneWidget);
+    expect(await localStore.read(index.sourceFingerprint), session.encode());
+    expect(cloudCalls, 0);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('empty local checkpoint is not misrepresented as progress',
+      (tester) async {
+    final index = BookSourceIndexer.index(_book);
+    final localStore = _MemoryCheckpoint();
+    final empty = SourceAnalysisSession.create(index).encode();
+    await localStore.write(index.sourceFingerprint, empty);
+    await tester.pumpWidget(MaterialApp(home: BookRpgStartPage(
+      book: _book,
+      gateway: const DeviceWorldLibraryGateway(background: false),
+      indexer: (_) async => index,
+      analysis: ZaiAutoWholeBookAnalysis(repository: _MemoryCheckpoint()),
+      manualCheckpointRepository: localStore,
+    )));
+    await tester.ensureVisible(find.byKey(const Key('rpg-start-resume')));
+    await tester.tap(find.byKey(const Key('rpg-start-resume')));
+    await tester.pump();
+    await tester.runAsync(() async {
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+    });
+    await tester.pump(const Duration(milliseconds: 250));
+    expect(find.byType(BookRpgStartPage), findsOneWidget);
+    expect(find.textContaining('ещё не содержит сохранённых'), findsOneWidget);
+    expect(await localStore.read(index.sourceFingerprint), empty);
     expect(tester.takeException(), isNull);
   });
 

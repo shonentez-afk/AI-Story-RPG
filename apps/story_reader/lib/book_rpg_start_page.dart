@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 
 import 'book_import.dart';
 import 'book_isolate_workers.dart';
+import 'source_analysis_checkpoint_repository.dart';
+import 'source_index_preview_page.dart';
 import 'book_source_index.dart';
 import 'quick_rpg_page.dart';
 import 'world_library_gateway.dart';
@@ -21,6 +23,7 @@ class BookRpgStartPage extends StatefulWidget {
     required this.gateway,
     this.indexer,
     this.analysis,
+    this.manualCheckpointRepository,
   });
 
   final ImportedBook book;
@@ -32,6 +35,10 @@ class BookRpgStartPage extends StatefulWidget {
   /// Test seam; real analysis is created only after the user selects AI.
   final ZaiAutoWholeBookAnalysis? analysis;
 
+  /// Same private scope used by the existing local source editor.
+  /// Inject only for deterministic offline tests; no extra format is stored.
+  final SourceAnalysisCheckpointRepository? manualCheckpointRepository;
+
   @override
   State<BookRpgStartPage> createState() => _BookRpgStartPageState();
 }
@@ -41,6 +48,9 @@ class _BookRpgStartPageState extends State<BookRpgStartPage> {
   // only reads local validated checkpoints until the downstream consent UI.
   late final ZaiAutoWholeBookAnalysis _analysis =
       widget.analysis ?? ZaiAutoWholeBookAnalysis();
+  late final SourceAnalysisCheckpointRepository _manualCheckpoints =
+      widget.manualCheckpointRepository ??
+          const FileSourceAnalysisCheckpointRepository();
   bool _opening = false;
   String? _error;
 
@@ -82,26 +92,45 @@ class _BookRpgStartPageState extends State<BookRpgStartPage> {
           ? await indexImportedBookInWorker(widget.book)
           : await indexer(widget.book);
       if (!mounted) return;
+      var resumeManual = false;
       if (resumeOnly) {
-        // PortableWholeBookAnalyzer.read verifies the exact source window
-        // manifest, fingerprint, all saved excerpts and their checksum.
-        // A mismatched or corrupt checkpoint is never overwritten.
+        // Try existing full-book preparation first. This pure-Dart read
+        // validates fingerprint, exact source windows and their checksums.
         final restored = await _analysis.read(index);
         if (restored.progress.completed == 0) {
-          setState(() => _error =
-              'Для этой редакции книги нет сохранённого анализа. '
-              'Выберите «Подготовить книгу через ИИ» для нового запуска. '
-              'В Z.ai ничего не отправлено.');
-          return;
+          // The older local authoring route is NOT an alternative runtime.
+          // Its independent exact-edition checkpoint can be resumed through
+          // its own existing, source-verified UI without a new book scan/POST.
+          final raw = await _manualCheckpoints.read(index.sourceFingerprint);
+          if (raw == null) {
+            setState(() => _error =
+                'Для этой редакции книги нет сохранённого анализа. '
+                'Выберите «Подготовить книгу через ИИ» или откройте '
+                '«Расширенный редактор». В Z.ai ничего не отправлено.');
+            return;
+          }
+          final checked = await decodeSourceAnalysisInWorker(index, raw);
+          if (checked.processedCount == 0 && checked.mentions.isEmpty) {
+            setState(() => _error =
+                'Локальная подготовка ещё не содержит сохранённых '
+                'результатов. Исходный checkpoint не изменён.');
+            return;
+          }
+          resumeManual = true;
         }
       }
       if (!mounted) return;
       await Navigator.of(context).push<void>(MaterialPageRoute(
-        builder: (_) => ZaiWholeBookAnalysisPage(
-          index: index,
-          analysis: _analysis,
-          gateway: widget.gateway,
-        ),
+        builder: (_) => resumeManual
+            ? SourceIndexPreviewPage(
+                book: widget.book, indexer: (_) async => index,
+                checkpointRepository: _manualCheckpoints,
+                worldGateway: widget.gateway,
+              )
+            : ZaiWholeBookAnalysisPage(
+                index: index, analysis: _analysis,
+                gateway: widget.gateway,
+              ),
       ));
     } catch (error) {
       if (mounted) {
@@ -194,11 +223,11 @@ class _BookRpgStartPageState extends State<BookRpgStartPage> {
                     label: const Text('Продолжить создание RPG'),
                   ),
                   const SizedBox(height: 6),
-                  const Text('Проверим сохранённую подготовку именно этой '
-                      'редакции книги. Если она есть, восстановим '
-                      'подтверждённые фрагменты и черновой сюжет без '
-                      'повторной отправки. Новое согласие на ИИ всегда '
-                      'запрашивается отдельно.'),
+                  const Text('По точному отпечатку книги проверяются '
+                      'сохранённый анализ всей книги и локальный '
+                      'редактор источника. Продолжается существующий '
+                      'маршрут без повторной отправки книги. '
+                      'Новое согласие на ИИ запрашивается отдельно.'),
                 ],
               ),
             ),
