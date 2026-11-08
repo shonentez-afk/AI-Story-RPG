@@ -12,6 +12,32 @@ Future<void> main(List<String> args) async {
       final source = engine.parseAndIndex(
           args[1], await File(args[1]).readAsBytes());
       stdout.writeln(jsonEncode(source.status));
+    } else if ((args.length == 2 || args.length == 4) &&
+        args[0] == 'scan-source' &&
+        (args.length == 2 || args[2] == '--checkpoint')) {
+      final source = engine.parseAndIndex(
+          args[1], await File(args[1]).readAsBytes());
+      final save = args.length == 4 ? File(args[3]) : null;
+      OfflineScanCheckpoint? restored;
+      if (save != null && await save.exists()) {
+        final raw = jsonDecode(await save.readAsString());
+        if (raw is! Map<String, dynamic>) {
+          throw const FormatException('Неверный локальный checkpoint');
+        }
+        restored = OfflineScanCheckpoint.fromJson(source.index, raw);
+      }
+      final report = await const OfflineBookAnalyzer().scan(
+        source, resume: restored,
+        onCheckpoint: save == null ? null : (checkpoint) {
+          // Atomically replace the file only with source-validated snapshots.
+          // Contains source excerpts; store in a PRIVATE folder, never CI.
+          final partial = File(save.path + '.pending');
+          partial.writeAsStringSync(jsonEncode(checkpoint.toJson()),
+              flush: true);
+          partial.renameSync(save.path);
+        },
+      );
+      stdout.writeln(jsonEncode(report.summary));
     } else if (args.length == 4 && args[0] == 'build-reviewed') {
       final source = engine.parseAndIndex(
           args[1], await File(args[1]).readAsBytes());
@@ -57,6 +83,7 @@ Future<void> main(List<String> args) async {
     } else {
       stderr.writeln('Команды:');
       stderr.writeln('  dart run bin/author_book.dart inspect-source source.fb2');
+      stderr.writeln('  dart run bin/author_book.dart scan-source source.fb2 [--checkpoint private/scan.json]');
       stderr.writeln('  dart run bin/author_book.dart build-reviewed source.fb2 review.json game.bworld');
       stderr.writeln('  dart run bin/author_book.dart verify-world game.bworld');
       exitCode = 64;
@@ -64,6 +91,9 @@ Future<void> main(List<String> args) async {
   } on FormatException catch (error) {
     stderr.writeln('Ошибка проверки: ' + error.message);
     exitCode = 2;
+  } on StateError catch (error) {
+    stderr.writeln('Анализ прерван: ' + error.message);
+    exitCode = 3;
   } on FileSystemException catch (error) {
     stderr.writeln('Ошибка файла: ' + error.message);
     exitCode = 74;

@@ -42,6 +42,37 @@ void main() {
     expect(src.status['scenario_reviewed'], false);
   });
 
+  test('complete offline source scan is resumable, keeps all proposals unapproved',
+      () async {
+    final src = engine.parseAndIndex(
+      'story.txt',
+      bytes('Мария встретила Ивана.\nДверь закрыта.\n'
+          'По словам Марии, Иван открыл окно.'),
+      maxChunkUtf16: 256,
+    );
+    OfflineScanCheckpoint? latest;
+    final first = await const OfflineBookAnalyzer().scan(
+      src, onCheckpoint: (checkpoint) => latest = checkpoint,
+    );
+    expect(first.mentions.pendingCount, 0);
+    expect(first.evidence.scannedChunks, src.index.chunks.length);
+    expect(first.semantics.pendingCount, 0);
+    expect(first.summary['is_playable_rpg'], false);
+    expect(first.summary['is_literary_canon'], false);
+    expect(latest, isNotNull);
+    final restored = OfflineScanCheckpoint.fromJson(
+      src.index, Map<String, dynamic>.from(latest!.toJson()),
+    );
+    final second = await const OfflineBookAnalyzer().scan(src,
+        resume: restored);
+    expect(second.catalog.encode(), first.catalog.encode());
+    expect(second.summary, first.summary);
+    final foreign = engine.parseAndIndex('other.txt', bytes('Иной текст.'));
+    expect(() => OfflineScanCheckpoint.fromJson(
+      foreign.index, Map<String, dynamic>.from(latest!.toJson())),
+      throwsFormatException);
+  });
+
   test('forged source fingerprint is rejected before authoring', () {
     final src = engine.parseAndIndex('book.txt', bytes('Начало.'));
     expect(() => engine.buildReviewedPrivateWorld(

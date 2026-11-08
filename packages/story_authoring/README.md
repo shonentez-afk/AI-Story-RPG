@@ -19,7 +19,9 @@ The native writer + independent rich-v3 reader verify all actual UTF-16
 quotes before creating the package. No model answer is trusted as the original
 source. If validation fails, no destination file is truncated.
 
-**Current limitation:** this slice extracts source import/index and verified
+**Standalone offline semantic pass:** `dart run bin/author_book.dart scan-source /private/book.fb2 --checkpoint /private/scan.json`. This reuses the SAME verified mention, evidence, semantic, chronology and NPC-dossier models as Flutter. The checkpoint has embedded private quote snippets and is fingerprint-bound; the stdout JSON contains only counts. The scan yields review CANDIDATES, not approved canon or a playable RPG.
+
+**Current limitation:** this slice extracts source import/index, offline source candidate analysis and verified
 compilation, NOT the entire intermediate semantic/causal/AI authoring pipeline.
 Literary event/character review, long-book StoryPlan, and UI checkpoints still
 live inside the Flutter app. They must move to this Dart package without a
