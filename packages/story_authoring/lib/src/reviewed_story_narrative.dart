@@ -119,6 +119,7 @@ class ReviewedStoryNarrative implements MultiActStoryPlanDraft {
   }
 
   @override StoryPlan get plan => _plan.plan;
+  @override bool get expanded => _plan.expanded;
   @override StoryCausalContract get causalContract => _plan.causalContract;
   @override StoryCausalAudit get formalAudit => _plan.formalAudit;
   @override BookwideStoryCoverage get coverage => _plan.coverage;

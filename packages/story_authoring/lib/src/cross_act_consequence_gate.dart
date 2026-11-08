@@ -313,7 +313,7 @@ class CrossActConsequenceGate {
       exclusiveGroups: draft.causalContract.exclusiveGroups,
     );
     final audit = StoryPlanCausalAuditor.audit(
-        plan: revised, book: book, contract: contract);
+        plan: revised, book: book, contract: contract, expanded: expanded);
     if (audit.counterexamples.isNotEmpty) {
       throw const FormatException('Новые условия нарушили игровую причинность.');
     }
@@ -325,7 +325,8 @@ class CrossActConsequenceGate {
             decisionId: rule.laterDecisionId,
             earlierActIndex: parts[rule.earlierActId]!,
             outcome: rule.priorOutcome,
-            mode: rule.mode),
+            mode: rule.mode,
+            expanded: expanded),
     ];
     if (impacts.any((x) => !x.changesLaterOptions)) {
       throw const FormatException(
@@ -345,6 +346,7 @@ class CrossActConsequenceGate {
       required int earlierActIndex,
       required CrossActPriorOutcome outcome,
       required CrossActRuleMode mode,
+      required bool expanded,
   }) {
     final scenes = {for (final s in plan.situations) s.id: s};
     final sceneId = scenes.values

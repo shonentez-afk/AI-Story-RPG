@@ -323,6 +323,7 @@ class _ReviewedUnifiedDraft implements MultiActStoryPlanDraft {
   final MultiActStoryPlanDraft base;
   final CrossActContinuityDraft continuity;
   @override StoryPlan get plan => continuity.plan;
+  @override bool get expanded => base.expanded;
   @override StoryCausalContract get causalContract => base.causalContract;
   @override StoryCausalAudit get formalAudit => continuity.audit;
   @override BookwideStoryCoverage get coverage => continuity.coverage;
