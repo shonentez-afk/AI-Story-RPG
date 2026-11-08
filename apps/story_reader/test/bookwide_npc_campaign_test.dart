@@ -8,6 +8,7 @@ import 'package:ai_story_reader/bookwide_storyplan_composer.dart';
 import 'package:ai_story_reader/multi_act_trial_page.dart';
 import 'package:ai_story_reader/narrative_book_model.dart';
 import 'package:ai_story_reader/npc_editorial_notebook.dart';
+import 'package:ai_story_reader/npc_campaign_writing_session.dart';
 import 'package:ai_story_reader/reviewed_hero_role.dart';
 import 'package:ai_story_reader/source_analysis_checkpoint_repository.dart';
 import 'package:ai_story_reader/source_character_dossiers.dart';
@@ -189,6 +190,12 @@ Future<_Fixture> _prepare({bool expanded = false}) async {
     allShownQuotesReviewed: true, privateFictionConfirmed: true,
   );
   return _Fixture(source, base, roles, candidates);
+}
+
+class _NoRolesCatalog extends ReviewedHeroRoleCatalog {
+  const _NoRolesCatalog();
+  @override
+  Future<List<ReviewedHeroRole>> load(BookSourceIndex index) async => const [];
 }
 
 class _UnusedGateway implements WorldLibraryGateway {
@@ -530,4 +537,41 @@ void main() {
     expect(tester.widget<OutlinedButton>(prepare).onPressed, isNull);
     expect(tester.takeException(), isNull);
   });
+  testWidgets('zero NPC is reviewable without a fictional actor or dialogue',
+      (tester) async {
+    final source = fixture.source;
+    final memory = MemorySourceAnalysisCheckpointRepository();
+    await tester.pumpWidget(MaterialApp(home: WholeBookNpcCampaignPage(
+      index: source.index, book: source.book, bookMap: source.bookMap,
+      draft: source.draft, gateway: _UnusedGateway(),
+      roleCatalog: const _NoRolesCatalog(),
+      draftStore: NpcWritingStore(repository: memory),
+    )));
+    Future<void> tap(String key) async {
+      final finder = find.byKey(Key(key));
+      await tester.scrollUntilVisible(finder, 120,
+          scrollable: find.byType(Scrollable).first);
+      await tester.pumpAndSettle();
+      await tester.tap(finder);
+      await tester.pumpAndSettle();
+    }
+    await tap('whole-npc-quotes-reviewed');
+    await tap('whole-npc-private-fiction');
+    await tap('whole-npc-prepare');
+    expect(find.textContaining('Возможных разговоров: 0'), findsWidgets);
+    await tap('whole-npc-review-package');
+    final consent = find.byKey(const Key('whole-npc-final-approval'));
+    await tester.scrollUntilVisible(consent, 120,
+        scrollable: find.byType(Scrollable).first);
+    await tester.pumpAndSettle();
+    expect(consent, findsOneWidget);
+    expect(tester.widget<FilledButton>(
+        find.byKey(const Key('whole-npc-start'))).onPressed, isNull);
+    await tester.tap(consent);
+    await tester.pumpAndSettle();
+    expect(tester.widget<FilledButton>(
+        find.byKey(const Key('whole-npc-start'))).onPressed, isNotNull);
+    expect(tester.takeException(), isNull);
+  });
+
 }
