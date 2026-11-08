@@ -189,6 +189,33 @@ class ProjectTests(unittest.TestCase):
                         check_contract()
                 self.assertEqual(error.exception.code, "contract_drift")
 
+    def test_e6g_lock_checks_migrated_native_dart_authoring_and_v4_reader(self):
+        # E6g is pinned to actual PR #133 files, not historical Flutter
+        # re-export wrappers alone. A wrong Git object cannot be blessed
+        # by changing a version label or a derived toolchain ID.
+        from tools.rpg_author import compatibility
+        lock = check_contract()
+        self.assertEqual(lock["format"], "rpg_author_compatibility_v2")
+        self.assertEqual(lock["digest_algorithm"], "git_blob_sha1")
+        self.assertEqual(lock["application_baseline"],
+                         "7c4401c25b77e4643cf23000c28a717cb22dabca")
+        pinned = (
+            "packages/story_authoring/lib/story_authoring.dart",
+            "packages/story_authoring/lib/src/book_import.dart",
+            "packages/story_authoring/lib/src/book_source_index.dart",
+            "packages/story_authoring/lib/src/book_text_decoder.dart",
+            "packages/bookworld_format/lib/private_rich_bookworld.dart",
+            "packages/bookworld_format/lib/private_bookworld_writer.dart",
+        )
+        for name in pinned:
+            with self.subTest(name=name):
+                self.assertRegex(lock["files"][name], r"^[a-f0-9]{40}$")
+                altered = {**lock, "files": {**lock["files"], name: "0" * 40}}
+                with patch.object(compatibility, "read_json", return_value=altered):
+                    with self.assertRaises(AuthoringError) as error:
+                        check_contract()
+                self.assertEqual(error.exception.code, "contract_drift")
+
     def test_another_book_changes_identity_and_cannot_reuse_analysis(self):
         second = self.base / "different.txt"
         second.write_text("На станции потерялся билет. Смотритель помог пассажиру.")
