@@ -11,3 +11,10 @@
 - Внешний автор переносится без копирования main/apps/packages/tools/bookworld из старой E6g базы; новое native дерево — точный PR #133 HEAD, два родителя сохраняют историю.
 - Проверять: `python3 -m tools.rpg_author doctor`; `python3 -m unittest discover -s tests/rpg_author -t .`; `python3 tests/rpg_author/run_dart_parity.py`; на GitHub exact-head `External RPG author tests` (author-tests + dart-parity) и native CI.
 - До подтверждения CI: статус **INTEGRATION_PENDING**, не USER_READY. Реальные FB2, >192 scenes, initial-state review и Android/Windows device QA остаются отдельными блокерами.
+
+## Итоговая проверка exact-code
+
+- [CI #42502540208](https://github.com/shonentez-afk/AI-Story-RPG/actions/runs/42502540208): **COMPLETED SUCCESS**, обе задачи `author-tests` и `dart-parity`; проверенный внешний код SHA `f2caf69ab6c932cbe660c912554e4c74e24130af`.
+- Регрессионное ожидание в `tests/rpg_author/test_project.py` перенесено со старой native базы `7c4401c...` на фактически изученный native PR #133 HEAD `233c6c3...`; проверка 27 Git blobs осталась fail-closed.
+- Результат: **E6g native-PR133-pin parity ACCEPTED** для синтетических v3/v4; не означает полный литературный E2E, 203+ сцен, initial-state review или реальную Android/Windows приёмку.
+- До нового upstream PR #133 HEAD следует повторять точный diff/lock/parity; не объявлять новую HEAD совместимой по предыдущему CI.
