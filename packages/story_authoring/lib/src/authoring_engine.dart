@@ -13,6 +13,9 @@ class SourceLockedBook {
   final ImportedBook book;
   final BookSourceIndex index;
 
+  /// Exact immutable edition ID shared by every client and checkpoint.
+  String get sourceFingerprint => index.sourceFingerprint;
+
   bool get hasCompleteText => index.chapterCount > 0 &&
       index.indexedChapterCount == index.chapterCount &&
       index.textIndexCoverage == 1;

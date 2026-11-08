@@ -3,8 +3,6 @@ import 'dart:typed_data';
 import 'authoring_engine.dart';
 import 'book_import.dart';
 import 'book_source_selection.dart';
-import 'book_source_analysis.dart';
-import 'book_source_index.dart';
 import 'offline_book_analyzer.dart';
 import 'portable_reviewed_draft_compiler.dart';
 import 'preparation_readiness_report.dart';
