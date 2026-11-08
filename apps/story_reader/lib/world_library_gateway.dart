@@ -143,6 +143,8 @@ class WorldGameView {
     this.statNames = const {}, this.factNames = const {},
     this.sceneNames = const {},
     this.sceneDialogueTurns,
+    this.sceneSpeakerIdentityReviewed = false,
+    this.visibleSpeakerActorIds = const {},
     this.npcItemOwners = const {},
     this.npcDisplayNames = const {},
     this.npcLifeStates = const {},
@@ -171,6 +173,30 @@ class WorldGameView {
   final Map<String, String> sceneNames;
   /// Exact, importer-verified speaker turns. Null for older worlds or prose.
   final List<RichDialogueTurn>? sceneDialogueTurns;
+
+  /// True only when the importer has validated per-turn speaker IDs for
+  /// the current signed scene and runtime has applied every causal gate.
+  /// A redacted NPC line must never inherit a portrait by display name.
+  final bool sceneSpeakerIdentityReviewed;
+
+  /// Visible, source-reviewed scene speaker -> permanent actor ID. Actors
+  /// whose names collide or whose lines are still gated are NOT present.
+  final Map<String, String> visibleSpeakerActorIds;
+
+  /// Resolve the ONLY permitted portrait storage key for this speaker.
+  /// Reviewed NPC dialogue uses actor identity; legacy v1/v2 name-based
+  /// portraits remain locally compatible without changing their archives.
+  String? portraitStorageKeyFor(String speaker) {
+    if (sceneSpeakerIdentityReviewed) {
+      return visibleSpeakerActorIds[speaker];
+    }
+    final matching = npcRelations
+        .where((npc) => npc.displayName == speaker)
+        .map((npc) => npc.actorId).toSet();
+    if (matching.length > 1) return null;
+    return matching.isEmpty ? speaker : matching.single;
+  }
+
   /// Item -> NPC character_id, derived only from verified committed events.
   final Map<String, String> npcItemOwners;
   /// Source-reviewed signed speakers where available; not guessed from names.
@@ -357,19 +383,32 @@ class DeviceWorldLibraryGateway implements WorldLibraryGateway {
     // An NPC is visible here only after a committed memory event, or when
     // its actual, knowledge-verified spoken turn is visible right now.
     final visibleSpeakers = <String>{};
+    final reviewedSpeakerIds = <String, Set<String>>{};
     if (hasReviewedNpcTurns && signedTurns != null) {
       for (final raw in guards[current.id] as List) {
         if (raw is! Map || raw['actor_id'] is! String ||
             raw['turn_index'] is! int) continue;
         final i = raw['turn_index'] as int;
-        if (i >= 0 && i < signedTurns.length &&
-            signedTurns[i].speaker == raw['speaker'] &&
-            signedTurns[i].text != RichNpcDialogueKnowledge.unavailableLine &&
-            raw['actor_id'] != 'player') {
-          visibleSpeakers.add(raw['actor_id'] as String);
+        if (i < 0 || i >= signedTurns.length ||
+            signedTurns[i].speaker == null ||
+            signedTurns[i].speaker != raw['speaker'] ||
+            signedTurns[i].text == RichNpcDialogueKnowledge.unavailableLine) {
+          continue;
         }
+        final actor = raw['actor_id'] as String;
+        // Include player speaker identities in the collision check, but
+        // never assign an NPC portrait to the hero's spoken lines.
+        reviewedSpeakerIds
+            .putIfAbsent(signedTurns[i].speaker!, () => <String>{})
+            .add(actor);
+        if (actor != 'player') visibleSpeakers.add(actor);
       }
     }
+    final visibleSpeakerActorIds = Map<String, String>.unmodifiable({
+      for (final entry in reviewedSpeakerIds.entries)
+        if (entry.value.length == 1 && entry.value.single != 'player')
+          entry.key: entry.value.single,
+    });
     final npcRelations = <NpcRelationView>[];
     if (social != null && socialRules != null) {
       final actors = blueprint.actors.where((id) => id != 'player').toList()
@@ -551,6 +590,8 @@ class DeviceWorldLibraryGateway implements WorldLibraryGateway {
       factNames: facts,
       sceneNames: scenes,
       sceneDialogueTurns: signedTurns,
+      sceneSpeakerIdentityReviewed: hasReviewedNpcTurns,
+      visibleSpeakerActorIds: visibleSpeakerActorIds,
       npcItemOwners: Map.unmodifiable({
         if (social != null)
           for (final item in blueprint.items)

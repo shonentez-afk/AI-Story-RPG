@@ -118,6 +118,7 @@ class DialogueStage extends StatefulWidget {
     required this.onFinished,
     this.portraitFor,
     this.onAddPortrait,
+    this.canAddPortrait,
     this.store = const DialoguePositionStore(),
   });
 
@@ -129,6 +130,9 @@ class DialogueStage extends StatefulWidget {
   final ValueChanged<bool> onFinished;
   final ImageProvider? Function(String speaker)? portraitFor;
   final ValueChanged<String>? onAddPortrait;
+  /// Hide upload controls for source-gated/ambiguous NPC identities.
+  /// Older standalone dialogue stages remain compatible when unset.
+  final bool Function(String speaker)? canAddPortrait;
   final DialoguePositionStore store;
 
   @override
@@ -246,7 +250,9 @@ class _DialogueStageState extends State<DialogueStage> {
               child: Column(
                 children: [
                   _avatar(current, accent),
-                  if (current.speaker != null && widget.onAddPortrait != null)
+                  if (current.speaker != null &&
+                      widget.onAddPortrait != null &&
+                      (widget.canAddPortrait?.call(current.speaker!) ?? true))
                     TextButton.icon(
                       key: const ValueKey('dialogue-set-portrait'),
                       onPressed: () => widget.onAddPortrait!(current.speaker!),

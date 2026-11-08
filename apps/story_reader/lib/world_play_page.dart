@@ -67,15 +67,10 @@ class _WorldPlayPageState extends State<WorldPlayPage> {
     unawaited(_saveReading(settings));
   }
 
-  // Prefer the signed ID of an already met NPC over a cosmetic name.
-  // Duplicate display names never share a portrait implicitly.
-  String? _portraitAddress(WorldGameView view, String speaker) {
-    final ids = view.npcRelations
-        .where((npc) => npc.displayName == speaker)
-        .map((npc) => npc.actorId).toSet();
-    if (ids.length > 1) return null;
-    return ids.isEmpty ? speaker : ids.single;
-  }
+  // The view carries the importer-verified, replay-gated actor mapping.
+  // Never infer a portrait owner from the name in a reviewed NPC scene.
+  String? _portraitAddress(WorldGameView view, String speaker) =>
+      view.portraitStorageKeyFor(speaker);
 
   Future<void> _loadPortraits(WorldGameView view) async {
     final script = view.sceneDialogueTurns == null
@@ -107,8 +102,8 @@ class _WorldPlayPageState extends State<WorldPlayPage> {
     final address = _portraitAddress(current, speaker);
     if (address == null) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text('Два персонажа имеют одинаковое имя. '
-            'Нужен проверенный ID говорящего; портрет не изменён.')));
+        content: Text('Портрет недоступен: реплика ещё не открыта, '
+            'личность не подтверждена или имена совпадают.')));
       return;
     }
     try {
@@ -468,6 +463,8 @@ class _WorldPlayPageState extends State<WorldPlayPage> {
                                     },
                                     onAddPortrait: (speaker) =>
                                         unawaited(_pickPortrait(speaker)),
+                                    canAddPortrait: (speaker) =>
+                                        _portraitAddress(view, speaker) != null,
                                     onFinished: (finished) {
                                       if (!mounted || _view?.sceneId != view.sceneId ||
                                           _view?.revision != view.revision ||

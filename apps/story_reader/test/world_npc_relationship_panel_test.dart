@@ -107,6 +107,46 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  test('verified portrait address ignores duplicate names and future actors',
+      () {
+    final sameName = 'npc_' + List.filled(32, 'c').join();
+    final other = 'npc_' + List.filled(32, 'd').join();
+    final speaker = NpcRelationView(
+        actorId: sameName, displayName: 'Мария',
+        directedScore: 2, memoryCount: 1,
+        memoryKinds: const {}, lifeState: 'present');
+    final shadow = NpcRelationView(
+        actorId: other, displayName: 'Мария',
+        directedScore: 0, memoryCount: 0,
+        memoryKinds: const {});
+    final oldWorld = _game(npcs: [speaker]);
+    expect(oldWorld.portraitStorageKeyFor('Мария'), sameName);
+    final ambiguous = _game(npcs: [speaker, shadow]);
+    expect(ambiguous.portraitStorageKeyFor('Мария'), isNull);
+    // Two reviewed actors sharing a display label cannot resolve a
+    // portrait from raw text. Unrevealed speech is never name-keyed.
+    final reviewed = WorldGameView(
+      campaignId: 'campaign_a', worldTitle: 'Игра', sceneId: 'gate',
+      sceneText: 'Разговор', revision: 0, tick: 0, isTerminal: false,
+      stats: const {}, inventory: const [], flags: const {},
+      knownFacts: const [], choices: const [], journal: const [],
+      npcRelations: [speaker], sceneSpeakerIdentityReviewed: true,
+      visibleSpeakerActorIds: { 'Мария': sameName },
+    );
+    expect(reviewed.portraitStorageKeyFor('Мария'), sameName);
+    expect(reviewed.portraitStorageKeyFor('Не встреченный'), isNull);
+    // A locked line is not a license to open its portrait even when the
+    // character was encountered in a prior scene.
+    final locked = WorldGameView(
+      campaignId: 'campaign_a', worldTitle: 'Игра', sceneId: 'gate',
+      sceneText: 'Разговор', revision: 1, tick: 1, isTerminal: false,
+      stats: const {}, inventory: const [], flags: const {},
+      knownFacts: const [], choices: const [], journal: const [],
+      npcRelations: [speaker], sceneSpeakerIdentityReviewed: true,
+    );
+    expect(locked.portraitStorageKeyFor('Мария'), isNull);
+  });
+
   testWidgets('unmet NPC is not spoiled by future life transitions in Hero',
       (tester) async {
     final unseen = 'npc_' + List.filled(32, 'a').join();
