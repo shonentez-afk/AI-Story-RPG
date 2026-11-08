@@ -73,15 +73,16 @@ StoryDilemmaProposal _proposal(NarrativeBookModel book, int chapter) {
   );
 }
 
-Future<_Fixture> _prepare() async {
+Future<_Fixture> _prepare({bool expanded = false}) async {
   const names = ['Артем', 'Мария', 'Борис'];
   final index = BookSourceIndexer.index(ImportedBook(
     title: 'Три персонажа — синтетическая причинная приёмка',
     author: 'Локальный тест, не оригинальная книга',
     chapters: [
-      for (final name in names)
+      for (var chapter = 0; chapter < (expanded ? 18 : 3); chapter++)
         List.filled(7, 'Начало пути. ').join() +
-            '$name встретил путника у ворот и показал дорогу. ' +
+            '${chapter < names.length ? names[chapter] : 'Путник'} '
+            'встретил путника у ворот и показал дорогу. ' +
             List.filled(12, 'Путник продолжил путешествие. ').join(),
     ],
   ));
@@ -94,7 +95,7 @@ Future<_Fixture> _prepare() async {
       // Distinct overlapping 150-unit excerpts keep the reviewed name in
       // both encounters without bypassing any production source checks.
       final candidates = [
-        for (var i = 0; i < 4; i++)
+        for (var i = 0; i < (expanded ? 12 : 4); i++)
           SemanticCandidate.propose(source, chunk,
             category: SemanticCategory.event,
             startUtf16: chunk.startUtf16 + i * 10,
@@ -122,15 +123,16 @@ Future<_Fixture> _prepare() async {
   expect(analyzed.complete, true);
   final book = NarrativeBookModel.fromExisting(
       index: index, outline: ZaiWholeBookEventOutline.build(analyzed));
-  expect(book.events.length, 12);
+  expect(book.events.length, expanded ? 216 : 12);
   final map = BookwideActPlanner.build(index: index, book: book);
   final draft = BookwideStoryPlanComposer.compose(
     index: index, book: book, bookMap: map,
-    actProposals: [for (var i = 0; i < 3; i++) _proposal(book, i)],
+    actProposals: [for (var i = 0; i < (expanded ? 18 : 3); i++) _proposal(book, i)],
+    expanded: expanded,
   );
   final source = WholeBookNpcSourcePlan.fromBook(
       index: index, book: book, bookMap: map, draft: draft);
-  expect(source.coverage.referencedEvents, 12);
+  expect(source.coverage.referencedEvents, expanded ? 216 : 12);
   expect(source.coverage.allDetectedEventsReferenced, true);
   var graph = SourceEvidenceGraph.empty(index);
   final mentions = <SourceEvidence>[];
@@ -184,6 +186,140 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   late _Fixture fixture;
   setUpAll(() async { fixture = await _prepare(); });
+
+  test('18-act v4: 216 reviewed events, three permanent NPCs and'
+      ' knowledge/memory survive 233 offline actions, replay and SQLite'
+      ' restart without granting unearned dialogue', () async {
+    final extended = await _prepare(expanded: true);
+    expect(extended.source.expanded, true);
+    expect(extended.source.reviewedEventIds, hasLength(216));
+    expect(extended.base.sceneCount, greaterThan(192));
+    final original = const RichPrivateBookworldImporter()
+        .inspect(extended.base.archive);
+    expect(original.formatVersion, 4);
+    expect(original.npcSocialRulebook, isNull);
+
+    final approval = extended.review();
+    expect(approval.actorCount, 3);
+    expect(approval.episodeCount, 3);
+    final built = await BookwideNpcCampaignAuthoring.compile(
+      source: extended.source,
+      approval: approval,
+      freshReviewedRoles: extended.roles,
+      approvedDigest: approval.approvalDigest,
+      explicitlyConfirmedPrivateFiction: true,
+    );
+    expect(built.sourceEventsRepresented, 216);
+    expect(built.sourceEventsTotal, 216);
+    final imported = const RichPrivateBookworldImporter()
+        .inspect(built.archive);
+    expect(imported.formatVersion, 4);
+    expect(imported.blueprint.scenes.length, greaterThan(192));
+    expect(imported.blueprint.actors.length, 4);
+    expect(imported.blueprint.facts.length, 3);
+    expect(imported.npcSocialRulebook!.rules.length, 3);
+    expect(imported.requiresNetwork, false);
+    expect(imported.canDistributePublicly, false);
+
+    final first = extended.candidates.first;
+    final unearned = StoryWorld(imported.blueprint,
+        socialRulebook: imported.npcSocialRulebook);
+    final pass = imported.blueprint.scenes[unearned.state.sceneId]!
+        .choices.singleWhere((c) => c.id.contains('_pass_source')).id;
+    expect(unearned.apply(actionId: 'ignore_meeting', choiceId: pass)
+        .applied, true);
+    final reply = ReviewedNpcCampaignBookworldWriter.replyChoiceId(first.id);
+    expect(unearned.choiceLockReason(reply), isNotNull);
+    expect(unearned.state.knowledge[first.role.characterId], isEmpty);
+
+    final game = StoryWorld(imported.blueprint,
+        socialRulebook: imported.npcSocialRulebook);
+    final steps = <String>[];
+    void take(String choice) {
+      final result = game.apply(
+          actionId: 'full_book_step_${steps.length}',
+          choiceId: choice, expectedRevision: steps.length);
+      expect(result.applied, true, reason: choice);
+      steps.add(choice);
+    }
+
+    for (var act = 1; act <= 18; act++) {
+      for (var sourceEvent = 0; sourceEvent < 10; sourceEvent++) {
+        if (act <= extended.candidates.length && sourceEvent < 2) {
+          final episode = extended.candidates[act - 1];
+          take(sourceEvent == 0
+            ? ReviewedNpcCampaignBookworldWriter.meetChoiceId(episode.id)
+            : ReviewedNpcCampaignBookworldWriter.replyChoiceId(episode.id));
+        } else {
+          final current = imported.blueprint.scenes[game.state.sceneId]!;
+          final exit = current.choices.singleWhere(
+              (choice) => choice.id.contains('_pass_source'));
+          take(exit.id);
+        }
+      }
+      take('act_${act}_accept_offer');
+      take('act_${act}_honor_condition');
+      if (act < 18) take('act_${act}_continue_original');
+    }
+    expect(steps, hasLength(233));
+    expect(game.isTerminal, true);
+    for (var act = 1; act <= 18; act++) {
+      expect(game.state.flags['act_${act}_original_outcome'], true);
+    }
+    final social = NpcSocialLedger.inspect(game, imported.npcSocialRulebook!);
+    for (final episode in extended.candidates) {
+      expect(game.state.knowledge[episode.role.characterId],
+          contains(ReviewedNpcCampaignBookworldWriter.factId(episode.id)));
+      expect(social.hasMemory(episode.role.characterId,
+          ReviewedNpcCampaignBookworldWriter.memoryId(episode.id)), true);
+    }
+    expect(game.state.knowledge['player'], isEmpty);
+    final restored = StoryWorld.replay(
+      imported.blueprint, game.events.map((event) => event.toJson()),
+      socialRulebook: imported.npcSocialRulebook,
+      expectedSequence: steps.length,
+      expectedStateHash: game.state.stateHash,
+    );
+    expect(restored.state.stateHash, game.state.stateHash);
+    expect(restored.state.knowledge, game.state.knowledge);
+
+    final dir = await Directory.systemTemp.createTemp(
+        'long_npc_source_v4_sqlite_');
+    late String campaignId;
+    BookworldCampaignStore? db;
+    try {
+      db = BookworldCampaignStore.openPrivateDirectory(dir.path);
+      final installed = db.installBookworld(built.archive);
+      campaignId = db.createCampaign(installed.archiveHash);
+      for (var i = 0; i < steps.length; i++) {
+        if (i == 112) {
+          db.close();
+          db = BookworldCampaignStore.openPrivateDirectory(dir.path);
+          final loaded = db.loadCampaign(campaignId);
+          expect(loaded.metadata.revision, 112);
+          expect(loaded.coordinator.state.knowledge[
+              extended.candidates.first.role.characterId], isNotEmpty);
+        }
+        final committed = db.commitChoice(campaignId,
+          actionId: 'full_book_step_$i',
+          choiceId: steps[i], expectedRevision: i);
+        expect(committed.applied, true, reason: 'step $i / ${steps[i]}');
+      }
+      final saved = db.loadCampaign(campaignId);
+      expect(saved.metadata.revision, steps.length);
+      expect(saved.coordinator.state.stateHash, game.state.stateHash);
+      expect(saved.coordinator.state.knowledge, game.state.knowledge);
+      expect(saved.coordinator.isTerminal, true);
+      db.close();
+      db = BookworldCampaignStore.openPrivateDirectory(dir.path);
+      final afterRestart = db.loadCampaign(campaignId);
+      expect(afterRestart.coordinator.state.stateHash, game.state.stateHash);
+      expect(afterRestart.coordinator.state.knowledge, game.state.knowledge);
+    } finally {
+      db?.close();
+      await dir.delete(recursive: true);
+    }
+  });
 
   test('all source events and three independent NPCs form one causally '
       'connected offline campaign, with isolated knowledge and SQLite replay',
