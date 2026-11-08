@@ -74,7 +74,6 @@ ZaiManualSourceAlignment _accept(_TestCase f, {
 );
 
 void main() {
-  TestWidgetsFlutterBinding.ensureInitialized();
 
   test('two independent human approvals add exact source and M2c canon '
       'candidate without changing original independent checkpoints', () {
