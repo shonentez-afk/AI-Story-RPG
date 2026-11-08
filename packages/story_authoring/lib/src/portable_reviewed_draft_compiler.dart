@@ -64,7 +64,7 @@ class PortableReviewedDraftCompiler {
     final editorial = SemanticEditorialReviewSession.decode(
         index, graph, catalog, review['editorial'] as String);
     final draft = IntermediateStoryBlueprint.decode(
-        review['draft'] as String);
+        review['draft'] as String, expanded: expanded);
     final preflight = PrivateAdaptationPreflight.evaluate(
         index, graph, catalog, editorial, draft, expanded: expanded);
     if (!preflight.isStructurallyReady) {

@@ -211,16 +211,17 @@ class IntermediateStoryBlueprint {
     }
   }
 
-  String encode() {
+  String encode({bool expanded = false}) {
     final raw = jsonEncode(toJson());
-    if (utf8.encode(raw).length > maxDraftBytes) {
+    if (utf8.encode(raw).length > (expanded ? 4 * maxDraftBytes : maxDraftBytes)) {
       throw const FormatException('Слишком большой черновик сценария');
     }
     return raw;
   }
 
-  static IntermediateStoryBlueprint decode(String raw) {
-    if (utf8.encode(raw).length > maxDraftBytes) {
+  static IntermediateStoryBlueprint decode(String raw,
+      {bool expanded = false}) {
+    if (utf8.encode(raw).length > (expanded ? 4 * maxDraftBytes : maxDraftBytes)) {
       throw const FormatException('Слишком большой черновик сценария');
     }
     try {
@@ -249,7 +250,8 @@ class IntermediateStoryBlueprint {
         !_id.hasMatch(entrySceneId)) {
       throw const FormatException('Несовместимый источник или размер сценария');
     }
-    if (utf8.encode(jsonEncode(toJson())).length > maxDraftBytes) {
+    if (utf8.encode(jsonEncode(toJson())).length >
+        (expanded ? 4 * maxDraftBytes : maxDraftBytes)) {
       throw const FormatException('Черновик превышает безопасный размер');
     }
     final declared = flags.toSet();

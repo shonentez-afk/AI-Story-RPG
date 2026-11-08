@@ -78,7 +78,7 @@ class PrivateClassicScenarioTranslator {
           'не проверены факты, причинность или права');
     }
 
-    final draftHash = sha256.convert(utf8.encode(draft.encode())).toString();
+    final draftHash = sha256.convert(utf8.encode(draft.encode(expanded: expanded))).toString();
     final bookId = 'book_${index.sourceFingerprint.substring(0,12)}_'
         '${draftHash.substring(0,12)}';
     final currentFlags = draft.initialFlags.toSet();

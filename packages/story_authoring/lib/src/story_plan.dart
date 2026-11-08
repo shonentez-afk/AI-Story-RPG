@@ -119,9 +119,9 @@ class StoryPlan {
     'status': 'DRAFT_ONLY', 'is_playable': false,
   };
 
-  String encode() {
+  String encode({bool expanded = false}) {
     final result = jsonEncode(toJson());
-    if (utf8.encode(result).length > maxBytes) {
+    if (utf8.encode(result).length > (expanded ? 4 * maxBytes : maxBytes)) {
       throw const FormatException('Слишком большой StoryPlan');
     }
     return result;
@@ -140,8 +140,8 @@ class StoryPlan {
   static StoryRoute _route(dynamic raw) =>
       StoryRoute.values.firstWhere((route) => route.name == raw);
 
-  factory StoryPlan.decode(String encoded) {
-    if (utf8.encode(encoded).length > maxBytes) {
+  factory StoryPlan.decode(String encoded, {bool expanded = false}) {
+    if (utf8.encode(encoded).length > (expanded ? 4 * maxBytes : maxBytes)) {
       throw const FormatException('Слишком большой StoryPlan');
     }
     try {
@@ -218,7 +218,7 @@ class StoryPlan {
         initialFlags.toSet().length != initialFlags.length) {
       throw const FormatException('План не соответствует исходной книге');
     }
-    encode();
+    encode(expanded: expanded);
     final events = {for (final e in book.events) e.id: e};
     final byId = <String, StorySituation>{};
     final decisionIds = <String>{};
