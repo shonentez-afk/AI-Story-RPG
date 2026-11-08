@@ -81,7 +81,7 @@ class CausalStateSignature {
       // This affects ONLY the verifier's equivalence key. No flags,
       // inventory, NPC knowledge, social memory or event hashes are removed.
       'flags': _futureFlags == null ? state.flags : {
-        for (final flag in _futureFlags!.at(state.sceneId))
+        for (final flag in _futureFlags.at(state.sceneId))
           flag: state.flags[flag]!,
       },
       'inventory': state.inventory.toList()..sort(),
