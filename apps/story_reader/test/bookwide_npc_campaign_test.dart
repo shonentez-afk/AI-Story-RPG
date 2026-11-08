@@ -170,11 +170,14 @@ Future<_Fixture> _prepare({bool expanded = false}) async {
   // Twelve source suggestions per act produce several adjacent encounter
   // pairs for each role. The author must select explicit episodes, not
   // silently compile every AI/synthetically proposed conversation.
-  final candidates = expanded ? <BookwideNpcConversationCandidate>[
-    for (final role in roles)
-      available.firstWhere((candidate) =>
-          candidate.role.characterId == role.characterId),
-  ] : available;
+  final candidates = <BookwideNpcConversationCandidate>[
+    if (expanded)
+      for (final role in roles)
+        available.firstWhere((candidate) =>
+            candidate.role.characterId == role.characterId)
+    else
+      ...available,
+  ];
   // Approval prerequisites are chronological, never character_id order.
   candidates.sort((a, b) =>
       a.firstEvent.narrativePosition.compareTo(
