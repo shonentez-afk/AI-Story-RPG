@@ -41,7 +41,23 @@ campaign route. Strict mode exits 3 on warnings; invalid archive/contract
 exits 2. A clean report does *not* certify prose, dialogue quality, or
 character motivation, and does not imply real Android/Windows playtesting.
 
+## E6d corrections (0.3.0a2)
+
+`requires_fact` is a **precondition**: the player must already know the fact
+before selecting the question, on every route where that question is available.
+Learning it as an effect of the question does not satisfy the precondition.
+Use a `knows_fact` choice condition to gate a question on earlier knowledge.
+If the answer itself introduces new information, express that with `learn_fact`
+and leave `requires_fact` null (or name a different, genuinely prior fact).
+
+For `UNAUTHORIZED_DISCLOSURE`, `example_route` ends with the question taken
+without its prerequisite. For `REPEATABLE_DIALOGUE_REWARD`, it is a complete
+executable sequence from the initial state through the first question, any
+return/detour, and the repeated question. It includes both question actions,
+even for a self-loop or when another route reaches the same answer sooner.
+The audit only reports these defects; it does not rewrite the game.
+
 Question content in this manifest may contain private character names; never
 include real user books or manifests in public GitHub Actions. CI uses only
-synthetic minimal stories. Existing E5 checkpoint toolchain hashes are not
-modified or silently migrated; run this against the compiled archive.
+synthetic minimal stories. Create new projects with the verified toolchain;
+project migration is outside this stage's scope.
