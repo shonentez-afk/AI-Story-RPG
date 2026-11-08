@@ -115,7 +115,7 @@ class BookwideNpcArc {
   StoryPlan attach(StoryPlan plan, NarrativeBookModel book,
       {bool expanded = false}) {
     if (role.sourceFingerprint != plan.sourceFingerprint ||
-        plan.flags.length >= 32 || plan.flags.contains(contactFlag)) {
+        plan.flags.length >= (expanded ? 64 : 32) || plan.flags.contains(contactFlag)) {
       throw const FormatException('NPC-версия сценария изменилась.');
     }
     final result = StoryPlan(

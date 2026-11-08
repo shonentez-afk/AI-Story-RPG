@@ -47,6 +47,7 @@ class MultiActDilemmaPart {
 class MultiActStoryPlanDraft {
   MultiActStoryPlanDraft._({
     required this.plan,
+    required this.expanded,
     required this.causalContract,
     required this.formalAudit,
     required this.coverage,
@@ -58,6 +59,8 @@ class MultiActStoryPlanDraft {
        blockers = List.unmodifiable(blockers);
 
   final StoryPlan plan;
+  /// Versioned v4 capacity is explicit; an ordinary draft remains v3.
+  final bool expanded;
   final StoryCausalContract causalContract;
   final StoryCausalAudit formalAudit;
   final BookwideStoryCoverage coverage;
@@ -82,6 +85,7 @@ class MultiActStoryPlanDraft {
     'format': 'ai_story_multiact_storyplan_m2h2_v1',
     'status': 'DRAFT_ONLY',
     'act_count': parts.length,
+    if (expanded) 'private_format_target': 'v4',
     'game_situations': plan.situations.length,
     'source_events_referenced': coverage.referencedEvents,
     'source_events_total': coverage.allEvents,
@@ -104,6 +108,9 @@ class BookwideStoryPlanComposer {
   const BookwideStoryPlanComposer._();
 
   static const maxDraftActs = 12;
+  // A *capacity*, not a promise of playable exponential branch paths.
+  // Both causal auditors still fail closed at 8000 distinct states.
+  static const maxExtendedDraftActs = 30;
 
   // rich-v3 retains its 32-flag contract. Longer campaigns lease only
   // transient process flags; each act keeps durable outcome flags.
@@ -119,6 +126,7 @@ class BookwideStoryPlanComposer {
     required NarrativeBookModel book,
     required BookwideActPlan bookMap,
     required List<StoryDilemmaProposal> actProposals,
+    bool expanded = false,
   }) {
     if (!book.analysisComplete ||
         index.sourceFingerprint != book.sourceFingerprint ||
@@ -127,10 +135,11 @@ class BookwideStoryPlanComposer {
         bookMap.chapters != book.chapterCount ||
         bookMap.sourceEvents != book.events.length ||
         actProposals.length < 2 ||
-        actProposals.length > maxDraftActs) {
+        actProposals.length > (expanded ? maxExtendedDraftActs : maxDraftActs)) {
       throw const FormatException(
-          'Для многоактового черновика нужны 2–12 разных '
-          'предложений, основанных на завершённом анализе одной книги.');
+          'Для многоактового черновика нужны 2–' +
+          (expanded ? maxExtendedDraftActs : maxDraftActs).toString() +
+          ' разных предложений этой книги.');
     }
 
     // Independently confirm the supplied act map still matches exact source.
@@ -341,7 +350,7 @@ class BookwideStoryPlanComposer {
       initialFlags: const [],
       situations: composedScenes,
     );
-    final validation = draft.validate(book);
+    final validation = draft.validate(book, expanded: expanded);
     if (!validation.isStructurallySound ||
         !validation.branchChangesState ||
         validation.terminalSituations != 2) {
@@ -358,7 +367,8 @@ class BookwideStoryPlanComposer {
       ],
     );
     final audit = StoryPlanCausalAuditor.audit(
-        plan: draft, book: book, contract: mergedContract);
+        plan: draft, book: book, contract: mergedContract,
+        expanded: expanded);
     if (audit.counterexamples.isNotEmpty) {
       throw const FormatException(
           'Многоактовый маршрут нарушает причинные условия.');
@@ -377,6 +387,7 @@ class BookwideStoryPlanComposer {
     ];
     return MultiActStoryPlanDraft._(
       plan: draft,
+      expanded: expanded,
       causalContract: mergedContract,
       formalAudit: audit,
       coverage: coverage,
