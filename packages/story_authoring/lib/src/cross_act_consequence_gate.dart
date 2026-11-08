@@ -163,6 +163,7 @@ class CrossActConsequenceGate {
         draft.plan.title != book.title ||
         !draft.formalRulesPassed ||
         draft.parts.length < 2 ||
+        draft.expanded != expanded ||
         rules.isEmpty || rules.length > (expanded ? 32 : 12)) {
       throw const FormatException(
           'Нужен проверенный многоактовый черновик этой редакции.');
@@ -334,7 +335,7 @@ class CrossActConsequenceGate {
           'игроку решения в реальных прохождениях.');
     }
     final coverage = BookwideActPlanner.compareWithStoryPlan(
-        bookMap: bookMap, book: book, story: revised);
+        bookMap: bookMap, book: book, story: revised, expanded: expanded);
     return CrossActContinuityDraft._(
       plan: revised, audit: audit, coverage: coverage, impacts: impacts);
   }

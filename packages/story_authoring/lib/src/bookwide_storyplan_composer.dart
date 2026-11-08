@@ -374,7 +374,7 @@ class BookwideStoryPlanComposer {
           'Многоактовый маршрут нарушает причинные условия.');
     }
     final coverage = BookwideActPlanner.compareWithStoryPlan(
-        bookMap: bookMap, book: book, story: draft);
+        bookMap: bookMap, book: book, story: draft, expanded: expanded);
     final blockers = <String>[
       'Причинность переходов между частями — игровая гипотеза.',
       'Нужна независимая проверка хронологии, знаний персонажей '

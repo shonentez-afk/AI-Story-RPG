@@ -22,6 +22,15 @@ import 'story_plan_trial_compiler.dart';
 
 String _sha(String value) => sha256.convert(utf8.encode(value)).toString();
 
+/// Different explicit output contracts must NEVER reuse the same approval.
+/// Keep the historical v3 digest bytes stable for old private reviews.
+String _digestPlan(StoryPlan plan, bool expanded) => expanded
+    ? _sha(canonicalJson({
+        'scope': 'reviewed_bookwide_private_extended_v4',
+        'plan': plan.encode(expanded: true),
+      }))
+    : _sha(plan.encode());
+
 /// The selected protagonist and all NPC episodes share ONE source plan and
 /// the existing compiler/runtime. Source coverage is not literary truth.
 class WholeBookNpcSourcePlan {
@@ -33,7 +42,7 @@ class WholeBookNpcSourcePlan {
     required this.reviewedHeroSourceAction,
   }) : extraEventIds = Set.unmodifiable(extraEventIds),
        reviewedEventIds = Set.unmodifiable(reviewedEventIds),
-       planDigest = _sha(plan.encode());
+       planDigest = _digestPlan(plan, draft.expanded);
 
   final BookSourceIndex index;
   final NarrativeBookModel book;
@@ -43,6 +52,7 @@ class WholeBookNpcSourcePlan {
   final Set<String> extraEventIds, reviewedEventIds;
   final BookwideStoryCoverage coverage;
   final String planDigest;
+  bool get expanded => draft.expanded;
   final ReviewedHeroRole? selectedHeroRole;
   final bool reviewedHeroSourceAction;
   bool get literaryMeaningVerified => false;
@@ -135,18 +145,22 @@ class WholeBookNpcSourcePlan {
       }
       extras.addAll(candidates.map((e) => e.id));
     }
-    if (extras.length > BookwideSourceEncounters.remainingSceneCapacity(draft.plan)) {
+    if (extras.length > BookwideSourceEncounters.remainingSceneCapacity(
+        draft.plan, expanded: draft.expanded)) {
       throw const FormatException('Сценарий не помещается в текущий формат; события не обрезаны.');
     }
     final sourcePlan = BookwideSourceEncounters.attach(
       index: index, book: book, bookMap: bookMap, draft: draft,
       plan: draft.plan, reviewedEventIds: extras,
       userConfirmedPrivateAdaptation: true, // Local preview; no export or API.
+      expanded: draft.expanded,
     );
-    final rolePlan = selectedHeroRole?.bindTo(sourcePlan, book) ?? sourcePlan;
+    final rolePlan = selectedHeroRole?.bindTo(sourcePlan, book,
+        expanded: draft.expanded) ?? sourcePlan;
     final plan = reviewedHeroSourceAction ? ReviewedHeroSourceAction.attach(
       index: index, book: book, plan: rolePlan, role: selectedHeroRole!,
       explicitlyConfirmedPrivateGameFiction: true,
+      expanded: draft.expanded,
     ) : rolePlan;
     final reviewed = <String>{
       ...extras,
@@ -157,7 +171,8 @@ class WholeBookNpcSourcePlan {
       index: index, book: book, bookMap: bookMap, draft: draft, plan: plan,
       selectedHeroRole: selectedHeroRole, reviewedHeroSourceAction: reviewedHeroSourceAction,
       extraEventIds: extras, reviewedEventIds: reviewed,
-      coverage: BookwideActPlanner.compareWithStoryPlan(bookMap: bookMap, book: book, story: plan),
+      coverage: BookwideActPlanner.compareWithStoryPlan(bookMap: bookMap,
+          book: book, story: plan, expanded: draft.expanded),
     );
   }
 
@@ -166,7 +181,8 @@ class WholeBookNpcSourcePlan {
     required bool privateFictionConfirmed, String? approvedHeroDigest,
   }) {
     if (!allShownQuotesReviewed || !privateFictionConfirmed ||
-        approvedPlanDigest != planDigest || _sha(plan.encode()) != planDigest ||
+        approvedPlanDigest != planDigest ||
+        _digestPlan(plan, expanded) != planDigest ||
         (selectedHeroRole != null && approvedHeroDigest != heroReviewDigest)) {
       throw const FormatException('Согласие на цитаты или выбранного героя устарело.');
     }
@@ -176,6 +192,7 @@ class WholeBookNpcSourcePlan {
       heroName: heroName, selectedHeroRole: selectedHeroRole,
       reviewedHeroSourceAction: reviewedHeroSourceAction,
       privateUseConfirmed: true, fictionalTrialAcknowledged: true,
+      expanded: expanded,
     );
   }
 }
@@ -266,7 +283,7 @@ class BookwideNpcCampaignAuthoring {
   static List<BookwideNpcConversationCandidate> discover({
     required WholeBookNpcSourcePlan source, required List<ReviewedHeroRole> currentReviewedRoles,
   }) {
-    if (source.planDigest != _sha(source.plan.encode())) {
+    if (source.planDigest != _digestPlan(source.plan, source.expanded)) {
       throw const FormatException('Сценарий изменился после просмотра цитат.');
     }
     source.verifyCurrentHero(currentReviewedRoles);
@@ -325,7 +342,8 @@ class BookwideNpcCampaignAuthoring {
     required List<NpcCampaignDialogueDraft> selectedDrafts}) {
     final base = const RichPrivateBookworldImporter().inspect(verifiedBaseArchive);
     source.verifyCurrentHero(currentReviewedRoles); source.verifyArchiveHero(base);
-    if (base.blueprint.scenes.length != source.plan.situations.length ||
+    if (base.formatVersion != (source.expanded ? 4 : 3) ||
+        base.blueprint.scenes.length != source.plan.situations.length ||
         selectedDrafts.isEmpty || selectedDrafts.length > ReviewedNpcCampaignBookworldWriter.maxEpisodes) {
       throw const FormatException('Неверный сценарий или число NPC-разговоров.');
     }
@@ -388,7 +406,8 @@ class BookwideNpcCampaignAuthoring {
     await source.narrative?.verifyLive();
     final verified = const RichPrivateBookworldImporter().inspect(archive);
     source.verifyArchiveHero(verified);
-    if (verified.requiresNetwork || verified.canDistributePublicly ||
+    if (verified.formatVersion != (source.expanded ? 4 : 3) ||
+        verified.requiresNetwork || verified.canDistributePublicly ||
         verified.blueprint.actors.length != approval.actorCount + 1) {
       throw const FormatException('Собранный NPC-мир не соответствует принятой кампании.');
     }

@@ -197,7 +197,7 @@ class MultiActTrialCompiler {
     // Recalculate source coverage from the actual typed plan; never trust a
     // cached count or a model-provided readiness flag.
     final coverage = BookwideActPlanner.compareWithStoryPlan(
-        bookMap: bookMap, book: book, story: plan);
+        bookMap: bookMap, book: book, story: plan, expanded: expanded);
     // Extended campaigns must represent ALL confirmed source events through
     // real executable source decisions. No silent first-48 subset or citation
     // shortcut may be called a full-book game.

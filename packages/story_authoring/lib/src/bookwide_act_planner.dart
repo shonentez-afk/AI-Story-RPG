@@ -259,13 +259,14 @@ class BookwideActPlanner {
     required BookwideActPlan bookMap,
     required NarrativeBookModel book,
     required StoryPlan story,
+    bool expanded = false,
   }) {
     if (bookMap.sourceFingerprint != book.sourceFingerprint ||
         story.sourceFingerprint != book.sourceFingerprint ||
         story.title != book.title || !book.analysisComplete) {
       throw const FormatException('План относится к другой книге.');
     }
-    story.validate(book);
+    story.validate(book, expanded: expanded);
     final anchors = [
       for (final act in bookMap.acts)
         for (final e in act.events) e,
