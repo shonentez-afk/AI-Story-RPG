@@ -20,6 +20,8 @@ from tests.rpg_author.fixtures import source, story, TEXT, analysis
 from tests.rpg_author.fixtures_rich import enrichment
 from tests.rpg_author.test_npc_review import reviewed_fixture, reviewed_transfer_fixture
 from tools.rpg_author.rich_package import compile_rich_from_project
+from tools.rpg_author.native_v4_bridge import (compile_extended_from_project,
+                                               verify_extended_bundle)
 from tools.rpg_author import project
 from tools.rpg_author.legacy_package import compile_from_project
 from tools.rpg_author.common import digest
@@ -264,6 +266,66 @@ def main():
         assert plain_campaign["journal"] == ["leave_rope", "go_for_help"]
         assert (plain_campaign["restart_ok"] and
                 plain_campaign["save_import_ok"] and plain_campaign["fork_ok"])
+        # E6g v4: prepare the very same source-reviewed external E6f project,
+        # then call the ACTUAL standalone native Dart v4 authoring CLI. The
+        # Python writer never impersonates the 1024-scene v4 causal engine.
+        extended_bytes, extended_attribution = compile_extended_from_project(
+            checkpoint, enrichment())
+        v4_path = root / "private_extended_v4.bworld"
+        sidecar_path = root / "private_extended_v4.attribution.json"
+        v4_path.write_bytes(extended_bytes)
+        sidecar_path.write_bytes(extended_attribution)
+        verified_v4 = verify_extended_bundle(v4_path, sidecar_path)
+        assert verified_v4["format_version"] == 4, verified_v4
+        assert verified_v4["native_dart_verified"]
+        assert verified_v4["archive_sha256"] == digest(extended_bytes)
+        v4_world = dart({
+            "operation": "rich_private",
+            "data": base64.b64encode(extended_bytes).decode("ascii"),
+            "paths": [["take_rope", "rescue"], ["leave_rope", "go_for_help"]],
+        })
+        assert v4_world["format_version"] == 4, v4_world
+        assert v4_world["archive_sha256"] == digest(extended_bytes)
+        assert all(j["replay_ok"] and j["terminal"]
+                   for j in v4_world["journeys"]), v4_world
+        v4_restart = dart({
+            "operation": "rich_campaign",
+            "data": base64.b64encode(extended_bytes).decode("ascii"),
+            "path": ["take_rope", "rescue"],
+        })
+        assert v4_restart["restart_ok"] and v4_restart["save_import_ok"]
+        assert v4_restart["fork_ok"]
+        # Deliberately forged sidecar remains rejected even when Dart accepts
+        # the underlying v4 archive. Do not confuse hashes with model proof.
+        sidecar_data = json.loads(extended_attribution)
+        sidecar_data["scenario_generation"]["provider"] = "forged"
+        sidecar_path.write_text(json.dumps(sidecar_data), encoding="utf-8")
+        try:
+            verify_extended_bundle(v4_path, sidecar_path)
+        except AuthoringError as error:
+            assert error.code == "attribution_mismatch", error.code
+        else:
+            raise AssertionError("v4 accepted forged attribution")
+        sidecar_path.write_bytes(extended_attribution)
+        # NPC witness/social/custody/life v5 is still governed by native core.
+        npc_extended, npc_v4_attribution = compile_extended_from_project(
+            checkpoint, reviewed_enrichment, npc_review=reviewed_npc)
+        assert npc_extended != extended_bytes
+        npc_v4 = dart({
+            "operation": "rich_private",
+            "data": base64.b64encode(npc_extended).decode("ascii"),
+            "paths": [["take_rope", "rescue"], ["leave_rope", "go_for_help"]],
+        })
+        assert npc_v4["format_version"] == 4
+        assert all(j["replay_ok"] for j in npc_v4["journeys"]), npc_v4
+        npc_v4_save = dart({
+            "operation": "rich_campaign",
+            "data": base64.b64encode(npc_extended).decode("ascii"),
+            "path": ["take_rope", "rescue"],
+        })
+        assert npc_v4_save["restart_ok"] and npc_v4_save["save_import_ok"]
+        assert npc_v4_save["fork_ok"]
+        assert json.loads(npc_v4_attribution)["bookworld_packaging"]["version"] == "4.0"
     print(json.dumps({"source_comparisons": checked, "candidate_accepted_by_dart_blueprint": True,
                       "known_lossy_source_forms_refused": 1,
                       "application_modified": False,
@@ -277,7 +339,11 @@ def main():
                       "rich_v3_sqlite_restart_fork_portable_save": True,
                       "rich_v3_empty_catalogs_dart_sqlite": True,
                       "external_reviewed_npc_social_v5_dart_sqlite": True,
-                      "external_reviewed_npc_item_custody_life_v5_dart_sqlite": True}))
+                      "external_reviewed_npc_item_custody_life_v5_dart_sqlite": True,
+                       "native_v4_python_reviewed_dart_compiled_and_imported": True,
+                       "native_v4_sqlite_replay_and_save": True,
+                       "native_v4_npc_v5_dart_sqlite": True,
+                       "native_v4_attribution_mismatch_rejected": True}))
 
 
 if __name__ == "__main__":
