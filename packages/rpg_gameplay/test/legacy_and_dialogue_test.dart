@@ -1,4 +1,5 @@
 import 'package:bookworld_format/bookworld_format.dart';
+import 'package:campaign_manager/campaign_manager.dart';
 import 'package:rpg_gameplay/rpg_gameplay.dart';
 import 'package:test/test.dart';
 

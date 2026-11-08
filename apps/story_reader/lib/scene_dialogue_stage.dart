@@ -1,9 +1,3 @@
-// Dialogue staging models are owned by the headless RPG engine.
-import 'package:rpg_gameplay/rpg_gameplay.dart'
-    show SceneDialogueTurn, SceneDialogueScript;
-export 'package:rpg_gameplay/rpg_gameplay.dart'
-    show SceneDialogueTurn, SceneDialogueScript;
-
 import 'dart:async';
 import 'dart:convert';
 
@@ -11,6 +5,11 @@ import 'package:crypto/crypto.dart';
 import 'package:bookworld_format/bookworld_format.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:rpg_gameplay/rpg_gameplay.dart'
+    show SceneDialogueTurn, SceneDialogueScript;
+
+export 'package:rpg_gameplay/rpg_gameplay.dart'
+    show SceneDialogueTurn, SceneDialogueScript;
 
 /// Device-local reading position; not part of story_core, BookWorld, SQLite
 /// journal or the portable game save. Key includes scene AND committed turn
