@@ -79,13 +79,15 @@ class PrivateAdaptationPreflight {
     SourceSemanticCatalog catalog,
     SemanticEditorialReviewSession editorial,
     IntermediateStoryBlueprint draft,
+    {bool expanded = false}
   ) {
     if (index.sourceFingerprint != evidence.sourceFingerprint ||
         index.sourceFingerprint != catalog.sourceFingerprint ||
         index.sourceFingerprint != draft.sourceFingerprint) {
       throw const FormatException('Сценарий относится к другой книге');
     }
-    final causal = draft.validate(index, evidence, catalog);
+    final causal = draft.validate(index, evidence, catalog,
+        expanded: expanded);
     final issues = <AdaptationGateIssue>{
       AdaptationGateIssue.productionBookworldNotImplemented,
     };

@@ -205,13 +205,13 @@ class StoryPlan {
 
   /// Bounded state exploration. Source text order is NEVER treated as
   /// causal proof; semantics and NPC knowledge require later M2g3c checks.
-  StoryPlanReport validate(NarrativeBookModel book) {
+  StoryPlanReport validate(NarrativeBookModel book, {bool expanded = false}) {
     if (!book.analysisComplete ||
         book.sourceFingerprint != sourceFingerprint ||
         book.title != title ||
         !_id.hasMatch(entrySituationId) ||
-        situations.isEmpty || situations.length > 192 ||
-        flags.length > 32 || flags.toSet().length != flags.length ||
+        situations.isEmpty || situations.length > (expanded ? 1024 : 192) ||
+        flags.length > (expanded ? 64 : 32) || flags.toSet().length != flags.length ||
         initialFlags.toSet().length != initialFlags.length ||
         flags.any((f) => !_id.hasMatch(f)) ||
         initialFlags.any((f) => !flags.contains(f)) ||
@@ -275,7 +275,7 @@ class StoryPlan {
     final previous = <String, Set<String>>{};
     bool changedState = false;
     for (var i = 0; i < queue.length; i++) {
-      if (queue.length > 2500) {
+      if (queue.length > (expanded ? 8000 : 2500)) {
         throw const FormatException('Превышен лимит проверки состояний');
       }
       final node = queue[i];
@@ -334,8 +334,9 @@ class StoryPlan {
   /// Deliberately DRAFT_ONLY. Existing M2c validation and private compiler
   /// remain separate, mandatory steps; no semantic acceptance is implied.
   IntermediateStoryBlueprint toIntermediateDraft(
-      NarrativeBookModel book, {PreparationRights rights = PreparationRights.unknown}) {
-    final report = validate(book);
+      NarrativeBookModel book, {PreparationRights rights = PreparationRights.unknown,
+      bool expanded = false}) {
+    final report = validate(book, expanded: expanded);
     if (!report.isStructurallySound) {
       throw FormatException(report.blockers.join('; '));
     }

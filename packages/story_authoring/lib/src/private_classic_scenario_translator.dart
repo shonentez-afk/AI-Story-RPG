@@ -65,9 +65,10 @@ class PrivateClassicScenarioTranslator {
     NpcKnowledgeRulebook? npcRules,
     NpcEditorialNotebook? npcNotebook,
     SourceCharacterDossierIndex? npcDossiers,
+    bool expanded = false,
   }) {
     final acceptance = PrivateAdaptationPreflight.evaluate(
-        index, evidence, catalog, editorial, draft);
+        index, evidence, catalog, editorial, draft, expanded: expanded);
     if (!acceptance.isStructurallyReady ||
         !_digestPattern.hasMatch(index.sourceFingerprint) ||
         !_digestPattern.hasMatch(editorial.catalogSha256) ||

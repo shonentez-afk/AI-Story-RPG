@@ -237,13 +237,14 @@ class IntermediateStoryBlueprint {
   /// An alternate choice that prevents a required event cannot keep routing
   /// into the canonical scene. A dead state or loop with no exit is rejected.
   CausalPreflight validate(BookSourceIndex index,
-      SourceEvidenceGraph evidence, SourceSemanticCatalog catalog) {
+      SourceEvidenceGraph evidence, SourceSemanticCatalog catalog,
+      {bool expanded = false}) {
     if (index.sourceFingerprint != sourceFingerprint ||
         evidence.sourceFingerprint != sourceFingerprint ||
         catalog.sourceFingerprint != sourceFingerprint ||
         title.trim().isEmpty || title.length > 256 ||
-        scenes.isEmpty || scenes.length > maxScenes ||
-        flags.length > 32 || flags.toSet().length != flags.length ||
+        scenes.isEmpty || scenes.length > (expanded ? 1024 : maxScenes) ||
+        flags.length > (expanded ? 64 : 32) || flags.toSet().length != flags.length ||
         initialFlags.toSet().length != initialFlags.length ||
         !_id.hasMatch(entrySceneId)) {
       throw const FormatException('Несовместимый источник или размер сценария');
@@ -348,7 +349,7 @@ class IntermediateStoryBlueprint {
     final terminals = <String>{};
 
     for (var cursor = 0; cursor < queue.length; cursor++) {
-      if (queue.length > maxStates) {
+      if (queue.length > (expanded ? 8000 : maxStates)) {
         throw const FormatException('Превышен лимит симуляции причинности');
       }
       final current = queue[cursor];
