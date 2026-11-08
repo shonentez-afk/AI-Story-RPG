@@ -247,6 +247,16 @@ class RichPrivateBookworldImporter {
         !seenFactGrants.union(expanded ? blueprint.initial.knowledge.values.expand((known) => known).toSet() : const <String>{}).containsAll(blueprint.facts)) {
       throw const FormatException('Каталог не связан с игровыми действиями');
     }
+    // An action advances clock time by one even without an explicit effect.
+    // Saturate the search key at the highest threshold that ANY decision
+    // reads. Later ticks are logically indistinguishable for predicates;
+    // enumerating absolute time in a wait-loop would never terminate.
+    final relevantTick = expanded ? blueprint.scenes.values
+        .expand((scene) => scene.choices)
+        .expand((choice) => choice.conditions)
+        .where((condition) => condition.op == 'tick_at_least')
+        .fold<int>(0, (maxValue, c) =>
+            c.amount! > maxValue ? c.amount! : maxValue) : 0;
     final start = (
       blueprint.entrySceneId,
       blueprint.initial.flags.entries.where((e) => e.value).map((e) => e.key).toSet(),
@@ -259,7 +269,7 @@ class RichPrivateBookworldImporter {
       'scene': state.$1, 'flags': state.$2.toList()..sort(),
       'inventory': state.$3.toList()..sort(), 'stats': state.$4,
       'knowledge': {for (final actor in blueprint.actors) actor: state.$5[actor]!.toList()..sort()},
-      'tick': state.$6,
+      'tick': expanded && state.$6 < relevantTick ? state.$6 : relevantTick,
     });
     final seen = <String>{keyOf(start)}, visited = <String>{};
     final parent = <String, Set<String>>{};
@@ -419,10 +429,10 @@ class RichPrivateBookworldImporter {
       for (final entry in init.knowledge.entries)
         for (final fact in entry.value) entry.key + '|' + fact,
     };
-    final required = init.inventory.isNotEmpty ||
+    final needsReview = init.inventory.isNotEmpty ||
         knowledge.isNotEmpty || init.tick != 0;
     final review = source['initial_state_review'];
-    if (!expanded || !required) {
+    if (!expanded || !needsReview) {
       if (review != null || manifest.containsKey('initial_state_review_format')) {
         throw const FormatException('Неожиданная редактура исходного состояния');
       }
