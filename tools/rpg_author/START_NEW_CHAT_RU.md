@@ -1,4 +1,29 @@
-# AI Story RPG — АКТУАЛЬНЫЙ HANDOFF E6g / текущий PR #133
+# AI Story RPG — актуальный handoff E6g, native v4 (8 ноября 2026)
+
+**Текущая версия внешнего генератора:** `0.3.0a6`. **Единственная текущая ветка:** [feature/external-rpg-author-e6g-pr133-compat-20261108](https://github.com/shonentez-afk/AI-Story-RPG/tree/feature/external-rpg-author-e6g-pr133-compat-20261108). **Native dependency:** рабочий код [PR #133](https://github.com/shonentez-afk/AI-Story-RPG/pull/133), проверенная база `7c4401c25b77e4643cf23000c28a717cb22dabca`, Draft (последующий PR #133 двигается, требуется актуальная re-pin проверка при интеграции).
+
+**Сначала читать [E6G_NATIVE_V4_BRIDGE_RU_2026-11-08.md](E6G_NATIVE_V4_BRIDGE_RU_2026-11-08.md)**, затем [E6G_PR133_NATIVE_STORY_AUTHORING_COMPATIBILITY_RU_2026-11-08.md](E6G_PR133_NATIVE_STORY_AUTHORING_COMPATIBILITY_RU_2026-11-08.md). **27 точных upstream code blobs** в `compatibility_v2`; `doctor` FAIL-CLOSED при drift. Из E6f перенесены доказанные npc_social v5, rich-v3, author checkpoints, literary/dialogue QA и Python/Dart tests; изменялись исключительно `tools/rpg_author/`, `tests/rpg_author/`.
+
+**Новый реальный CLI (v4 opt-in, v3 по умолчанию):**
+
+```sh
+# Требуется установленный Dart SDK; локально разрешить story_authoring заранее.
+(cd packages/story_authoring && dart pub get)
+python3 -m tools.rpg_author doctor
+python3 -m tools.rpg_author build --project /private/project --enrichment /private/enrichment.json --output /private/game_v3.bworld
+python3 -m tools.rpg_author build-extended --project /private/project --enrichment /private/enrichment.json --output /private/game_v4.bworld
+python3 -m tools.rpg_author verify-extended --input /private/game_v4.bworld --attribution /private/game_v4.attribution.json
+```
+
+**Подтверждённое native-v4 доказательство:** [CI #42495808223](https://github.com/shonentez-afk/AI-Story-RPG/actions/runs/42495808223), code SHA `3c06489798fd74b5281488a935b8210b7661f99a`, оба `author-tests` и `dart-parity` **SUCCESS**: из E6g Python-review → реальный Dart `build-extended` → rich v4 → replay/две концовки → SQLite resume/fork/portable → NPC-social v5 + negative sidecar. E6g `0.3.0a6` добавил Python-only negative tests/standalone pub config; **его final exact-head CI перепроверять по последнему коммиту**, не подменять фактом старого PASS.
+
+**Ограничения:** v4 **реально выпускается**, но пока только из проверенного E6g StoryPlan старых лимитов (≤192 сцены); нет автономного E6g >192 или initial_state/tick review. Для этого нужен новый source-locked authoring/semantic/cross-act контракт. Не обещать полную книгу только из успешного package-test. Источник, приватные checkpoints, .bworld, цитаты и секреты не публиковать.
+
+**Installed ChatGPT skill пока E6d (0.3.0a2, pinned `9849c22…`)** — обновить его отдельно после проверки нового генератора; обновление README не переподключает установленный skill. Native main/apps/packages/tools/bookworld/CI не изменяли. Не создавать PR в main до приёмки PR #133. Старые E6d/E6f project snapshots сохраняют свои toolchain SHA, их не мигрировать самовольно.
+
+---
+
+## Архив E6g 0.3.0a5 — предыдущая проверенная интеграция
 
 **8 ноября 2026 — теперь E6g 0.3.0a5:** рабочая ветка внешнего автора [feature/external-rpg-author-e6g-pr133-compat-20261108](https://github.com/shonentez-afk/AI-Story-RPG/tree/feature/external-rpg-author-e6g-pr133-compat-20261108), **основана непосредственно на native [PR #133](https://github.com/shonentez-afk/AI-Story-RPG/pull/133) кодовом SHA `7c4401c25b77e4643cf23000c28a717cb22dabca`**. Из E6f перенесён внешний Python-автор и его тесты без изменений `main`, `apps/`, `packages/` или native `tools/bookworld/`. Историческая E6f ниже теперь *архив предыдущей реализации*, не текущий pin.
 
@@ -9,6 +34,7 @@
 **Неприкосновенные ограничения:** `tools/rpg_author/`, `tests/rpg_author/` — единственная рабочая область E6g; основной движок read-only, native PR #133 остаётся Draft; не публиковать приватные книги/цитаты/ключи; не сливать в `main` до его приёмки. Старые checkpoint `toolchain_sha256` не переписывать. Установленный навык ChatGPT по-прежнему pinned к E6d 0.3.0a2 и не обновляется автоматически. Цель дальнейшего этапа: реальный 2-книжный литературный E2E, затем отдельно проверенный source-locked native v4 adaptor при необходимости, без фиктивного CANON.
 
 ---
+
 
 ## Архив E6f — предыдущая проверенная интеграция
 
