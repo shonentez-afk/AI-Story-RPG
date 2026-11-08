@@ -67,10 +67,24 @@ jobs:
           (cd story_engine_smoke && dart run bin/stress.dart ../pilot/stress_1000.json)
         working-directory: experiments/m0_engine_comparison
       - name: Download Ink compiler 1.2.1
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          curl --fail --location --retry 3 -o /tmp/inklecate_linux.zip https://github.com/inkle/ink/releases/download/v1.2.1/inklecate_linux.zip
+          # Fixed upstream 1.2.1 release asset. A CDN 504 must not block
+          # unrelated engine CI when the official GitHub API can serve it.
+          set -euo pipefail
+          asset=/tmp/inklecate_linux.zip
+          primary=https://github.com/inkle/ink/releases/download/v1.2.1/inklecate_linux.zip
+          fallback=https://api.github.com/repos/inkle/ink/releases/assets/412615602
+          if ! curl --fail --location --retry 3 --retry-all-errors --retry-delay 2 -o "$asset" "$primary"; then
+            curl --fail --location --retry 4 --retry-all-errors --retry-delay 3 \
+              -H 'Accept: application/octet-stream' \
+              -H "Authorization: Bearer ${GH_TOKEN}" \
+              -o "$asset" "$fallback"
+          fi
+          echo "1997ff5bca618c90003ecd5fecb286e7468abb955005a2a185042949642f8fb5  $asset" | sha256sum --check -
           mkdir -p /tmp/inklecate-dist
-          unzip -q /tmp/inklecate_linux.zip -d /tmp/inklecate-dist
+          unzip -q "$asset" -d /tmp/inklecate-dist
           find /tmp/inklecate-dist -type f -name 'inklecate*' -exec chmod +x {} \;
       - name: Test ink_dart
         run: |

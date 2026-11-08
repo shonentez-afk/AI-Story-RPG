@@ -339,9 +339,9 @@ void main() {
       expect(saved.coordinator.state.stateHash, game.state.stateHash);
       expect(saved.coordinator.state.knowledge, game.state.knowledge);
       expect(saved.coordinator.isTerminal, true);
-      db!.close();
+      db.close();
       db = BookworldCampaignStore.openPrivateDirectory(dir.path);
-      final afterRestart = db!.loadCampaign(campaignId);
+      final afterRestart = db.loadCampaign(campaignId);
       expect(afterRestart.coordinator.state.stateHash, game.state.stateHash);
       expect(afterRestart.coordinator.state.knowledge, game.state.knowledge);
     } finally {
