@@ -29,7 +29,9 @@ void main() {
       expect(beginning.npcDisplayNames, isEmpty);
       expect(beginning.npcItemOwners, isEmpty);
       expect(beginning.journal, isEmpty);
-      expect(beginning.inventory, contains('map'));
+      // Source-reviewed map is granted by the first actual wait event.
+      // It does NOT belong to a player at the start of the story.
+      expect(beginning.inventory, isNot(contains('map')));
       expect(beginning.choices.any((choice) =>
           choice.id == 'help' && !choice.enabled), isTrue);
 
@@ -58,6 +60,8 @@ void main() {
           expectedRevision: 0).applied, isTrue);
       final met = game.load(id);
       expect(met.revision, 1);
+      expect(met.inventory, contains('map'),
+          reason: 'Only committed source-bound wait grants the map');
       expect(met.npcRelations, isNotEmpty);
       expect(met.journal, hasLength(1));
 
