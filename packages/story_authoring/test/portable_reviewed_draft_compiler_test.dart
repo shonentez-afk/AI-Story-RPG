@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:bookworld_format/bookworld_format.dart';
+import 'package:story_core/story_core.dart';
 import 'package:story_authoring/story_authoring.dart';
 import 'package:test/test.dart';
 

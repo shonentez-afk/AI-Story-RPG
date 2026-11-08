@@ -191,6 +191,38 @@ void main() {
     expect(compiled.verifiedActBridges, 10);
     expect(compiled.isFullBookAdaptation, isFalse);
     expect(compiled.requiresCloudToPlay, isFalse);
+    // The same source-locked 72-event campaign can be explicitly compiled
+    // as v4 without altering the legacy v3 tests, NPC gates or core engine.
+    final extendedDraft = BookwideStoryPlanComposer.compose(
+      index: index,
+      book: book,
+      bookMap: map,
+      expanded: true,
+      actProposals: [for (var i = 0; i < 6; i++) _actProposal(book, i)],
+    );
+    await expectLater(MultiActTrialCompiler.compile(
+      index: index, book: book, bookMap: map, draft: extendedDraft,
+      reviewedInteractiveEventIds: extras,
+      sourceEventIdsReviewedByUser: reviewedQuotes,
+      privateUseConfirmed: true,
+      fictionalTrialAcknowledged: true,
+    ), throwsFormatException);
+    final extended = await MultiActTrialCompiler.compile(
+      index: index, book: book, bookMap: map, draft: extendedDraft,
+      reviewedInteractiveEventIds: extras,
+      sourceEventIdsReviewedByUser: reviewedQuotes,
+      privateUseConfirmed: true,
+      fictionalTrialAcknowledged: true,
+      expanded: true,
+    );
+    final extendedWorld = const RichPrivateBookworldImporter()
+        .inspect(extended.archive);
+    expect(extendedWorld.formatVersion, 4);
+    expect(extended.sourceEventsRepresented, 72);
+    expect(extended.verifiedSourceChoices, 72);
+    expect(extendedWorld.requiresNetwork, false);
+    expect(extendedWorld.canDistributePublicly, false);
+
     final imported = const RichPrivateBookworldImporter()
         .inspect(compiled.archive);
     final causal = StoryCampaignCausalAudit.inspect(
