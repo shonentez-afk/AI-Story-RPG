@@ -365,17 +365,33 @@ class CrossActConsequenceGate {
     final opposite = mask([earlier +
         (outcome == CrossActPriorOutcome.original
             ? 'alternate_outcome' : 'original_outcome')]);
+    // The specific earlier result is an explicit proof read even if a
+    // mistaken later choice forgot to include it in its own conditions.
+    final remembered = <String>{
+      earlier + 'original_outcome', earlier + 'alternate_outcome',
+    };
+    final proof = expanded ? plan.futureFlagLiveness(
+      additionalReadsByScene: {sceneId: remembered},
+    ) : null;
+    final masks = expanded ? {
+      for (final scene in plan.situations)
+        scene.id: proof!.bitMask(scene.id, maskByFlag),
+    } : const <String, int>{};
+    String keyOf(String scene, int bits) => scene + ':' +
+        (expanded ? (bits & masks[scene]!) : bits).toString();
     final states = <(String, int)>[
       (plan.entrySituationId, mask(plan.initialFlags)),
     ];
     final seen = <String>{};
+    final queued = <String>{keyOf(plan.entrySituationId,
+        mask(plan.initialFlags))};
     var allowed = 0, blocked = 0;
     for (var i = 0; i < states.length; i++) {
       if (states.length > (expanded ? 8000 : 2500)) {
         throw const FormatException('Слишком много состояний для проверки.');
       }
       final state = states[i];
-      final key = state.$1 + ':' + state.$2.toString();
+      final key = keyOf(state.$1, state.$2);
       if (!seen.add(key)) continue;
       final scene = scenes[state.$1]!;
       if (scene.terminal) continue;
@@ -401,7 +417,11 @@ class CrossActConsequenceGate {
         if ((state.$2 & mask(d.requires)) != mask(d.requires) ||
             (state.$2 & mask(d.forbids)) != 0) continue;
         final next = (state.$2 | mask(d.adds)) & ~mask(d.removes);
-        states.add((d.nextSituationId, next));
+        if (expanded
+            ? queued.add(keyOf(d.nextSituationId, next))
+            : true) {
+          states.add((d.nextSituationId, next));
+        }
       }
     }
     return CrossActRuleImpact(

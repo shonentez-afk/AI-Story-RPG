@@ -212,9 +212,33 @@ class BranchContinuityAuditor {
       }
     }
 
+    // Ledger checks inspect resource/owner flags outside ordinary choice
+    // conditions. Retain them for ALL reachable scenes; never treat a
+    // persistent ownership difference as irrelevant to the proof.
+    final ledgerReads = <String>{
+      for (final rule in rules) rule.stateFlag,
+      for (final rule in rules)
+        if (rule.requiresFlagAtGrant != null) rule.requiresFlagAtGrant!,
+    };
+    final proof = expanded ? plan.futureFlagLiveness(
+      additionalReadsByScene: {
+        for (final scene in plan.situations) scene.id: ledgerReads,
+      },
+    ) : null;
+    final liveMasks = expanded ? {
+      for (final scene in plan.situations)
+        scene.id: proof!.bitMask(scene.id, bits),
+    } : const <String, int>{};
+    String stateKey(String scene, int flags, int refusals) =>
+        scene + '|' + (expanded
+          ? (flags & liveMasks[scene]!)
+          : flags).toString() + '|' + refusals.toString();
     final queue = <_LedgerNode>[
       _LedgerNode(plan.entrySituationId, mask(plan.initialFlags), 0, const []),
     ];
+    final discovered = <String>{
+      stateKey(plan.entrySituationId, mask(plan.initialFlags), 0),
+    };
     final visited = <String>{};
     final problems = <BranchContinuityCounterexample>[];
     final dedup = <String>{};
@@ -233,8 +257,7 @@ class BranchContinuityAuditor {
         throw const FormatException('Слишком много состояний игрового мира.');
       }
       final node = queue[cursor];
-      final key = node.sceneId + '|' + node.flags.toString() + '|' +
-          node.refusals.toString();
+      final key = stateKey(node.sceneId, node.flags, node.refusals);
       if (!visited.add(key)) continue;
       final scene = scenes[node.sceneId]!;
       for (var i = 0; i < rules.length; i++) {
@@ -292,8 +315,13 @@ class BranchContinuityAuditor {
             report('MULTIPLE_ITEM_OWNERS', rule, node, choice.id, path);
           }
         }
-        queue.add(_LedgerNode(
-          choice.nextSituationId, nextFlags, refusals, path));
+        if (expanded
+            ? discovered.add(stateKey(choice.nextSituationId,
+                nextFlags, refusals))
+            : true) {
+          queue.add(_LedgerNode(
+            choice.nextSituationId, nextFlags, refusals, path));
+        }
       }
     }
     return BranchContinuityReport(

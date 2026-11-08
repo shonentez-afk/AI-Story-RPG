@@ -194,6 +194,36 @@ class StoryPlanCausalAuditor {
     };
     int mask(Iterable<String> flags) =>
         flags.fold(0, (result, f) => result | bits[f]!);
+    final invariantReads = <String, Set<String>>{};
+    for (final scene in plan.situations) {
+      final reads = <String>{};
+      for (final choice in scene.decisions) {
+        for (final invariant in contract.decisionInvariants) {
+          if (invariant.decisionId == choice.id) {
+            reads.addAll(invariant.requires);
+            reads.addAll(invariant.forbids);
+          }
+        }
+        for (final gate in contract.knowledgeGates) {
+          if (gate.protectedDecisionIds.contains(choice.id)) {
+            reads.add(gate.knowledgeFlag);
+          }
+        }
+      }
+      if (reads.isNotEmpty) invariantReads[scene.id] = reads;
+    }
+    final proof = expanded ? plan.futureFlagLiveness(
+      additionalReadsByScene: invariantReads,
+      exclusiveGroups: [
+        for (final group in contract.exclusiveGroups) group.flags,
+      ],
+    ) : null;
+    final liveMask = expanded ? {
+      for (final scene in plan.situations)
+        scene.id: proof!.bitMask(scene.id, bits),
+    } : const <String, int>{};
+    String stateKey(String scene, int flags) => scene + ':' +
+        (expanded ? (flags & liveMask[scene]!) : flags).toString();
     List<String> active(int state) => [
       for (final f in sortedFlags)
         if ((state & bits[f]!) != 0) f,
@@ -226,7 +256,7 @@ class StoryPlanCausalAuditor {
       _AuditNode(plan.entrySituationId, mask(plan.initialFlags), const []),
     ];
     final visited = <String>{
-      plan.entrySituationId + ':' + mask(plan.initialFlags).toString(),
+      stateKey(plan.entrySituationId, mask(plan.initialFlags)),
     };
     final violations = <StoryCausalCounterexample>[];
     final recorded = <String>{};
@@ -280,7 +310,7 @@ class StoryPlanCausalAuditor {
                 decision.id, node.bits, path);
           }
         }
-        final target = decision.nextSituationId + ':' + next.toString();
+        final target = stateKey(decision.nextSituationId, next);
         if (visited.add(target)) {
           queue.add(_AuditNode(decision.nextSituationId, next, path));
         }
