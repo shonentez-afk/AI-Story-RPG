@@ -1,5 +1,8 @@
 import 'dart:convert';
 
+import 'package:story_core/story_core.dart'
+    show FutureFlagEdge, FutureFlagLiveness;
+
 import 'intermediate_story_blueprint.dart';
 import 'narrative_book_model.dart';
 
@@ -203,6 +206,30 @@ class StoryPlan {
     }
   }
 
+  /// Pure proof-only relevance: a past outcome is forgotten by the
+  /// REACHABILITY key only after no possible future branch can read it.
+  /// The authored flags and every real WorldEvent remain intact.
+  FutureFlagLiveness futureFlagLiveness({
+    Iterable<Iterable<String>> exclusiveGroups =
+        const <Iterable<String>>[],
+    Map<String, Iterable<String>> additionalReadsByScene =
+        const <String, Iterable<String>>{},
+  }) => FutureFlagLiveness.derive(
+    scenes: [for (final scene in situations) scene.id],
+    edges: [
+      for (final scene in situations)
+        for (final decision in scene.decisions)
+          FutureFlagEdge(
+            from: scene.id,
+            to: decision.nextSituationId,
+            reads: [...decision.requires, ...decision.forbids],
+            writes: [...decision.adds, ...decision.removes],
+          ),
+    ],
+    exclusiveGroups: exclusiveGroups,
+    additionalReadsByScene: additionalReadsByScene,
+  );
+
   /// Bounded state exploration. Source text order is NEVER treated as
   /// causal proof; semantics and NPC knowledge require later M2g3c checks.
   StoryPlanReport validate(NarrativeBookModel book, {bool expanded = false}) {
@@ -268,8 +295,20 @@ class StoryPlan {
     };
     int mask(List<String> active) =>
         active.fold(0, (n, v) => n | bits[v]!);
+    // Only v4 opts into the formally conservative future-flag projection.
+    // Old v3 counts/hashes and acceptance results retain their original key.
+    final proofLiveness = expanded ? futureFlagLiveness() : null;
+    final relevantBits = expanded
+        ? {for (final scene in situations)
+            scene.id: proofLiveness!.bitMask(scene.id, bits)}
+        : const <String, int>{};
+    String stateKey(String sceneId, int state) =>
+        sceneId + ':' + (expanded
+            ? (state & relevantBits[sceneId]!)
+            : state).toString();
     final queue = <(String, int)>[(entrySituationId, mask(initialFlags))];
     final visited = <String>{};
+    final enqueued = <String>{stateKey(entrySituationId, mask(initialFlags))};
     final sceneIds = <String>{};
     final terminals = <String>{};
     final previous = <String, Set<String>>{};
@@ -279,7 +318,7 @@ class StoryPlan {
         throw const FormatException('Превышен лимит проверки состояний');
       }
       final node = queue[i];
-      final key = '${node.$1}:${node.$2}';
+      final key = stateKey(node.$1, node.$2);
       if (!visited.add(key)) continue;
       final situation = byId[node.$1]!;
       sceneIds.add(situation.id);
@@ -294,9 +333,13 @@ class StoryPlan {
         count++;
         final next = (node.$2 | mask(d.adds)) & ~mask(d.removes);
         if (next != node.$2) changedState = true;
-        final target = '${d.nextSituationId}:$next';
+        final target = stateKey(d.nextSituationId, next);
         previous.putIfAbsent(target, () => <String>{}).add(key);
-        if (!visited.contains(target)) queue.add((d.nextSituationId, next));
+        if (expanded
+            ? enqueued.add(target)
+            : !visited.contains(target)) {
+          queue.add((d.nextSituationId, next));
+        }
       }
       if (count == 0) {
         throw const FormatException('Игра попадает в тупик без решений');

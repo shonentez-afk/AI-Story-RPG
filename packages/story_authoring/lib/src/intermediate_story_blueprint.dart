@@ -1,5 +1,8 @@
 import 'dart:convert';
 
+import 'package:story_core/story_core.dart'
+    show FutureFlagEdge, FutureFlagLiveness;
+
 import 'book_source_index.dart';
 import 'source_evidence_graph.dart';
 import 'source_semantic_catalog.dart';
@@ -339,8 +342,28 @@ class IntermediateStoryBlueprint {
     };
     int sumBits(List<String> values) =>
         values.fold(0, (result, value) => result | bitByFlag[value]!);
+    // The proof can merge histories with different dormant flags, but no
+    // actual initial flags or committed game events are deleted.
+    final projection = expanded ? FutureFlagLiveness.derive(
+      scenes: byScene.keys,
+      edges: [
+        for (final scene in scenes)
+          for (final choice in scene.choices)
+            FutureFlagEdge(
+              from: scene.id, to: choice.nextSceneId,
+              reads: [...choice.requires, ...choice.forbids],
+              writes: [...choice.adds, ...choice.removes],
+            ),
+      ],
+    ) : null;
+    final relevance = expanded
+        ? {for (final scene in byScene.keys)
+            scene: projection!.bitMask(scene, bitByFlag)}
+        : const <String, int>{};
+    String keyOf(String scene, int bits) => scene + ':' +
+        (expanded ? (bits & relevance[scene]!) : bits).toString();
 
-    final start = entrySceneId + ':' + mask(initialFlags.toSet()).toString();
+    final start = keyOf(entrySceneId, mask(initialFlags.toSet()));
     final queue = <(String, int)>[
       (entrySceneId, mask(initialFlags.toSet())),
     ];
@@ -355,7 +378,7 @@ class IntermediateStoryBlueprint {
         throw const FormatException('Превышен лимит симуляции причинности');
       }
       final current = queue[cursor];
-      final id = current.$1 + ':' + current.$2.toString();
+      final id = keyOf(current.$1, current.$2);
       final scene = byScene[current.$1]!;
       seenScenes.add(scene.id);
       if (scene.terminal) {
@@ -372,7 +395,7 @@ class IntermediateStoryBlueprint {
         available++;
         final nextBits = (current.$2 | sumBits(action.adds)) &
             ~sumBits(action.removes);
-        final to = action.nextSceneId + ':' + nextBits.toString();
+        final to = keyOf(action.nextSceneId, nextBits);
         predecessors.putIfAbsent(to, () => <String>{}).add(id);
         if (discovered.add(to)) {
           queue.add((action.nextSceneId, nextBits));
