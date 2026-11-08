@@ -1,27 +1,14 @@
 import 'dart:async';
 import 'dart:convert';
-
 import 'npc_campaign_writing_session.dart';
 import 'reviewed_hero_role.dart';
 import 'source_analysis_checkpoint_repository.dart';
 import 'whole_book_npc_campaign.dart';
+import 'package:story_authoring/npc_campaign_hero_selection.dart'
+    show NpcCampaignHeroSelection;
 
-/// A remembered editing preference, never permission to upload or install.
-class NpcCampaignHeroSelection {
-  const NpcCampaignHeroSelection(this.role, this.sourceAction, this.revision);
-  final ReviewedHeroRole? role;
-  final bool sourceAction;
-  final int revision;
-  bool get cloudConsent => false;
-  bool get installConsent => false;
-
-  WholeBookNpcSourcePlan bind(WholeBookNpcSourcePlan source) =>
-      WholeBookNpcSourcePlan.fromBook(
-        index: source.index, book: source.book, bookMap: source.bookMap,
-        draft: source.draft, selectedHeroRole: role,
-        reviewedHeroSourceAction: sourceAction,
-      );
-}
+export 'package:story_authoring/npc_campaign_hero_selection.dart'
+    show NpcCampaignHeroSelection;
 
 /// Separate small record points to the chosen role. Actual dialogue drafts
 /// retain their per-plan addresses, so switching heroes deletes no work.

@@ -83,3 +83,5 @@ export 'src/npc_campaign_consequences.dart';
 export 'src/npc_inventory_writing_context.dart';
 export 'src/source_locked_dialogue_speaker_audit.dart';
 export 'src/reviewed_hero_reading_candidate.dart';
+export 'src/npc_campaign_writing_session.dart';
+export 'src/npc_campaign_hero_selection.dart';
