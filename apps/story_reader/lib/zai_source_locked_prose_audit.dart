@@ -7,8 +7,7 @@ import 'zai_semantic_preview.dart';
 
 import 'package:rpg_api/rpg_api.dart' show
     LocalRpgProposalReviewApi, SourceLockedProseAuditContext,
-    AiProseFindingKind, AiProseFindingSeverity, AiProseAuditVerdict,
-    AiProseAuditFinding, AiProseAuditReport;
+    AiProseAuditReport;
 export 'package:rpg_api/rpg_api.dart' show
     SourceLockedProseAuditContext,
     AiProseFindingKind, AiProseFindingSeverity, AiProseAuditVerdict,
