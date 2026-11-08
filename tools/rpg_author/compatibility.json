@@ -2,7 +2,7 @@
   "format": "rpg_author_compatibility_v2",
   "digest_algorithm": "git_blob_sha1",
   "application_baseline": "7c4401c25b77e4643cf23000c28a717cb22dabca",
-  "application_contract": "Native PR #133 pure-Dart story_authoring source API and strict rich-v3/v4 importer. External author emits validated rich-v3 only.",
+  "application_contract": "Native PR #133 pure-Dart story_authoring source API and strict rich-v3/v4 importer. External author emits validated rich-v3 only.; opt-in native CLI build-extended source-name identity pinned by SHA.",
   "files": {
     "apps/story_reader/lib/book_import.dart": "2b705f97410381f7a7e8a76645bf49cfd5ea6418",
     "apps/story_reader/lib/book_source_index.dart": "35ea8f05c1659c42dd8b0173b16deba7182d7546",
@@ -16,6 +16,7 @@
     "packages/bookworld_format/lib/private_bookworld.dart": "bb423e619ce5a94d078ffeaa56081ee94ff1387f",
     "packages/bookworld_format/lib/private_rich_bookworld.dart": "6fd50caa643ce82f70fd86dae58cd88c4278f4f1",
     "packages/campaign_manager/lib/campaign_manager.dart": "2fdefa9835e8d3c21281569eef5656ceefe77107",
+    "packages/story_authoring/bin/author_book.dart": "cf6779e641819661bb3fbec869da4fc850aa4e8c",
     "packages/story_authoring/lib/src/authoring_engine.dart": "d7c7dfadcc8e6e1ee2d1f317fc3887976bfd0e6b",
     "packages/story_authoring/lib/src/book_import.dart": "efdebc3fc21d7f21b1c14cab0d7bdcf28150f924",
     "packages/story_authoring/lib/src/book_source_index.dart": "4fb5f589fe161347e81dd822bfda6618b735c88b",
