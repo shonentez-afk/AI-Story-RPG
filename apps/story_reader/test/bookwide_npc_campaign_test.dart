@@ -308,26 +308,26 @@ void main() {
       campaignId = db.createCampaign(installed.archiveHash);
       for (var i = 0; i < steps.length; i++) {
         if (i == 112) {
-          db.close();
+          db!.close();
           db = BookworldCampaignStore.openPrivateDirectory(dir.path);
           final loaded = db.loadCampaign(campaignId);
           expect(loaded.metadata.revision, 112);
           expect(loaded.coordinator.state.knowledge[
               extended.candidates.first.role.characterId], isNotEmpty);
         }
-        final committed = db.commitChoice(campaignId,
+        final committed = db!.commitChoice(campaignId,
           actionId: 'full_book_step_$i',
           choiceId: steps[i], expectedRevision: i);
         expect(committed.applied, true, reason: 'step $i / ${steps[i]}');
       }
-      final saved = db.loadCampaign(campaignId);
+      final saved = db!.loadCampaign(campaignId);
       expect(saved.metadata.revision, steps.length);
       expect(saved.coordinator.state.stateHash, game.state.stateHash);
       expect(saved.coordinator.state.knowledge, game.state.knowledge);
       expect(saved.coordinator.isTerminal, true);
-      db.close();
+      db!.close();
       db = BookworldCampaignStore.openPrivateDirectory(dir.path);
-      final afterRestart = db.loadCampaign(campaignId);
+      final afterRestart = db!.loadCampaign(campaignId);
       expect(afterRestart.coordinator.state.stateHash, game.state.stateHash);
       expect(afterRestart.coordinator.state.knowledge, game.state.knowledge);
     } finally {
