@@ -508,6 +508,7 @@ class MultiActTrialCompiler {
     // and structurally connected but impossible endings before installation.
     final campaignReport = CompiledCampaignCausalGate.verify(
       blueprint: inspected.blueprint,
+      expanded: expanded,
       socialRules: inspected.npcSocialRulebook,
       requiredChoiceIds: [
         ...campaignContract.requiredChoiceIds,

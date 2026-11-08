@@ -257,6 +257,8 @@ class RichPrivateBookworldImporter {
         .where((condition) => condition.op == 'tick_at_least')
         .fold<int>(0, (maxValue, c) =>
             c.amount! > maxValue ? c.amount! : maxValue) : 0;
+    final futureFlags = expanded
+        ? FutureFlagLiveness.fromBlueprint(blueprint) : null;
     final start = (
       blueprint.entrySceneId,
       blueprint.initial.flags.entries.where((e) => e.value).map((e) => e.key).toSet(),
@@ -266,7 +268,10 @@ class RichPrivateBookworldImporter {
       expanded ? blueprint.initial.tick : 0,
     );
     String keyOf((String, Set<String>, Set<String>, Map<String, int>, Map<String, Set<String>>, int) state) => canonicalJson({
-      'scene': state.$1, 'flags': state.$2.toList()..sort(),
+      'scene': state.$1,
+      // Proof-only projection: source-backed WorldState keeps ALL outcomes.
+      'flags': (futureFlags == null ? state.$2 :
+          state.$2.intersection(futureFlags.at(state.$1))).toList()..sort(),
       'inventory': state.$3.toList()..sort(), 'stats': state.$4,
       'knowledge': {for (final actor in blueprint.actors) actor: state.$5[actor]!.toList()..sort()},
       'tick': expanded && state.$6 < relevantTick ? state.$6 : relevantTick,

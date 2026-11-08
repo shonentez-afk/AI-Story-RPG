@@ -112,6 +112,8 @@ class StoryCampaignCausalAudit {
     Iterable<String> requiredChoiceIds = const [],
     int maxStates = 8192,
     int maxMoves = 256,
+    /// Opt-in proof equivalence for source-reviewed v4, not a world mutation.
+    bool projectDormantFlags = false,
   }) {
     if (maxStates < 1 || maxStates > 20000 ||
         maxMoves < 1 || maxMoves > 2000) {
@@ -135,7 +137,8 @@ class StoryCampaignCausalAudit {
         for (final scene in blueprint.scenes.values)
           if (scene.terminal) scene.id,
     };
-    final signature = CausalStateSignature(blueprint, socialRulebook);
+    final signature = CausalStateSignature(blueprint, socialRulebook,
+        projectDormantFlags: projectDormantFlags);
     final start = StoryWorld(blueprint, socialRulebook: socialRulebook);
     final firstKey = signature.of(start);
     final queue = <StoryWorld>[start];

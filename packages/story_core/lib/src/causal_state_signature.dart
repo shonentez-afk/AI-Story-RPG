@@ -1,6 +1,7 @@
 import 'blueprint.dart';
 import 'codec.dart';
 import 'engine.dart';
+import 'future_flag_liveness.dart';
 import 'npc_social_ledger.dart';
 
 /// Internal equivalence key for *future playable behavior*, not a checksum
@@ -10,8 +11,11 @@ import 'npc_social_ledger.dart';
 /// The optional prior-choice flag is necessary for source-locked dialogue
 /// proofs. Campaign-wide terminal/trap audits omit that extra condition.
 class CausalStateSignature {
-  CausalStateSignature(this.blueprint, this.socialRulebook)
-      : _latestTimeGate = _timeGate(blueprint),
+  CausalStateSignature(this.blueprint, this.socialRulebook,
+      {bool projectDormantFlags = false})
+      : _futureFlags = projectDormantFlags
+            ? FutureFlagLiveness.fromBlueprint(blueprint) : null,
+        _latestTimeGate = _timeGate(blueprint),
         _npcActors = (
           blueprint.actors.where((id) => id != 'player').toList()..sort()
         ),
@@ -19,6 +23,7 @@ class CausalStateSignature {
 
   final StoryBlueprint blueprint;
   final NpcSocialRulebook? socialRulebook;
+  final FutureFlagLiveness? _futureFlags;
   final int _latestTimeGate;
   final List<String> _npcActors;
   final List<String> _itemIds;
@@ -73,7 +78,12 @@ class CausalStateSignature {
           ? 0
           : (state.tick > _latestTimeGate ? _latestTimeGate : state.tick),
       'stats': state.stats,
-      'flags': state.flags,
+      // This affects ONLY the verifier's equivalence key. No flags,
+      // inventory, NPC knowledge, social memory or event hashes are removed.
+      'flags': _futureFlags == null ? state.flags : {
+        for (final flag in _futureFlags!.at(state.sceneId))
+          flag: state.flags[flag]!,
+      },
       'inventory': state.inventory.toList()..sort(),
       'knowledge': {
         for (final actor in blueprint.actors)

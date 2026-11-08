@@ -17,13 +17,15 @@ class CompiledCampaignCausalGate {
     Iterable<String> requiredChoiceIds = const [],
     int maxStates = 8192,
     int maxMoves = 256,
+    bool expanded = false,
   }) {
     final report = StoryCampaignCausalAudit.inspect(
       blueprint: blueprint,
       socialRulebook: socialRules,
       requiredChoiceIds: requiredChoiceIds,
       maxStates: maxStates,
-      maxMoves: maxMoves,
+      maxMoves: expanded && maxMoves == 256 ? 2000 : maxMoves,
+      projectDormantFlags: expanded,
     );
     if (report.status == CampaignCausalStatus.playable) return report;
     if (report.traps.isNotEmpty) {
