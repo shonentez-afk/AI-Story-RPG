@@ -67,27 +67,50 @@ class _WorldPlayPageState extends State<WorldPlayPage> {
     unawaited(_saveReading(settings));
   }
 
+  // Prefer the signed ID of an already met NPC over a cosmetic name.
+  // Duplicate display names never share a portrait implicitly.
+  String? _portraitAddress(WorldGameView view, String speaker) {
+    final ids = view.npcRelations
+        .where((npc) => npc.displayName == speaker)
+        .map((npc) => npc.actorId).toSet();
+    if (ids.length > 1) return null;
+    return ids.isEmpty ? speaker : ids.single;
+  }
+
   Future<void> _loadPortraits(WorldGameView view) async {
     final script = view.sceneDialogueTurns == null
         ? SceneDialogueScript.fromSceneText(view.sceneText)
         : SceneDialogueScript.fromSignedTurns(view.sceneDialogueTurns!);
-    if (script == null) return;
-    final speakers = script.turns.map((t) => t.speaker)
-        .whereType<String>().toSet();
+    final speakers = script?.turns.map((turn) => turn.speaker)
+        .whereType<String>().toSet() ?? <String>{};
+    final loaded = <String, Uint8List>{};
     for (final speaker in speakers) {
-      final bytes = await _portraitStore.read(
-          campaignId: widget.campaignId, speaker: speaker);
-      if (!mounted || _view?.sceneId != view.sceneId ||
-          _view?.revision != view.revision) return;
-      if (bytes != null) {
-        setState(() => _portraitBytes[speaker] = bytes);
+      final address = _portraitAddress(view, speaker);
+      if (address == null) continue;
+      var bytes = await _portraitStore.read(
+          campaignId: widget.campaignId, speaker: address);
+      if (bytes == null && address != speaker) {
+        // Legacy local portraits remain visible after switching to actor IDs.
+        bytes = await _portraitStore.read(
+            campaignId: widget.campaignId, speaker: speaker);
       }
+      if (bytes != null) loaded[speaker] = bytes;
     }
+    if (!mounted || _view?.sceneId != view.sceneId ||
+        _view?.revision != view.revision) return;
+    setState(() { _portraitBytes..clear()..addAll(loaded); });
   }
 
   Future<void> _pickPortrait(String speaker) async {
     final current = _view;
     if (current == null || speaker.trim().isEmpty) return;
+    final address = _portraitAddress(current, speaker);
+    if (address == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Два персонажа имеют одинаковое имя. '
+            'Нужен проверенный ID говорящего; портрет не изменён.')));
+      return;
+    }
     try {
       final selected = await FilePicker.platform.pickFiles(
         type: FileType.image, allowMultiple: false, withData: true,
@@ -99,7 +122,7 @@ class _WorldPlayPageState extends State<WorldPlayPage> {
             'Не удалось прочитать изображение. Выберите локальный PNG.');
       }
       await _portraitStore.save(
-        campaignId: widget.campaignId, speaker: speaker, png: bytes);
+        campaignId: widget.campaignId, speaker: address, png: bytes);
       if (!mounted) return;
       setState(() => _portraitBytes[speaker] = bytes);
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
@@ -213,6 +236,12 @@ class _WorldPlayPageState extends State<WorldPlayPage> {
         'knows_fact' => 'Сначала требуется узнать новые сведения',
         'stat_at_least' => 'Не хватает характеристики персонажа',
         'tick_at_least' => 'Ещё не наступило время события',
+        'npc_unavailable' => 'Собеседник сейчас недоступен',
+        'npc_memory' => 'Сначала требуется подтверждённая встреча',
+        'npc_trust' => 'Пока недостаточно доверия для этого разговора',
+        'npc_item_owner' => 'Предмет должен быть у нужного персонажа',
+        'npc_item_custody' => 'Сначала требуется подтверждённая передача предмета',
+        'npc_life_transition' => 'Состояние персонажа не позволяет этот выбор',
         _ => 'Пока не выполнены сюжетные условия',
       };
     }
@@ -539,7 +568,8 @@ class _WorldPlayPageState extends State<WorldPlayPage> {
                                       title: const Text(
                                           'Свободное действие'),
                                       subtitle: const Text(
-                                          'Офлайн или с помощью ИИ — с подтверждением'),
+                                          'Подбор предусмотренного сценарием хода; '
+                                          'ИИ не создаёт новых правил'),
                                       initiallyExpanded: false,
                                       children: [
                                         FreeTextActionPanel(
@@ -636,9 +666,6 @@ class _WorldInfoSheet extends StatelessWidget {
         if (_selectedHeroCharacterId != null)
           'Роль: проверенная карточка персонажа',
         if (_selectedHeroCharacterId != null)
-          'Постоянный ID: ' +
-              _selectedHeroCharacterId!.substring(0, 12) + '…',
-        if (_selectedHeroCharacterId != null)
           'Знания и секреты NPC не присваиваются автоматически.',
         if (view.stats.isEmpty) 'Характеристики не заданы',
         for (final stat in view.stats.entries)
@@ -650,15 +677,15 @@ class _WorldInfoSheet extends StatelessWidget {
               view.knownFacts
                   .map((id) => view.factNames[id] ?? id).join(', '),
         if (view.knownFacts.isEmpty) 'Открыто сведений: 0',
-        if (view.npcLifeStates.isNotEmpty)
-          'Персонажи (подтверждённые событиями):',
-        for (final entry in view.npcLifeStates.entries)
-          (view.npcDisplayNames[entry.key] ?? entry.key) + ': ' +
-              switch (entry.value) {
+        if (view.npcRelations.isNotEmpty)
+          'Только встреченные персонажи:',
+        for (final npc in view.npcRelations)
+          npc.displayName + ': ' +
+              switch (npc.lifeState) {
                 'present' => 'доступен',
                 'absent' => 'отсутствует',
                 'dead' => 'погиб',
-                _ => 'состояние неизвестно',
+                _ => 'состояние не подтверждено',
               },
       ],
       GamePanel.inventory => [
@@ -715,6 +742,21 @@ class _WorldInfoSheet extends StatelessWidget {
                 ),
               ]),
               const SizedBox(height: 8),
+              if (panel == GamePanel.character && _selectedHeroCharacterId != null)
+                ExpansionTile(
+                  key: const Key('world-hero-diagnostics'),
+                  title: const Text('Техническая диагностика роли'),
+                  children: [
+                    SelectableText('Постоянный ID: ${_selectedHeroCharacterId!}'),
+                  ],
+                ),
+              if (panel == GamePanel.inventory)
+                const Text('Предметы и владельцы — только из подтверждённых '
+                    'игровых действий. Использовать предмет можно через '
+                    'доступное решение сцены.'),
+              if (panel == GamePanel.journal)
+                const Text('Записаны только подтверждённые решения и последствия '
+                    'из SQLite. Исходная свободная фраза не заменяет запись хода.'),
               Flexible(child: panel == GamePanel.npc
                   ? ListView(
                       key: const Key('world-npc-relation-list'),

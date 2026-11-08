@@ -184,4 +184,26 @@ void main() {
     expect(find.textContaining('Недоступно:'), findsNothing);
   });
 
+
+  testWidgets('four panels fit 280dp and 200% scaled text', (tester) async {
+    tester.view.physicalSize = const Size(280, 720);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    GamePanel? selected;
+    await tester.pumpWidget(MaterialApp(home: MediaQuery(
+      data: const MediaQueryData(textScaler: TextScaler.linear(2)),
+      child: Scaffold(bottomNavigationBar: GameQuickBar(
+        showNpc: true, onOpen: (panel) => selected = panel,
+      )),
+    )));
+    await tester.pumpAndSettle();
+    expect(find.text('Герой'), findsOneWidget);
+    expect(find.text('Предметы'), findsOneWidget);
+    expect(find.text('Журнал'), findsOneWidget);
+    expect(find.text('NPC'), findsOneWidget);
+    await tester.tap(find.text('NPC'));
+    expect(selected, GamePanel.npc);
+    expect(tester.takeException(), isNull);
+  });
 }

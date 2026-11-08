@@ -19,7 +19,8 @@ class _Gateway implements WorldLibraryGateway {
       throw UnimplementedError('Only read-only load is supported');
 }
 
-WorldGameView _game({required List<NpcRelationView> npcs}) => WorldGameView(
+WorldGameView _game({required List<NpcRelationView> npcs,
+    Map<String, String> futureLife = const {}}) => WorldGameView(
   campaignId: 'campaign_a',
   worldTitle: 'Частная история', sceneId: 'canon_end',
   sceneText: 'Сохранённая финальная сцена.', revision: 2, tick: 2,
@@ -27,6 +28,8 @@ WorldGameView _game({required List<NpcRelationView> npcs}) => WorldGameView(
   stats: const {}, inventory: const [], flags: const {},
   knownFacts: const [], choices: const [], journal: const [],
   npcRelations: npcs,
+  npcLifeStates: futureLife,
+  npcDisplayNames: {for (final id in futureLife.keys) id: 'Скрытый персонаж'},
 );
 
 void main() {
@@ -101,6 +104,21 @@ void main() {
     await tester.tap(find.text('NPC'));
     await tester.pumpAndSettle();
     expect(find.text('Отношение NPC к герою: -10'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('unmet NPC is not spoiled by future life transitions in Hero',
+      (tester) async {
+    final unseen = 'npc_' + List.filled(32, 'a').join();
+    await tester.pumpWidget(MaterialApp(home: WorldPlayPage(
+      gateway: _Gateway(_game(npcs: const [],
+          futureLife: {unseen: 'dead'})), campaignId: 'campaign_a',
+    )));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Герой'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Скрытый персонаж'), findsNothing);
+    expect(find.textContaining('погиб'), findsNothing);
     expect(tester.takeException(), isNull);
   });
 }

@@ -261,10 +261,11 @@ class _FreeTextActionPanelState extends State<FreeTextActionPanel> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Text('Опишите действие своим текстом. '
-              'Можно подобрать доступный ход офлайн или запросить подсказку '
-              'ИИ после отдельного согласия. ИИ не создаёт события '
-              'и не получает доступ к будущему сюжету.'),
+          const Text('Опишите желаемое действие. Офлайн и Z.ai подбирают '
+              'только уже разрешённые решения текущей сцены, без новых '
+              'предметов, диалогов и событий. ИИ получает вашу фразу и '
+              'подписи допустимых ходов лишь после отдельного согласия. '
+              'Игровой ход сохраняется только после подтверждения.'),
           const SizedBox(height: 8),
           TextField(
             key: const Key('free-text-input'), controller: _input,
@@ -291,6 +292,18 @@ class _FreeTextActionPanelState extends State<FreeTextActionPanel> {
             label: const Text('Подобрать с помощью ИИ'),
           ),
           if (_busy) const LinearProgressIndicator(),
+          if (_busy && _aiCancellation != null)
+            TextButton.icon(
+              key: const Key('free-text-stop-ai'),
+              onPressed: () {
+                _aiCancellation?.cancel();
+                setState(() => _notice =
+                    'Остановлены новые попытки ИИ. Уже отправленный запрос '
+                    'нельзя отозвать; игровой ход не совершён.');
+              },
+              icon: const Icon(Icons.stop_circle_outlined),
+              label: const Text('Остановить запрос к ИИ'),
+            ),
           if (_error != null)
             Text(_error!, key: const Key('free-text-error'),
                 style: TextStyle(color: Theme.of(context).colorScheme.error)),

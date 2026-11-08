@@ -841,14 +841,14 @@ class _LibraryPageState extends State<LibraryPage> {
                                 onPressed: _working ? null :
                                     () => _quickRpg(entry),
                                 icon: const Icon(Icons.play_arrow),
-                                label: const Text('Играть по книге'),
+                                label: const Text('Создать RPG'),
                               ),
                               OutlinedButton.icon(
                                 key: ValueKey('library-prepare-${entry.id}'),
                                 onPressed: _working ? null :
                                     () => _prepareBook(entry),
                                 icon: const Icon(Icons.auto_awesome_outlined),
-                                label: const Text('Подготовить к RPG'),
+                                label: const Text('Расширенный редактор'),
                               ),
                             ],
                           ),

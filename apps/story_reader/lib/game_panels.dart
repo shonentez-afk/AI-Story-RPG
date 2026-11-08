@@ -108,19 +108,34 @@ class GameQuickBar extends StatelessWidget {
         top: false,
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 3),
-          child: Row(
-            children: [
-              Expanded(child: _item(context,
-                  Icons.person_outline, 'Герой', GamePanel.character)),
-              Expanded(child: _item(context,
-                  Icons.backpack_outlined, 'Предметы', GamePanel.inventory)),
-              Expanded(child: _item(context,
-                  Icons.menu_book_outlined, 'Журнал', GamePanel.journal)),
+          child: LayoutBuilder(builder: (context, constraints) {
+            final actions = <({IconData icon, String name, GamePanel panel})>[
+              (icon: Icons.person_outline, name: 'Герой', panel: GamePanel.character),
+              (icon: Icons.backpack_outlined, name: 'Предметы', panel: GamePanel.inventory),
+              (icon: Icons.menu_book_outlined, name: 'Журнал', panel: GamePanel.journal),
               if (showNpc)
+                (icon: Icons.people_outline, name: 'NPC', panel: GamePanel.npc),
+            ];
+            // Four 72dp minimum buttons must not overflow on narrow devices.
+            if (constraints.maxWidth < (showNpc ? 336 : 260) ||
+                MediaQuery.textScalerOf(context).scale(12) > 18) {
+              final width = (constraints.maxWidth - 4) / 2;
+              return Wrap(
+                alignment: WrapAlignment.center,
+                spacing: 4, runSpacing: 2,
+                children: [
+                  for (final action in actions)
+                    SizedBox(width: width, child: _item(context,
+                        action.icon, action.name, action.panel)),
+                ],
+              );
+            }
+            return Row(children: [
+              for (final action in actions)
                 Expanded(child: _item(context,
-                    Icons.people_outline, 'NPC', GamePanel.npc)),
-            ],
-          ),
+                    action.icon, action.name, action.panel)),
+            ]);
+          }),
         ),
       );
 
