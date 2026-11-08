@@ -156,6 +156,32 @@ class _BookRpgStartPageState extends State<BookRpgStartPage> {
               key: const Key('rpg-start-book-title'),
               style: Theme.of(context).textTheme.titleLarge),
           const SizedBox(height: 8),
+          // Resume is a primary action, not the last item in a long card.
+          // At 320dp / 200% font it must stay discoverable above both modes.
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  FilledButton.tonalIcon(
+                    key: const Key('rpg-start-resume'),
+                    onPressed: _opening ? null :
+                        () => _openWholeBook(resumeOnly: true),
+                    icon: const Icon(Icons.history_rounded),
+                    label: const Text('Продолжить создание RPG'),
+                  ),
+                  const SizedBox(height: 6),
+                  const Text('Проверим сохранённую подготовку именно '
+                      'этой редакции книги. Локальный анализ и '
+                      'проверенные части ИИ восстанавливаются без '
+                      'повторной отправки и без сохранённого согласия '
+                      'на новые запросы.'),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
           const Text('Один вход в создание RPG: сначала выберите '
               'офлайн-пробу либо поактовую подготовку. Затем проверьте '
               'источник, героя, последствия, NPC (можно 0), текст '
@@ -214,20 +240,6 @@ class _BookRpgStartPageState extends State<BookRpgStartPage> {
                     icon: const Icon(Icons.auto_awesome_outlined),
                     label: const Text('Подготовить книгу через ИИ'),
                   ),
-                  const SizedBox(height: 8),
-                  FilledButton.tonalIcon(
-                    key: const Key('rpg-start-resume'),
-                    onPressed: _opening ? null :
-                        () => _openWholeBook(resumeOnly: true),
-                    icon: const Icon(Icons.history_rounded),
-                    label: const Text('Продолжить создание RPG'),
-                  ),
-                  const SizedBox(height: 6),
-                  const Text('По точному отпечатку книги проверяются '
-                      'сохранённый анализ всей книги и локальный '
-                      'редактор источника. Продолжается существующий '
-                      'маршрут без повторной отправки книги. '
-                      'Новое согласие на ИИ запрашивается отдельно.'),
                 ],
               ),
             ),

@@ -575,13 +575,26 @@ void main() {
     await tester.scrollUntilVisible(consequences, 120,
         scrollable: find.byType(Scrollable).first);
     expect(consequences, findsOneWidget);
-    expect(find.textContaining('Возможных разговоров: 0'), findsWidgets);
+    // The ListView is lazy: review text below the consequence card is only
+    // built after an actual scroll. Never assume an offscreen row exists.
+    final conversationCount = find.textContaining('Возможных разговоров: 0');
+    await tester.scrollUntilVisible(conversationCount, 120,
+        scrollable: find.byType(Scrollable).first);
+    await tester.pump();
+    expect(conversationCount, findsOneWidget);
     await tap('whole-npc-review-package');
     for (var attempt = 0; attempt < 100; attempt++) {
       await tester.runAsync(() async {
         await Future<void>.delayed(const Duration(milliseconds: 100));
       });
       await tester.pump();
+      // The review appears after the action below the viewport, so a
+      // successful response needs a real scroll to instantiate the row.
+      if (attempt % 10 == 0) {
+        await tester.drag(find.byType(Scrollable).first,
+            const Offset(0, -140));
+        await tester.pump();
+      }
       if (find.byKey(const Key('whole-npc-final-approval')).evaluate().isNotEmpty) {
         break;
       }

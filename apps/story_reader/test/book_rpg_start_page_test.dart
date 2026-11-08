@@ -70,6 +70,10 @@ void main() {
 
     expect(find.byKey(const Key('rpg-start-offline')), findsOneWidget);
     expect(find.byKey(const Key('rpg-start-ai')), findsOneWidget);
+    expect(find.byKey(const Key('rpg-start-resume')), findsOneWidget);
+    // Primary Resume must be physically tappable in the first viewport.
+    final rect = tester.getRect(find.byKey(const Key('rpg-start-resume')));
+    expect(rect.center.dy, lessThan(tester.view.physicalSize.height));
     expect(indexingCalls, 0);
     expect(networkCalls, 0);
 
@@ -148,6 +152,11 @@ void main() {
     final ai = find.byKey(const Key('rpg-start-ai'));
     await tester.scrollUntilVisible(ai, 120, scrollable: scroll);
     expect(ai, findsOneWidget);
+    await tester.scrollUntilVisible(
+        find.byKey(const Key('rpg-start-resume')), 120,
+        scrollable: scroll);
+    final resume = find.byKey(const Key('rpg-start-resume'));
+    expect(resume, findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
