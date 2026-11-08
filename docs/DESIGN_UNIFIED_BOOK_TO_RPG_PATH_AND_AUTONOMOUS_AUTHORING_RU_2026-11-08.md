@@ -1,5 +1,10 @@
 # AI Story RPG — отдельное проектирование единого пути «книга → RPG» и полной автономности
 
+## Новый единый перенос multi-act/whole-book model port (код 3c1a7aa)
+
+[**Полный статус, файлы и gate**](P0_STANDALONE_MULTIACT_AND_BOOKWIDE_MODEL_PORT_RU_2026-11-08.md). `story_authoring` теперь содержит общий multi-act/NPC компилятор, reviewed hero, литературные и prose типы, source/chronology/causal gate и `PortableWholeBookAnalyzer` (точные окна, source hashes, consent, Resume, cancellation, provider callback). Flutter использует те же типы через export и остаётся только адаптером Z.ai/OS. **Это ещё не автоматический CANON FB2→RPG**, лимиты богатого формата и game UI остаются. Код `3c1a7aa19853d5ea13a031db4dc2ad06b80b2b96`. [CI #42455037055](https://github.com/shonentez-afk/AI-Story-RPG/actions/runs/42455037055) — точный итог перепроверить; [M0 #42455036949](https://github.com/shonentez-afk/AI-Story-RPG/actions/runs/42455036949) SUCCESS. E6d/main не менять. Один Draft PR #133, никаких микро-PR.
+
+
 Дата: 8 ноября 2026. **ЭТО ТЕХНИЧЕСКИЙ/UX ПРОЕКТ ДО НАЧАЛА ПЕРЕДЕЛКИ МАСТЕРА**, не обещание готовых режимов. Один Draft [PR #133](https://github.com/shonentez-afk/AI-Story-RPG/pull/133), два крупных функциональных пакета, одна сквозная приёмка. Главный критерий: не терять функциональность `story_core`, rich-v3, проверку источника, NPC/предметы/события, ИИ, сохранения или автономность ради упрощённого UI.
 
 Исходные требования: [единая матрица разрывов](ENGINE_FORMAT_UI_GAP_AUDIT_RU_2026-11-08.md), [общий план](PLAN_TWO_UX_AUDITS_ONE_PR_RU_2026-11-08.md), [критерий завершения 1.0](PROJECT_COMPLETION_GATE_RU_2026-11-06.md). Архитектура и источник истины — `story_core` + `story_runtime_adapter` + `bookworld_format` + `campaign_manager`. Ни Flutter, ни GLM не должны становиться альтернативной реализацией игрового состояния.
