@@ -11,8 +11,8 @@ import 'private_rich_bookworld.dart';
 import 'rich_scene_dialogue.dart';
 import 'src/zip_v1.dart';
 
-/// Batch authoring of source-reviewed NPC conversations in ONE existing v3
-/// campaign. This is a translator into story_core, not a second runtime.
+/// Batch authoring of source-reviewed NPC conversations in ONE existing
+/// rich-v3 or explicitly reviewed extended-v4 campaign. This is a translator into story_core, not a second runtime.
 /// Consent covers the exact base archive, all actors, quotations, lines and
 /// dependencies. No existing save, source text, or network is ever modified.
 class ReviewedNpcCampaignBookworldWriter {
@@ -138,7 +138,8 @@ class ReviewedNpcCampaignBookworldWriter {
       episodes[id] = row;
     }
     if (names.length > 15 ||
-        base.blueprint.facts.length + episodes.length > 64) {
+        base.blueprint.facts.length + episodes.length >
+            (base.formatVersion == 4 ? 128 : 64)) {
       throw const FormatException('NPC campaign exceeds existing v3 catalogs');
     }
     // Reject dependency cycles BEFORE state exploration or ZIP construction.
@@ -375,14 +376,22 @@ class ReviewedNpcCampaignBookworldWriter {
     RichNpcDialogueKnowledge.validate(dialogueReview, story, dialogues,
         socialRules: social, sceneOrigins: Map<String, dynamic>.from(origins));
     RichNpcDialogueKnowledge.auditExecutableRoutes(dialogueReview, story,
-        socialRules: social);
-    final baseProof = StoryCampaignCausalAudit.inspect(blueprint: base.blueprint);
+        socialRules: social, maxMoves: base.formatVersion == 4 ? 2000 : 128,
+        maxStates: base.formatVersion == 4 ? 8192 : 4096,
+        projectDormantFlags: base.formatVersion == 4);
+    final extended = base.formatVersion == 4;
+    final baseProof = StoryCampaignCausalAudit.inspect(
+      blueprint: base.blueprint, maxMoves: extended ? 2000 : 256,
+      projectDormantFlags: extended,
+    );
     if (!baseProof.playable || !baseProof.exhaustive) {
       throw const FormatException('Base campaign has no exhaustive causal acceptance');
     }
     final proof = StoryCampaignCausalAudit.inspect(
       blueprint: story, socialRulebook: social,
       requiredChoiceIds: [...baseProof.choiceWitnesses.keys, ...required],
+      maxMoves: extended ? 2000 : 256,
+      projectDormantFlags: extended,
     );
     if (!proof.playable || !proof.exhaustive) {
       throw const FormatException(
@@ -391,6 +400,7 @@ class ReviewedNpcCampaignBookworldWriter {
     // The existing writer repeats source checks and independently imports its
     // ZIP and SQLite result. No new .bworld member or runtime capability.
     return const RichPrivateBookworldWriter().build(
-        blueprint: blueprint, provenance: provenance, sourceIndex: sourceIndex);
+        blueprint: blueprint, provenance: provenance, sourceIndex: sourceIndex,
+        expanded: extended);
   }
 }

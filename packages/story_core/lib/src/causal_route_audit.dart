@@ -53,6 +53,7 @@ class StoryCausalRouteAudit {
     NpcSocialRulebook? socialRulebook,
     int maxStates = 4096,
     int maxMoves = 128,
+    bool projectDormantFlags = false,
   }) {
     jsonId(targetSceneId, 'causal.target_scene');
     if (!blueprint.scenes.containsKey(targetSceneId) ||
@@ -108,7 +109,8 @@ class StoryCausalRouteAudit {
     var limited = false;
     // Campaign and individual NPC proofs share identical game-state
     // equivalence. Never merge routes on scene ID alone.
-    final signature = CausalStateSignature(blueprint, socialRulebook);
+    final signature = CausalStateSignature(blueprint, socialRulebook,
+      projectDormantFlags: projectDormantFlags);
     String stateKey(StoryWorld world) => signature.of(
       world, requiredPriorChoiceId: requiredPriorChoiceId,
     );

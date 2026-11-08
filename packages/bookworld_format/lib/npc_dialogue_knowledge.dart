@@ -185,6 +185,7 @@ class RichNpcDialogueKnowledge {
     NpcSocialRulebook? socialRules,
     int maxStates = 4096,
     int maxMoves = 128,
+    bool projectDormantFlags = false,
   }) {
     final unique = <String>{};
     for (final sceneEntry in reviewedTurns.entries) {
@@ -227,6 +228,7 @@ class RichNpcDialogueKnowledge {
           socialRulebook: socialRules,
           maxStates: maxStates,
           maxMoves: maxMoves,
+          projectDormantFlags: projectDormantFlags,
         );
         if (!proof.proven) {
           final cause = proof.status == CausalRouteStatus.unreachable
