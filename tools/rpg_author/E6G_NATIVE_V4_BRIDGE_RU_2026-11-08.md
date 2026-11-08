@@ -28,7 +28,7 @@ python3 -m tools.rpg_author verify-extended --input /private/game_v4.bworld --at
 
 - [CI #42495808223](https://github.com/shonentez-afk/AI-Story-RPG/actions/runs/42495808223), точный code SHA `3c06489798fd74b5281488a935b8210b7661f99a`: **COMPLETED SUCCESS**, оба `author-tests` и `dart-parity`. Native Dart `build-extended` после исходного Python v3+source check; import strict v4; два терминальных исхода; replay; SQLite restart, fork и portable save; v5 NPC memory/knowledge; отказ при forged attribution.
 - [CI #42495478060](https://github.com/shonentez-afk/AI-Story-RPG/actions/runs/42495478060): FAIL *с полезным подтверждением защиты* — без фикса имени TXT native editor вернул отказ «Авторский проект не привязан к полной исходной редакции книги». Код исправлен с сохранением строгой проверки; это не тест, который был выключен.
-- Новый набор [test_native_v4_bridge.py](../../tests/rpg_author/test_native_v4_bridge.py): отдельный явный CLI, сохранение имени из приватной cwd, отклонение неверных путей, нестандартной разбивки книги и подмены v3→v4. **Точный final CI для 0.3.0a6 перепроверять после последнего кодового коммита.**
+- **Итоговый кодовый E6g 0.3.0a6:** [CI #42496185581](https://github.com/shonentez-afk/AI-Story-RPG/actions/runs/42496185581), exact code SHA `835fda3f6699f853acb3c9d6ded8ef3eb8610df6`: **COMPLETED SUCCESS** — оба задания `author-tests` и `dart-parity`. Новый [test_native_v4_bridge.py](../../tests/rpg_author/test_native_v4_bridge.py) регрессионно проверяет явный CLI, имя исходной TXT во внешнем приватном каталоге, несовпадающие пути, неподдерживаемую разбивку и отказ маскировать v3 под v4.
 
 ## Честные пределы интеграции
 
