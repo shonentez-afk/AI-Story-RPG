@@ -24,6 +24,11 @@ class NativeSourceChapterProofTests(unittest.TestCase):
                  "chapter_index": 2},
             ],
         }
+        for origin in self.provenance["scene_origins"]:
+            if origin["origin"] == "SOURCE_PASSAGE":
+                origin["source_refs"] = [{
+                    "chapter_index": origin["chapter_index"]
+                }]
 
     def test_only_original_source_scenes_are_authoritative(self):
         spec = _source_chapter_proof_spec(self.provenance)
@@ -41,6 +46,19 @@ class NativeSourceChapterProofTests(unittest.TestCase):
             _source_chapter_proof_spec(broken)
         self.assertEqual(error.exception.code,
                          "native_chapter_provenance_incomplete")
+
+    def test_earlier_quote_cannot_fake_later_book_chapter(self):
+        broken = deepcopy(self.provenance)
+        broken["scene_origins"][-1]["source_refs"] = [
+            {"chapter_index": 0}
+        ]
+        with self.assertRaises(AuthoringError) as error:
+            _source_chapter_proof_spec(broken)
+        self.assertEqual(error.exception.code,
+                         "native_chapter_quote_unbound")
+        broken["scene_origins"][-1]["source_refs"] = []
+        with self.assertRaises(AuthoringError):
+            _source_chapter_proof_spec(broken)
 
     def test_duplicate_original_scene_and_wrong_chapter_refused(self):
         broken = deepcopy(self.provenance)

@@ -192,6 +192,17 @@ def _source_chapter_proof_spec(provenance: dict) -> dict:
                 "Native scene provenance has invalid chapter/source fields")
         if entry["origin"] != "SOURCE_PASSAGE":
             continue
+        # A chapter may not be 'covered' by a scene that only reuses a quote
+        # from an EARLIER chapter. The signed v4 provenance retains exact
+        # original chapter_index for every quote (not the claimed scene index).
+        refs = entry.get("source_refs")
+        require(type(refs) is list and any(
+            type(ref) is dict and
+            type(ref.get("chapter_index")) is int and
+            ref["chapter_index"] == entry["chapter_index"]
+            for ref in refs),
+            "native_chapter_quote_unbound",
+            "An original scene must cite actual text from its own book chapter")
         sid = entry["scene_id"]
         require(bool(sid) and sid not in ids,
                 "native_chapter_provenance_invalid",
