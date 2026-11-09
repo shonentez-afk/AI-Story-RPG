@@ -189,16 +189,16 @@ class ProjectTests(unittest.TestCase):
                         check_contract()
                 self.assertEqual(error.exception.code, "contract_drift")
 
-    def test_e6g_lock_checks_migrated_native_dart_authoring_and_v4_reader(self):
-        # E6l is pinned to the reviewed PR #133 multi-client native head, not Flutter
-        # re-export wrappers alone. A wrong Git object cannot be blessed
-        # by changing a version label or a derived toolchain ID.
+    def test_e6r_lock_checks_exact_native_v5_npc_and_causal_engine(self):
+        # E6r is now pinned to exact PASS native PR #133 SHA (CI #1120).
+        # A wrong Git object cannot be blessed by changing the version
+        # label, toolchain ID or path to a newer repository checkout.
         from tools.rpg_author import compatibility
         lock = check_contract()
         self.assertEqual(lock["format"], "rpg_author_compatibility_v2")
         self.assertEqual(lock["digest_algorithm"], "git_blob_sha1")
         self.assertEqual(lock["application_baseline"],
-                         "43930247ef0d2b3e67de7d05ac629fe5a9dd45a4")
+                         "92ef5d701637957e31e3e6e090f63d1e0bdb4173")
         pinned = (
             "packages/story_authoring/lib/story_authoring.dart",
             "packages/story_authoring/lib/src/book_import.dart",
