@@ -823,17 +823,17 @@ class _WorldInfoSheet extends StatelessWidget {
                       shrinkWrap: true,
                       itemCount: entries.length +
                           (panel == GamePanel.character &&
-                                  _selectedHeroCharacterId != null ? 1 : 0),
+                                  view.heroSourceCharacterId != null ? 1 : 0),
                       itemBuilder: (_, index) {
                         final diagnosis = panel == GamePanel.character &&
-                            _selectedHeroCharacterId != null;
+                            view.heroSourceCharacterId != null;
                         if (diagnosis && index == 1) {
                           return ExpansionTile(
                             key: const Key('world-hero-diagnostics'),
                             title: const Text('Техническая диагностика роли'),
                             children: [
                               SelectableText('Постоянный ID: '
-                                  '${_selectedHeroCharacterId!}'),
+                                  '${view.heroSourceCharacterId!}'),
                             ],
                           );
                         }

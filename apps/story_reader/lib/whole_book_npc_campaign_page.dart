@@ -568,8 +568,8 @@ class _WholeBookNpcCampaignPageState extends State<WholeBookNpcCampaignPage>
       if (edits.isEmpty) {
         // The strict NPC writer requires one or more reviewed episodes.
         // Keep the existing proven BookWorld unchanged instead.
-        final checked = const RichPrivateBookworldImporter()
-            .inspect(_archiveForNpc());
+        final checked = const LocalRpgAuthoringApi()
+            .inspectPrivateWorld(_archiveForNpc());
         _source!.verifyArchiveHero(checked);
         if (checked.formatVersion != (_source!.expanded ? 4 : 3) ||
             checked.blueprint.scenes.length != _source!.plan.situations.length ||
