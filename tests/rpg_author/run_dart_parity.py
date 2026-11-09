@@ -584,6 +584,61 @@ def main():
         e6k_file.write_bytes(item_npc_world)
         e6k_sidecar.write_bytes(item_npc_attr)
         assert verify_extended_bundle(e6k_file, e6k_sidecar)["native_dart_verified"]
+        # Unified ChatGPT Skill NPC path: source-derived character_id,
+        # native v3/social v5 review, cross-act v4 engine compilation,
+        # real Dart import, actual actor memory and portable SQLite replay.
+        from tests.rpg_author.test_skill_npc_authoring import SkillAuthorNpcTests
+        from tools.rpg_author.npc_skill import prepare_npc_v4_extension
+        skill_case = SkillAuthorNpcTests(
+            methodName="test_source_identity_is_deterministic_and_private")
+        skill_case.setUp()
+        try:
+            skill_review = skill_case.create_review()
+            skill_v3, _ = compile_rich_from_project(
+                skill_case.project, skill_case.overlay,
+                npc_review=skill_review)
+            with zipfile.ZipFile(io.BytesIO(skill_v3)) as skill_zip:
+                skill_bp = json.loads(skill_zip.read("scenario/blueprint.json"))
+                skill_prov = json.loads(skill_zip.read("source/provenance.json"))
+            skill_example = npc_case.reviewed_npc_acts(
+                skill_bp, skill_prov, overlay=skill_case.overlay)
+            skill_example = json.loads(json.dumps(skill_example).replace(
+                npc_case.ACTOR, skill_case.actor))
+            actor_fields = skill_example["npc_actor_review"]
+            skill_draft = {
+                "acts": skill_example["acts"],
+                "initial_state": skill_example["initial_state"],
+                "npc_actor_review": {
+                    key: actor_fields[key]
+                    for key in ("knowledge_grants", "witnesses", "memories",
+                                "choice_gates", "life_transitions")
+                },
+            }
+            skill_v4_review = prepare_npc_v4_extension(
+                skill_draft, skill_case.idx, skill_case.story,
+                skill_case.overlay, skill_bp, skill_prov,
+                npc_present=True, user_confirmed=True)
+            skill_raw, skill_attr = compile_extended_from_project(
+                skill_case.project, skill_case.overlay,
+                npc_review=skill_review, extension=skill_v4_review)
+            skilled_world = root / "skill_source_npc_v4.bworld"
+            skilled_sidecar = root / "skill_source_npc_v4.attribution.json"
+            skilled_world.write_bytes(skill_raw)
+            skilled_sidecar.write_bytes(skill_attr)
+            assert verify_extended_bundle(
+                skilled_world, skilled_sidecar)["native_dart_verified"]
+            skill_live = dart({
+                "operation": "npc_public_api",
+                "data": base64.b64encode(skill_raw).decode("ascii"),
+                "path": careful_path,
+            })
+            assert skill_live["terminal"] and (
+                skill_live["portable_save_verified"]), skill_live
+            assert skill_case.actor in skill_live["npc_life_states"], skill_live
+            assert skill_case.actor in skill_live["npc_knowledge"], skill_live
+            assert skill_case.actor not in (npc_case.ACTOR,), skill_case.actor
+        finally:
+            skill_case.doCleanups()
         # The author's complete-book automation must discover, not invent,
         # two distinct endings via the public native game API.
         from tools.rpg_author.auto_author import _discover_real_endings
@@ -695,6 +750,7 @@ def main():
                        "native_v4_python_reviewed_dart_compiled_and_imported": True,
                        "native_v4_sqlite_replay_and_save": True,
                        "native_v4_npc_v5_dart_sqlite": True,
+                       "native_skill_source_bound_npc_v4_dart_replay": True,
                        "native_v4_attribution_mismatch_rejected": True,
                        "native_v4_203_source_locked_scenes_replayed": True,
                        "native_v4_initial_item_and_tick_review_verified": True,
