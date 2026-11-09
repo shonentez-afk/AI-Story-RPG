@@ -68,10 +68,11 @@ Future<void> main() async {
     // simulate a rule or invent a state hash here; fork the REAL SQLite
     // campaign through LocalRpgGameApi and choose one enabled action.
     final rootCampaign = api.start(installed.archiveHash);
-    // Choose() returns the fully checked current view. Preserve that exact
-    // native view in the queue rather than restoring all SQLite events again
-    // at every one-choice step of a long book.
-    final queue = <({
+    // A native depth-first frontier reaches a complete long-book route
+    // before expanding every alternate choice at each of 200+ chapters.
+    // Every transition STILL goes through LocalRpgGameApi and SQLite.
+    // Choose() returns the checked view: do not replay it redundantly.
+    final frontier = <({
       String campaignId, List<String> path, WorldGameView view
     })>[
       (campaignId: rootCampaign, path: <String>[],
@@ -86,10 +87,11 @@ Future<void> main() async {
     const maxNodes = 3000;
     const maxSteps = 512;
 
-    while (cursor < queue.length && cursor < maxNodes &&
+    while (frontier.isNotEmpty && cursor < maxNodes &&
            (found.length < 2 ||
             (strictCoverage && reachedChapters.length < totalChapters))) {
-      final current = queue[cursor++];
+      final current = frontier.removeLast();
+      cursor++;
       final path = current.path;
       final campaign = current.campaignId;
       final state = current.view;
@@ -124,8 +126,11 @@ Future<void> main() async {
         final hash = store.loadCampaign(campaign).metadata.stateHash;
         if (!explored.add(hash)) continue;
       }
-      for (final choice in enabled) {
-        if (queue.length >= maxNodes) break;
+      // Reverse the stable sort when pushing a LIFO frontier so the first
+      // lexical choice is explored FIRST. This finds full playable endings
+      // without an exponential breadth-wise explosion in a long corridor.
+      for (final choice in enabled.reversed) {
+        if (cursor + frontier.length >= maxNodes) break;
         // A deterministic one-choice corridor needs no clone: this BFS
         // node has exactly one successor and will never be reused. Mutating
         // its own native campaign is safe and avoids O(n^2) SQLite history
@@ -140,8 +145,8 @@ Future<void> main() async {
         if (!outcome.applied) {
           throw const FormatException('Native fork refused enabled decision');
         }
-        queue.add((campaignId: forked,
-                   path: [...path, choice.id], view: outcome.view));
+        frontier.add((campaignId: forked,
+                      path: [...path, choice.id], view: outcome.view));
       }
     }
     if (found.length != 2) {
@@ -155,7 +160,7 @@ Future<void> main() async {
       ];
       throw FormatException(
           'Source chapters not playable via native RPG API: $missing '
-          '(bounded BFS; cannot certify completeness)');
+          '(bounded native search; cannot certify completeness)');
     }
     stdout.write(jsonEncode({
       'format': 'rpg_author_native_two_discovered_routes_v1',
