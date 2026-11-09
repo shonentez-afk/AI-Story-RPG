@@ -10,6 +10,7 @@ import 'rich_scene_dialogue.dart';
 import 'npc_dialogue_knowledge.dart';
 import 'npc_dialogue_responses.dart';
 import 'npc_social_contract.dart';
+import 'canon_causal_contract.dart';
 import 'src/zip_v1.dart';
 
 /// A private, source-bound, offline CLASSIC package. No permission to publish.
@@ -49,8 +50,11 @@ final class VerifiedBookSceneOrigin {
   const VerifiedBookSceneOrigin({
     required this.sceneId, required this.chapterIndex,
     required this.origin,
+    this.sourceQuoteSha256,
   });
   final String sceneId, origin;
+  /// Verified opening quotation of this scene; for authoring only.
+  final String? sourceQuoteSha256;
   final int chapterIndex;
   bool get isSourcePassage => origin == 'SOURCE_PASSAGE';
 }
@@ -185,6 +189,8 @@ class RichPrivateBookworldImporter {
     _fields(manifest, {
       ...keys,
       if (literalCanon) 'canon_review_format',
+      if (literalCanon && manifest.containsKey('canon_causality_format'))
+        'canon_causality_format',
     }, 'manifest');
     if (manifest['format'] != 'ai_story_bookworld' ||
         manifest['format_version'] != (literalCanon ? 5 : 2) ||
@@ -402,6 +408,17 @@ class RichPrivateBookworldImporter {
   Set<String> _npcKnowledge(Map<String, dynamic> source,
       Map<String, dynamic> manifest, StoryBlueprint blueprint) {
     final npcs = blueprint.actors.difference({'player'});
+    // Signed v5 causal NPC witnesses authorize identities and memories;
+    // they do NOT silently introduce legacy NPC knowledge grants.
+    if (blueprint.isReviewedCanon &&
+        source.containsKey('canon_causality') &&
+        manifest['canon_causality_format'] == CanonCausalContract.format) {
+      if (source.containsKey('npc_knowledge') ||
+          manifest.containsKey('npc_knowledge_format')) {
+        throw const FormatException('Mixed NPC source authority');
+      }
+      return const <String>{};
+    }
     final extension = source['npc_knowledge'];
     if (npcs.isEmpty) {
       if (extension != null || manifest.containsKey('npc_knowledge_format')) throw const FormatException('NPC marker without NPC actors');
@@ -669,7 +686,8 @@ class RichPrivateBookworldImporter {
         !bp.supportsFreeform ||
         !_same(bp.items.toList()..sort(), ['gm_keepsake']) ||
         !_same(bp.facts.toList()..sort(), ['gm_impression']) ||
-        !_same(bp.actors.toList()..sort(), ['player']) ||
+        (!source.containsKey('canon_causality') &&
+            !_same(bp.actors.toList()..sort(), ['player'])) ||
         !_same(bp.initial.flags, {'gm_noted': false}) ||
         !_same(bp.initial.stats, {'gm_resolve': 50}) ||
         bp.initial.inventory.isNotEmpty ||
@@ -787,7 +805,8 @@ class RichPrivateBookworldImporter {
     final hasGameplayReview = source.containsKey('gameplay_review');
     final knownSource = Map<String, dynamic>.of(source)
       ..remove('gameplay_review')..remove('npc_knowledge')..remove('npc_social')
-      ..remove('initial_state_review')..remove('canon_review');
+      ..remove('initial_state_review')..remove('canon_review')
+      ..remove('canon_causality');
     _fields(knownSource, {'format', 'bookworld_id', 'source_fingerprint', 'source_title',
       'source_author', 'source_chapters_total', 'source_chapters_indexed',
       'semantic_catalog_sha256', 'intermediate_draft_sha256', 'rights_status',
@@ -804,10 +823,23 @@ class RichPrivateBookworldImporter {
       throw const FormatException('Неподдерживаемая версия RPG v3');
     }
     _model(source, manifest);
+    final sourceCausal = CanonCausalContract.inspect(source,
+        manifest, blueprint);
     if (literalCanon) _verifyLiteralCanon(source, manifest, blueprint);
     _initialReview(source, manifest, blueprint, expanded: expanded);
-    final socialRulebook = RichNpcSocialContract.inspect(source, manifest, blueprint);
-    final presentation = _presentation(source, blueprint, socialRules: socialRulebook);
+    final legacySocial = RichNpcSocialContract.inspect(
+        source, manifest, blueprint);
+    if (legacySocial != null && sourceCausal != null) {
+      throw const FormatException('Mixed legacy and causal NPC contracts');
+    }
+    final socialRulebook = sourceCausal?.rulebook ?? legacySocial;
+    final basePresentation = _presentation(source, blueprint,
+        socialRules: socialRulebook);
+    final presentation = <String, dynamic>{
+      ...basePresentation,
+      if (sourceCausal != null)
+        'npc_display_names': sourceCausal.names,
+    };
     final verifiedNpcGrants = _npcKnowledge(source, manifest, blueprint);
     if (hasGameplayReview) {
       final review = source['gameplay_review'];
@@ -821,7 +853,8 @@ class RichPrivateBookworldImporter {
     }
     final originV2 = Map<String, dynamic>.of(source)
       ..remove('presentation')..remove('gameplay_review')..remove('npc_knowledge')..remove('npc_social')
-      ..remove('initial_state_review')..remove('canon_review');
+      ..remove('initial_state_review')..remove('canon_review')
+      ..remove('canon_causality');
     originV2['format'] = 'ai_story_private_provenance_v1';
     originV2['model_provenance'] = {'provider': 'none', 'model_id': null};
     _provenance(originV2, blueprint, literalCanon: literalCanon);
@@ -854,6 +887,11 @@ class RichPrivateBookworldImporter {
                 sceneId: raw['scene_id'] as String,
                 chapterIndex: raw['chapter_index'] as int,
                 origin: raw['origin'] as String,
+                sourceQuoteSha256: raw['source_refs'] is List &&
+                        (raw['source_refs'] as List).isNotEmpty
+                    ? ((raw['source_refs'] as List).first as Map)['quote_sha256']
+                        as String?
+                    : null,
               ),
       }),
       formatVersion: version as int,

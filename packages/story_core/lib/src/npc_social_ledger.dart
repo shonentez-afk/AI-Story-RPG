@@ -153,6 +153,24 @@ class NpcSocialRule {
   };
 }
 
+/// Reviewed source expectation for one future canonical book scene.
+/// It cannot be inferred from a model's narrative proposal.
+final class NpcCanonInvariant {
+  const NpcCanonInvariant({
+    required this.sceneId, required this.actorId,
+    required this.forbiddenMemoryId,
+    this.minimumTrust, this.maximumTrust,
+  });
+  final String sceneId, actorId, forbiddenMemoryId;
+  final int? minimumTrust, maximumTrust;
+  Map<String, Object?> toJson() => {
+    'scene_id': sceneId, 'actor_id': actorId,
+    'forbidden_memory_id': forbiddenMemoryId,
+    'minimum_trust': minimumTrust,
+    'maximum_trust': maximumTrust,
+  };
+}
+
 /// Bound to one exact, validated blueprint. A caller must separately
 /// establish source provenance and editorial approval before using rules
 /// to present a literary adaptation. Rules are not embedded in .bworld yet.
@@ -165,7 +183,10 @@ class NpcSocialRulebook {
     List<NpcItemTransfer> itemTransfers = const [],
     List<NpcLifeTransition> lifeTransitions = const [],
     this.requireReviewedWitnesses = false,
-  }) : rules = List.unmodifiable(rules),
+    this.dynamicInteractionsEnabled = false,
+    List<NpcCanonInvariant> canonInvariants = const [],
+  }) : canonInvariants = List.unmodifiable(canonInvariants),
+       rules = List.unmodifiable(rules),
        witnesses = List.unmodifiable(witnesses),
        choiceGates = List.unmodifiable(choiceGates),
        itemTransfers = List.unmodifiable(itemTransfers),
@@ -177,6 +198,8 @@ class NpcSocialRulebook {
   final List<NpcSocialChoiceGate> choiceGates;
   final List<NpcItemTransfer> itemTransfers;
   final List<NpcLifeTransition> lifeTransitions;
+  final List<NpcCanonInvariant> canonInvariants;
+  final bool dynamicInteractionsEnabled;
   /// Strict portable social rules must prove how each observer learned
   /// about the event. Old local preview rulebooks keep legacy semantics.
   final bool requireReviewedWitnesses;
@@ -184,7 +207,9 @@ class NpcSocialRulebook {
   void validate(StoryBlueprint blueprint) {
     if (blueprintHash != blueprint.blueprintHash ||
         !RegExp(r'^[0-9a-f]{64}$').hasMatch(blueprintHash) ||
-        rules.length > 512) {
+        rules.length > 512 || canonInvariants.length > 256 ||
+        (canonInvariants.isNotEmpty && !dynamicInteractionsEnabled) ||
+        (dynamicInteractionsEnabled && !requireReviewedWitnesses)) {
       throw const FormatException('NPC social rules not bound to blueprint');
     }
     if (witnesses.length > 512 || choiceGates.length > 128 ||
@@ -207,6 +232,28 @@ class NpcSocialRulebook {
         throw const FormatException('Invalid or duplicate NPC scene witness');
       }
       presence['${witness.sceneId}|${witness.actorId}'] = witness.mode;
+    }
+    final invariantKeys = <String>{};
+    for (final invariant in canonInvariants) {
+      jsonId(invariant.sceneId, 'canon.invariant.scene_id');
+      jsonId(invariant.actorId, 'canon.invariant.actor_id');
+      jsonId(invariant.forbiddenMemoryId, 'canon.invariant.memory_id');
+      final low = invariant.minimumTrust, high = invariant.maximumTrust;
+      if (!blueprint.isReviewedCanon ||
+          !blueprint.scenes.containsKey(invariant.sceneId) ||
+          invariant.sceneId == blueprint.entrySceneId ||
+          !blueprint.actors.contains(invariant.actorId) ||
+          invariant.actorId == 'player' ||
+          !CharacterId.isValidNpc(invariant.actorId) ||
+          !RegExp(r'^gm_[a-z0-9_]{1,59}$')
+              .hasMatch(invariant.forbiddenMemoryId) ||
+          (low != null && (low < -100 || low > 100)) ||
+          (high != null && (high < -100 || high > 100)) ||
+          (low != null && high != null && low > high) ||
+          !invariantKeys.add(invariant.sceneId + '|' +
+              invariant.actorId + '|' + invariant.forbiddenMemoryId)) {
+        throw const FormatException('Invalid reviewed canonical prerequisite');
+      }
     }
     final seen = <String>{};
     final usedWitnesses = <String>{};
@@ -319,7 +366,7 @@ class NpcSocialRulebook {
             'NPC item custody does not match typed world effect');
       }
     }
-    if (requireReviewedWitnesses &&
+    if (requireReviewedWitnesses && !dynamicInteractionsEnabled &&
         (presence.length != usedWitnesses.length ||
          !usedWitnesses.containsAll(presence.keys))) {
       throw const FormatException('Orphaned NPC witness evidence');
@@ -399,6 +446,19 @@ class NpcSocialRulebook {
 
   /// Digest is stable under rule order changes. The authoring client must
   /// persist and check it when this projection becomes a portable contract.
+  bool breaksCanon(String nextSceneId, NpcSocialSnapshot snapshot) {
+    for (final rule in canonInvariants) {
+      if (rule.sceneId != nextSceneId) continue;
+      if (snapshot.hasMemory(rule.actorId, rule.forbiddenMemoryId)) return true;
+      final trust = snapshot.directedScore(rule.actorId, 'player');
+      if ((rule.minimumTrust != null && trust < rule.minimumTrust!) ||
+          (rule.maximumTrust != null && trust > rule.maximumTrust!)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   String get digest {
     final entries = rules.map((rule) => rule.toJson()).toList()
       ..sort((a, b) =>
@@ -430,6 +490,15 @@ class NpcSocialRulebook {
                 .compareTo('${b['scene_id']}|${b['choice_id']}|${b['item_id']}'));
       signed['item_transfers'] = transfers;
     }
+    if (dynamicInteractionsEnabled) {
+      signed['dynamic_interactions'] = true;
+      signed['canon_invariants'] = (canonInvariants
+          .map((gate) => gate.toJson()).toList()
+          ..sort((a, b) => (a['scene_id'].toString() +
+              a['actor_id'].toString())
+              .compareTo(b['scene_id'].toString() +
+                  b['actor_id'].toString())));
+    }
     if (lifeTransitions.isNotEmpty) {
       final changes = lifeTransitions.map((change) => change.toJson()).toList()
         ..sort((a, b) =>
@@ -450,6 +519,7 @@ class NpcEventMemory {
     required this.relatedActorId,
     required this.relationshipDelta,
     this.witnessMode,
+    this.goalId,
   });
 
   final String observerId;
@@ -462,6 +532,7 @@ class NpcEventMemory {
   /// Null for the player (whose action is already committed), present or
   /// reported for separately verified NPC observers.
   final NpcWitnessMode? witnessMode;
+  final String? goalId;
 }
 
 /// Safe read-only projection of *actual* committed events onto authored
@@ -514,6 +585,15 @@ class NpcSocialSnapshot {
       throw const FormatException('Unknown NPC memory actor');
     }
     return _memoryByActor[actorId] ?? List<NpcEventMemory>.unmodifiable([]);
+  }
+
+  /// Last committed private goal, not a source-book personality assertion.
+  String? currentGoal(String actorId) {
+    final memories = memoriesFor(actorId);
+    for (var i = memories.length - 1; i >= 0; i--) {
+      if (memories[i].goalId != null) return memories[i].goalId;
+    }
+    return null;
   }
 
   bool hasMemory(String actorId, String memoryId) {
@@ -618,6 +698,51 @@ class NpcSocialLedger {
           life[change.actorId] = change.nextState;
         }
       }
+      final intervention = event.freeform?.npcInteraction;
+      if (intervention != null) {
+        if (!rulebook.dynamicInteractionsEnabled ||
+            !blueprint.actors.contains(intervention.actorId) ||
+            life[intervention.actorId] != NpcLifeState.present) {
+          throw const FormatException('Unreviewed or absent NPC');
+        }
+        final key = event.sceneId + '|' + intervention.actorId;
+        final witness = witnessModes[key];
+        final previousContact =
+            memory[intervention.actorId]?.isNotEmpty ?? false;
+        if (witness != NpcWitnessMode.present &&
+            !(previousContact && world.state.plotDiverged)) {
+          throw const FormatException('NPC is not present and source-reviewed');
+        }
+        final actorMemories =
+            memory.putIfAbsent(intervention.actorId, () => <NpcEventMemory>[]);
+        if (actorMemories.any((v) => v.memoryId == intervention.memoryId) ||
+            actorMemories.length >= 64) {
+          throw const FormatException('Repeated NPC memory or overflow');
+        }
+        final kind = switch (intervention.kind) {
+          'helped' => NpcMemoryKind.helped,
+          'betrayed' => NpcMemoryKind.betrayed,
+          'promise_received' => NpcMemoryKind.promiseReceived,
+          'promise_broken' => NpcMemoryKind.promiseBroken,
+          'rumor_heard' => NpcMemoryKind.rumorHeard,
+          _ => NpcMemoryKind.witnessed,
+        };
+        final relation = relations.putIfAbsent(
+            intervention.actorId, () => <String, int>{});
+        final trust = (relation['player'] ?? 0) + intervention.trustDelta;
+        if (trust < -100 || trust > 100) {
+          throw const FormatException('NPC trust outside approved bounds');
+        }
+        relation['player'] = trust;
+        actorMemories.add(NpcEventMemory(
+          observerId: intervention.actorId,
+          memoryId: intervention.memoryId,
+          kind: kind, event: event,
+          relatedActorId: 'player',
+          relationshipDelta: intervention.trustDelta,
+          witnessMode: witness, goalId: intervention.goalId,
+        ));
+      }
       for (final rule in byChoice[
               '${event.sceneId}|${event.choiceId}'] ??
           <NpcSocialRule>[]) {
@@ -664,9 +789,11 @@ class NpcSocialLedger {
             transfer,
     };
     for (final event in events) {
-      final choice = blueprint.scenes[event.sceneId]!.choices
-          .singleWhere((candidate) => candidate.id == event.choiceId);
-      for (final effect in choice.effects) {
+      final effects = event.freeform?.effects ??
+          blueprint.scenes[event.sceneId]!.choices
+              .singleWhere((candidate) => candidate.id == event.choiceId)
+              .effects;
+      for (final effect in effects) {
         if (effect.op != 'grant_item' && effect.op != 'consume_item') continue;
         final itemId = effect.id!;
         final transfer = transferByAction[
@@ -697,7 +824,10 @@ class NpcSocialLedger {
         }
       }
     }
-    for (final item in blueprint.items) {
+    for (final item in {
+      ...blueprint.items,
+      ...world.state.inventory.where((id) => id.startsWith('gm_')),
+    }) {
       if ((owners[item] == 'player') != world.state.inventory.contains(item)) {
         throw const FormatException('NPC custody conflicts with world inventory');
       }
@@ -708,7 +838,8 @@ class NpcSocialLedger {
       worldStateHash: world.state.stateHash,
       eventHeadHash: events.isEmpty ? null : events.last.hash,
       actorIds: blueprint.actors,
-      itemIds: blueprint.items,
+      itemIds: {...blueprint.items,
+          ...world.state.inventory.where((id) => id.startsWith('gm_'))},
       itemOwners: owners,
       lifeByActor: life,
       memoryByActor: memory,

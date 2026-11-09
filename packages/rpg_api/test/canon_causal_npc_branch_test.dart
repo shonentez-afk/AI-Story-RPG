@@ -1,0 +1,267 @@
+import 'dart:convert';
+import 'dart:io';
+import 'dart:typed_data';
+
+import 'package:bookworld_format/bookworld_format.dart';
+import 'package:campaign_manager/campaign_manager.dart';
+import 'package:rpg_api/rpg_api.dart';
+import 'package:story_authoring/story_authoring.dart';
+import 'package:story_core/story_core.dart';
+import 'package:test/test.dart';
+
+const _anna = 'npc_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+
+Uint8List _book() => Uint8List.fromList(utf8.encode(
+    List.generate(900, (i) => 'Анна шла по дороге. '
+      'В главе есть реальное событие номер ' + i.toString() +
+      ' и ещё одно утверждение.').join('\n')));
+
+Map<String, dynamic> _review(
+    VerifiedRichPrivateBookworld base) {
+  final first = base.sceneOrigins['canon_00000']!;
+  final second = base.sceneOrigins['canon_00001']!;
+  return {
+    'format': ReviewedCanonCausalBookworldWriter.reviewFormat,
+    'review_scope': 'human_reviewed_private_story_causality',
+    'source_fingerprint': base.sourceFingerprint,
+    'base_archive_sha256': base.archiveSha256,
+    'user_confirmed': true,
+    'semantic_canon_automatically_verified': false,
+    'witnesses': [{
+      'scene_id': first.sceneId,
+      'actor_id': _anna,
+      'display_name': 'Анна',
+      'source_quote_sha256': first.sourceQuoteSha256,
+      'mode': 'present',
+    }],
+    'invariants': [{
+      'scene_id': second.sceneId,
+      'actor_id': _anna,
+      'forbidden_memory_id': 'gm_anna_warning',
+      'minimum_trust': null,
+      'maximum_trust': null,
+      'source_quote_sha256': second.sourceQuoteSha256,
+    }],
+  };
+}
+
+Map<String, dynamic> _proposal({
+  String player = 'Предупредить Анну',
+  String memory = 'gm_anna_warning',
+  String narrative = 'Анна услышала предупреждение, и история изменилась.',
+  int trustDelta = 4, String? goal = 'gm_anna_avoids_trap',
+  String intent = 'continue',
+  bool withNpc = true,
+}) => {
+  'format': FreeformActionDraft.format,
+  'scope': FreeformActionDraft.fictionScope,
+  'player_text': player,
+  'narration': narrative,
+  'effects': <Object>[],
+  if (withNpc)
+    'npc_interaction': {
+      'actor_id': _anna,
+      'memory_id': memory,
+      'kind': 'warned',
+      'trust_delta': trustDelta,
+      'goal_id': goal,
+    },
+  'plot_intent': intent,
+};
+
+({Uint8List base, Uint8List reviewed, Map<String, dynamic> sourceIndex,
+    String reviewJson, String approvedDigest}) _files() {
+  final bytes = _book();
+  final index = BookSourceIndexer.index(BookImporter.parse('story.txt', bytes));
+  final rawIndex = Map<String, dynamic>.from(index.toJson());
+  final api = const LocalRpgLiteralCanonApi();
+  final preview = api.prepareIndex(index);
+  expect(preview.chunkCount, greaterThan(2));
+  final base = api.compileIndex(index,
+    approvedDigest: preview.approvalDigest, userConfirmed: true);
+  final checked = const RichPrivateBookworldImporter().inspect(base);
+  final reviewJson = canonicalJson(_review(checked));
+  final digest = ReviewedCanonCausalBookworldWriter.digest(reviewJson);
+  final reviewed = api.compileReviewedCausality(
+    verifiedBaseArchive: base, sourceIndex: rawIndex,
+    reviewJson: reviewJson, approvedDigest: digest,
+    userConfirmed: true);
+  return (base: base, reviewed: reviewed, sourceIndex: rawIndex,
+    reviewJson: reviewJson, approvedDigest: digest);
+}
+
+void main() {
+  test('source-locked NPC witness / expected future event produce a private '
+      'new v5 with unchanged full CANON text', () {
+    final input = _files();
+    final original = const RichPrivateBookworldImporter().inspect(input.base);
+    final changed = const RichPrivateBookworldImporter()
+        .inspect(input.reviewed);
+    expect(changed.formatVersion, 5);
+    expect(changed.sourceLiteralCanonVerified, true);
+    expect(changed.blueprint.actors, contains(_anna));
+    expect(changed.npcSocialRulebook?.dynamicInteractionsEnabled, true);
+    expect(changed.npcSocialRulebook?.canonInvariants, hasLength(1));
+    expect(changed.presentation['npc_display_names'], {_anna: 'Анна'});
+    expect(changed.sourceFingerprint, original.sourceFingerprint);
+    expect(changed.archiveSha256, isNot(original.archiveSha256));
+    for (final scene in original.blueprint.scenes.entries) {
+      expect(changed.blueprint.scenes[scene.key]!.text, scene.value.text);
+    }
+    expect(changed.canDistributePublicly, false);
+    expect(changed.requiresNetwork, false);
+  });
+
+  test('warn NPC: reviewed presence, durable directed trust and memory, '
+      'automatic CANON -> ALTER_FATE, scenes, goals, end, SQLite replay',
+      () async {
+    final input = _files();
+    final first = await Directory.systemTemp.createTemp('canon_causal_npc_');
+    final second = await Directory.systemTemp.createTemp('canon_causal_import_');
+    BookworldCampaignStore? primary, target;
+    try {
+      primary = BookworldCampaignStore.openPrivateDirectory(first.path);
+      final game = LocalRpgGameApi(primary);
+      final world = game.install(input.reviewed);
+      final campaign = game.start(world.archiveHash);
+      final current = game.load(campaign);
+      expect(current.sourceLiteralCanon, true);
+      expect(current.activePlotMode, 'CANON');
+      expect(current.availableNpcTargets, {_anna: 'Анна'});
+      expect(current.npcRelations.single.displayName, 'Анна');
+      expect(current.npcRelations.single.directedScore, 0);
+
+      final warning = FreeformActionDraft.fromJson(_proposal());
+      final proposed = game.previewFreeform(campaign, warning,
+          expectedRevision: 0);
+      expect(game.load(campaign).revision, 0);
+      final accepted = game.commitFreeform(campaign,
+          actionId: 'warn_anna_1', draft: warning,
+          expectedRevision: 0,
+          approvalDigest: proposed.approvalDigest, userConfirmed: true);
+      expect(accepted.applied, true);
+      expect(accepted.view.activePlotMode, 'ALTER_FATE');
+      expect(accepted.view.sceneId, 'gm_scene_1');
+      expect(accepted.view.sceneText, warning.narration);
+      expect(accepted.view.sceneSource?.isSourcePassage, false);
+      expect(accepted.view.choices, isEmpty);
+      expect(accepted.view.npcRelations.single.directedScore, 4);
+      expect(accepted.view.npcRelations.single.memoryCount, 1);
+      expect(accepted.view.npcRelations.single.currentGoal,
+          'gm_anna_avoids_trap');
+
+      final denied = game.choose(campaign,
+          actionId: 'fake_canon_next', choiceId: 'canon_next_00000',
+          expectedRevision: 1);
+      expect(denied.applied, false);
+      expect(denied.reason, 'timeline_diverged_into_alter_fate');
+
+      final nextAction = FreeformActionDraft.fromJson(_proposal(
+        player: 'Помочь Анне укрыться',
+        memory: 'gm_anna_safe_hiding',
+        narrative: 'В новой истории Анна скрылась в безопасном доме.',
+        trustDelta: 3, goal: 'gm_anna_returns_home',
+      ));
+      final preview2 = game.previewFreeform(campaign, nextAction,
+          expectedRevision: 1);
+      final done = game.commitFreeform(campaign,
+          actionId: 'aid_anna_2', draft: nextAction,
+          expectedRevision: 1,
+          approvalDigest: preview2.approvalDigest,
+          userConfirmed: true);
+      expect(done.view.sceneId, 'gm_scene_2');
+      expect(done.view.npcRelations.single.directedScore, 7);
+      expect(done.view.npcRelations.single.memoryCount, 2);
+      expect(done.view.npcRelations.single.currentGoal,
+          'gm_anna_returns_home');
+
+      final ending = FreeformActionDraft.fromJson(_proposal(
+        player: 'Завершить новый путь',
+        narrative: 'Анна и герой уехали, новая история завершилась.',
+        withNpc: false, intent: 'end',
+      ));
+      final finalPreview = game.previewFreeform(campaign, ending,
+          expectedRevision: 2);
+      final ended = game.commitFreeform(campaign,
+          actionId: 'ending_3', draft: ending,
+          expectedRevision: 2,
+          approvalDigest: finalPreview.approvalDigest,
+          userConfirmed: true);
+      expect(ended.view.isTerminal, true);
+      expect(ended.view.sceneId, 'gm_scene_3');
+      expect(ended.view.activePlotMode, 'ALTER_FATE');
+      expect(ended.view.freeformAvailable, false);
+
+      final backup = game.exportSave(campaign);
+      target = BookworldCampaignStore.openPrivateDirectory(second.path);
+      final replica = LocalRpgGameApi(target);
+      replica.install(input.reviewed);
+      final imported = replica.importSave(backup,
+          expectedWorldHash: world.archiveHash);
+      final replayed = replica.load(imported);
+      expect(replayed.stateHash, ended.view.stateHash);
+      expect(replayed.sceneText, ended.view.sceneText);
+      expect(replayed.activePlotMode, 'ALTER_FATE');
+      expect(replayed.npcRelations.single.directedScore, 7);
+      expect(replayed.npcRelations.single.currentGoal,
+          'gm_anna_returns_home');
+      expect(replayed.isTerminal, true);
+      expect(replayed.journal.length, 3);
+    } finally {
+      primary?.close(); target?.close();
+      await first.delete(recursive: true);
+      await second.delete(recursive: true);
+    }
+  });
+
+  test('fake NPC identity, missing witness, stale approval, early ending '
+      'and uncited canonical obligation fail closed', () async {
+    final files = _files();
+    final api = const LocalRpgLiteralCanonApi();
+    expect(() => api.compileReviewedCausality(
+      verifiedBaseArchive: files.base,
+      sourceIndex: files.sourceIndex,
+      reviewJson: files.reviewJson,
+      approvedDigest: '0' * 64, userConfirmed: true), throwsFormatException);
+    expect(() => api.compileReviewedCausality(
+      verifiedBaseArchive: files.base,
+      sourceIndex: files.sourceIndex,
+      reviewJson: files.reviewJson,
+      approvedDigest: files.approvedDigest,
+      userConfirmed: false), throwsFormatException);
+    final bad = jsonDecode(files.reviewJson) as Map<String, dynamic>;
+    (bad['invariants'] as List).first['source_quote_sha256'] = '0' * 64;
+    final changed = canonicalJson(bad);
+    expect(() => api.compileReviewedCausality(
+      verifiedBaseArchive: files.base,
+      sourceIndex: files.sourceIndex,
+      reviewJson: changed,
+      approvedDigest: ReviewedCanonCausalBookworldWriter.digest(changed),
+      userConfirmed: true), throwsFormatException);
+    final dir = await Directory.systemTemp.createTemp('canon_negative_');
+    BookworldCampaignStore? store;
+    try {
+      store = BookworldCampaignStore.openPrivateDirectory(dir.path);
+      final game = LocalRpgGameApi(store);
+      final world = game.install(files.reviewed);
+      final id = game.start(world.archiveHash);
+      final unreviewed = FreeformActionDraft.fromJson({
+        ..._proposal(),
+        'npc_interaction': {
+          ...(_proposal()['npc_interaction'] as Map),
+          'actor_id': 'npc_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+        },
+      });
+      expect(() => game.previewFreeform(id, unreviewed,
+          expectedRevision: 0), throwsFormatException);
+      final prematureEnd = FreeformActionDraft.fromJson(
+          _proposal(withNpc: false, intent: 'end'));
+      expect(() => game.previewFreeform(id, prematureEnd,
+          expectedRevision: 0), throwsFormatException);
+      expect(game.load(id).revision, 0);
+    } finally {
+      store?.close();
+      await dir.delete(recursive: true);
+    }
+  });
+}

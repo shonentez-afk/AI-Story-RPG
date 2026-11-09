@@ -186,7 +186,8 @@ class StoryWorld {
 
   WorldState get state => _state;
   List<WorldEvent> get events => List.unmodifiable(_events);
-  bool get isTerminal => blueprint.scenes[_state.sceneId]!.terminal;
+  bool get isTerminal => _state.alternateScene?.terminal ??
+      blueprint.scenes[_state.sceneId]!.terminal;
 
   /// Committed decisions that explicitly taught [factId] to [actorId].
   ///
@@ -276,6 +277,15 @@ class StoryWorld {
       }
     }
     if (selected == null) return 'choice_not_in_current_scene';
+    if (_state.plotDiverged) return 'timeline_diverged_into_alter_fate';
+    if (socialRulebook?.dynamicInteractionsEnabled == true &&
+        socialRulebook!.canonInvariants.any((rule) =>
+            rule.sceneId == selected!.nextSceneId)) {
+      final social = NpcSocialLedger.inspect(this, socialRulebook!);
+      if (socialRulebook!.breaksCanon(selected.nextSceneId, social)) {
+        return 'canon_causality_broken';
+      }
+    }
     for (final condition in selected.conditions) {
       if (!_matches(condition)) {
         return 'condition_not_met:${condition.op}';
@@ -494,6 +504,13 @@ class StoryWorld {
     }
     if (isTerminal) return _denied('terminal_scene');
     draft.validate(blueprint, _state);
+    if (draft.npcInteraction != null &&
+        (socialRulebook?.dynamicInteractionsEnabled != true)) {
+      throw const FormatException('NPC intervention needs signed source review');
+    }
+    if (draft.plotIntent == 'end' && !_state.plotDiverged) {
+      throw const FormatException('Only an existing alternate story may end');
+    }
     final stats = Map<String, int>.of(_state.stats);
     final inventory = Set<String>.of(_state.inventory);
     final flags = Map<String, bool>.of(_state.flags);
@@ -528,6 +545,35 @@ class StoryWorld {
       return _denied('too_many_private_gm_resources');
     }
     if (time > 100000000) return _denied('time_out_of_range');
+    // A source-reviewed future event may become impossible when an NPC has
+    // received new information or changed trust. Never show its original
+    // chapter as if the user's intervention had not happened.
+    var diverged = _state.plotDiverged || draft.plotIntent == 'diverge';
+    if (!diverged && draft.npcInteraction != null &&
+        socialRulebook?.dynamicInteractionsEnabled == true) {
+      final npc = draft.npcInteraction!;
+      final social = NpcSocialLedger.inspect(this, socialRulebook!);
+      for (final nextChoice in blueprint.scenes[_state.sceneId]!.choices) {
+        for (final gate in socialRulebook!.canonInvariants) {
+          if (gate.sceneId != nextChoice.nextSceneId ||
+              gate.actorId != npc.actorId) continue;
+          final trust = social.directedScore(npc.actorId, 'player') +
+              npc.trustDelta;
+          if (gate.forbiddenMemoryId == npc.memoryId ||
+              (gate.minimumTrust != null && trust < gate.minimumTrust!) ||
+              (gate.maximumTrust != null && trust > gate.maximumTrust!)) {
+            diverged = true;
+          }
+        }
+      }
+    }
+    final alt = diverged
+        ? AlternateNarrativeScene(
+            id: 'gm_scene_' + (_state.revision + 1).toString(),
+            text: draft.narration,
+            terminal: draft.plotIntent == 'end',
+          )
+        : null;
     final next = WorldState(
       sceneId: _state.sceneId,
       revision: _state.revision + 1,
@@ -536,6 +582,7 @@ class StoryWorld {
       inventory: inventory,
       flags: flags,
       knowledge: knowledge,
+      alternateScene: alt,
     );
     final event = WorldEvent.create(
       sequence: next.revision,

@@ -430,6 +430,9 @@ class RichPrivateBookworldWriter {
         'initial_state_review_format': RichPrivateBookworldImporter.initialStateReviewFormat,
       if (literalCanon) 'canon_review_format':
           ReviewedLiteralCanonReviewFormat.format,
+      if (literalCanon && provenance.containsKey('canon_causality'))
+        'canon_causality_format':
+            'ai_story_source_causal_review_v1',
       'bookworld_id': checked.bookId,
       'source_fingerprint': checked.sourceFingerprint,
       'title': checked.title,

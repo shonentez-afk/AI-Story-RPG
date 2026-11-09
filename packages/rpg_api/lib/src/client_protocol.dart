@@ -121,6 +121,8 @@ final class RpgClientProtocol {
     'hero_name': view.heroName,
     'hero_description': view.heroDescription,
     'source_literal_canon': view.sourceLiteralCanon,
+    'active_plot_mode': view.activePlotMode,
+    'source_reviewed_npc_targets': view.availableNpcTargets,
     'dynamic_ai_action_available': view.freeformAvailable,
     'gm_action_palette': {
       'stats': view.gmStats, 'flags': view.gmFlags,
@@ -160,6 +162,7 @@ final class RpgClientProtocol {
         'memory_count': npc.memoryCount,
         'memory_kinds': npc.memoryKinds,
         'life_state': npc.lifeState,
+        'current_private_goal': npc.currentGoal,
       }
     ],
     'npc_item_owners': view.npcItemOwners,
@@ -313,6 +316,42 @@ final class RpgClientProtocol {
           'chapters_total': receipt.sourceChaptersTotal,
           'scenes_total': receipt.sceneCount,
           'source_literal_canon_verified': true,
+          'literary_semantics_automatically_verified': false,
+        };
+      case 'compile_reviewed_causal_canon':
+        _fields(args, must: {
+          'archive_base64', 'source_index', 'review_json',
+          'approved_digest', 'user_confirmed',
+        });
+        if (args['user_confirmed'] != true ||
+            args['source_index'] is! Map<String, dynamic>) {
+          throw const FormatException('Missing reviewed source/canonical NPCs');
+        }
+        final reviewedIndex = args['source_index'] as Map<String, dynamic>;
+        if (utf8.encode(jsonEncode(reviewedIndex)).length > 12 * 1024 * 1024) {
+          throw const FormatException('Source index exceeds private limit');
+        }
+        final archive = const LocalRpgLiteralCanonApi()
+            .compileReviewedCausality(
+          verifiedBaseArchive:
+              _bytes(args, 'archive_base64', maxArchiveBytes),
+          sourceIndex: reviewedIndex,
+          reviewJson: _text(args, 'review_json', maxLength: 131072),
+          approvedDigest: _text(args, 'approved_digest'),
+          userConfirmed: true,
+        );
+        final certificate = const RichPrivateBookworldImporter()
+            .inspect(archive);
+        return {
+          'status': 'private_canon_npc_causal_reviewed_v5',
+          'archive_base64': base64Encode(archive),
+          'world_hash': certificate.archiveSha256,
+          'source_fingerprint': certificate.sourceFingerprint,
+          'source_literal_canon_verified':
+              certificate.sourceLiteralCanonVerified,
+          'reviewed_npc_actor_count': certificate.blueprint.actors.length - 1,
+          'reviewed_causal_checkpoint_count':
+              certificate.npcSocialRulebook?.canonInvariants.length ?? 0,
           'literary_semantics_automatically_verified': false,
         };
       case 'preview_dynamic_action':

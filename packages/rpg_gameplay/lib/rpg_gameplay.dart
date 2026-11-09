@@ -133,6 +133,7 @@ class NpcRelationView {
     required this.actorId, required this.displayName,
     required this.directedScore, required this.memoryCount,
     required this.memoryKinds, this.lifeState,
+    this.currentGoal,
   });
 
   final String actorId;
@@ -143,6 +144,7 @@ class NpcRelationView {
   final Map<String, int> memoryKinds;
   /// Null if the signed world has no lifecycle events for this actor.
   final String? lifeState;
+  final String? currentGoal;
 }
 
 /// Only the currently reached scene's trusted book provenance.
@@ -171,6 +173,8 @@ class WorldGameView {
     this.heroSourceCharacterId, this.sourceReviewedHeroStart = false,
     this.freeformAvailable = false,
     this.sourceLiteralCanon = false,
+    this.activePlotMode = 'ALTER_FATE',
+    this.availableNpcTargets = const {},
     this.gmStats = const {}, this.gmFlags = const {},
     this.gmItems = const [], this.gmFacts = const [],
     this.itemNames = const {}, this.itemDescriptions = const {},
@@ -207,6 +211,10 @@ class WorldGameView {
   /// Compiled v5 only. Only these known private GM slots can be proposed.
   final bool freeformAvailable;
   final bool sourceLiteralCanon;
+  /// The current PLAYTHROUGH mode, not the format of the source archive.
+  final String activePlotMode;
+  /// Only witnessed, reached NPC IDs; never hidden future cast members.
+  final Map<String, String> availableNpcTargets;
   final Map<String, int> gmStats;
   final Map<String, bool> gmFlags;
   final List<String> gmItems, gmFacts;
@@ -382,7 +390,9 @@ class RpgGameplayEngine {
     final stats = names('stat_names');
     final facts = names('fact_names');
     final scenes = names('scene_names');
-    final npcDisplayNames = <String, String>{};
+    final npcDisplayNames = <String, String>{
+      ...names('npc_display_names'),
+    };
     final allReviewedSpeakers = presentation['scene_dialogue_knowledge'];
     if (allReviewedSpeakers is Map<String, dynamic>) {
       for (final turns in allReviewedSpeakers.values) {
@@ -459,7 +469,12 @@ class RpgGameplayEngine {
         ..sort();
       for (final actor in actors) {
         final memories = social.memoriesFor(actor);
-        if (memories.isEmpty && !visibleSpeakers.contains(actor)) continue;
+        final witnessedHere = socialRules.dynamicInteractionsEnabled &&
+            socialRules.witnesses.any((w) =>
+                w.sceneId == current.id && w.actorId == actor &&
+                w.mode == NpcWitnessMode.present);
+        if (memories.isEmpty && !visibleSpeakers.contains(actor) &&
+            !witnessedHere) continue;
         final kinds = <String, int>{};
         for (final memory in memories) {
           kinds.update(memory.kind.name, (count) => count + 1,
@@ -474,6 +489,7 @@ class RpgGameplayEngine {
           memoryCount: memories.length,
           memoryKinds: Map.unmodifiable(kinds),
           lifeState: hasLifeReview ? social.lifeState(actor).name : null,
+          currentGoal: social.currentGoal(actor),
         ));
       }
     }
@@ -629,11 +645,12 @@ class RpgGameplayEngine {
     return WorldGameView(
       campaignId: record.metadata.id,
       worldTitle: blueprint.title,
-      sceneId: current.id,
+      sceneId: state.activeSceneId,
       // When dialogue has per-NPC facts, do not pass its raw signed prose
       // to a UI fallback, history widget or local position cache.
-      sceneText: hasReviewedNpcTurns
-          ? 'Разговор с проверяемыми репликами.' : current.text,
+      sceneText: state.alternateScene?.text ??
+          (hasReviewedNpcTurns
+              ? 'Разговор с проверяемыми репликами.' : current.text),
       revision: state.revision,
       tick: state.tick,
       stateHash: state.stateHash,
@@ -644,7 +661,8 @@ class RpgGameplayEngine {
       knownFacts: List.unmodifiable(
         (state.knowledge['player'] ?? <String>{}).toList()..sort(),
       ),
-      choices: List.unmodifiable(coordinator.choices.map(
+      choices: List.unmodifiable((state.plotDiverged
+          ? const <RuntimeChoice>[] : coordinator.choices).map(
         (choice) => WorldChoiceView.fromVerifiedRules(
           signedChoice: current.choices.singleWhere(
               (signed) => signed.id == choice.id),
@@ -661,6 +679,17 @@ class RpgGameplayEngine {
       sourceReviewedHeroStart: reviewedStart,
       freeformAvailable: blueprint.supportsFreeform && !coordinator.isTerminal,
       sourceLiteralCanon: blueprint.isReviewedCanon,
+      activePlotMode: state.plotDiverged ? 'ALTER_FATE'
+          : (blueprint.isReviewedCanon ? 'CANON' : 'ALTER_FATE'),
+      availableNpcTargets: Map.unmodifiable({
+        if (socialRules?.dynamicInteractionsEnabled == true)
+          for (final witness in socialRules!.witnesses)
+            if (witness.sceneId == current.id &&
+                witness.mode == NpcWitnessMode.present &&
+                social?.lifeState(witness.actorId) == NpcLifeState.present)
+              witness.actorId:
+                  npcDisplayNames[witness.actorId] ?? 'Персонаж книги',
+      }),
       gmStats: Map.unmodifiable({
         for (final entry in state.stats.entries)
           if (entry.key.startsWith('gm_')) entry.key: entry.value,
@@ -683,7 +712,8 @@ class RpgGameplayEngine {
       sceneSource: currentOrigin == null ? null : WorldSceneSourceView(
         chapterIndex: currentOrigin.chapterIndex,
         chapterCount: sourceChapterCount,
-        isSourcePassage: currentOrigin.isSourcePassage,
+        isSourcePassage: !state.plotDiverged &&
+            currentOrigin.isSourcePassage,
         sourceTitle: sourceTitle,
       ),
       itemNames: items,

@@ -4,6 +4,61 @@ import 'blueprint.dart';
 import 'codec.dart';
 import 'world_state.dart';
 
+/// Source-reviewed NPC contact, with a NEW durable memory/goal. Identity,
+/// witness presence, life and cause checkpoints are checked by story_core.
+/// No inferred NPC appearance, knowledge or player-provided display name.
+final class FreeformNpcInteraction {
+  const FreeformNpcInteraction._({
+    required this.actorId,
+    required this.memoryId,
+    required this.kind,
+    required this.trustDelta,
+    this.goalId,
+  });
+  final String actorId, memoryId, kind;
+  final int trustDelta;
+  final String? goalId;
+
+  static final _actor = RegExp(r'^npc_[a-f0-9]{32}$');
+  static final _gm = RegExp(r'^gm_[a-z0-9_]{1,59}$');
+  static const kinds = {
+    'warned', 'helped', 'betrayed', 'promise_received',
+    'promise_broken', 'rumor_heard', 'witnessed',
+  };
+  factory FreeformNpcInteraction.fromJson(Object? source) {
+    if (source is! Map<String, dynamic> ||
+        source.keys.toSet().length != 5 ||
+        !source.keys.toSet().containsAll({
+          'actor_id', 'memory_id', 'kind', 'trust_delta', 'goal_id',
+        }) ||
+        source['actor_id'] is! String ||
+        !_actor.hasMatch(source['actor_id'] as String) ||
+        source['memory_id'] is! String ||
+        !_gm.hasMatch(source['memory_id'] as String) ||
+        source['kind'] is! String ||
+        !kinds.contains(source['kind']) ||
+        source['trust_delta'] is! int ||
+        (source['trust_delta'] as int).abs() > 10 ||
+        (source['goal_id'] != null &&
+            (source['goal_id'] is! String ||
+             !_gm.hasMatch(source['goal_id'] as String)))) {
+      throw const FormatException('Unverified NPC freeform intervention');
+    }
+    return FreeformNpcInteraction._(
+      actorId: source['actor_id'] as String,
+      memoryId: source['memory_id'] as String,
+      kind: source['kind'] as String,
+      trustDelta: source['trust_delta'] as int,
+      goalId: source['goal_id'] as String?,
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+    'actor_id': actorId, 'memory_id': memoryId,
+    'kind': kind, 'trust_delta': trustDelta, 'goal_id': goalId,
+  };
+}
+
 /// A NEW, scene-local game action. It is not a mapping to a compiled choice.
 /// The model's response is an untrusted proposal. Only the bounded typed
 /// fiction-state DSL below may be committed, after a fresh CAS and consent.
@@ -11,7 +66,7 @@ import 'world_state.dart';
 /// knowledge, NPC custody, source scenes, or the book's chronology.
 final class FreeformActionDraft {
   FreeformActionDraft._(this.playerText, this.narration,
-      this.effects, this._json);
+      this.effects, this.npcInteraction, this.plotIntent, this._json);
 
   static const format = 'ai_story_freeform_action_v1';
   static const fictionScope = 'private_noncanonical_interlude';
@@ -24,6 +79,10 @@ final class FreeformActionDraft {
   /// Unsigned model prose is ALWAYS shown as fictional, never book narration.
   final String narration;
   final List<TypedRule> effects;
+  /// Optional witnessed, replayable NPC memory and directed relationship.
+  final FreeformNpcInteraction? npcInteraction;
+  /// continue (default), explicitly diverge or finish an existing branch.
+  final String plotIntent;
   final Map<String, dynamic> _json;
   Map<String, dynamic> toJson() =>
       Map<String, dynamic>.from(
@@ -32,15 +91,23 @@ final class FreeformActionDraft {
       utf8.encode(canonicalJson(_json))).toString();
 
   static FreeformActionDraft fromJson(Object? raw) {
+    const required = {
+      'format', 'scope', 'player_text', 'narration', 'effects'
+    };
+    const optional = {'npc_interaction', 'plot_intent'};
     if (raw is! Map<String, dynamic> ||
-        raw.keys.toSet().length != 5 ||
-        !raw.keys.toSet().containsAll({
-          'format', 'scope', 'player_text', 'narration', 'effects'
-        }) ||
+        !raw.keys.toSet().containsAll(required) ||
+        raw.keys.toSet().difference({...required, ...optional}).isNotEmpty ||
         raw['format'] != format || raw['scope'] != fictionScope ||
         raw['player_text'] is! String || raw['narration'] is! String ||
         raw['effects'] is! List) {
       throw const FormatException('Invalid AI interlude schema');
+    }
+    final npcInteraction = raw.containsKey('npc_interaction')
+        ? FreeformNpcInteraction.fromJson(raw['npc_interaction']) : null;
+    final intent = raw['plot_intent'] ?? 'continue';
+    if (intent is! String || !{'continue', 'diverge', 'end'}.contains(intent)) {
+      throw const FormatException('Unknown alternative plot intent');
     }
     final player = raw['player_text'] as String;
     final narration = raw['narration'] as String;
@@ -76,7 +143,7 @@ final class FreeformActionDraft {
     }
     return FreeformActionDraft._(
       player, narration, List.unmodifiable(effects),
-      Map.unmodifiable(Map<String, dynamic>.from(
+      npcInteraction, intent, Map.unmodifiable(Map<String, dynamic>.from(
           jsonDecode(canonicalJson(raw)) as Map)),
     );
   }
@@ -87,6 +154,10 @@ final class FreeformActionDraft {
     if (!bp.supportsFreeform || bp.rightsStatus != 'private_adaptation' ||
         bp.scenes[current.sceneId]?.terminal != false) {
       throw const FormatException('This game does not allow dynamic actions');
+    }
+    if (npcInteraction != null &&
+        !bp.actors.contains(npcInteraction!.actorId)) {
+      throw const FormatException('NPC not in source-reviewed cast');
     }
     for (final e in effects) {
       switch (e.op) {

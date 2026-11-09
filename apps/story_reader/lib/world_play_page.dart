@@ -443,8 +443,11 @@ class _WorldPlayPageState extends State<WorldPlayPage> {
                                 ],
                                 Wrap(spacing: 8, runSpacing: 6, children: [
                                   Chip(
-                                    label: Text(view.sourceLiteralCanon
-                                        ? 'CANON · буквальный текст + свободный ИИ'
+                                    label: Text(view.activePlotMode == 'ALTER_FATE' &&
+                                            view.sourceLiteralCanon
+                                        ? 'ALTER_FATE · альтернативная история'
+                                        : view.sourceLiteralCanon
+                                            ? 'CANON · текст книги + свободный ИИ'
                                         : dialogue == null ? 'Классический режим' : 'Диалог',
                                         style: TextStyle(color: ink)),
                                     backgroundColor: prefs.background,
@@ -462,8 +465,11 @@ class _WorldPlayPageState extends State<WorldPlayPage> {
                                     Chip(
                                       key: const ValueKey('world-book-origin'),
                                       label: Text(
-                                        (view.sourceLiteralCanon
-                                            ? 'CANON · глава '
+                                        (view.sourceLiteralCanon &&
+                                                view.activePlotMode == 'ALTER_FATE'
+                                            ? 'Альтернативный сюжет · от главы '
+                                            : view.sourceLiteralCanon
+                                                ? 'CANON · глава '
                                             : view.sceneSource!.isSourcePassage
                                                 ? 'По книге · глава '
                                                 : 'Альтернативный сюжет · глава ') +
@@ -513,6 +519,7 @@ class _WorldPlayPageState extends State<WorldPlayPage> {
                                 // It is explicitly separated from the
                                 // immutable literal CANON scene text.
                                 if (view.sourceLiteralCanon &&
+                                    view.activePlotMode == 'CANON' &&
                                     view.journal.isNotEmpty &&
                                     view.journal.last.sequence == view.revision &&
                                     view.journal.last.choiceLabel.startsWith(

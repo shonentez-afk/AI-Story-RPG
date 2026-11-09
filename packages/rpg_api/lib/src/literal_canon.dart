@@ -35,6 +35,13 @@ abstract interface class RpgLiteralCanonApi {
   Uint8List compileIndex(BookSourceIndex index, {
     required String approvedDigest, required bool userConfirmed,
   });
+  Uint8List compileReviewedCausality({
+    required Uint8List verifiedBaseArchive,
+    required Map<String, dynamic> sourceIndex,
+    required String reviewJson,
+    required String approvedDigest,
+    required bool userConfirmed,
+  });
   Uint8List compile({
     required String filename, required Uint8List bytes,
     required String approvedDigest, required bool userConfirmed,
@@ -114,6 +121,28 @@ final class LocalRpgLiteralCanonApi implements RpgLiteralCanonApi {
   @override
   RpgCanonPreview prepare(String filename, Uint8List bytes) =>
       _indexed(filename, bytes).preview;
+
+  @override
+  Uint8List compileReviewedCausality({
+    required Uint8List verifiedBaseArchive,
+    required Map<String, dynamic> sourceIndex,
+    required String reviewJson,
+    required String approvedDigest,
+    required bool userConfirmed,
+  }) {
+    final archive = const ReviewedCanonCausalBookworldWriter().compile(
+      verifiedLiteralCanon: verifiedBaseArchive,
+      sourceIndex: sourceIndex, reviewJson: reviewJson,
+      approvedDigest: approvedDigest, userConfirmed: userConfirmed,
+    );
+    final verified = const RichPrivateBookworldImporter().inspect(archive);
+    if (!verified.sourceLiteralCanonVerified ||
+        verified.npcSocialRulebook?.dynamicInteractionsEnabled != true ||
+        verified.requiresNetwork || verified.canDistributePublicly) {
+      throw const FormatException('Source NPC causality was not validated');
+    }
+    return archive;
+  }
 
   @override
   Uint8List compile({
