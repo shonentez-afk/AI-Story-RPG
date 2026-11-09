@@ -68,8 +68,14 @@ Future<void> main() async {
     // simulate a rule or invent a state hash here; fork the REAL SQLite
     // campaign through LocalRpgGameApi and choose one enabled action.
     final rootCampaign = api.start(installed.archiveHash);
-    final queue = <({String campaignId, List<String> path})>[
-      (campaignId: rootCampaign, path: <String>[]),
+    // Choose() returns the fully checked current view. Preserve that exact
+    // native view in the queue rather than restoring all SQLite events again
+    // at every one-choice step of a long book.
+    final queue = <({
+      String campaignId, List<String> path, WorldGameView view
+    })>[
+      (campaignId: rootCampaign, path: <String>[],
+       view: api.load(rootCampaign)),
     ];
     var cursor = 0;
     final endings = <String>{};
@@ -86,7 +92,7 @@ Future<void> main() async {
       final current = queue[cursor++];
       final path = current.path;
       final campaign = current.campaignId;
-      final state = api.load(campaign);
+      final state = current.view;
 
       if (strictCoverage) {
         final chapter = byScene[state.sceneId];
@@ -107,11 +113,17 @@ Future<void> main() async {
         continue;
       }
       if (path.length >= maxSteps) continue;
-      // Re-use genuine native state identities; never invent Python/Dart rules.
-      final hash = store.loadCampaign(campaign).metadata.stateHash;
-      if (!explored.add(hash)) continue;
       final enabled = state.choices.where((c) => c.enabled).toList()
         ..sort((a, b) => a.id.compareTo(b.id));
+      // Use the genuine *native* state hash only when states may fork or
+      // converge. A forced single-choice corridor cannot produce another
+      // distinct local outcome; skipping its redundant SQLite load is safe.
+      // If a loop exists, the strict 512-step/3000-node limits still fail
+      // closed rather than incorrectly claiming complete chapter coverage.
+      if (enabled.length != 1) {
+        final hash = store.loadCampaign(campaign).metadata.stateHash;
+        if (!explored.add(hash)) continue;
+      }
       for (final choice in enabled) {
         if (queue.length >= maxNodes) break;
         // A deterministic one-choice corridor needs no clone: this BFS
@@ -128,7 +140,8 @@ Future<void> main() async {
         if (!outcome.applied) {
           throw const FormatException('Native fork refused enabled decision');
         }
-        queue.add((campaignId: forked, path: [...path, choice.id]));
+        queue.add((campaignId: forked,
+                   path: [...path, choice.id], view: outcome.view));
       }
     }
     if (found.length != 2) {
@@ -148,7 +161,8 @@ Future<void> main() async {
       'format': 'rpg_author_native_two_discovered_routes_v1',
       'archive_sha256': installed.archiveHash,
       'routes': found,
-      'explored_states': explored.length,
+      'explored_states': cursor,
+      'deduplicated_branch_states': explored.length,
       'true_rpg_api': true,
       'native_world_readonly': true,
       'native_source_chapter_coverage': strictCoverage,
