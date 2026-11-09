@@ -15,8 +15,6 @@ dependencies:
     path: ../rpg_gameplay
   story_authoring:
     path: ../story_authoring
-  story_core:
-    path: ../story_core
 
 dev_dependencies:
   test: ^1.25.15
