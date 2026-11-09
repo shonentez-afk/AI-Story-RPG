@@ -5,7 +5,6 @@ import 'package:ai_story_reader/zai_gameplay_choice_advisor.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:rpg_api/rpg_api.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:story_core/story_core.dart';
 
 class _SecretVault implements AiApiKeyVault {
   @override

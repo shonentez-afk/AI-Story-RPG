@@ -5,7 +5,6 @@ import 'dart:typed_data';
 import 'package:campaign_manager/campaign_manager.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:rpg_api/rpg_api.dart';
-import 'package:story_core/story_core.dart';
 
 export 'package:rpg_api/rpg_api.dart' show
     WorldLibraryItem, WorldCampaignItem, WorldSavePreview,

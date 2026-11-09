@@ -319,11 +319,11 @@ final class RpgClientProtocol {
         _fields(args, must: {
           'campaign_id', 'expected_revision', 'proposal',
         });
-        final port = game;
-        if (port is! RpgDynamicGameApi ||
+        if (game is! RpgDynamicGameApi ||
             args['proposal'] is! Map<String, dynamic>) {
           throw const FormatException('No dynamic action engine');
         }
+        final RpgDynamicGameApi port = game as RpgDynamicGameApi;
         final draft = FreeformActionDraft.fromJson(args['proposal']);
         final preview = port.previewFreeform(
             _text(args, 'campaign_id'), draft,
@@ -344,12 +344,12 @@ final class RpgClientProtocol {
           'campaign_id', 'expected_revision', 'action_id',
           'proposal', 'approval_digest', 'user_confirmed',
         });
-        final port = game;
-        if (port is! RpgDynamicGameApi ||
+        if (game is! RpgDynamicGameApi ||
             args['proposal'] is! Map<String, dynamic> ||
             args['user_confirmed'] != true) {
           throw const FormatException('Unapproved dynamic action');
         }
+        final RpgDynamicGameApi port = game as RpgDynamicGameApi;
         final draft = FreeformActionDraft.fromJson(args['proposal']);
         final result = port.commitFreeform(
           _text(args, 'campaign_id'),
