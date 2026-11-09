@@ -21,3 +21,17 @@ python -m tools.rpg_author author-causal-v5 --project PRIVATE_PROJECT --base-wor
 ## Отложенные решения NPC (E6q.1)
 
 В source-reviewed `causal_npc` можно дополнительно указать `delayed_decisions` с точным первым источниковым появлением, подтверждённым present witness, именем NPC, ID триггерной памяти и числом последующих **зафиксированных** ходов (1–32). После наступления срока `story_core` самостоятельно создаёт детерминированное решение NPC: новую цель и память, не вызывая модель и не требуя нового контакта героя. Оно может изменить причины всех будущих книжных сцен. Новое поле `npc_delayed_decisions` не обязательно для старых v2-обзоров, но если указано, его SHA и авторство проверяются нативным компилятором, а исполнение — в едином журнале кампании. CI покрывает неверный срок и чужого NPC, но не литературную истинность решений произвольного романа.
+
+
+## E6q.1 — СКВОЗНОЙ ГЕНЕРАТОР→ДВИЖОК→СОХРАНЕНИЕ (09.11.2026)
+
+**Исходная кодовая точка генератора:** `0b7283653c9dc23a3a1380ca42bb68caf4451993` (версия `0.3.0a21`) в `feature/external-rpg-author-e6g-pr133-compat-20261108`. Новый пакет: `source_causal_v2.py` авторит по ВСЕЙ исходной книге `ai_story_source_causal_review_v2` с цитатами, предшествующими событиями, проверкой первых NPC-встреч, обязательными условиями, source-воспоминаниями, `npc_reactions` и `npc_delayed_decisions`. Требует явной пользовательской подписи и независимого литературного ревью; не создаёт `.bworld` самостоятельно, только через нативную CLI `compile-reviewed-causal-v5` при наличии Dart.
+
+**ГЛАВНОЕ НОВОЕ ИСПЫТАНИЕ:** [Author CI #477](https://github.com/shonentez-afk/AI-Story-RPG/actions/runs/42597944505), job `Source-wide E6q -> actual PR133 Dart v5 BookWorld -> CLI replay`: синтетическая русская FB2, независимый checkout native PR#133, точный source index, настоящее получение literal v5 и reviewed causal v5, `LocalRpgGameApi` через CLI, SQLite, ход и экспорт/import `.bwsave` с совпадающим state_hash. **Сценарий прошёл полностью и выдал `synthetic_e6q_native_v5_compiled_and_replayed`**, но job #477 формально FAIL на последней уборке: подготовка SQLite временно дописала `hooks:` в четыре отслеживаемых pubspec.yaml. Это штатное тестовое изменение, НЕ повреждение источников. В текущем коммите workflow временные `hooks` предварительно восстанавливает через `git restore --` только четырёх конкретных файлов, затем выполняет **обе полные `git diff --exit-code`**. Требуется повторный exact-code CI на обновлённом workflow; его результат и SHA смотреть в Actions.
+
+**Нативная кодовая точка** `92ef5d701637957e31e3e6e090f63d1e0bdb4173` в [Draft PR #133](https://github.com/shonentez-afk/AI-Story-RPG/pull/133), документационный `138156178c3e13036c09793678aacabca0017aca`; handoff — [START_NEW_CHAT_RU.md](../../START_NEW_CHAT_RU.md) в native ветке и [три больших пакета](../../docs/RPG_THREE_BIG_PACKAGES_FINAL_HANDOFF_RU_2026-11-09.md). Native M0 #1205 и author #476 — SUCCESS; общий #1120 проверяется отдельно.
+
+**Честные границы:** реальная литературная причинность по произвольной книге не доказана синтетическим CI; 2 настоящие русские FB2, качественные альтернативные прохождения и физический Win/Android E2E не предъявлены. Нельзя выдавать `semantic_canon_automatically_verified` за true, менять `arbitraryBookCanon=false` или сливать Draft PR #133 до продуктовой приёмки. Старые E6p/E6q skill-packages не переподписывать на новый SHA автоматически. Не дробить на микро-PR и не дублировать Dart-движок в Python.
+
+---
+

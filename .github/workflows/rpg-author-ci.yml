@@ -135,7 +135,11 @@ jobs:
         working-directory: author
         run: |
           python3 -m tests.rpg_author.causal_v5_native_integration --native-root "$GITHUB_WORKSPACE/native"
-      - name: Never modify checked-out authoring/application source
+      - name: Verify all source files remain unchanged after temporary SQLite hook cleanup
         run: |
+          # The verified SQLite preparation intentionally adds temporary
+          # hooks to four pubspec.yaml files. Restore ONLY those known CI
+          # entries before asserting the actual code checkout is pristine.
+          git -C native restore -- apps/rpg_cli/pubspec.yaml packages/bookworld_format/pubspec.yaml packages/campaign_manager/pubspec.yaml packages/rpg_api/pubspec.yaml
           git -C author diff --exit-code
           git -C native diff --exit-code
