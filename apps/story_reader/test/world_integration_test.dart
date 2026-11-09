@@ -142,7 +142,7 @@ void main() {
     final bytes = Uint8List.fromList(utf8.encode(
       List.generate(900, (i) => 'Анна стоит рядом с мостом. '
           'Событие в главе номер $i описано очевидцем.')
-          .join('\\n')));
+          .join('\n')));
     final index = BookSourceIndexer.index(
         BookImporter.parse('source_book.txt', bytes));
     const api = LocalRpgLiteralCanonApi();
