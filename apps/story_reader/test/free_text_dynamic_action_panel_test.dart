@@ -137,6 +137,8 @@ void main() {
     expect(gateway.writes, 0);
     expect(find.text('Создать новое игровое действие с Z.ai?'),
         findsOneWidget);
+    expect(find.textContaining('открытые обещания'), findsWidgets);
+    expect(find.textContaining('альтернативной ветки'), findsWidgets);
     await tester.tap(find.byKey(const Key('free-text-dynamic-consent')));
     await tester.pumpAndSettle();
     expect(transport.calls, 1);
@@ -144,6 +146,10 @@ void main() {
     expect(gateway.writes, 0);
     expect(find.byKey(const Key('free-text-dynamic-narration')),
         findsOneWidget);
+    expect(find.byKey(const Key('free-text-dynamic-impact')),
+        findsOneWidget);
+    expect(find.text('Получить предмет: river stone'), findsOneWidget);
+    expect(find.textContaining('не изменены'), findsWidgets);
     expect(find.textContaining('НЕ канон книги'), findsOneWidget);
     final commit = find.byKey(const Key('free-text-dynamic-confirm'));
     await tester.ensureVisible(commit);
@@ -152,6 +158,8 @@ void main() {
     expect(gateway.writes, 1);
     expect(committed, 1);
     expect(transport.sentBody, contains('gm_'));
+    expect(transport.sentBody, contains('alternate_plot_continuity'));
+    expect(transport.sentBody, contains('open_promise_ids'));
     expect(transport.sentBody, isNot(contains('not_an_actual_key')));
     expect(tester.takeException(), isNull);
   });
