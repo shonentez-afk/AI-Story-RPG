@@ -5,17 +5,20 @@ import 'dart:typed_data';
 import 'package:campaign_manager/campaign_manager.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:rpg_api/rpg_api.dart';
+import 'package:story_core/story_core.dart';
 
 export 'package:rpg_api/rpg_api.dart' show
     WorldLibraryItem, WorldCampaignItem, WorldSavePreview,
     WorldChoiceView, WorldEventView, NpcRelationView, WorldGameView,
     WorldSceneSourceView,
-    WorldChoiceResult, WorldLibraryGateway;
+    WorldChoiceResult, WorldLibraryGateway,
+    WorldDynamicActionGateway, FreeformActionPreview;
 
 /// Platform transport only. It owns application storage path and isolate
 /// scheduling; game/NPC/journal/save rules belong to the independent API.
 /// The same headless RpgGameplayEngine powers tests, CLI and Flutter.
-class DeviceWorldLibraryGateway implements WorldLibraryGateway {
+class DeviceWorldLibraryGateway implements WorldLibraryGateway,
+    WorldDynamicActionGateway {
   const DeviceWorldLibraryGateway({this.background = true});
 
   /// Production uses independent worker isolates. Host widget tests may
@@ -67,6 +70,28 @@ class DeviceWorldLibraryGateway implements WorldLibraryGateway {
   }) => _execute((engine) => engine.choose(campaignId,
       actionId: actionId, choiceId: choiceId,
       expectedRevision: expectedRevision));
+
+  @override
+  Future<FreeformActionPreview> previewDynamic(
+      String campaignId, FreeformActionDraft draft, {
+      required int expectedRevision}) =>
+      _execute((game) => (game as RpgDynamicGameApi)
+          .previewFreeform(campaignId, draft,
+              expectedRevision: expectedRevision));
+
+  @override
+  Future<WorldChoiceResult> commitDynamic(String campaignId, {
+    required String actionId,
+    required FreeformActionDraft draft,
+    required int expectedRevision,
+    required String approvalDigest,
+    required bool userConfirmed,
+  }) => _execute((game) => (game as RpgDynamicGameApi)
+      .commitFreeform(campaignId,
+          actionId: actionId, draft: draft,
+          expectedRevision: expectedRevision,
+          approvalDigest: approvalDigest,
+          userConfirmed: userConfirmed));
 
   @override
   Future<String> exportSave(String campaignId) =>

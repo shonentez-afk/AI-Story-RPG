@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:typed_data';
+import 'package:crypto/crypto.dart';
 
 import 'package:bookworld_format/bookworld_format.dart';
 import 'package:campaign_manager/campaign_manager.dart';
@@ -167,6 +168,10 @@ class WorldGameView {
     required this.choices, required this.journal,
     this.heroName, this.heroDescription, this.sceneSource,
     this.heroSourceCharacterId, this.sourceReviewedHeroStart = false,
+    this.freeformAvailable = false,
+    this.sourceLiteralCanon = false,
+    this.gmStats = const {}, this.gmFlags = const {},
+    this.gmItems = const [], this.gmFacts = const [],
     this.itemNames = const {}, this.itemDescriptions = const {},
     this.statNames = const {}, this.factNames = const {},
     this.sceneNames = const {},
@@ -198,6 +203,12 @@ class WorldGameView {
   final String? heroDescription;
   final String? heroSourceCharacterId;
   final bool sourceReviewedHeroStart;
+  /// Compiled v5 only. Only these known private GM slots can be proposed.
+  final bool freeformAvailable;
+  final bool sourceLiteralCanon;
+  final Map<String, int> gmStats;
+  final Map<String, bool> gmFlags;
+  final List<String> gmItems, gmFacts;
   final WorldSceneSourceView? sceneSource;
   final Map<String, String> itemNames;
   final Map<String, String> itemDescriptions;
@@ -479,8 +490,9 @@ class RpgGameplayEngine {
     final journal = <WorldEventView>[];
     for (final event in coordinator.events) {
       final scene = blueprint.scenes[event.sceneId]!;
-      final choice = scene.choices
-          .firstWhere((option) => option.id == event.choiceId);
+      final choice = event.freeform == null
+          ? scene.choices.firstWhere((option) => option.id == event.choiceId)
+          : null;
       final changes = <String>[];
       if (playback != null) {
         final before = playback.state;
@@ -492,11 +504,17 @@ class RpgGameplayEngine {
         final beforeLife = socialRules != null &&
             socialRules.lifeTransitions.isNotEmpty
             ? NpcSocialLedger.inspect(playback, socialRules) : null;
-        final committed = playback.apply(
-          actionId: event.actionId,
-          choiceId: event.choiceId,
-          expectedRevision: before.revision,
-        );
+        final committed = event.freeform == null
+            ? playback.apply(
+                actionId: event.actionId,
+                choiceId: event.choiceId,
+                expectedRevision: before.revision,
+              )
+            : playback.applyFreeform(
+                actionId: event.actionId,
+                draft: event.freeform!,
+                expectedRevision: before.revision,
+              );
         if (!committed.applied || committed.event?.hash != event.hash) {
           throw const FormatException('Журнал игры не совпадает с сохранением');
         }
@@ -572,12 +590,15 @@ class RpgGameplayEngine {
       journal.add(WorldEventView(
         sequence: event.sequence,
         sceneId: event.sceneId,
-        choiceLabel: RichNpcDialogueResponses.replyFor(
+        choiceLabel: event.freeform != null
+            ? 'Свободное действие (не текст книги): ' +
+                event.freeform!.playerText + ' — ' + event.freeform!.narration
+            : RichNpcDialogueResponses.replyFor(
                 presentation, event.sceneId, event.choiceId) == null
-            ? choice.label
-            : 'Игрок: «' +
-                RichNpcDialogueResponses.replyFor(
-                    presentation, event.sceneId, event.choiceId)! + '»',
+                ? choice!.label
+                : 'Игрок: «' +
+                    RichNpcDialogueResponses.replyFor(
+                        presentation, event.sceneId, event.choiceId)! + '»',
         sceneTitle: scenes[event.sceneId],
         changes: List.unmodifiable(changes),
       ));
@@ -630,6 +651,20 @@ class RpgGameplayEngine {
       heroDescription: heroDescription,
       heroSourceCharacterId: selectedHeroId,
       sourceReviewedHeroStart: reviewedStart,
+      freeformAvailable: blueprint.supportsFreeform && !coordinator.isTerminal,
+      sourceLiteralCanon: blueprint.isReviewedCanon,
+      gmStats: Map.unmodifiable({
+        for (final entry in state.stats.entries)
+          if (entry.key.startsWith('gm_')) entry.key: entry.value,
+      }),
+      gmFlags: Map.unmodifiable({
+        for (final entry in state.flags.entries)
+          if (entry.key.startsWith('gm_')) entry.key: entry.value,
+      }),
+      gmItems: List.unmodifiable((blueprint.items
+          .where((id) => id.startsWith('gm_')).toList()..sort())),
+      gmFacts: List.unmodifiable((blueprint.facts
+          .where((id) => id.startsWith('gm_')).toList()..sort())),
       sceneSource: currentOrigin == null ? null : WorldSceneSourceView(
         chapterIndex: currentOrigin.chapterIndex,
         chapterCount: sourceChapterCount,
@@ -716,6 +751,72 @@ class RpgGameplayEngine {
         reason: result.reason, view: current);
   }
 
+  /// Only a verified v5 archive permits new typed, fictional interludes.
+  /// Preview is an isolated simulation: nothing is appended to SQLite.
+  FreeformActionPreview previewFreeform(
+      String campaignId, FreeformActionDraft draft, {
+      required int expectedRevision}) {
+    final record = _store.loadCampaign(campaignId);
+    final before = record.coordinator.state;
+    if (before.revision != expectedRevision ||
+        record.coordinator.isTerminal) {
+      throw const FormatException('Dynamic proposal is stale or terminal');
+    }
+    final simulated = record.coordinator.freeform(
+      actionId: 'gm_preview', draft: draft,
+      expectedRevision: expectedRevision);
+    if (!simulated.applied) {
+      throw FormatException('AI action rejected: ' + (simulated.reason ?? 'unknown'));
+    }
+    final approval = _approvalDigest(
+      campaignId, record.metadata.worldHash,
+      expectedRevision, before.stateHash, draft);
+    return FreeformActionPreview(
+      campaignId: campaignId,
+      expectedRevision: expectedRevision,
+      stateHash: before.stateHash,
+      approvalDigest: approval,
+      narration: draft.narration,
+      nextStateHash: simulated.state.stateHash,
+    );
+  }
+
+  static String _approvalDigest(String campaignId, String worldHash,
+      int revision, String stateHash, FreeformActionDraft draft) =>
+      sha256.convert(utf8.encode(canonicalJson({
+        'format': 'ai_story_dynamic_consent_v1',
+        'campaign': campaignId, 'world': worldHash,
+        'revision': revision, 'state': stateHash,
+        'draft': draft.toJson(),
+      }))).toString();
+
+  WorldChoiceResult commitFreeform(String campaignId, {
+    required String actionId,
+    required FreeformActionDraft draft,
+    required int expectedRevision,
+    required String approvalDigest,
+    required bool userConfirmed,
+  }) {
+    if (!userConfirmed) {
+      throw const FormatException('Player did not approve AI action');
+    }
+    final fresh = _store.loadCampaign(campaignId);
+    final state = fresh.coordinator.state;
+    if (state.revision != expectedRevision ||
+        approvalDigest != _approvalDigest(campaignId,
+          fresh.metadata.worldHash, expectedRevision, state.stateHash, draft)) {
+      throw const FormatException('Dynamic action approval became stale');
+    }
+    final result = _store.commitFreeform(campaignId,
+      actionId: actionId, draft: draft,
+      expectedRevision: expectedRevision);
+    final current = load(campaignId);
+    return WorldChoiceResult(
+      applied: result.applied,
+      duplicate: result.status == DecisionStatus.duplicate,
+      reason: result.reason, view: current);
+  }
+
   String exportSave(String campaignId) =>
       _store.exportPortable(campaignId);
 
@@ -755,6 +856,35 @@ class RpgGameplayEngine {
     }
     return _store.importPortable(text);
   }
+}
+
+/// Separate optional dynamic port. Old clients keep WorldLibraryGateway;
+/// the engine, not the Flutter adapter, verifies every fresh model turn.
+abstract interface class WorldDynamicActionGateway {
+  Future<FreeformActionPreview> previewDynamic(
+      String campaignId, FreeformActionDraft draft,
+      {required int expectedRevision});
+  Future<WorldChoiceResult> commitDynamic(String campaignId, {
+    required String actionId,
+    required FreeformActionDraft draft,
+    required int expectedRevision,
+    required String approvalDigest,
+    required bool userConfirmed,
+  });
+}
+
+final class FreeformActionPreview {
+  const FreeformActionPreview({
+    required this.campaignId,
+    required this.expectedRevision,
+    required this.stateHash,
+    required this.approvalDigest,
+    required this.narration,
+    required this.nextStateHash,
+  });
+  final String campaignId, stateHash, approvalDigest;
+  final String narration, nextStateHash;
+  final int expectedRevision;
 }
 
 /// Preserves the existing asynchronous SQLite/isolate architecture.

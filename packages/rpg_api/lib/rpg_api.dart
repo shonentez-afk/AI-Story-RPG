@@ -10,6 +10,7 @@ import 'dart:typed_data';
 import 'package:crypto/crypto.dart';
 
 import 'package:bookworld_format/bookworld_format.dart';
+import 'package:story_core/story_core.dart';
 import 'package:campaign_manager/campaign_manager.dart';
 import 'package:rpg_gameplay/rpg_gameplay.dart';
 import 'package:story_authoring/story_authoring.dart';
@@ -50,6 +51,7 @@ export 'package:bookworld_format/bookworld_format.dart' show
 part 'src/client_protocol.dart';
 part 'src/campaign_transfer.dart';
 part 'src/book_character_start.dart';
+part 'src/literal_canon.dart';
 
 /// Contract version, not a promise that all planned game modes exist.
 abstract final class RpgApiContract {
@@ -58,6 +60,8 @@ abstract final class RpgApiContract {
   static const verifiedPrivateCompilation = true;
   static const reviewedBookCharacterStart = true;
   static const arbitraryBookCanon = false;
+  /// Source-literal, fully reproduced book v5 (not interpretive literary QA).
+  static const literalBookCanon = true;
   static const dynamicAiGameMaster = false;
 }
 

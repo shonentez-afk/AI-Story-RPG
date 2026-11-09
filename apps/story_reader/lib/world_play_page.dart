@@ -443,7 +443,9 @@ class _WorldPlayPageState extends State<WorldPlayPage> {
                                 ],
                                 Wrap(spacing: 8, runSpacing: 6, children: [
                                   Chip(
-                                    label: Text(dialogue == null ? 'Классический режим' : 'Диалог',
+                                    label: Text(view.sourceLiteralCanon
+                                        ? 'CANON · буквальный текст + свободный ИИ'
+                                        : dialogue == null ? 'Классический режим' : 'Диалог',
                                         style: TextStyle(color: ink)),
                                     backgroundColor: prefs.background,
                                     side: BorderSide(
@@ -460,9 +462,11 @@ class _WorldPlayPageState extends State<WorldPlayPage> {
                                     Chip(
                                       key: const ValueKey('world-book-origin'),
                                       label: Text(
-                                        (view.sceneSource!.isSourcePassage
-                                            ? 'По книге · глава '
-                                            : 'Альтернативный сюжет · глава ') +
+                                        (view.sourceLiteralCanon
+                                            ? 'CANON · глава '
+                                            : view.sceneSource!.isSourcePassage
+                                                ? 'По книге · глава '
+                                                : 'Альтернативный сюжет · глава ') +
                                             '${view.sceneSource!.chapterNumber}/'
                                             '${view.sceneSource!.chapterCount}',
                                         style: TextStyle(color: ink),
@@ -596,12 +600,14 @@ class _WorldPlayPageState extends State<WorldPlayPage> {
                                           view.revision.toString()),
                                       title: const Text(
                                           'Свободное действие'),
-                                      subtitle: const Text(
-                                          'Офлайн или ИИ: только доступные ходы'),
+                                      subtitle: Text(view.freeformAvailable
+                                          ? 'Новые действия ИИ с настоящими последствиями'
+                                          : 'Офлайн или ИИ: только доступные ходы'),
                                       initiallyExpanded: false,
                                       children: [
                                         FreeTextActionPanel(
                                           campaignId: widget.campaignId,
+                                          dynamicAvailable: view.freeformAvailable,
                                           gateway: widget.gateway,
                                           onBusyChanged: (busy) {
                                             if (mounted) {

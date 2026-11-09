@@ -176,7 +176,10 @@ void main() {
     expect(prepared.readiness.canStartPlayableBook, isFalse);
     expect(prepared.sourceFingerprint, index.sourceFingerprint);
     expect(RpgApiContract.arbitraryBookCanon, isFalse);
-    expect(RpgApiContract.dynamicAiGameMaster, isFalse);
+    expect(RpgApiContract.dynamicAiGameMaster, isTrue);
+    expect(RpgApiContract.literalBookCanon, isTrue);
+    // The older generic creation policy still must NOT promote a draft
+    // to source-literal CANON without exact source and the v5 approval.
   });
 
   test('one-book/one-tale API scopes source without changing library book',

@@ -366,6 +366,11 @@ CREATE TABLE templates(template_id TEXT PRIMARY KEY,
 }
 
 
+/// Shared label for the independent v5 writer/reader review contract.
+abstract final class ReviewedLiteralCanonReviewFormat {
+  static const format = 'ai_story_literal_canon_review_v1';
+}
+
 /// Native v3 writer. Shares the exact source, SQLite and ZIP implementation
 /// with the accepted v2 writer; the independent *rich* importer is the final
 /// authority. No Python, network request or human-supplied manifest is needed.
@@ -379,10 +384,18 @@ class RichPrivateBookworldWriter {
     required Map<String, dynamic> blueprint,
     required Map<String, dynamic> provenance,
     required Map<String, dynamic> sourceIndex,
-    /// A separately versioned v4 archive, never a silent upgrade of v3.
+    /// v5 literal CANON uses the same signed SQLite and ZIP writer.
     bool expanded = false,
+    bool literalCanon = false,
   }) {
-    final checked = StoryBlueprint.fromJson(blueprint);
+    if (literalCanon && !expanded) {
+      throw const FormatException('CANON v5 requires an explicit format');
+    }
+    final checked = StoryBlueprint.fromJson(
+        blueprint, allowReviewedCanon: literalCanon);
+    if (checked.isReviewedCanon != literalCanon) {
+      throw const FormatException('No silent promotion to literary CANON');
+    }
     if (checked.rightsStatus != 'private_adaptation' ||
         checked.sourceFingerprint == null) {
       throw const FormatException('Разрешена только частная RPG по книге');
@@ -406,7 +419,7 @@ class RichPrivateBookworldWriter {
     }
     final manifest = <String, dynamic>{
       'format': 'ai_story_bookworld',
-      'format_version': expanded ? 4 : 3,
+      'format_version': literalCanon ? 5 : (expanded ? 4 : 3),
       if (provenance.containsKey('npc_knowledge'))
         'npc_knowledge_format':
             RichPrivateBookworldImporter.npcKnowledgeFormat,
@@ -415,6 +428,8 @@ class RichPrivateBookworldWriter {
             ? (provenance['npc_social'] as Map)['format'] : null,
       if (expanded && provenance.containsKey('initial_state_review'))
         'initial_state_review_format': RichPrivateBookworldImporter.initialStateReviewFormat,
+      if (literalCanon) 'canon_review_format':
+          ReviewedLiteralCanonReviewFormat.format,
       'bookworld_id': checked.bookId,
       'source_fingerprint': checked.sourceFingerprint,
       'title': checked.title,
@@ -424,11 +439,13 @@ class RichPrivateBookworldWriter {
       'scenario_format': 'ai_story_blueprint_v1',
       'scenario_format_version': 1,
       'content_capabilities': blueprint['supported_modes'],
-      'build_status': expanded ? 'private_extended_structural' : 'private_rich_structural',
+      'build_status': literalCanon ? 'private_literal_canon_reviewed'
+          : (expanded ? 'private_extended_structural' : 'private_rich_structural'),
       'rights_status': 'private_use_only',
       'build_tool': {
-        'name': expanded ? 'ai_story_private_extended_bookworld' : 'ai_story_private_rich_bookworld',
-        'version': expanded ? '4.0' : '3.0',
+        'name': literalCanon ? 'ai_story_literal_canon_bookworld'
+            : (expanded ? 'ai_story_private_extended_bookworld' : 'ai_story_private_rich_bookworld'),
+        'version': literalCanon ? '5.0' : (expanded ? '4.0' : '3.0'),
       },
       'model_provenance': provenance['model_provenance'],
       'hashes': hashes,
@@ -445,7 +462,7 @@ class RichPrivateBookworldWriter {
         verified.blueprint.blueprintHash != checked.blueprintHash ||
         verified.canDistributePublicly ||
         verified.requiresNetwork ||
-        verified.formatVersion != (expanded ? 4 : 3)) {
+        verified.formatVersion != (literalCanon ? 5 : (expanded ? 4 : 3))) {
       throw const FormatException('Нативная сборка v3 не прошла самопроверку');
     }
     return package;

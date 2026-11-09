@@ -73,6 +73,8 @@ void main() {
     expect(find.byKey(const Key('rpg-start-offline')), findsOneWidget);
     expect(find.byKey(const Key('rpg-start-ai')), findsOneWidget);
     expect(find.byKey(const Key('rpg-start-resume')), findsOneWidget);
+    expect(find.byKey(const Key('rpg-start-literal-canon')),
+        findsOneWidget);
     // Primary Resume must be physically tappable in the first viewport.
     final rect = tester.getRect(find.byKey(const Key('rpg-start-resume')));
     expect(rect.center.dy, lessThan(tester.view.physicalSize.height));
@@ -424,6 +426,37 @@ void main() {
     expect(passed!.chapters.single, book.chapters[0]);
     expect(passed!.title, contains('вариант № 95'));
     expect(book.chapters, hasLength(2));
+  });
+
+
+  testWidgets('literal CANON always reviews the full imported book '
+      'before writing anything; cancel does not launch a campaign',
+      (tester) async {
+    var indexCount = 0;
+    await tester.pumpWidget(MaterialApp(home: BookRpgStartPage(
+      book: _book,
+      gateway: const DeviceWorldLibraryGateway(background: false),
+      indexer: (book) async {
+        indexCount++;
+        expect(book.chapters.length, 2);
+        return BookSourceIndexer.index(book);
+      },
+    )));
+    final action = find.byKey(const Key('rpg-start-literal-canon'));
+    expect(action, findsOneWidget);
+    await tester.ensureVisible(action);
+    await tester.tap(action);
+    await tester.pumpAndSettle();
+    expect(indexCount, 1);
+    expect(find.text('Создать CANON всей книги?'), findsOneWidget);
+    expect(find.textContaining('Глав: 2, фрагментов: 2'),
+        findsOneWidget);
+    await tester.tap(find.text('Отмена').last);
+    await tester.pumpAndSettle();
+    expect(find.text('Создать CANON всей книги?'), findsNothing);
+    expect(find.byKey(const Key('rpg-start-literal-canon')),
+        findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 
 }

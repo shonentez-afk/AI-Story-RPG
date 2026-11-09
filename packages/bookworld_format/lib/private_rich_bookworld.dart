@@ -35,8 +35,10 @@ class VerifiedRichPrivateBookworld {
   final int sourceChaptersTotal, sourceChaptersIndexed;
   final Map<String, VerifiedBookSceneOrigin> sceneOrigins;
   final NpcSocialRulebook? npcSocialRulebook;
-  /// 3 is the unchanged rich format; 4 is opt-in, strictly reviewed.
+  /// v3/v4 are alternative fiction; v5 is full-source literal CANON.
   final int formatVersion;
+  bool get sourceLiteralCanonVerified =>
+      formatVersion == 5 && blueprint.isReviewedCanon;
   String get bookworldId => blueprint.bookId;
   bool get canDistributePublicly => false;
   bool get requiresNetwork => false;
@@ -83,7 +85,8 @@ class RichPrivateBookworldImporter {
     }
   }
 
-  void _provenance(Map<String, dynamic> source, StoryBlueprint blueprint) {
+  void _provenance(Map<String, dynamic> source, StoryBlueprint blueprint,
+      {bool literalCanon = false}) {
     const fields = {
       'format', 'bookworld_id', 'source_fingerprint', 'source_title',
       'source_author', 'source_chapters_total', 'source_chapters_indexed',
@@ -162,31 +165,51 @@ class RichPrivateBookworldImporter {
         }
       }
     }
-    if (originalScenes == 0 || adaptations == 0) throw const FormatException('Нет оригинала или альтернативного пути');
+    if (originalScenes == 0 ||
+        (literalCanon ? adaptations != 0 : adaptations == 0)) {
+      throw const FormatException('Invalid source/alternative scene mixture');
+    }
   }
 
   bool _shaId(Object? value) => value is String && RegExp(r'^[a-f0-9]{32}$').hasMatch(value);
 
   void _manifest(Map<String, dynamic> manifest, StoryBlueprint blueprint,
-      Map<String, dynamic> provenance, Map<String, Uint8List> files) {
+      Map<String, dynamic> provenance, Map<String, Uint8List> files,
+      {bool literalCanon = false}) {
     const keys = {
       'format', 'format_version', 'bookworld_id', 'source_fingerprint', 'title', 'author',
       'languages', 'engine_min_version', 'scenario_format', 'scenario_format_version',
       'content_capabilities', 'build_status', 'hashes', 'sizes', 'build_tool',
       'model_provenance', 'rights_status', 'blueprint_sha256',
     };
-    _fields(manifest, keys, 'manifest');
-    if (manifest['format'] != 'ai_story_bookworld' || manifest['format_version'] != 2 ||
+    _fields(manifest, {
+      ...keys,
+      if (literalCanon) 'canon_review_format',
+    }, 'manifest');
+    if (manifest['format'] != 'ai_story_bookworld' ||
+        manifest['format_version'] != (literalCanon ? 5 : 2) ||
         manifest['bookworld_id'] != blueprint.bookId || manifest['source_fingerprint'] != blueprint.sourceFingerprint ||
         manifest['title'] != blueprint.title || manifest['author'] != provenance['source_author'] ||
         !_same(manifest['languages'], ['ru']) || manifest['engine_min_version'] != '0.1.0' ||
         manifest['scenario_format'] != 'ai_story_blueprint_v1' || manifest['scenario_format_version'] != 1 ||
-        !_same(manifest['content_capabilities'], {
-          'roles': ['PROTAGONIST'], 'plots': ['ALTER_FATE'], 'interactions': ['CLASSIC'],
-        }) || manifest['build_status'] != 'private_classic_structural' ||
+        !_same(manifest['content_capabilities'], literalCanon ? {
+          'roles': ['PROTAGONIST'], 'plots': ['CANON'],
+          'interactions': ['AI_FREEFORM'],
+        } : {
+          'roles': ['PROTAGONIST'], 'plots': ['ALTER_FATE'],
+          'interactions': ['CLASSIC'],
+        }) || manifest['build_status'] !=
+            (literalCanon ? 'private_literal_canon_reviewed' :
+                'private_classic_structural') ||
         manifest['rights_status'] != 'private_use_only' || manifest['blueprint_sha256'] != blueprint.blueprintHash ||
-        !_same(manifest['build_tool'], {'name': 'ai_story_private_bookworld', 'version': '2.0'}) ||
-        !_same(manifest['model_provenance'], {'provider': 'none', 'model_id': null})) {
+        !_same(manifest['build_tool'], literalCanon
+            ? {'name': 'ai_story_literal_canon_bookworld', 'version': '5.0'}
+            : {'name': 'ai_story_private_bookworld', 'version': '2.0'}) ||
+        (literalCanon && manifest['canon_review_format'] !=
+            'ai_story_literal_canon_review_v1') ||
+        !_same(manifest['model_provenance'], literalCanon
+            ? provenance['model_provenance']
+            : {'provider': 'none', 'model_id': null})) {
       throw const FormatException('Формат частной адаптации не подтверждён');
     }
     final sizes = manifest['sizes'], hashes = manifest['hashes'];
@@ -205,9 +228,10 @@ class RichPrivateBookworldImporter {
 
   /// Exact bounded state exploration includes each actor's knowledge and
   /// inventory. It also rejects closed loops through reverse reachability.
-  void _causality(StoryBlueprint blueprint, {bool expanded = false}) {
-    if (blueprint.scenes.length < 3 ||
-        blueprint.scenes.length > (expanded ? 1024 : 192) ||
+  void _causality(StoryBlueprint blueprint,
+      {bool expanded = false, bool literalCanon = false}) {
+    if (blueprint.scenes.length < (literalCanon ? 1 : 3) ||
+        blueprint.scenes.length > (literalCanon ? 5000 : (expanded ? 1024 : 192)) ||
         blueprint.items.length > (expanded ? 96 : 32) ||
         blueprint.facts.length > (expanded ? 128 : 64) ||
         blueprint.initial.stats.length > (expanded ? 16 : 8) ||
@@ -262,8 +286,14 @@ class RichPrivateBookworldImporter {
         }
       }
     }
-    if (!seenItemGrants.union(expanded ? blueprint.initial.inventory : const <String>{}).containsAll(blueprint.items) ||
-        !seenFactGrants.union(expanded ? blueprint.initial.knowledge.values.expand((known) => known).toSet() : const <String>{}).containsAll(blueprint.facts)) {
+    final reserved = literalCanon
+        ? <String>{...blueprint.items.where((id) => id.startsWith('gm_')),
+                   ...blueprint.facts.where((id) => id.startsWith('gm_'))}
+        : <String>{};
+    if (!seenItemGrants.union(expanded ? blueprint.initial.inventory : const <String>{})
+            .union(reserved).containsAll(blueprint.items) ||
+        !seenFactGrants.union(expanded ? blueprint.initial.knowledge.values.expand((known) => known).toSet() : const <String>{})
+            .union(reserved).containsAll(blueprint.facts)) {
       throw const FormatException('Каталог не связан с игровыми действиями');
     }
     // An action advances clock time by one even without an explicit effect.
@@ -352,7 +382,10 @@ class RichPrivateBookworldImporter {
       }
       if (choicesAvailable == 0) throw const FormatException('Тупик без доступного действия');
     }
-    if (endings.length < 2 || visited.length != blueprint.scenes.length) throw const FormatException('Недостижимые игровые сцены или финалы');
+    if (endings.length < (literalCanon ? 1 : 2) ||
+        visited.length != blueprint.scenes.length) {
+      throw const FormatException('Missing reachable ending or canonical chunk');
+    }
     final escapable = <String>{...terminals};
     final work = terminals.toList();
     while (work.isNotEmpty) {
@@ -537,7 +570,11 @@ class RichPrivateBookworldImporter {
       'model_id_status': 'not_attested', 'tool': 'AI Story RPG', 'method': 'reviewed_local_compilation'});
     final noAI = _same(model, {'provider': 'none', 'model_id': null,
       'model_id_status': 'not_applicable', 'tool': 'none', 'method': 'local_fixture'});
-    if ((!isOpenAI && !isZai && !unattested && !noAI) || !_same(manifest['model_provenance'], model)) {
+    final literal = _same(model, {'provider': 'none', 'model_id': null,
+      'model_id_status': 'not_applicable',
+      'tool': 'AI Story RPG', 'method': 'source_literal_compilation'});
+    if ((!isOpenAI && !isZai && !unattested && !noAI && !literal) ||
+        !_same(manifest['model_provenance'], model)) {
       throw const FormatException('Некорректное происхождение v3');
     }
   }
@@ -606,33 +643,168 @@ class RichPrivateBookworldImporter {
     return Map.unmodifiable(data);
   }
 
+  /// Independent v5 certificate: exact literal scene text for EVERY
+  /// listed source chunk, no reordering, side branches, skipped chapters or
+  /// AI-authored canonical narration. This proves textual fidelity only.
+  void _verifyLiteralCanon(Map<String, dynamic> source,
+      Map<String, dynamic> manifest, StoryBlueprint bp) {
+    final raw = source['canon_review'];
+    if (raw is! Map<String, dynamic>) {
+      throw const FormatException('Missing v5 literal CANON review');
+    }
+    _fields(raw, {
+      'format', 'scope', 'source_fingerprint', 'source_index_sha256',
+      'source_chapters_total', 'source_chunks_total', 'user_confirmed',
+      'literary_truth_scope', 'route',
+    }, 'literal CANON');
+    if (raw['format'] != 'ai_story_literal_canon_review_v1' ||
+        raw['scope'] != 'exact_complete_source_text' ||
+        raw['source_fingerprint'] != bp.sourceFingerprint ||
+        raw['source_index_sha256'] is! String ||
+        !_sha.hasMatch(raw['source_index_sha256'] as String) ||
+        raw['source_chapters_total'] != source['source_chapters_total'] ||
+        raw['user_confirmed'] != true ||
+        raw['literary_truth_scope'] != 'verbatim_text_and_order_only' ||
+        bp.roleMode != 'PROTAGONIST' || !bp.isReviewedCanon ||
+        !bp.supportsFreeform ||
+        !_same(bp.items.toList()..sort(), ['gm_keepsake']) ||
+        !_same(bp.facts.toList()..sort(), ['gm_impression']) ||
+        !_same(bp.actors.toList()..sort(), ['player']) ||
+        !_same(bp.initial.flags, {'gm_noted': false}) ||
+        !_same(bp.initial.stats, {'gm_resolve': 50}) ||
+        bp.initial.inventory.isNotEmpty ||
+        bp.initial.knowledge['player']?.isNotEmpty == true ||
+        bp.initial.tick != 0 ||
+        manifest['canon_review_format'] != raw['format']) {
+      throw const FormatException('CANON v5 is not a sealed literal edition');
+    }
+    final route = raw['route'];
+    final chapters = raw['source_chapters_total'];
+    if (route is! List || route.length != bp.scenes.length ||
+        raw['source_chunks_total'] != route.length ||
+        chapters is! int || chapters < 1 || chapters > 10000) {
+      throw const FormatException('Incomplete CANON source route');
+    }
+    final seenChunks = <String>{}, chaptersSeen = <int>{};
+    final sourceOrigins = source['scene_origins'];
+    if (sourceOrigins is! List || sourceOrigins.length != route.length) {
+      throw const FormatException('Missing canonical source origins');
+    }
+    final scenes = bp.scenes.values.toList(growable: false);
+    var previousChapter = 0;
+    for (var i = 0; i < route.length; i++) {
+      final row = route[i];
+      if (row is! Map<String, dynamic>) {
+        throw const FormatException('Invalid canonical route row');
+      }
+      _fields(row, {
+        'scene_id', 'chunk_id', 'chapter_index',
+        'start_utf16', 'end_utf16', 'source_sha256',
+      }, 'CANON route');
+      final scene = scenes[i];
+      final origin = sourceOrigins[i];
+      final ch = row['chapter_index'], start = row['start_utf16'];
+      final end = row['end_utf16'], id = row['chunk_id'];
+      if (row['scene_id'] != scene.id ||
+          scene.id != 'canon_' + i.toString().padLeft(5, '0') ||
+          id is! String || !seenChunks.add(id) ||
+          ch is! int || ch < previousChapter || ch >= chapters ||
+          start is! int || end is! int || start < 0 ||
+          end - start != scene.text.length ||
+          row['source_sha256'] !=
+            sha256.convert(utf8.encode(scene.text)).toString() ||
+          origin is! Map<String, dynamic> ||
+          origin['scene_id'] != scene.id ||
+          origin['chapter_index'] != ch ||
+          origin['origin'] != 'SOURCE_PASSAGE' ||
+          origin['source_refs'] is! List ||
+          (origin['source_refs'] as List).length != 1) {
+        throw const FormatException('CANON text or scene order changed');
+      }
+      previousChapter = ch;
+      chaptersSeen.add(ch);
+      final cite = (origin['source_refs'] as List).single;
+      if (cite is! Map<String, dynamic> ||
+          cite['chunk_id'] != id ||
+          cite['chapter_index'] != ch ||
+          cite['visible_after_chapter'] != ch ||
+          cite['start_utf16'] is! int ||
+          cite['end_utf16'] is! int ||
+          (cite['start_utf16'] as int) < start ||
+          (cite['end_utf16'] as int) > end ||
+          (cite['end_utf16'] as int) <= (cite['start_utf16'] as int)) {
+        throw const FormatException('CANON quotation does not cite its chunk');
+      }
+      final sample = scene.text.substring(
+          (cite['start_utf16'] as int) - start,
+          (cite['end_utf16'] as int) - start);
+      if (sample.trim().isEmpty ||
+          cite['quote_sha256'] !=
+              sha256.convert(utf8.encode(sample)).toString()) {
+        throw const FormatException('Canonical quote does not match scene text');
+      }
+      if (i + 1 == route.length) {
+        if (!scene.terminal || scene.choices.isNotEmpty) {
+          throw const FormatException('CANON has a false final ending');
+        }
+      } else {
+        if (scene.terminal || scene.choices.length != 1 ||
+            scene.choices.single.id !=
+                'canon_next_' + i.toString().padLeft(5, '0') ||
+            scene.choices.single.nextSceneId != scenes[i + 1].id ||
+            scene.choices.single.conditions.isNotEmpty ||
+            scene.choices.single.effects.isNotEmpty) {
+          throw const FormatException('CANON cannot branch or change book events');
+        }
+      }
+    }
+    if (chaptersSeen.length != chapters ||
+        !chaptersSeen.containsAll(Iterable<int>.generate(chapters))) {
+      throw const FormatException('A book chapter was omitted from CANON');
+    }
+  }
+
   VerifiedRichPrivateBookworld inspect(Uint8List data) {
     final files = BworldZipV1.readPrivate(data);
     final bpRaw = _object(files['scenario/blueprint.json']!, 'blueprint');
-    final blueprint = StoryBlueprint.fromJson(bpRaw);
-    if (blueprint.rightsStatus != 'private_adaptation' || blueprint.sourceFingerprint == null) throw const FormatException('Не является приватной RPG по книге');
     final manifest = _object(files['manifest.json']!, 'manifest');
     final version = manifest['format_version'];
-    if (version != 3 && version != 4) throw const FormatException('Неподдерживаемая версия игры');
-    final expanded = version == 4;
-    _causality(blueprint, expanded: expanded);
+    if (version != 3 && version != 4 && version != 5) {
+      throw const FormatException('Неподдерживаемая версия игры');
+    }
+    final literalCanon = version == 5;
+    final blueprint = StoryBlueprint.fromJson(
+        bpRaw, allowReviewedCanon: literalCanon);
+    if (blueprint.rightsStatus != 'private_adaptation' ||
+        blueprint.sourceFingerprint == null ||
+        blueprint.isReviewedCanon != literalCanon) {
+      throw const FormatException('Частная версия CANON не подтверждена');
+    }
+    final expanded = version == 4 || literalCanon;
+    _causality(blueprint, expanded: expanded,
+        literalCanon: literalCanon);
     final source = _object(files['source/provenance.json']!, 'provenance');
     final hasGameplayReview = source.containsKey('gameplay_review');
     final knownSource = Map<String, dynamic>.of(source)
       ..remove('gameplay_review')..remove('npc_knowledge')..remove('npc_social')
-      ..remove('initial_state_review');
+      ..remove('initial_state_review')..remove('canon_review');
     _fields(knownSource, {'format', 'bookworld_id', 'source_fingerprint', 'source_title',
       'source_author', 'source_chapters_total', 'source_chapters_indexed',
       'semantic_catalog_sha256', 'intermediate_draft_sha256', 'rights_status',
       'publication_authorized', 'model_provenance', 'scene_origins', 'presentation'}, 'source provenance v3');
     if (source['format'] != 'ai_story_private_provenance_v2') throw const FormatException('Неверная версия происхождения v3');
-    if (manifest['build_status'] != (expanded ? 'private_extended_structural' : 'private_rich_structural') ||
-        !_same(manifest['build_tool'], expanded
-            ? {'name': 'ai_story_private_extended_bookworld', 'version': '4.0'}
-            : {'name': 'ai_story_private_rich_bookworld', 'version': '3.0'})) {
+    if (manifest['build_status'] != (literalCanon
+            ? 'private_literal_canon_reviewed'
+            : (expanded ? 'private_extended_structural' : 'private_rich_structural')) ||
+        !_same(manifest['build_tool'], literalCanon
+            ? {'name': 'ai_story_literal_canon_bookworld', 'version': '5.0'}
+            : (expanded
+                ? {'name': 'ai_story_private_extended_bookworld', 'version': '4.0'}
+                : {'name': 'ai_story_private_rich_bookworld', 'version': '3.0'}))) {
       throw const FormatException('Неподдерживаемая версия RPG v3');
     }
     _model(source, manifest);
+    if (literalCanon) _verifyLiteralCanon(source, manifest, blueprint);
     _initialReview(source, manifest, blueprint, expanded: expanded);
     final socialRulebook = RichNpcSocialContract.inspect(source, manifest, blueprint);
     final presentation = _presentation(source, blueprint, socialRules: socialRulebook);
@@ -649,18 +821,23 @@ class RichPrivateBookworldImporter {
     }
     final originV2 = Map<String, dynamic>.of(source)
       ..remove('presentation')..remove('gameplay_review')..remove('npc_knowledge')..remove('npc_social')
-      ..remove('initial_state_review');
+      ..remove('initial_state_review')..remove('canon_review');
     originV2['format'] = 'ai_story_private_provenance_v1';
     originV2['model_provenance'] = {'provider': 'none', 'model_id': null};
-    _provenance(originV2, blueprint);
+    _provenance(originV2, blueprint, literalCanon: literalCanon);
     final manifestV2 = Map<String, dynamic>.of(manifest)
       ..remove('npc_knowledge_format')..remove('npc_social_format')
       ..remove('initial_state_review_format');
-    manifestV2['format_version'] = 2;
-    manifestV2['build_status'] = 'private_classic_structural';
-    manifestV2['build_tool'] = {'name': 'ai_story_private_bookworld', 'version': '2.0'};
-    manifestV2['model_provenance'] = {'provider': 'none', 'model_id': null};
-    _manifest(manifestV2, blueprint, originV2, files);
+    if (literalCanon) {
+      _manifest(manifest, blueprint, source, files,
+          literalCanon: true);
+    } else {
+      manifestV2['format_version'] = 2;
+      manifestV2['build_status'] = 'private_classic_structural';
+      manifestV2['build_tool'] = {'name': 'ai_story_private_bookworld', 'version': '2.0'};
+      manifestV2['model_provenance'] = {'provider': 'none', 'model_id': null};
+      _manifest(manifestV2, blueprint, originV2, files);
+    }
     BworldSqliteV1.inspect(files['world.sqlite']!, blueprint, bpRaw);
     return VerifiedRichPrivateBookworld(
       blueprint: blueprint, sourceFingerprint: blueprint.sourceFingerprint!,

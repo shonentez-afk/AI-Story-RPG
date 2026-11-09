@@ -20,6 +20,9 @@ class StoryBlueprint {
     required this.facts,
     required this.actors,
     required this.initial,
+    required this.roleMode,
+    required this.plotMode,
+    required this.interactionMode,
   });
 
   final String bookId;
@@ -34,8 +37,15 @@ class StoryBlueprint {
   final Set<String> facts;
   final Set<String> actors;
   final WorldState initial;
+  final String roleMode, plotMode, interactionMode;
+  bool get supportsFreeform => interactionMode == 'AI_FREEFORM';
+  bool get isReviewedCanon => plotMode == 'CANON' &&
+      rightsStatus == 'private_adaptation';
 
-  factory StoryBlueprint.fromJson(Object? value) {
+  /// A distinct, source-reviewed v5 import path must opt in explicitly.
+  /// Ordinary v1-v4 and direct JSON callers keep the old strict contract.
+  factory StoryBlueprint.fromJson(Object? value,
+      {bool allowReviewedCanon = false}) {
     final root = jsonObject(value, 'story_blueprint');
     assertFields(root, 'story_blueprint', {
       'format', 'schema_version', 'book_id', 'title',
@@ -81,15 +91,20 @@ class StoryBlueprint {
         throw FormatException('Invalid supported mode: ${entry.key}');
       }
     }
-    // A declared mode must be truly executable by this prototype.
-    if ((modes['roles'] as List).length != 1 ||
-        (modes['roles'] as List).single != 'PROTAGONIST' ||
-        (modes['plots'] as List).length != 1 ||
-        (modes['plots'] as List).single !=
-            (isOriginal ? 'CANON' : 'ALTER_FATE') ||
-        (modes['interactions'] as List).length != 1 ||
-        (modes['interactions'] as List).single != 'CLASSIC') {
-      throw const FormatException('Unsupported M1.7 prototype modes');
+    final roles = modes['roles'] as List;
+    final plots = modes['plots'] as List;
+    final interactions = modes['interactions'] as List;
+    final legacy = roles.length == 1 && roles.single == 'PROTAGONIST' &&
+        plots.length == 1 &&
+        plots.single == (isOriginal ? 'CANON' : 'ALTER_FATE') &&
+        interactions.length == 1 && interactions.single == 'CLASSIC';
+    final reviewedCanon = allowReviewedCanon && isPrivate &&
+        roles.length == 1 &&
+        (roles.single == 'PROTAGONIST' || roles.single == 'BOOK_CHARACTER') &&
+        plots.length == 1 && plots.single == 'CANON' &&
+        interactions.length == 1 && interactions.single == 'AI_FREEFORM';
+    if (!legacy && !reviewedCanon) {
+      throw const FormatException('Unsupported RPG modes without v5 review');
     }
     final items = _readIdSet(root['items'], 'items');
     final facts = _readIdSet(root['facts'], 'facts');
@@ -182,6 +197,9 @@ class StoryBlueprint {
       facts: Set.unmodifiable(facts),
       actors: Set.unmodifiable(actors),
       initial: initial,
+      roleMode: roles.single as String,
+      plotMode: plots.single as String,
+      interactionMode: interactions.single as String,
     );
   }
 

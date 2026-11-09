@@ -46,7 +46,9 @@ class PythonRemoteRpgTests(unittest.TestCase):
                 capabilities = client.call("capabilities")
                 self.assertTrue(capabilities["offline_play"])
                 self.assertFalse(capabilities["arbitrary_book_canon"])
-                self.assertFalse(capabilities["dynamic_ai_game_master"])
+                self.assertTrue(capabilities["dynamic_ai_game_master"])
+                self.assertTrue(capabilities["source_literal_canon"])
+                self.assertTrue(capabilities["new_typed_freeform_event"])
                 self.assertTrue(capabilities["reviewed_book_character_start"])
                 # Privileged credentials and source text must never be
                 # redirected to host HTTP_PROXY settings.

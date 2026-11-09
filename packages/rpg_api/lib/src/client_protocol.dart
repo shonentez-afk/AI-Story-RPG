@@ -120,6 +120,12 @@ final class RpgClientProtocol {
     'world_title': view.worldTitle,
     'hero_name': view.heroName,
     'hero_description': view.heroDescription,
+    'source_literal_canon': view.sourceLiteralCanon,
+    'dynamic_ai_action_available': view.freeformAvailable,
+    'gm_action_palette': {
+      'stats': view.gmStats, 'flags': view.gmFlags,
+      'items': view.gmItems, 'facts': view.gmFacts,
+    },
     'hero_source_character_id': view.heroSourceCharacterId,
     'source_reviewed_hero_start': view.sourceReviewedHeroStart,
     'scene_id': view.sceneId,
@@ -203,7 +209,9 @@ final class RpgClientProtocol {
               RpgApiContract.reviewedBookCharacterStart,
           'arbitrary_book_canon': RpgApiContract.arbitraryBookCanon,
           'dynamic_ai_game_master': RpgApiContract.dynamicAiGameMaster,
-          'world_formats': [1, 2, 3, 4],
+          'world_formats': [1, 2, 3, 4, 5],
+          'source_literal_canon': RpgApiContract.literalBookCanon,
+          'new_typed_freeform_event': true,
           'portable_save': true,
           'self_contained_private_transfer': true,
           'safe_free_text_confirmation': true,
@@ -244,6 +252,7 @@ final class RpgClientProtocol {
           'producer_claims_two_replayed_routes':
               receipt.producerClaimsTwoReplayedRoutes,
           'literary_canon_proven': receipt.literaryCanonProven,
+          'source_literal_canon_verified': receipt.sourceLiteralCanonVerified,
           'allowed_to_publish': receipt.allowedToPublish,
         };
       case 'audit_world':
@@ -273,6 +282,90 @@ final class RpgClientProtocol {
           'literary_canon_verified': audit.sourceLiteraryCanonVerified,
           'exact_generator_routes_replayed':
               audit.exactGeneratorRoutesReplayed,
+        };
+      case 'prepare_literal_canon':
+        _fields(args, must: {'filename', 'book_base64'});
+        final bytes = _bytes(args, 'book_base64', maxBookBytes);
+        return const LocalRpgLiteralCanonApi().prepare(
+            _text(args, 'filename'), bytes).toJson();
+      case 'compile_literal_canon':
+        _fields(args, must: {
+          'filename', 'book_base64', 'approved_digest', 'user_confirmed',
+        });
+        if (args['user_confirmed'] != true) {
+          throw const FormatException('Missing private CANON confirmation');
+        }
+        final archive = const LocalRpgLiteralCanonApi().compile(
+          filename: _text(args, 'filename'),
+          bytes: _bytes(args, 'book_base64', maxBookBytes),
+          approvedDigest: _text(args, 'approved_digest'),
+          userConfirmed: true,
+        );
+        final receipt = const LocalRpgWorldIntakeApi().inspect(archive);
+        if (!receipt.sourceLiteralCanonVerified) {
+          throw const FormatException('Literal CANON did not survive import');
+        }
+        return {
+          'status': 'private_source_literal_canon_v5',
+          'archive_base64': base64Encode(archive),
+          'world_hash': receipt.archiveHash,
+          'source_fingerprint': receipt.sourceFingerprint,
+          'chapters_total': receipt.sourceChaptersTotal,
+          'scenes_total': receipt.sceneCount,
+          'source_literal_canon_verified': true,
+          'literary_semantics_automatically_verified': false,
+        };
+      case 'preview_dynamic_action':
+        _fields(args, must: {
+          'campaign_id', 'expected_revision', 'proposal',
+        });
+        final port = game;
+        if (port is! RpgDynamicGameApi ||
+            args['proposal'] is! Map<String, dynamic>) {
+          throw const FormatException('No dynamic action engine');
+        }
+        final draft = FreeformActionDraft.fromJson(args['proposal']);
+        final preview = port.previewFreeform(
+            _text(args, 'campaign_id'), draft,
+            expectedRevision: _number(args, 'expected_revision'));
+        return {
+          'status': 'requires_explicit_confirmation',
+          'kind': 'new_typed_dynamic_action',
+          'fiction_scope': FreeformActionDraft.fictionScope,
+          'campaign_id': preview.campaignId,
+          'expected_revision': preview.expectedRevision,
+          'state_hash': preview.stateHash,
+          'next_state_hash': preview.nextStateHash,
+          'approval_digest': preview.approvalDigest,
+          'narration': preview.narration,
+        };
+      case 'commit_dynamic_action':
+        _fields(args, must: {
+          'campaign_id', 'expected_revision', 'action_id',
+          'proposal', 'approval_digest', 'user_confirmed',
+        });
+        final port = game;
+        if (port is! RpgDynamicGameApi ||
+            args['proposal'] is! Map<String, dynamic> ||
+            args['user_confirmed'] != true) {
+          throw const FormatException('Unapproved dynamic action');
+        }
+        final draft = FreeformActionDraft.fromJson(args['proposal']);
+        final result = port.commitFreeform(
+          _text(args, 'campaign_id'),
+          actionId: _text(args, 'action_id'),
+          draft: draft,
+          expectedRevision: _number(args, 'expected_revision'),
+          approvalDigest: _text(args, 'approval_digest'),
+          userConfirmed: true,
+        );
+        return {
+          'kind': 'new_typed_dynamic_event',
+          'fiction_scope': FreeformActionDraft.fictionScope,
+          'applied': result.applied,
+          'duplicate': result.duplicate,
+          'reason': result.reason,
+          ...projectView(result.view),
         };
       case 'suggest_action':
         _fields(args, must: {'campaign_id', 'text'});

@@ -1,6 +1,8 @@
+import 'dart:isolate';
 import 'package:flutter/material.dart';
 import 'package:rpg_api/rpg_api.dart' show
-    RpgCreationApi, LocalRpgCreationApi, RpgCreationIntent;
+    RpgCreationApi, LocalRpgCreationApi, RpgCreationIntent,
+    LocalRpgLiteralCanonApi;
 
 import 'book_import.dart';
 import 'package:story_authoring/story_authoring.dart'
@@ -12,6 +14,7 @@ import 'source_index_preview_page.dart';
 import 'book_source_index.dart';
 import 'quick_rpg_page.dart';
 import 'world_library_gateway.dart';
+import 'world_play_page.dart';
 import 'zai_auto_whole_book_analysis.dart';
 import 'zai_whole_book_analysis_page.dart';
 
@@ -188,6 +191,80 @@ class _BookRpgStartPageState extends State<BookRpgStartPage> {
     }
   }
 
+  /// Exact full-book textual CANON. This never silently reuses the selected
+  /// excerpt of a collection; the whole imported edition is independently
+  /// indexed and approved. No cloud request or invented literary events.
+  Future<void> _openLiteralCanon() async {
+    if (_opening) return;
+    setState(() { _opening = true; _error = null; });
+    try {
+      final index = await (widget.indexer ?? indexImportedBookInWorker)(
+          widget.book);
+      if (!mounted) return;
+      const api = LocalRpgLiteralCanonApi();
+      final preview = api.prepareIndex(index);
+      if (!preview.canCompile) {
+        throw const FormatException(
+            'Буква в букву сохранить эту книгу пока невозможно: '
+            'проверьте изображения, пропущенные главы или размер текста.');
+      }
+      final approved = await showDialog<bool>(
+        context: context,
+        builder: (dialog) => AlertDialog(
+          scrollable: true,
+          title: const Text('Создать CANON всей книги?'),
+          content: Text('Исходная редакция: ' + preview.title +
+              '. Глав: ' + preview.chapterCount.toString() +
+              ', фрагментов: ' + preview.chunkCount.toString() +
+              '. Переносится ВЕСЬ оригинальный текст без сокращений, '
+              'в порядке книги. Это проверенный буквальный CANON, '
+              'но не автоматическая проверка мотивов и всех '
+              'литературных обстоятельств. '
+              'Свободные действия ИИ будут отдельными '
+              'вымышленными вставками и не перепишут книгу. '
+              'Никакой текст сейчас не отправляется в сеть. '
+              'Будет создана новая частная игра; старые сохранения '
+              'и позиция чтения не меняются.'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialog).pop(false),
+              child: const Text('Отмена'),
+            ),
+            FilledButton(
+              key: const Key('rpg-start-literal-canon-consent'),
+              onPressed: () => Navigator.of(dialog).pop(true),
+              child: const Text('Создать частный CANON'),
+            ),
+          ],
+        ),
+      );
+      if (approved != true || !mounted) return;
+      final expected = preview.approvalDigest;
+      final archive = await Isolate.run(() => api.compileIndex(index,
+          approvedDigest: expected, userConfirmed: true));
+      if (!mounted) return;
+      final installed = await widget.gateway.install(archive);
+      final id = await widget.gateway.start(installed.archiveHash);
+      if (!mounted) return;
+      await Navigator.of(context).push<void>(MaterialPageRoute(
+          builder: (_) => WorldPlayPage(
+            gateway: widget.gateway, campaignId: id,
+          )));
+    } on FormatException catch (error) {
+      if (mounted) {
+        setState(() => _error = 'Нельзя создать полный CANON: ' +
+            error.message + '. Исходная книга не изменена.');
+      }
+    } catch (error) {
+      if (mounted) {
+        setState(() => _error = 'Не удалось собрать CANON: ' +
+            error.toString() + '. Старые игры сохранены.');
+      }
+    } finally {
+      if (mounted) setState(() => _opening = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) => Scaffold(
     appBar: AppBar(title: const Text('Создать RPG по книге')),
@@ -310,6 +387,35 @@ class _BookRpgStartPageState extends State<BookRpgStartPage> {
                 ),
               ),
             ),
+            const SizedBox(height: 6),
+            Card(
+              key: const Key('rpg-start-literal-canon-card'),
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text('Точный CANON всей книги',
+                        style: Theme.of(context).textTheme.titleMedium),
+                    const Text('Все главы, весь оригинальный текст '
+                        'в неизменном порядке. Без необходимости '
+                        'выдумывать литературные события.'),
+                    const SizedBox(height: 8),
+                    const Text('В этой отдельной частной игре ИИ может '
+                        'создавать новые неканонические действия, '
+                        'меняющие разрешённые игровые ресурсы и журнал. '
+                        'Не приписываем их автору книги.'),
+                    const SizedBox(height: 8),
+                    OutlinedButton.icon(
+                      key: const Key('rpg-start-literal-canon'),
+                      onPressed: _opening ? null : _openLiteralCanon,
+                      icon: const Icon(Icons.menu_book_outlined),
+                      label: const Text('Создать CANON из всей книги'),
+                    ),
+                  ],
+                ),
+              ),
+            ),
             if (widget.book.chapters.length > 1) ...[
               const SizedBox(height: 8),
               ExpansionTile(
@@ -404,10 +510,14 @@ class _BookRpgStartPageState extends State<BookRpgStartPage> {
                           'запрашиваем отдельное согласие. Прогресс '
                           'сохраняется по проверенным фрагментам.'),
                       SizedBox(height: 8),
-                      Text('Полный литературный CANON, автоматическая '
-                          'сборка законченной RPG из любой книги и '
-                          'динамический AI-мастер ещё разрабатываются. '
-                          'Чтение и существующие прохождения не меняются.'),
+                      Text('Буквальный CANON всей книги доступен '
+                          'как отдельная проверенная редакция: текст и '
+                          'порядок глав сохраняются. Семантическую '
+                          'истинность придуманных персонажем действий '
+                          'модель не подтверждает. Новые действия ИИ '
+                          'записываются как отдельные неканонические '
+                          'игровые события. Чтение и сохранения '
+                          'существующих прохождений не меняются.'),
                     ],
                   ),
                 ),

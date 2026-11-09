@@ -5,6 +5,7 @@ import 'package:crypto/crypto.dart';
 import 'blueprint.dart';
 import 'codec.dart';
 import 'world_state.dart';
+import 'freeform_action.dart';
 import 'npc_social_ledger.dart';
 
 enum DecisionStatus { applied, denied, duplicate }
@@ -41,6 +42,7 @@ class WorldEvent {
     required this.beforeStateHash,
     required this.afterStateHash,
     required this.hash,
+    this.freeform,
   });
 
   final int sequence;
@@ -55,6 +57,7 @@ class WorldEvent {
   final String beforeStateHash;
   final String afterStateHash;
   final String hash;
+  final FreeformActionDraft? freeform;
 
   Map<String, dynamic> toJson() => {..._payload(), 'hash': hash};
 
@@ -69,6 +72,7 @@ class WorldEvent {
     'previous_hash': previousHash,
     'before_state_hash': beforeStateHash,
     'after_state_hash': afterStateHash,
+    if (freeform != null) 'freeform': freeform!.toJson(),
   };
 
   factory WorldEvent.create({
@@ -82,6 +86,7 @@ class WorldEvent {
     required String? previousHash,
     required String beforeStateHash,
     required String afterStateHash,
+    FreeformActionDraft? freeform,
   }) {
     final event = WorldEvent._(
       sequence: sequence,
@@ -94,6 +99,7 @@ class WorldEvent {
       previousHash: previousHash,
       beforeStateHash: beforeStateHash,
       afterStateHash: afterStateHash,
+      freeform: freeform,
       hash: '',
     );
     final hash = sha256.convert(
@@ -110,6 +116,7 @@ class WorldEvent {
       previousHash: previousHash,
       beforeStateHash: beforeStateHash,
       afterStateHash: afterStateHash,
+      freeform: freeform,
       hash: hash,
     );
   }
@@ -122,7 +129,13 @@ class WorldEvent {
       'before_state_hash',
       'after_state_hash', 'hash',
     };
-    assertFields(data, 'world_event', keys, keys);
+    assertFields(data, 'world_event', keys, {...keys, 'freeform'});
+    final dynamicPlan = data.containsKey('freeform')
+        ? FreeformActionDraft.fromJson(data['freeform']) : null;
+    if (dynamicPlan != null &&
+        data['choice_id'] != FreeformActionDraft.reservedChoice) {
+      throw const FormatException('Mislabelled dynamic event');
+    }
     if (data['sequence'] is! int || (data['sequence'] as int) < 1) {
       throw const FormatException('Invalid event sequence');
     }
@@ -149,6 +162,7 @@ class WorldEvent {
       previousHash: previous as String?,
       beforeStateHash: verifiedHash('before_state_hash'),
       afterStateHash: verifiedHash('after_state_hash'),
+      freeform: dynamicPlan,
       hash: verifiedHash('hash'),
     );
   }
@@ -189,9 +203,9 @@ class StoryWorld {
     }
     final evidence = <WorldEvent>[];
     for (final event in _events) {
-      final scene = blueprint.scenes[event.sceneId]!;
-      final choice = scene.choices.singleWhere((c) => c.id == event.choiceId);
-      if (choice.effects.any((effect) =>
+      final effects = event.freeform?.effects ?? blueprint.scenes[event.sceneId]!
+          .choices.singleWhere((c) => c.id == event.choiceId).effects;
+      if (effects.any((effect) =>
           effect.op == 'learn_fact' &&
           effect.actor == actorId &&
           effect.id == factId)) {
@@ -453,6 +467,101 @@ class StoryWorld {
     );
   }
 
+  /// A new scene-local narrative action, NOT one of the authored choice IDs.
+  /// Typed noncanonical effects are applied to the same world and event chain.
+  DecisionResult applyFreeform({
+    required String actionId,
+    required FreeformActionDraft draft,
+    int? expectedRevision,
+    String actor = 'player',
+  }) {
+    jsonId(actionId, 'action_id');
+    jsonId(actor, 'actor');
+    final duplicate = _byAction[actionId];
+    if (duplicate != null) {
+      if (duplicate.freeform?.digest != draft.digest ||
+          duplicate.actor != actor) {
+        throw const FormatException('Freeform action ID reused');
+      }
+      return DecisionResult(
+        status: DecisionStatus.duplicate, reason: 'already_committed',
+        state: _state, event: duplicate,
+      );
+    }
+    if (actor != 'player') return _denied('actor_not_supported');
+    if (expectedRevision != null && expectedRevision != _state.revision) {
+      return _denied('stale_revision');
+    }
+    if (isTerminal) return _denied('terminal_scene');
+    draft.validate(blueprint, _state);
+    final stats = Map<String, int>.of(_state.stats);
+    final inventory = Set<String>.of(_state.inventory);
+    final flags = Map<String, bool>.of(_state.flags);
+    final knowledge = _state.knowledge.map((key, val) =>
+        MapEntry(key, Set<String>.of(val)));
+    var time = _state.tick + 1;
+    for (final effect in draft.effects) {
+      switch (effect.op) {
+        case 'set_flag':
+          flags[effect.id!] = effect.value!;
+        case 'stat_delta':
+          stats[effect.id!] = stats[effect.id!]! + effect.amount!;
+        case 'advance_time':
+          time += effect.amount!;
+        case 'grant_item':
+          inventory.add(effect.id!);
+        case 'consume_item':
+          if (!inventory.remove(effect.id)) {
+            return _denied('missing_gm_item');
+          }
+        case 'learn_fact':
+          knowledge['player']!.add(effect.id!);
+        default:
+          throw StateError('Unexpected verified GM effect');
+      }
+    }
+    if (time > 100000000) return _denied('time_out_of_range');
+    final next = WorldState(
+      sceneId: _state.sceneId,
+      revision: _state.revision + 1,
+      tick: time,
+      stats: stats,
+      inventory: inventory,
+      flags: flags,
+      knowledge: knowledge,
+    );
+    final event = WorldEvent.create(
+      sequence: next.revision,
+      actionId: actionId,
+      actor: actor,
+      sceneId: _state.sceneId,
+      choiceId: FreeformActionDraft.reservedChoice,
+      nextSceneId: next.sceneId,
+      blueprintHash: blueprint.blueprintHash,
+      previousHash: _events.isEmpty ? null : _events.last.hash,
+      beforeStateHash: _state.stateHash,
+      afterStateHash: next.stateHash,
+      freeform: draft,
+    );
+    if (socialRulebook != null) {
+      final preview = fork();
+      preview._state = next;
+      preview._events.add(event);
+      preview._byAction[actionId] = event;
+      try {
+        NpcSocialLedger.inspect(preview, socialRulebook!);
+      } on FormatException {
+        return _denied('npc_social_conflict');
+      }
+    }
+    _state = next;
+    _events.add(event);
+    _byAction[actionId] = event;
+    return DecisionResult(
+      status: DecisionStatus.applied, state: _state, event: event,
+    );
+  }
+
   DecisionResult _denied(String reason) => DecisionResult(
     status: DecisionStatus.denied, reason: reason, state: _state,
   );
@@ -484,12 +593,19 @@ class StoryWorld {
     final world = StoryWorld(blueprint, socialRulebook: socialRulebook);
     for (final raw in recordedEvents) {
       final expected = WorldEvent.fromJson(raw);
-      final result = world.apply(
-        actionId: expected.actionId,
-        choiceId: expected.choiceId,
-        actor: expected.actor,
-        expectedRevision: expected.sequence - 1,
-      );
+      final result = expected.freeform == null
+          ? world.apply(
+              actionId: expected.actionId,
+              choiceId: expected.choiceId,
+              actor: expected.actor,
+              expectedRevision: expected.sequence - 1,
+            )
+          : world.applyFreeform(
+              actionId: expected.actionId,
+              draft: expected.freeform!,
+              actor: expected.actor,
+              expectedRevision: expected.sequence - 1,
+            );
       if (!result.applied ||
           canonicalJson(result.event!.toJson()) !=
               canonicalJson(expected.toJson())) {
