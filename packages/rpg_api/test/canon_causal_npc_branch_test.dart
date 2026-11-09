@@ -563,7 +563,7 @@ void main() {
             'source_quote_sha256':
                 originalWorld.sceneOrigins[scenes[i]]!.sourceQuoteSha256,
             'depends_on': i == 0 ? <String>[] : [scenes[i - 1]],
-            'preconditions': i == 1 ? [{
+            'preconditions': i == scenes.length - 1 ? [{
               'op': 'fact_unknown', 'actor_id': boris,
               'id': 'gm_signal', 'value': null,
             }] : <Object>[],

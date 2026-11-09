@@ -657,8 +657,12 @@ class StoryWorld {
         ...trial.events.map((event) => event.sceneId),
         ...trial.events.map((event) => event.nextSceneId),
       };
-      if (blueprint.scenes[_state.sceneId]!.choices.any((choice) =>
-          !graph.permits(choice.nextSceneId, candidate, updated, visited))) {
+      final sourcePaths = blueprint.scenes[_state.sceneId]!.choices;
+      if ((sourcePaths.isNotEmpty &&
+          sourcePaths.every((choice) =>
+              !graph.permits(choice.nextSceneId, candidate,
+                  updated, visited))) ||
+          graph.breaksAnUnavoidableFuture(candidate, updated, visited)) {
         diverged = true;
       }
     }

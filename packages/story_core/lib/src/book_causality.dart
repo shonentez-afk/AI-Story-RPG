@@ -240,6 +240,29 @@ final class BookCausalGraph {
     return event.preconditions.every((v) => v.isSatisfied(nextState, social));
   }
 
+  /// Full-book check of *irreversible* future contradictions. Unknown facts
+  /// and absent memories can only become known/present, never be forgotten.
+  /// Other predicates (trust, promises, custody, goals) might be restored by
+  /// later actions and are therefore checked only at the exact scene gate.
+  /// A game cannot keep claiming CANON if an unseen future event permanently
+  /// requires ignorance of something that already happened.
+  bool breaksAnUnavoidableFuture(WorldState state,
+      NpcSocialSnapshot social, Set<String> visited) {
+    for (final node in nodes) {
+      if (visited.contains(node.sceneId)) continue;
+      for (final condition in node.preconditions) {
+        if (condition.op == 'fact_unknown' ||
+            condition.op == 'memory_absent' ||
+            (condition.op == 'life_is' &&
+             social.lifeState(condition.actorId) == NpcLifeState.dead &&
+             condition.value != 'dead')) {
+          if (!condition.isSatisfied(state, social)) return true;
+        }
+      }
+    }
+    return false;
+  }
+
   Map<String, Object?> toJson() =>
       {'events': nodes.map((v) => v.toJson()).toList()};
 }
