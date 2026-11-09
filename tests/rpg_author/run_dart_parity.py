@@ -648,6 +648,36 @@ def main():
             "safe", "help"
         }, discovered
         assert all(len(r["choice_ids"]) >= 2 for r in discovered)
+        playable = _discover_real_endings(
+            item_npc_world, strict_source_chapters=True, with_proof=True)
+        assert playable["native_source_chapter_coverage"] is True, playable
+        assert playable["reachable_source_chapters"] == [0, 1, 2], playable
+        assert playable["source_chapters_total"] == 3, playable
+        assert len(playable["routes"]) == 2
+        # Prove negative behavior using the REAL engine: forge the caller's
+        # signed-map argument, never the compiled BookWorld. This rejects
+        # an 'original' chapter scene that no real player can reach.
+        import subprocess as subprocess_module
+        from tools.rpg_author.auto_author import (
+            _DART_ROUTE, _PARITY_CONFIG,
+        )
+        dishonest = {
+            "format": "rpg_author_native_route_discovery_v1",
+            "archive_b64": base64.b64encode(item_npc_world).decode("ascii"),
+            "source_chapters_total": 3,
+            "source_passages": [
+                {"scene_id": "road", "chapter_index": 0},
+                {"scene_id": "river", "chapter_index": 1},
+                {"scene_id": "imaginary_chapter_scene", "chapter_index": 2},
+            ],
+        }
+        missing_proof = subprocess_module.run(
+            ["dart", "--packages=" + str(_PARITY_CONFIG), str(_DART_ROUTE)],
+            input=json.dumps(dishonest), stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE, text=True, timeout=600)
+        assert missing_proof.returncode != 0, missing_proof.stdout
+        assert "Source chapters not playable" in missing_proof.stderr, (
+            missing_proof.stderr[-800:])
         # ONE complete in-process synthetic-book authoring run (no network):
         # Fake AI proposes every response, while all evidence, compilation,
         # native route discovery, editorial gates and SQLite are REAL.
@@ -663,6 +693,12 @@ def main():
             "native_multi_act_campaign_mechanically_verified"), autopilot_result
         assert autopilot_result["native_routes"]["endings_verified"] == 2
         assert autopilot_result["source_review"]["reviewed_book_chapters"] == 3
+        assert autopilot_result["native_all_source_chapters_playable"] is True
+        assert autopilot_result["native_playable_chapter_count"] == 3
+        native_proof = json.loads((root / "autopilot_private_answers" /
+                                   "native_chapter_playability.json").read_text())
+        assert native_proof["reachable_source_chapters"] == [0, 1, 2]
+        assert native_proof["archive_sha256"] == autopilot_result["archive_sha256"]
         assert fake_llm.stages.count("analysis") == 3
         assert fake_llm.stages[-1] == "literary_review"
         assert (root / "autopilot_real_native_v4.bworld").exists()

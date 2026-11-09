@@ -1,3 +1,9 @@
+## E6n — игра должна давать дойти до исходных глав (0.3.0a17)
+
+В этой ветке добавлен строгий **native playable-source-chapter gate** для автоматического `author-book`: недостаточно положить SOURCE_PASSAGE в исходный ZIP — реальный Dart RPG API должен достигнуть исходной сцены *каждой* главы хотя бы на одном допустимом маршруте. Проверяется наряду с двумя разными концовками и SQLite, без Python-симуляции. Отдельный приватный `native_chapter_playability.json` сохраняется в едином snapshot. Детали: [NATIVE_PLAYABILITY_GATE_RU_2026-11-09.md](NATIVE_PLAYABILITY_GATE_RU_2026-11-09.md). Версия требует нового exact-code CI, старый PASS `ce221f0` к ней не относится. Два реальных FB2 и ручной Win/Android E2E пока не подтверждены. Не обновлять installed Skill до успешной приёмки.
+
+---
+
 ## ПРИНЯТО — единый E6m: ChatGPT Skill-first + автономный RPG API + переносимая сессия
 
 **Проверенный функциональный SHA: `ce221f0454a5be61de6bc39297e11cc070342680`; генератор `0.3.0a16`.** [External RPG author tests #42556984326](https://github.com/shonentez-afk/AI-Story-RPG/actions/runs/42556984326) **COMPLETED SUCCESS на этом же SHA**: `author-tests` 180 основных Python + 37 дополнительных тестов PASS и `dart-parity` SUCCESS. Dart подтвердил source-locked NPC-досье, Social v5, многоактовый BookWorld v4, 203 сцены, signed-dialogue redaction, подлинную передачу предмета, два различных реальных игровых финала и переносимые SQLite сохранения. Фикстуры CI синтетические, не настоящая пользовательская литература.

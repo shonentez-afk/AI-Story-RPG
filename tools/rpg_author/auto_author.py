@@ -165,7 +165,57 @@ def _derive_reviewed_extension(answer: dict, index: dict, story: dict,
     }
 
 
-def _discover_real_endings(raw: bytes) -> list[dict]:
+def _source_chapter_proof_spec(provenance: dict) -> dict:
+    """Bind playable chapter claims to SIGNED BookWorld provenance, not AI text.
+
+    This describes what must be visited, NOT how RPG state should advance.
+    A missing chapter in the archive is an immediate error, rather than a
+    reason to silently omit the chapter from the native check.
+    """
+    require(type(provenance) is dict and
+            type(provenance.get("source_chapters_total")) is int and
+            1 <= provenance["source_chapters_total"] <= 10000 and
+            type(provenance.get("scene_origins")) is list,
+            "native_chapter_provenance_invalid",
+            "Native BookWorld needs bounded original chapter provenance")
+    total = provenance["source_chapters_total"]
+    originals = []
+    ids = set()
+    covered = set()
+    for entry in provenance["scene_origins"]:
+        require(type(entry) is dict and
+                type(entry.get("scene_id")) is str and
+                type(entry.get("chapter_index")) is int and
+                0 <= entry["chapter_index"] < total and
+                entry.get("origin") in ("SOURCE_PASSAGE", "EXPLICIT_ADAPTATION"),
+                "native_chapter_provenance_invalid",
+                "Native scene provenance has invalid chapter/source fields")
+        if entry["origin"] != "SOURCE_PASSAGE":
+            continue
+        sid = entry["scene_id"]
+        require(bool(sid) and sid not in ids,
+                "native_chapter_provenance_invalid",
+                "A checked original scene may appear only once")
+        ids.add(sid)
+        chapter = entry["chapter_index"]
+        covered.add(chapter)
+        originals.append({"scene_id": sid, "chapter_index": chapter})
+    require(covered == set(range(total)),
+            "native_chapter_provenance_incomplete",
+            "Signed BookWorld itself omits original source chapters")
+    return {"source_chapters_total": total,
+            "source_passages": originals}
+
+
+def _discover_real_endings(raw: bytes, *, strict_source_chapters: bool = False,
+                           with_proof: bool = False) -> list[dict] | dict:
+    """Discover two actual endings; optionally prove *ALL* source chapters playable.
+
+    The source/chapter map comes from hash-bound v4 provenance, while the
+    state reachability proof is executed only by the pinned Dart RPG API.
+    A finite budget can reject a large valid game; never downgrade that
+    unresolved result to PASS.
+    """
     check_contract()
     package_config = (_DART_CONFIG if _DART_CONFIG.is_file()
                       else _PARITY_CONFIG)
@@ -178,6 +228,11 @@ def _discover_real_endings(raw: bytes) -> list[dict]:
     import base64
     request = {"format": "rpg_author_native_route_discovery_v1",
                "archive_b64": base64.b64encode(raw).decode("ascii")}
+    source_spec = None
+    if strict_source_chapters:
+        _, _, provenance = _inspect_v4(raw)
+        source_spec = _source_chapter_proof_spec(provenance)
+        request.update(source_spec)
     with tempfile.TemporaryDirectory(prefix="ai_rpg_private_discover_") as tmp:
         try:
             response = subprocess.run(
@@ -188,8 +243,11 @@ def _discover_real_endings(raw: bytes) -> list[dict]:
         except (OSError, subprocess.TimeoutExpired) as exc:
             raise AuthoringError("native_discovery_unavailable",
                                  "Native route discovery unavailable") from exc
-    require(response.returncode == 0, "native_route_not_found",
-            "Native public RPG API could not find two different playable endings")
+    require(response.returncode == 0,
+            ("native_source_chapters_unplayable" if strict_source_chapters
+             else "native_route_not_found"),
+            "Native RPG API could not prove two endings and all original "
+            "chapters within bounded gameplay search")
     reply = parse_json(response.stdout.encode("utf-8"))
     routes = reply.get("routes")
     require(reply.get("format") == "rpg_author_native_two_discovered_routes_v1"
@@ -199,6 +257,21 @@ def _discover_real_endings(raw: bytes) -> list[dict]:
             and len({r["expected_ending_scene_id"] for r in routes}) == 2,
             "native_discovery_invalid",
             "Native route discovery is not bound to compiled BookWorld")
+    if strict_source_chapters:
+        count = source_spec["source_chapters_total"]
+        require(reply.get("native_source_chapter_coverage") is True
+                and reply.get("source_chapters_total") == count
+                and reply.get("reachable_source_chapters") == list(range(count))
+                and type(reply.get("reachable_original_scene_count")) is int
+                and 1 <= reply["reachable_original_scene_count"] <=
+                    len(source_spec["source_passages"])
+                and reply.get("source_passage_scene_count") ==
+                    len(source_spec["source_passages"]),
+                "native_chapter_proof_invalid",
+                "Native game did not independently attest all book chapters")
+    if with_proof:
+        return {key: value for key, value in reply.items()
+                if key != "routes"} | {"routes": routes}
     return routes
 
 
@@ -492,7 +565,13 @@ def author_complete_book(*, project_root: Path, workdir: Path,
         root, overlay, npc_review=native_npc_review, extension=extension)
     _, bp_bytes, prov = _inspect_v4(raw)
     bp = parse_json(bp_bytes)
-    candidates = _discover_real_endings(raw)
+    # The compiled ZIP can claim source events in every chapter while some
+    # chapters are actually inaccessible via native game choices. Prove
+    # *playable* chapter coverage through the real Dart/SQLite client.
+    discovery = _discover_real_endings(
+        raw, strict_source_chapters=True, with_proof=True)
+    candidates = discovery["routes"]
+    _fresh_or_existing(private, "native_chapter_playability.json", discovery)
     template = prepare_full_review_template(bp, prov, extension)
     review_path = private / _STAGE_FILES["literary_review"]
 
@@ -503,6 +582,8 @@ def author_complete_book(*, project_root: Path, workdir: Path,
         return {"status": "needs_independent_editorial_review",
                 "review_template": str(review_path),
                 "two_native_ending_routes_discovered": True,
+                "all_book_chapters_playable_in_native_api": True,
+                "native_playability_report": str(private / "native_chapter_playability.json"),
                 "book_chapters_analyzed": idx["chapter_count"],
                 "game_created": False, "user_ready": False,
                 "skill_responses_this_run": provider.calls}
@@ -525,6 +606,12 @@ def author_complete_book(*, project_root: Path, workdir: Path,
              "scene_origins": prov["scene_origins"],
              "review_template": template,
              "native_discovered_routes": candidates,
+             "native_playable_chapter_proof": {
+                 key: discovery[key] for key in (
+                     "archive_sha256", "source_chapters_total",
+                     "reachable_source_chapters",
+                     "reachable_original_scene_count",
+                     "native_source_chapter_coverage")},
              "explicit_machine_review_consent": delegate_review},
             checked_review)
         _fresh_or_existing(private, _STAGE_FILES["literary_review"], review)
@@ -575,6 +662,11 @@ def author_complete_book(*, project_root: Path, workdir: Path,
     }
     _fresh_or_existing(private, receipt_path.name, receipt)
     result["authoring_workflow"] = REVISION
+    result["native_all_source_chapters_playable"] = True
+    result["native_playable_chapter_count"] = len(
+        discovery["reachable_source_chapters"])
+    result["native_chapter_playability_report"] = str(
+        private / "native_chapter_playability.json")
     result["authoring_provenance_receipt"] = str(receipt_path)
     result["skill_responses_this_run"] = provider.calls
     result["autonomous_review_requested"] = delegate_review
