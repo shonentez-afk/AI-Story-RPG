@@ -230,6 +230,7 @@ class _MultiActTrialPageState extends State<MultiActTrialPage> {
     return CrossActConsequenceGate.applyReviewedActChain(
       index: widget.index, book: widget.book, bookMap: widget.bookMap,
       draft: widget.draft, userConfirmedFictionalContinuity: true,
+      expanded: widget.draft.expanded,
     );
   }
 
@@ -250,6 +251,7 @@ class _MultiActTrialPageState extends State<MultiActTrialPage> {
     includeNpc: includeNpc,
     npcPlayerLine: _npcPlayerLine, npcReplyLine: _npcReplyLine,
     fictionalTrialAcknowledged: true,
+    expanded: widget.draft.expanded,
   );
 
   /// A single source/plan revision invalidates prior quotes, model digests
@@ -288,7 +290,7 @@ class _MultiActTrialPageState extends State<MultiActTrialPage> {
       if (!next.contains(eventId) &&
           (groupCount >= BookwideSourceEncounters.maxReviewedEventsPerAct ||
            next.length >= BookwideSourceEncounters.remainingSceneCapacity(
-               widget.draft.plan))) {
+               widget.draft.plan, expanded: widget.draft.expanded))) {
         setState(() => _error =
             'Достигнута вместимость акта или игрового мира. '
             'Остальные остаются в отчёте о покрытии.');
@@ -312,7 +314,7 @@ class _MultiActTrialPageState extends State<MultiActTrialPage> {
       for (final event in events.take(
           BookwideSourceEncounters.maxReviewedEventsPerAct)) {
         if (selected.length >= BookwideSourceEncounters.remainingSceneCapacity(
-                widget.draft.plan)) {
+                widget.draft.plan, expanded: widget.draft.expanded)) {
           break;
         }
         selected.add(event.id);
@@ -474,6 +476,7 @@ class _MultiActTrialPageState extends State<MultiActTrialPage> {
         reviewedNpcEncounter: _reviewedNpcArc,
         npcPlayerLine: _npcPlayerLine,
         npcReplyLine: _npcReplyLine,
+        expanded: widget.draft.expanded,
       );
       if (!mounted || compiled.sourceFingerprint !=
           widget.index.sourceFingerprint) return;
@@ -592,7 +595,8 @@ class _MultiActTrialPageState extends State<MultiActTrialPage> {
           index: widget.index, book: widget.book,
           plan: activePlan, role: _selectedHeroRole!);
     final coverage = BookwideActPlanner.compareWithStoryPlan(
-        bookMap: widget.bookMap, book: widget.book, story: activePlan);
+        bookMap: widget.bookMap, book: widget.book, story: activePlan,
+        expanded: widget.draft.expanded);
     BookwideNpcArc? npcAvailable;
     if (_selectedNpcRole != null &&
         _selectedNpcRole?.characterId != _selectedHeroRole?.characterId) {
