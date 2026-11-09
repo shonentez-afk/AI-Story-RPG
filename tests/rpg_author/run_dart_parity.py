@@ -770,15 +770,15 @@ def main():
             complete_target,
             complete_target.with_suffix(".attribution.json"))["native_dart_verified"]
 
-        # E6o: one continuous 201-chapter synthetic FB2, 26 signed chapter
-        # reviews, 197 additional SOURCE_PASSAGE events over three acts.
-        # The fake provider ONLY writes proposals. The real native Dart
-        # compiler, importer, forked BFS, SQLite and route replay must pass.
-        # No user book enters CI, no second game engine and no model API.
-        from tests.rpg_author import long_book_fixture as long_source
+        # E6p: one continuous synthetic FB2 introduces a major NPC first
+        # in chapter 100, between the prior sparse anchors 80 and 160.
+        # A single 201-chapter Dart integration (not a duplicate long game)
+        # tests exact source identity, a REAL StoryPlan first-contact anchor,
+        # native Social v5 cross-act memory, playable chapters and saves.
+        from tests.rpg_author import late_npc_book_fixture as long_source
         long_book = root / long_source.SOURCE_FILENAME
         long_book.write_text(long_source.SOURCE, encoding="utf-8")
-        long_fake = long_source.FakeLongSourceLockedAuthor()
+        long_fake = long_source.FakeLateNpcAuthor()
         long_result = author_complete_book(
             book=long_book,
             project_root=root / "large_201_checkpoint",
@@ -790,7 +790,7 @@ def main():
         assert long_result["native_all_source_chapters_playable"] is True
         assert long_result["native_playable_chapter_count"] == 201
         assert long_result["source_review"]["reviewed_book_chapters"] == 201
-        assert long_result["reviewed_extension"]["act_count"] == 3
+        assert long_result["reviewed_extension"]["act_count"] == 4
         assert long_result["long_book_event_coverage"][
             "featured_source_events_in_game"] == 201
         assert long_result["long_book_event_coverage"][
@@ -798,7 +798,16 @@ def main():
         assert long_result["native_routes"]["endings_verified"] == 2
         assert long_fake.stages.count("analysis") == 201
         assert long_fake.stages.count("chapter_outline") == 26
+        assert long_fake.stages.count("npc_cast") == 1
+        assert long_fake.stages.count("npc_review") == 1
+        assert long_fake.stages.count("npc_dossiers") == 0
         assert long_fake.stages[-1] == "literary_review"
+        npc_report = long_result["long_book_npc_source_continuity"]
+        assert npc_report["reviewed_npc_count"] == 1, npc_report
+        assert npc_report["first_source_witnessed_npc_count"] == 1
+        assert npc_report["no_premature_npc_history"] is True
+        assert (root / "large_201_private_skill" /
+                "long_npc_continuity.json").exists()
         assert (root / "large_201_private_skill" /
                 "native_chapter_playability.json").exists()
         assert not long_result["user_ready"]
@@ -834,7 +843,8 @@ def main():
                        "complete_private_book_two_native_ending_routes_verified": True,
                        "automatic_native_two_distinct_ending_discovery": True,
                        "automatic_whole_book_fake_ai_real_native_v4_sqlite": True,
-                       "native_201_chapter_long_book_skill_windows_and_sqlite": True}))
+                       "native_201_chapter_long_book_skill_windows_and_sqlite": True,
+                       "native_201_chapter_late_npc_first_contact_v5": True}))
 
 
 if __name__ == "__main__":
