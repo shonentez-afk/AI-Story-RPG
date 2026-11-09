@@ -1,3 +1,12 @@
+# E6q.1 — ПОЛНАЯ СКВОЗНАЯ ПРИЁМКА ГЕНЕРАТОРА 09.11.2026
+
+**Проверенный код генератора:** `0b7283653c9dc23a3a1380ca42bb68caf4451993`, версия `0.3.0a21`; workflow/doc SHA `8915286e7fe591bfeefa124850a427c8611aae7f`. [External RPG author CI #478](https://github.com/shonentez-afk/AI-Story-RPG/actions/runs/42598495752) **COMPLETED SUCCESS, ВСЕ JOBS**: author-tests, Dart-parity, реальный cross-branch E6q→native PR#133 E2E. Новый тест выполнил оригинальную синтетическую русскую FB2 → exact source-locked literal BookWorld v5 → ЧатGPT Skill-first причинный разбор каждого фрагмента с NPC и отложенными решениями → настоящий Dart CLI reviewed causal v5 → .bworld → приватная SQLite кампания через API → игровой ход → экспорт/import .bwsave с одинаковым state_hash. Строгое требование отсутствия незакоммиченных исходников сохранено; исходная временная SQLite hooks-ошибка #477 устранена в #478.
+
+**Нативный проверенный код:** `92ef5d701637957e31e3e6e090f63d1e0bdb4173`, [полный Native CI #1120](https://github.com/shonentez-afk/AI-Story-RPG/actions/runs/42597681279) **COMPLETED SUCCESS**, в том числе Dart, M1.7, Flutter, Windows portable и Android APK. Движок независим от Flutter и Python. Его актуальный handoff: [START_NEW_CHAT_RU.md](../../START_NEW_CHAT_RU.md) в ветке Draft PR #133. Для сборки reviewed causal v5 пользоваться только нативной командой `compile-reviewed-causal-v5` с точным consent SHA и исходной редакцией.
+
+**Граница готовности:** тестовое сгенерированное произведение синтетическое; семантическая литературная правдивость для произвольной пользовательской книги всё ещё НЕ доказана. Авторский ChatGPT Skill должен честно проверять литературные причинные утверждения, при сомнении возвращать fail-closed, не выдумывать NPC и источники; `semantic_canon_automatically_verified=false`. Две независимые полноценные реальные RU FB2 и ручное многовариантное Win/Android прохождение не прошли содержательной приёмки. Не объявлять AI-литературную всеобщую достоверность, не создавать микро-PR, не merge main. Эта верхняя запись заменяет все исторические статусы ниже. Документный [skip ci] commit не меняет тестированный код.
+
+---
 # E6q: сценарная причинность для CANON v5 из всей книги
 
 9 ноября 2026. Версия внешнего генератора `0.3.0a20`. Согласование с нативным контрактом `ai_story_source_causal_review_v2` в Draft PR #133.
