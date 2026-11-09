@@ -1,3 +1,20 @@
+# P0 UI PARITY — БОЛЬШОЙ ПАКЕТ РЕАЛИЗОВАН В PR #133, ПРИЁМКА В CI
+
+**Кодовый SHA:** `b7daca6f058f53956226474c8abca4d251d561f9`. Единственный [Draft PR #133](https://github.com/shonentez-afk/AI-Story-RPG/pull/133) в `feature/p0-bookwide-gameplay-readiness-20261107`. [Основной CI #1127](https://github.com/shonentez-afk/AI-Story-RPG/actions/runs/42619715731) **IN PROGRESS при записи**; [M0 #1212](https://github.com/shonentez-afk/AI-Story-RPG/actions/runs/42619715969) SUCCESS; [native author CI #488](https://github.com/shonentez-afk/AI-Story-RPG/actions/runs/42619715796) IN PROGRESS. Этот docs-only коммит **[skip ci]**, НЕ меняет тестированный исходный код; последующий чат должен сверить итог job, исправить обнаруженные проблемы в ЭТОМ ЖЕ PR и обновить SHA и статус.
+
+**Реализован один связанный пакет Flutter UI ↔ автономный движок:**
+- Новый `apps/story_reader/lib/world_ui_presenter.dart`: read-only presentation `WorldGameView`, NPC-целей/памяти/обещаний/автономных действий, hero/journal/inventory, `alternatePlotContinuity`, и детального typed `FreeformActionDraft` preview; НЕ собственный UI-движок сюжета.
+- `world_play_page.dart`: полноценные панели Герой, Предметы, Журнал и NPC; доказанные текущие цели, открытые обещания, самостоятельные решения, последние изменения; сюжетные обязательства и направления ALTER_FATE; source-scene/диалоги/портреты сохранены.
+- `free_text_action_panel.dart`: перед вторым подтверждением действия ИИ видны NPC, передача факта/предмета, доверие, обещание, цель, сюжетная ветка/маршрут, откр./закр. обязательства и typed resolution proofs; всё до commit НЕ считается записью.
+- `book_rpg_start_page.dart`: новая явная дорожка `E6q.1 external ChatGPT Skill` → готовый подписанный `.bworld` → проверка `sourceCausalReviewVerified` и **точного sourceFingerprint выбранной книги/сказки** → стандартный `WorldImportReviewFlow` и отдельный пользовательский consent → `WorldCampaignsPage`. Никакой скрытый Z.ai, Python-симулятор или новый тип игрового сохранения не внедрены.
+- `RpgWorldIntakePreview` дополнен `sourceCausalReviewVerified`, `heroName`, `dynamicAiActionsAvailable` только из проверенного импортёром v5 / подписанного blueprint. Нельзя принять буквальный CANON за полный причинный.
+- `world_import_review_flow.dart` и `world_campaigns_page.dart` объясняют истинные возможности архива, авторскую роль и наличие AI freeform перед началом прохождения. `WorldCampaignsPage` читает оригинальный .bworld через тот же native intake, не угадывает формат по названию и не прерывает существующую кампанию при недоступности дополнительного метаотчёта.
+- `world_ui_capability_parity_test.dart`, `reviewed_causal_start_ui_test.dart`, `world_integration_test.dart`: узкий экран/200% текст; Журнал/Герой/Инвентарь/NPC; отсутствие скрытых будущих NPC; typed preview с планом; native source-causal v5+SQLite → Flutter → real CANON→ALTER_FATE; импорт подписанного v5/отказ в literal-only и чужой редакции.
+
+**Пока не обещать готового QA:** только после зелёных Flutter widget/M1.7/Windows/Android и нового проверенного SHA считать этот P0 пакет автоматически принятым. Остаются реальное устройство, визуальное screenshot QA, две разные настоящие RU FB2 и содержательная литературная проверка. `main` не трогать, PR #133 Draft, никаких микро-PR. Генератор E6q.1 в своей ветке, не дублировать. Приоритет UI теперь ПЕРЕД литературными испытаниями и релизом.
+
+---
+
 # P0 — Согласование игрового Flutter UI со ВСЕМИ возможностями автономного RPG-движка
 
 **Дата:** 09.11.2026. **Состояние:** ОБЯЗАТЕЛЬНАЯ СЛЕДУЮЩАЯ РАБОТА, НЕ ПРИНЯТО. **Приоритет:** перед литературными тестами, физическим E2E, merge PR #133 и релизом.
