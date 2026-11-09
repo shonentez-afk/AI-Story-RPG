@@ -101,6 +101,10 @@ def extend_reviewed_npc_acts(blueprint: dict, provenance: dict,
                      "fact_id", "assertion_id"}, "npc act grant")
         for key in ("scene_id", "choice_id", "actor_id", "fact_id", "assertion_id"):
             identifier(raw[key], "npc grant " + key)
+        require(raw["actor_id"] != "player" and
+                raw["actor_id"] in blueprint["actors"],
+                "npc_identity_missing",
+                "NPC grant must reuse a verified persistent actor in the base world")
         tup = (raw["scene_id"], raw["choice_id"],
                raw["actor_id"], raw["fact_id"])
         require(tup not in keys, "npc_duplicate_grant",
