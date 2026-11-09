@@ -65,21 +65,32 @@ def chapter_windows(index: dict, analyses: list[dict]) -> list[dict]:
                 "be turned into a proven SOURCE_PASSAGE chapter scene: " +
                 str(chapter["chapter_index"]))
     windows = []
-    for begin in range(0, len(chapters), WINDOW_CHAPTERS):
+    begin = 0
+    while begin < len(chapters):
+        # 8 chapters is the *maximum*, not a fixed compulsory block. Dense
+        # novel chapters can contain many verified source assertions. Shrink
+        # the request to as few as one chapter instead of discarding evidence
+        # or spending ChatGPT context on an oversized private JSON request.
         end = min(begin + WINDOW_CHAPTERS, len(chapters))
-        proposal = {
-            "window_id": f"w{begin:04d}_{end - 1:04d}",
-            "source_fingerprint": index["source_fingerprint"],
-            "chapter_start": begin,
-            "chapter_end": end - 1,
-            "chapters": chapters[begin:end],
-        }
-        require(len(canonical(proposal)) <= MAX_WINDOW_BYTES,
-                "long_book_window_over_budget",
-                "Verified source chapter window exceeds the private Skill "
-                "request budget. Needs smaller, reviewed chapter/chunk "
-                "summaries, not silent loss of evidence.")
+        while True:
+            proposal = {
+                "window_id": f"w{begin:04d}_{end - 1:04d}",
+                "source_fingerprint": index["source_fingerprint"],
+                "chapter_start": begin,
+                "chapter_end": end - 1,
+                "chapters": chapters[begin:end],
+            }
+            if len(canonical(proposal)) <= MAX_WINDOW_BYTES:
+                break
+            if end == begin + 1:
+                raise AuthoringError(
+                    "long_book_single_chapter_over_budget",
+                    "One dense chapter exceeds the tested private Skill "
+                    "window limit. Requires a reviewed chunk-level "
+                    "synthesis, not evidence truncation.")
+            end -= 1
         windows.append(proposal)
+        begin = end
     return windows
 
 

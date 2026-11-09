@@ -42,7 +42,7 @@ from .v4_acts import FORMAT as ACT_FORMAT
 from .long_book import (
     is_long_book, chapter_windows, review_chapter_window,
     verify_chapter_window, outline_context, check_long_backbone,
-    verify_featured_gameplay, MAX_ANCHOR_GAP,
+    verify_featured_gameplay, MAX_ANCHOR_GAP, MAX_LONG_CHAPTERS,
 )
 
 REVISION = "rpg_author_ai_book_pipeline_v1"
@@ -376,6 +376,10 @@ def author_complete_book(*, project_root: Path, workdir: Path,
                 "Source book differs from the preserved private checkpoint")
     private.mkdir(parents=True, exist_ok=True, mode=0o700)
     _, state, idx, analyses, story = project.load_project(root)
+    require(idx["chapter_count"] <= MAX_LONG_CHAPTERS,
+            "long_book_requires_volumes",
+            "Book exceeds the verified 384-chapter single-world limit. "
+            "Do not call ChatGPT for this unsupported source or truncate it.")
 
     # All source chunks are checked individually and atomically checkpointed.
     chunk_order = {c["id"]: i for i, c in enumerate(idx["chunks"])}
@@ -395,6 +399,10 @@ def author_complete_book(*, project_root: Path, workdir: Path,
     _, state, idx, analyses, story = project.load_project(root)
     evidence = _brief_evidence(idx, analyses)
     long_mode = is_long_book(idx)
+    require(idx["chapter_count"] <= MAX_LONG_CHAPTERS,
+            "long_book_requires_volumes",
+            "Book exceeds the verified 384-chapter single-world limit. "
+            "Do not analyze/truncate this source; design volumes separately.")
     long_outlines = []
     context = evidence
     backbone = None
