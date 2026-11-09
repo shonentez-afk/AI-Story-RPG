@@ -56,7 +56,7 @@ def check_native_contract(native_root: Path) -> dict:
     """Fail closed if an external native checkout differs in any pinned blob.
 
     Version names and branch labels are not source authorization. This checks
-    all 27 exact Git blob OIDs with the same logic as check_contract(), without
+    all 43 exact Git blob OIDs with the same logic as check_contract(), without
     writing to the native checkout, and preserves independent repo boundaries.
     """
     lock = check_contract()

@@ -38,10 +38,10 @@ class NativeV5UnifiedTests(unittest.TestCase):
             provider=NoModel(), native_root=ROOT,
             user_confirmed=False, **kwargs)
 
-    def test_exact_native_engine_contract_has_27_git_blob_pins(self):
+    def test_exact_native_engine_contract_has_43_git_blob_pins(self):
         lock = check_contract()
         self.assertEqual(lock["format"], "rpg_author_compatibility_v2")
-        self.assertEqual(len(lock["files"]), 27)
+        self.assertEqual(len(lock["files"]), 43)
         self.assertEqual(check_native_contract(ROOT), lock)
 
     def test_native_checkout_tamper_rejected_before_any_compilation(self):
