@@ -1,4 +1,19 @@
-## ЕДИНЫЙ КНИЖНЫЙ ПАКЕТ NPC — текущий код на общей приёмке (не объявлять PASS)
+## ПРИНЯТО: единый ChatGPT Skill NPC Social v5 / многоактовый v4
+
+**Рабочий код:** `1f154a0eda9d046b7f355d4399f2b79cb2a3e2d3` (0.3.0a13).
+**GitHub Actions #42554315131:** https://github.com/shonentez-afk/AI-Story-RPG/actions/runs/42554315131 — **COMPLETED SUCCESS** на этом SHA: 171 основных и 37 дополнительных Python тестов, Dart parity SUCCESS.
+
+В одном пакете `author-book` навык ChatGPT создаёт source-locked `npc_dossiers`, из точных SOURCE_PASSAGE / NARRATED свидетельств формирует постоянные `character_id` без вымышленных хешей, затем готовит подтверждённый `npc_review` (знания, память, отношения, NPC Social v5), направляет их в `enrichment` и межактовый `v4_acts_v2`. При наличии отдельно подтверждённой цепочки разговоров/вещей поддерживает `v4_acts_v3`. Результат проверяется **существующими** native BookWorld, Dart `LocalRpgGameApi` и SQLite; отдельного игрового движка или внешнего ИИ API нет.
+
+В CI: оригинальная синтетическая 3-главная FB2 → source-derived NPC `character_id` → native v3 review → native v4 → Dart importer/API → NPC memory/knowledge + portable SQLite save. Маркер проверки `native_skill_source_bound_npc_v4_dart_replay=true`. Сохранены прежние rich-v3/v4 и диалоговые регрессии, 203 сцены, native item custody, две законченные концовки и SQLite.
+
+**Границы:** этот результат не подтверждает литературное качество на реальной книге, автоматическое создание полного многоактного v3 диалога/передачи предмета навыком для разных произведений, полное покрытие любых длинных романов и реальное Windows/Android E2E. Инсталлированный Skill E6d не заменяется автоматически; новый skill.zip только подготавливается для установки. Исходники пользователя в репозиторий/CI не попадали. Изменения только `tools/rpg_author` и `tests/rpg_author`; ни `main`, ни PR #133, ни native/Flutter не тронуты.
+
+**Следующий крупный блок без микро-PR:** полные AI-авторские NPC диалоги и предметные отношения v3 из двух настоящих приватных FB2 + литературный аудит всей книги и общая приёмка через Windows/Android.
+
+---
+
+## Архивная запись разработки NPC (до приёмки #42554315131)
 
 Версия **0.3.0a13**: ChatGPT Skill сама авторит source-locked
 `npc_dossiers` (постоянные `character_id` из настоящих цитат),
