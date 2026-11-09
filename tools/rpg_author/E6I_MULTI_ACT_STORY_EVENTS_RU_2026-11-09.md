@@ -56,3 +56,19 @@ Literary/canonical correctness, real large FB2 adaptation, GLM, actual
 authoring of new NPC social memories and device Windows/Android E2E
 remain unverified. This is a mechanism for authoring source-bound
 story acts, not a fully automatic book-to-game promise.
+## ACCEPTED exact-code integration (9 November 2026)
+
+External code SHA 96d4cfac79586bfb58f2302ed5192a830fac2ab9 includes both accepted source-bound multi-act generator
+and an reviewed native PR #133 integration SHA 081fc365efac030be25d8b75aca0ba305a6bcc6c.
+GitHub Actions #42540898271 COMPLETED SUCCESS: author-tests and dart-parity SUCCESS.
+135 Python unit tests OK, 37 supplemental tests OK. Dart runtime really compiled
+v4 world from a three-chapter synthetic FB2, replayed three routes with
+source-verified choices and actor=player knowledge gates, and verified
+SQLite campaign reopen/fork/portable save. The previous rich-v3,
+203-scene E6h, and native NPC v5 regression remain successful.
+Installed ChatGPT skill E6d is not automatically upgraded.
+
+Not proven: 3 real chapters are not a long novel; a confirmed source citation
+does not prove semantic correctness; an editorial user declaration is not a
+cryptographic author/canon attestation. New NPC actor-scoped grants in E6i
+remain fail-closed and require their own literary/source review.

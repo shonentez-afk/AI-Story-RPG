@@ -1,3 +1,26 @@
+## E6i accepted native-head integration (exact code)
+
+2026-11-09. External author generator version 0.3.0a8.
+ACCEPTED CODE SHA: 96d4cfac79586bfb58f2302ed5192a830fac2ab9
+NATIVE PR #133 PIN: 081fc365efac030be25d8b75aca0ba305a6bcc6c (Draft, not merged).
+CI: https://github.com/shonentez-afk/AI-Story-RPG/actions/runs/42540898271
+COMPLETED SUCCESS: author-tests SUCCESS, dart-parity SUCCESS.
+Python unit acceptance: 135 tests OK plus 37 supplemental tests OK.
+Actual Dart parity log includes native_v4_three_chapter_two_act_branching_verified=true
+and native_v4_stateful_knowledge_gate_and_save_replayed=true;
+legacy v3 and v4 E6h 203-scene and NPC-social regression also all PASS.
+Upstream contract: 27 exact git blobs; 24 unchanged; 3 reviewed and pinned.
+External changes preserve engine as single native API, no Python game-rule fork.
+Existing ChatGPT skill still E6d, NOT updated by this branch.
+
+LIMITS: Original synthetic FB2 only (3 chapters, 2 acts and 3 paths).
+No independently verified full literary two-book authoring, no tested private
+RU FB2 on devices, no new authored NPC actor knowledge/social witness.
+Do not claim literary canon or book-to-game product readiness.
+Next functional block: source-verified NPC continuity/actor-scoped grants
+and real multi-chapter literary editorial testing, avoiding micro-PRs.
+
+---
 ## E6i синхронизирован с native PR #133 (081fc36)
 
 Разрешён только внешний генератор: base native точный SHA 081fc365efac030be25d8b75aca0ba305a6bcc6c; все 27 pinned Git blob SHA-1 сверены, 24 совпали, 3 намеренно изменены после проверки диффа: world_library_gateway.dart теперь использует публичный rpg_api; story_authoring/src/authoring_engine.dart имеет неизменяющий правила getter sourceFingerprint; story_authoring.dart только публикует новые workflow exports. Ни один core/BookWorld/compiler/SQLite rule не менялся. Из внешнего E6i перенесены только tools/rpg_author и tests/rpg_author. Native PR #133 остаётся Draft, main не меняем.
