@@ -120,6 +120,8 @@ final class RpgClientProtocol {
     'world_title': view.worldTitle,
     'hero_name': view.heroName,
     'hero_description': view.heroDescription,
+    'hero_source_character_id': view.heroSourceCharacterId,
+    'source_reviewed_hero_start': view.sourceReviewedHeroStart,
     'scene_id': view.sceneId,
     'scene_title': view.sceneNames[view.sceneId],
     'scene_text': view.sceneText,
@@ -197,6 +199,8 @@ final class RpgClientProtocol {
           'offline_play': RpgApiContract.offlinePlay,
           'verified_private_compilation':
               RpgApiContract.verifiedPrivateCompilation,
+          'reviewed_book_character_start':
+              RpgApiContract.reviewedBookCharacterStart,
           'arbitrary_book_canon': RpgApiContract.arbitraryBookCanon,
           'dynamic_ai_game_master': RpgApiContract.dynamicAiGameMaster,
           'world_formats': [1, 2, 3, 4],
@@ -368,6 +372,43 @@ final class RpgClientProtocol {
             game, args['bundle'],
             confirmed: args['user_confirmed'] == true);
         return {'status': 'imported', ...projectView(game.load(id))};
+      case 'inspect_character_start':
+        _fields(args, must: {'archive_base64'});
+        return const LocalRpgBookCharacterStartApi().inspect(
+          _bytes(args, 'archive_base64', 12 * 1024 * 1024));
+      case 'compile_character_start':
+        _fields(args, must: {
+          'archive_base64', 'source_index', 'review_json',
+          'approved_digest', 'user_confirmed',
+        });
+        final sourceIndex = args['source_index'];
+        if (sourceIndex is! Map<String, dynamic> ||
+            utf8.encode(jsonEncode(sourceIndex)).length > 5 * 1024 * 1024 ||
+            args['user_confirmed'] != true) {
+          throw const FormatException('Unreviewed source book or hero');
+        }
+        final result = const LocalRpgBookCharacterStartApi().compile(
+          verifiedBaseArchive: _bytes(
+              args, 'archive_base64', 12 * 1024 * 1024),
+          sourceIndex: sourceIndex,
+          reviewJson: _text(args, 'review_json',
+              maxLength: 128 * 1024),
+          approvedDigest: _text(args, 'approved_digest'),
+          userConfirmed: true,
+        );
+        final receipt = const LocalRpgBookCharacterStartApi().inspect(result);
+        final audit = const LocalRpgBookGameplayAuditApi().inspect(
+          result, maxStates: 4096, maxMoves: 512);
+        if (audit.status == BookGameplayAuditStatus.blocked) {
+          throw const FormatException('Source-bound hero action causes a softlock');
+        }
+        return {
+          'status': 'verified_private_character_start',
+          'archive_base64': base64Encode(result),
+          'character': receipt,
+          'causal_status': audit.status.name,
+          'literary_canon_verified': false,
+        };
       case 'install_world':
         _fields(args, must: {'archive_base64'});
         final item = game.install(_bytes(

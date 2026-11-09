@@ -312,6 +312,32 @@ def validate() -> list[str]:
             "sqlite3" in pycode or
             "story_core" in pycode):
         issues.append("Python adapter must connect DIRECTLY to local RPG API")
+    # Book-character starting facts/items remain a private, native v4
+    # authoring extension, never a second Flutter/Python rule executor.
+    role_writer = ROOT / "packages" / "bookworld_format" / "lib" / "reviewed_book_character_start_writer.dart"
+    role_code = role_writer.read_text(encoding="utf-8") if role_writer.is_file() else ""
+    if ("class ReviewedBookCharacterStartWriter" not in role_code or
+            "RichPrivateBookworldWriter().build" not in role_code or
+            "initial_state_review" not in role_code or
+            "literary_canon_verified" not in role_code or
+            "package:flutter/" in role_code or "dart:io" in role_code):
+        issues.append("bookworld_format: reviewed starting state must reuse native verified v4")
+    character_api = ROOT / "packages" / "rpg_api" / "lib" / "src" / "book_character_start.dart"
+    character_code = character_api.read_text(encoding="utf-8") if character_api.is_file() else ""
+    if ("class LocalRpgBookCharacterStartApi" not in character_code or
+            "compileWithReviewedRole" not in character_code or
+            "source_reviewed_start" not in character_code or
+            "package:flutter/" in character_code):
+        issues.append("rpg_api: missing source-bound BOOK_CHARACTER entrypoint")
+    wire = ROOT / "packages" / "rpg_api" / "lib" / "src" / "client_protocol.dart"
+    wire_text = wire.read_text(encoding="utf-8") if wire.is_file() else ""
+    for op in ("inspect_character_start", "compile_character_start"):
+        if "case '" + op + "'" not in wire_text:
+            issues.append(f"rpg_api: no cross-client reviewed character {op}")
+    flutter_npc = ROOT / "apps" / "story_reader" / "lib" / "whole_book_npc_campaign_page.dart"
+    npc_code = flutter_npc.read_text(encoding="utf-8") if flutter_npc.is_file() else ""
+    if "RichPrivateBookworldImporter().inspect(" in npc_code:
+        issues.append("Flutter NPC editor bypasses public RpgAuthoringApi")
     return issues
 
 

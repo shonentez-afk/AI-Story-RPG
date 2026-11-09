@@ -47,6 +47,7 @@ class PythonRemoteRpgTests(unittest.TestCase):
                 self.assertTrue(capabilities["offline_play"])
                 self.assertFalse(capabilities["arbitrary_book_canon"])
                 self.assertFalse(capabilities["dynamic_ai_game_master"])
+                self.assertTrue(capabilities["reviewed_book_character_start"])
                 # Privileged credentials and source text must never be
                 # redirected to host HTTP_PROXY settings.
                 with patch.dict("os.environ", {
@@ -130,6 +131,14 @@ class PythonRemoteRpgTests(unittest.TestCase):
                     "archive_base64": v4_b64,
                 })
                 self.assertEqual(v4_preflight["format_version"], 4)
+                start_review = client.call("inspect_character_start", {
+                    "archive_base64": v4_b64,
+                })
+                self.assertEqual(start_review["format_version"], 4)
+                self.assertIsNone(start_review["reviewed_source_character_id"])
+                self.assertFalse(start_review["source_reviewed_start"])
+                self.assertFalse(start_review["literary_canon_verified"])
+
                 self.assertGreaterEqual(v4_preflight["scene_count"], 3)
                 self.assertFalse(v4_preflight["literary_canon_proven"])
                 v4_install = client.call("install_world", {

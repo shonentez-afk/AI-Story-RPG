@@ -166,6 +166,7 @@ class WorldGameView {
     required this.flags, required this.knownFacts,
     required this.choices, required this.journal,
     this.heroName, this.heroDescription, this.sceneSource,
+    this.heroSourceCharacterId, this.sourceReviewedHeroStart = false,
     this.itemNames = const {}, this.itemDescriptions = const {},
     this.statNames = const {}, this.factNames = const {},
     this.sceneNames = const {},
@@ -195,6 +196,8 @@ class WorldGameView {
   final List<WorldEventView> journal;
   final String? heroName;
   final String? heroDescription;
+  final String? heroSourceCharacterId;
+  final bool sourceReviewedHeroStart;
   final WorldSceneSourceView? sceneSource;
   final Map<String, String> itemNames;
   final Map<String, String> itemDescriptions;
@@ -583,6 +586,17 @@ class RpgGameplayEngine {
       throw const FormatException('История изменений не совпадает с героем');
     }
 
+    // The actual reviewed hero identity comes from immutable engine state,
+    // not from a screen label, AI model name or unencountered NPC record.
+    final roleFlags = blueprint.initial.flags.entries.where((entry) =>
+        entry.value &&
+        RegExp(r'^player_is_npc_[0-9a-f]{32}$').hasMatch(entry.key)).toList();
+    final selectedHeroId = roleFlags.length == 1
+        ? roleFlags.single.key.substring('player_is_'.length)
+        : null;
+    final reviewedStart = selectedHeroId != null &&
+        (blueprint.initial.inventory.isNotEmpty ||
+         (blueprint.initial.knowledge['player']?.isNotEmpty ?? false));
     return WorldGameView(
       campaignId: record.metadata.id,
       worldTitle: blueprint.title,
@@ -614,6 +628,8 @@ class RpgGameplayEngine {
       journal: List.unmodifiable(journal),
       heroName: heroName,
       heroDescription: heroDescription,
+      heroSourceCharacterId: selectedHeroId,
+      sourceReviewedHeroStart: reviewedStart,
       sceneSource: currentOrigin == null ? null : WorldSceneSourceView(
         chapterIndex: currentOrigin.chapterIndex,
         chapterCount: sourceChapterCount,

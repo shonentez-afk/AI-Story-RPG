@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:typed_data';
 
-import 'package:bookworld_format/bookworld_format.dart';
 import 'package:flutter/material.dart';
 import 'package:rpg_api/rpg_api.dart';
 
@@ -622,7 +621,7 @@ class _WholeBookNpcCampaignPageState extends State<WholeBookNpcCampaignPage>
           approvedDigest: approval.approvalDigest,
           explicitlyConfirmedPrivateFiction: _campaignConfirmed);
       } else {
-        final checked = const RichPrivateBookworldImporter().inspect(gameplay.archive);
+        final checked = const LocalRpgAuthoringApi().inspectPrivateWorld(gameplay.archive);
         source.verifyArchiveHero(checked);
         await source.narrative?.verifyLive();
         if (checked.archiveSha256 != _approvedWithoutNpcArchiveHash ||
@@ -679,7 +678,7 @@ class _WholeBookNpcCampaignPageState extends State<WholeBookNpcCampaignPage>
       if (selectedArchive == null) return;
       await verifyNarrationRevision();
       if (!mounted) return;
-      final checked = const RichPrivateBookworldImporter().inspect(selectedArchive);
+      final checked = const LocalRpgAuthoringApi().inspectPrivateWorld(selectedArchive);
       source.verifyArchiveHero(checked);
       final installed = await widget.gateway.install(selectedArchive);
       if (installed.archiveHash != checked.archiveSha256) throw const FormatException('Установленный мир отличается от проверенного.');

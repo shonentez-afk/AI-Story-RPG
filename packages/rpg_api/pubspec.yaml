@@ -18,4 +18,6 @@ dependencies:
     path: ../story_authoring
 
 dev_dependencies:
+  story_core:
+    path: ../story_core
   test: ^1.25.15

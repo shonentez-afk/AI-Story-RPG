@@ -49,12 +49,14 @@ export 'package:bookworld_format/bookworld_format.dart' show
 
 part 'src/client_protocol.dart';
 part 'src/campaign_transfer.dart';
+part 'src/book_character_start.dart';
 
 /// Contract version, not a promise that all planned game modes exist.
 abstract final class RpgApiContract {
   static const version = '0.1.0';
   static const offlinePlay = true;
   static const verifiedPrivateCompilation = true;
+  static const reviewedBookCharacterStart = true;
   static const arbitraryBookCanon = false;
   static const dynamicAiGameMaster = false;
 }

@@ -1,3 +1,9 @@
+## Новая игровая функциональность 2026-11-09 — действительное стартовое состояние книжного героя
+
+Native PR #133, baseline code `071ed2b07bec9cc863aa22583288688337ed9eae` [CI #1087 PASS](https://github.com/shonentez-afk/AI-Story-RPG/actions/runs/42558128159). Готовится один новый крупный пакет, **пока требует собственный exact-code CI**: проверенный permanent characterId + источник первой главы + начальные предметы/факты, source-linked условия реальных выборов, новый проверяемый private v4 мир, RpgBookCharacterStartApi + JSON для внешних клиентов, показ проверенной роли в Flutter через движок, удаление двух прямых вызовов форматного импортёра NPC-мастером. [Техническая реализация и обязательные отрицательные тесты](RPG_BOOK_CHARACTER_START_INTEGRATION_RU_2026-11-09.md). CANON и свободный динамический AI-GM остаются открытыми; не размазывать пакет на микро-PR.
+
+---
+
 ## 9 ноября 2026 — ПРИНЯТО: самостоятельный игровой API и перенос кампаний между клиентами
 
 Код `071ed2b07bec9cc863aa22583288688337ed9eae` имеет **полный точный [CI #1087 SUCCESS](https://github.com/shonentez-afk/AI-Story-RPG/actions/runs/42558128159)**: Python reference, Dart, headless M1.7, Flutter, Windows Portable, Android APK; **M0 #1172 SUCCESS**. Replayed v3/v4 `.bworld` и private `.bwsave` можно одним self-contained `RpgCampaignTransfer` импортировать в чистое другое SQLite-хранилище (с явным согласием); тесты сравнивают проверенные `state_hash`, NPC/предметы/журнал/сцену. `journal_page` и `confirm_suggestion` проверяют revision/fingerprint и source authorization; Python HTTP-клиент работает без Flutter, без второй игровой логики и без HTTP_PROXY. **Не считать CI физическим UX или литературным QA.**
