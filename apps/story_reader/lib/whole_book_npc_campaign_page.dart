@@ -3,6 +3,7 @@ import 'dart:typed_data';
 
 import 'package:bookworld_format/bookworld_format.dart';
 import 'package:flutter/material.dart';
+import 'package:rpg_api/rpg_api.dart';
 
 import 'book_source_index.dart';
 import 'bookwide_act_planner.dart';
@@ -11,13 +12,11 @@ import 'campaign_prose_authoring.dart';
 import 'campaign_prose_page.dart';
 import 'narrative_book_model.dart';
 import 'npc_campaign_consequence_store.dart';
-import 'npc_campaign_consequences.dart';
 import 'npc_campaign_hero_selection.dart';
 import 'npc_campaign_writing_session.dart';
 import 'npc_inventory_writing_context.dart';
 import 'npc_writing_consent_dialog.dart';
 import 'reviewed_hero_role.dart';
-import 'story_plan_trial_compiler.dart';
 import 'whole_book_npc_campaign.dart';
 import 'whole_plan_gameplay_batch_page.dart';
 import 'world_library_gateway.dart';
@@ -30,7 +29,7 @@ class WholeBookNpcCampaignPage extends StatefulWidget {
   const WholeBookNpcCampaignPage({
     super.key, required this.index, required this.book, required this.bookMap,
     required this.draft, required this.gateway, this.roleCatalog,
-    this.draftStore, this.aiWriter,
+    this.draftStore, this.aiWriter, this.workflow,
   });
   final BookSourceIndex index;
   final NarrativeBookModel book;
@@ -40,6 +39,7 @@ class WholeBookNpcCampaignPage extends StatefulWidget {
   final ReviewedHeroRoleCatalog? roleCatalog;
   final NpcWritingStore? draftStore;
   final ZaiNpcCampaignWriting? aiWriter;
+  final RpgCampaignWorkflowApi? workflow;
   @override
   State<WholeBookNpcCampaignPage> createState() => _WholeBookNpcCampaignPageState();
 }
@@ -61,8 +61,8 @@ class _ConversationEdit {
 class _WholeBookNpcCampaignPageState extends State<WholeBookNpcCampaignPage>
     with WidgetsBindingObserver {
   WholeBookNpcSourcePlan? _source;
-  StoryPlanTrialCompilation? _base;
-  NpcCampaignConsequences? _consequences;
+  ReviewedCampaignState? _base;
+  ReviewedCampaignState? _consequences;
   NpcConsequenceDraft? _effectDraft;
   bool _effectsBlocked = false;
   List<ReviewedHeroRole> _roles = const [];
@@ -88,6 +88,8 @@ class _WholeBookNpcCampaignPageState extends State<WholeBookNpcCampaignPage>
   bool _rolesLoaded = false, _heroBlocked = false;
   String? _error;
   ReviewedHeroRoleCatalog get _roleCatalog => widget.roleCatalog ?? const ReviewedHeroRoleCatalog();
+  RpgCampaignWorkflowApi get _workflow =>
+      widget.workflow ?? const LocalRpgCampaignWorkflowApi();
   bool get _effectsReady => !_effectsBlocked && _effectDraft != null &&
       (_effectDraft!.preview == null || _consequences != null);
 
@@ -174,7 +176,7 @@ class _WholeBookNpcCampaignPageState extends State<WholeBookNpcCampaignPage>
     'hero': _hero.revision, 'role': _source!.heroReviewDigest,
     'catalog': _catalog!.digest, 'writing': _session!.revision,
     'effects': _effectDraft!.recordHash,
-    'accepted_effects': _consequences?.approvalDigest,
+    'accepted_effects': _consequences == null ? null : _effectDraft?.preview?.approvalDigest,
   });
 
   /// Own writing revisions may advance after each saved model batch. The
@@ -182,7 +184,7 @@ class _WholeBookNpcCampaignPageState extends State<WholeBookNpcCampaignPage>
   String get _writingContextRevision => npcWritingHash({
     'hero': _hero.revision, 'role': _source!.heroReviewDigest,
     'catalog': _catalog!.digest, 'effects': _effectDraft!.recordHash,
-    'accepted_effects': _consequences?.approvalDigest,
+    'accepted_effects': _consequences == null ? null : _effectDraft?.preview?.approvalDigest,
   });
 
   /// Every final action uses the same author revision. Another editor cannot
@@ -314,9 +316,12 @@ class _WholeBookNpcCampaignPageState extends State<WholeBookNpcCampaignPage>
       NpcWritingSession saved;
       try { saved = await _store.load(catalog); }
       catch (_) { _storageBlocked = true; rethrow; }
-      final base = await source.compileBase(approvedPlanDigest: source.planDigest,
+      final base = await _workflow.compileBase(
+        source: source, reviewedRoles: roles,
+        approvedPlanDigest: source.planDigest,
         approvedHeroDigest: source.heroReviewDigest,
-        allShownQuotesReviewed: _quotesReviewed, privateFictionConfirmed: _privateFiction);
+        allShownQuotesReviewed: _quotesReviewed,
+        privateFictionConfirmed: _privateFiction);
       NpcConsequenceDraft? effects;
       String? effectsError;
       try {
@@ -337,7 +342,7 @@ class _WholeBookNpcCampaignPageState extends State<WholeBookNpcCampaignPage>
   Uint8List _archiveForNpc() {
     if (!_effectsReady) throw const FormatException(
         'Проверьте восстановленные последствия или явно выберите игру без них.');
-    return _consequences?.archiveFor(source: _source!, originalArchive: _base!.archive) ?? _base!.archive;
+    return _consequences?.archive ?? _base!.archive;
   }
 
   Future<void> _editConsequences() async {
@@ -417,9 +422,10 @@ class _WholeBookNpcCampaignPageState extends State<WholeBookNpcCampaignPage>
     );
     if (confirmed != true || !mounted) return;
     final roles = await _checkAuthorRevision();
-    final accepted = await NpcCampaignConsequences.accept(source: source, preview: preview,
-      originalArchive: base.archive, freshReviewedRoles: roles,
-      approvedDigest: preview.approvalDigest, explicitlyConfirmedPrivateFiction: true);
+    final accepted = await _workflow.acceptEffects(
+      base: base, reviewedRoles: roles, review: preview,
+      approvedDigest: preview.approvalDigest,
+      explicitlyConfirmedPrivateFiction: true);
     await _checkAuthorRevision();
     await _effectStore.assertUnchanged(source, saved);
     if (mounted) setState(() { _consequences = accepted; _invalidate(); _error = null; });
@@ -600,21 +606,25 @@ class _WholeBookNpcCampaignPageState extends State<WholeBookNpcCampaignPage>
       await _flush();
       final freshRoles = await _checkAuthorRevision();
       if (authorRevision != _authorRevision) throw const FormatException('Авторская редакция изменилась.');
-      Uint8List finalArchive;
+      // The same RPG API now owns every final stage, including no-NPC mode.
+      final gameplay = _consequences ?? await _workflow.skipEffects(
+        base: _base!, reviewedRoles: freshRoles,
+        explicitlyConfirmedNoEffects: _campaignConfirmed);
+      ReviewedCampaignState dialogue;
       if (approval != null) {
-        final current = BookwideNpcCampaignAuthoring.review(source: source,
-          verifiedBaseArchive: _archiveForNpc(), currentReviewedRoles: freshRoles,
-          selectedDrafts: approval.selectedDrafts);
-        if (current.approvalDigest != approval.approvalDigest) throw const FormatException(
-            'После одобрения изменились предметы, герой или NPC. Проверьте весь пакет заново.');
-        final built = await BookwideNpcCampaignAuthoring.compile(source: source, approval: approval,
-          freshReviewedRoles: freshRoles, approvedDigest: approval.approvalDigest,
+        final current = _workflow.reviewNpc(
+          gameplay: gameplay, reviewedRoles: freshRoles,
+          drafts: approval.selectedDrafts);
+        if (current.approvalDigest != approval.approvalDigest) {
+          throw const FormatException(
+              'После одобрения изменились предметы, герой или NPC. Проверьте пакет заново.');
+        }
+        dialogue = await _workflow.acceptNpc(
+          gameplay: gameplay, reviewedRoles: freshRoles, review: approval,
+          approvedDigest: approval.approvalDigest,
           explicitlyConfirmedPrivateFiction: _campaignConfirmed);
-        finalArchive = built.archive;
       } else {
-        // Same source, hero, effects and author revision as the review.
-        final candidate = _archiveForNpc();
-        final checked = const RichPrivateBookworldImporter().inspect(candidate);
+        final checked = const RichPrivateBookworldImporter().inspect(gameplay.archive);
         source.verifyArchiveHero(checked);
         await source.narrative?.verifyLive();
         if (checked.archiveSha256 != _approvedWithoutNpcArchiveHash ||
@@ -622,7 +632,9 @@ class _WholeBookNpcCampaignPageState extends State<WholeBookNpcCampaignPage>
             checked.requiresNetwork || checked.canDistributePublicly) {
           throw const FormatException('Игра без NPC изменилась после одобрения.');
         }
-        finalArchive = candidate;
+        dialogue = await _workflow.skipNpc(
+          gameplay: gameplay, reviewedRoles: freshRoles,
+          explicitlyConfirmedNoNpcDialogues: _campaignConfirmed);
       }
       await _checkAuthorRevision();
       if (!mounted || authorRevision != _authorRevision) return;
@@ -638,12 +650,34 @@ class _WholeBookNpcCampaignPageState extends State<WholeBookNpcCampaignPage>
           throw const FormatException('Сюжет изменился во время подготовки текста.');
         }
       }
-      final manifest = await CampaignProseManifest.prepare(source: source,
-          finalArchive: finalArchive, verifyCurrent: verifyNarrationRevision);
+      final manifest = await _workflow.prepareNarration(
+        dialogue: dialogue, reviewedRoles: freshRoles,
+        verifyCurrent: verifyNarrationRevision);
       if (!mounted) return;
       final selectedArchive = await Navigator.of(context).push<Uint8List>(
-        MaterialPageRoute(builder: (_) => CampaignProsePage(manifest: manifest,
-            store: CampaignProseStore(repository: _store.repository))));
+        MaterialPageRoute(builder: (_) => CampaignProsePage(
+          manifest: manifest,
+          store: CampaignProseStore(repository: _store.repository),
+          acceptExisting: () async {
+            await verifyNarrationRevision();
+            final latestRoles = await _checkAuthorRevision();
+            final completed = await _workflow.completeWithoutNarration(
+              dialogue: dialogue, reviewedRoles: latestRoles,
+              explicitlyAcceptedExistingSceneText: _campaignConfirmed);
+            return completed.archive;
+          },
+          applyReviewed: (session, store, digest, reviewed, fiction) async {
+            await verifyNarrationRevision();
+            final latestRoles = await _checkAuthorRevision();
+            final completed = await _workflow.completeWithNarration(
+              dialogue: dialogue, reviewedRoles: latestRoles,
+              manifest: manifest, session: session,
+              readLatest: () => store.load(manifest),
+              approvedDigest: digest, fullTextReviewed: reviewed,
+              privateFictionConfirmed: fiction);
+            return completed.archive;
+          },
+        )));
       if (selectedArchive == null) return;
       await verifyNarrationRevision();
       if (!mounted) return;
@@ -758,7 +792,7 @@ class _WholeBookNpcCampaignPageState extends State<WholeBookNpcCampaignPage>
             Card(child: Padding(padding: const EdgeInsets.all(12), child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch, children: [
                 Text(_effectsBlocked ? 'Сохранённые последствия требуют восстановления.'
-                    : _consequences != null ? 'Включено игровых эффектов: ${_consequences!.effectCount}.'
+                    : _consequences != null ? 'Включено игровых эффектов: ${_consequences!.effectsCount}.'
                     : _effectDraft?.preview != null ? 'Восстановлено эффектов: ${_effectDraft!.effectCount}. Нужна проверка.'
                     : 'Предметы и игровые последствия не добавлены.', key: const Key('npc-consequences-state')),
                 const Text('Выбор предметов и пояснения сохраняются отдельно для каждого героя. '
@@ -799,7 +833,7 @@ class _WholeBookNpcCampaignPageState extends State<WholeBookNpcCampaignPage>
           ],
           if (_approval != null || _approvedWithoutNpcArchiveHash != null) ...[
             Text('Герой: ${source!.heroName}. ${_approval?.actorCount ?? 0} NPC, ${_approval?.episodeCount ?? 0} разговоров. '
-                'Игровых эффектов: ${_consequences?.effectCount ?? 0}. '
+                'Игровых эффектов: ${_consequences?.effectsCount ?? 0}. '
                 'Все пути проверяются вместе перед установкой.'),
             CheckboxListTile(key: const Key('whole-npc-final-approval'), value: _campaignConfirmed,
               title: const Text('Одобряю роль, последствия и выбранные разговоры (включая 0 NPC)'),
