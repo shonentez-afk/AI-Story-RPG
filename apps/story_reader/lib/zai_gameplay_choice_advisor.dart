@@ -367,6 +367,7 @@ class ZaiGameplayChoiceAdvisor {
             'memory_count': npc.memoryCount,
             'current_private_goal': npc.currentGoal,
             'open_promise_ids': npc.openPromiseIds,
+            'autonomous_decision_ids': npc.autonomousDecisionIds,
           },
       ],
       'recent_reviewed_game_fiction': recentActions,
@@ -449,13 +450,16 @@ class ZaiGameplayChoiceAdvisor {
               !proposal.keys.toSet().containsAll({'narration', 'effects'}) ||
               proposal.keys.toSet().difference({
                 'narration', 'effects', 'npc_interaction', 'plot_intent',
+                'plot_beat',
               }).isNotEmpty ||
               proposal['narration'] is! String ||
               proposal['effects'] is! List ||
               (proposal.containsKey('npc_interaction') &&
                proposal['npc_interaction'] is! Map<String, dynamic>) ||
               (proposal.containsKey('plot_intent') &&
-               proposal['plot_intent'] is! String)) {
+               proposal['plot_intent'] is! String) ||
+              (proposal.containsKey('plot_beat') &&
+               proposal['plot_beat'] is! Map<String, dynamic>)) {
             throw const FormatException('Wrong dynamic action payload');
           }
           final npc = proposal['npc_interaction'];

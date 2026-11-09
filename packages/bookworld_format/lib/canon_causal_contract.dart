@@ -63,6 +63,8 @@ final class CanonCausalContract {
       'witnesses', 'invariants',
       if (graphReview) 'event_graph',
       if (graphReview && review.containsKey('npc_reactions')) 'npc_reactions',
+      if (graphReview && review.containsKey('npc_delayed_decisions'))
+        'npc_delayed_decisions',
     }, 'review');
     if (review['format'] != marker ||
         review['review_scope'] != 'human_reviewed_private_story_causality' ||
@@ -198,6 +200,41 @@ final class CanonCausalContract {
         ));
       }
     }
+    final delayed = <NpcDelayedDecision>[];
+    if (graphReview && review.containsKey('npc_delayed_decisions')) {
+      final rows = review['npc_delayed_decisions'];
+      if (rows is! List || rows.length > 256) {
+        throw const FormatException('Delayed NPC decisions exceed private budget');
+      }
+      for (final raw in rows) {
+        final row = _map(raw, 'delayed NPC decision');
+        _fields(row, {
+          'scene_id', 'source_quote_sha256', 'actor_id',
+          'trigger_memory_id', 'turns_after_trigger', 'minimum_trust',
+          'response_memory_id', 'next_goal_id',
+        }, 'delayed NPC decision');
+        final scene = row['scene_id'];
+        final quote = row['source_quote_sha256'];
+        if (scene is! String || quote is! String ||
+            !_cited(origins, scene, quote) ||
+            row['actor_id'] is! String ||
+            row['trigger_memory_id'] is! String ||
+            row['turns_after_trigger'] is! int ||
+            row['minimum_trust'] is! int ||
+            row['response_memory_id'] is! String ||
+            row['next_goal_id'] is! String) {
+          throw const FormatException('Unproved delayed NPC source cause');
+        }
+        delayed.add(NpcDelayedDecision(
+          sceneId: scene, actorId: row['actor_id'] as String,
+          triggerMemoryId: row['trigger_memory_id'] as String,
+          turnsAfterTrigger: row['turns_after_trigger'] as int,
+          minimumTrust: row['minimum_trust'] as int,
+          responseMemoryId: row['response_memory_id'] as String,
+          nextGoalId: row['next_goal_id'] as String,
+        ));
+      }
+    }
     if (graphReview) {
       final rawEvents = review['event_graph'];
       if (rawEvents is! List) {
@@ -227,6 +264,7 @@ final class CanonCausalContract {
       dynamicInteractionsEnabled: true,
       bookCausality: bookGraph,
       automaticReactions: reactions,
+      delayedDecisions: delayed,
     );
     rulebook.validate(blueprint);
     return (rulebook: rulebook, names: Map.unmodifiable(names));

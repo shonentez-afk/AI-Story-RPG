@@ -36,10 +36,12 @@ final class ReviewedCanonCausalBookworldWriter {
     final graphReview = parsed is Map<String, dynamic> &&
         parsed['format'] == graphReviewFormat;
     final hasReactions = graphReview && parsed.containsKey('npc_reactions');
+    final hasDelayed = graphReview &&
+        parsed.containsKey('npc_delayed_decisions');
     if (parsed is! Map<String, dynamic> ||
         canonicalJson(parsed) != reviewJson ||
         parsed.keys.toSet().length != (graphReview ?
-            (hasReactions ? 10 : 9) : 8) ||
+            (9 + (hasReactions ? 1 : 0) + (hasDelayed ? 1 : 0)) : 8) ||
         !parsed.keys.toSet().containsAll({
           'format', 'review_scope', 'source_fingerprint',
           'base_archive_sha256', 'user_confirmed',
@@ -47,6 +49,7 @@ final class ReviewedCanonCausalBookworldWriter {
           'witnesses', 'invariants',
           if (graphReview) 'event_graph',
           if (hasReactions) 'npc_reactions',
+          if (hasDelayed) 'npc_delayed_decisions',
         })) {
       throw const FormatException('Noncanonical source causal review');
     }

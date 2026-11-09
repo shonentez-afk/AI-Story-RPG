@@ -16,6 +16,7 @@ enum NpcMemoryKind {
   promiseReceived,
   promiseBroken,
   promiseFulfilled,
+  autonomousDecision,
   helped,
   betrayed,
   rumorHeard,
@@ -210,6 +211,34 @@ final class NpcAutomaticReaction {
       (relayFactId == null || contact.learnFactId == relayFactId);
 }
 
+/// A SOURCE-REVIEWED off-screen NPC decision after committed future turns.
+/// The trigger must be a real memory, not an AI sentence or model timestamp.
+/// The event which reaches the delay permanently records the derived decision
+/// through the SAME deterministic social ledger and portable event chain.
+final class NpcDelayedDecision {
+  const NpcDelayedDecision({
+    required this.sceneId,
+    required this.actorId,
+    required this.triggerMemoryId,
+    required this.turnsAfterTrigger,
+    required this.minimumTrust,
+    required this.responseMemoryId,
+    required this.nextGoalId,
+  });
+
+  final String sceneId, actorId, triggerMemoryId, responseMemoryId, nextGoalId;
+  final int turnsAfterTrigger, minimumTrust;
+
+  Map<String, Object?> toJson() => {
+    'scene_id': sceneId, 'actor_id': actorId,
+    'trigger_memory_id': triggerMemoryId,
+    'turns_after_trigger': turnsAfterTrigger,
+    'minimum_trust': minimumTrust,
+    'response_memory_id': responseMemoryId,
+    'next_goal_id': nextGoalId,
+  };
+}
+
 /// Bound to one exact, validated blueprint. A caller must separately
 /// establish source provenance and editorial approval before using rules
 /// to present a literary adaptation. Rules are not embedded in .bworld yet.
@@ -226,7 +255,9 @@ class NpcSocialRulebook {
     List<NpcCanonInvariant> canonInvariants = const [],
     this.bookCausality,
     List<NpcAutomaticReaction> automaticReactions = const [],
-  }) : automaticReactions = List.unmodifiable(automaticReactions),
+    List<NpcDelayedDecision> delayedDecisions = const [],
+  }) : delayedDecisions = List.unmodifiable(delayedDecisions),
+       automaticReactions = List.unmodifiable(automaticReactions),
        canonInvariants = List.unmodifiable(canonInvariants),
        rules = List.unmodifiable(rules),
        witnesses = List.unmodifiable(witnesses),
@@ -243,6 +274,7 @@ class NpcSocialRulebook {
   final List<NpcCanonInvariant> canonInvariants;
   final BookCausalGraph? bookCausality;
   final List<NpcAutomaticReaction> automaticReactions;
+  final List<NpcDelayedDecision> delayedDecisions;
   final bool dynamicInteractionsEnabled;
   /// Strict portable social rules must prove how each observer learned
   /// about the event. Old local preview rulebooks keep legacy semantics.
@@ -258,8 +290,9 @@ class NpcSocialRulebook {
         rules.length > 512 || canonInvariants.length > 256 ||
         (canonInvariants.isNotEmpty && !dynamicInteractionsEnabled) ||
         (dynamicInteractionsEnabled && !requireReviewedWitnesses) ||
-        automaticReactions.length > 256 ||
-        (automaticReactions.isNotEmpty && !dynamicInteractionsEnabled)) {
+        automaticReactions.length > 256 || delayedDecisions.length > 256 ||
+        ((automaticReactions.isNotEmpty || delayedDecisions.isNotEmpty) &&
+         !dynamicInteractionsEnabled)) {
       throw const FormatException('NPC social rules not bound to blueprint');
     }
     if (witnesses.length > 512 || choiceGates.length > 128 ||
@@ -310,6 +343,32 @@ class NpcSocialRulebook {
           (fact != null &&
               !(blueprint.facts.contains(fact) || gmId.hasMatch(fact)))) {
         throw const FormatException('NPC rumor lacks source-reviewed witness');
+      }
+    }
+    final delayedKeys = <String>{};
+    final producedMemoryKeys = <String>{
+      for (final reaction in automaticReactions)
+        '${reaction.actorId}|${reaction.responseMemoryId}',
+    };
+    for (final decision in delayedDecisions) {
+      if (!blueprint.scenes.containsKey(decision.sceneId) ||
+          !blueprint.actors.contains(decision.actorId) ||
+          decision.actorId == 'player' ||
+          !CharacterId.isValidNpc(decision.actorId) ||
+          !gmId.hasMatch(decision.triggerMemoryId) ||
+          !gmId.hasMatch(decision.responseMemoryId) ||
+          !gmId.hasMatch(decision.nextGoalId) ||
+          decision.triggerMemoryId == decision.responseMemoryId ||
+          decision.turnsAfterTrigger < 1 ||
+          decision.turnsAfterTrigger > 32 ||
+          decision.minimumTrust < -100 || decision.minimumTrust > 100 ||
+          presence['${decision.sceneId}|${decision.actorId}'] !=
+              NpcWitnessMode.present ||
+          !delayedKeys.add(
+              '${decision.actorId}|${decision.triggerMemoryId}') ||
+          !producedMemoryKeys.add(
+              '${decision.actorId}|${decision.responseMemoryId}')) {
+        throw const FormatException('Unreviewed or duplicated delayed NPC decision');
       }
     }
     final invariantKeys = <String>{};
@@ -588,6 +647,14 @@ class NpcSocialRulebook {
                 (a['actor_id'].toString() + a['trigger_memory_id'].toString())
                     .compareTo(b['actor_id'].toString() +
                         b['trigger_memory_id'].toString())));
+    }
+    if (delayedDecisions.isNotEmpty) {
+      signed['delayed_npc_decisions'] = (
+          delayedDecisions.map((decision) => decision.toJson()).toList()
+            ..sort((a, b) =>
+                ('${a['actor_id']}|${a['trigger_memory_id']}')
+                    .compareTo(
+                        '${b['actor_id']}|${b['trigger_memory_id']}')));
     }
     if (lifeTransitions.isNotEmpty) {
       final changes = lifeTransitions.map((change) => change.toJson()).toList()
@@ -937,6 +1004,44 @@ class NpcSocialLedger {
           }
           targets[rule.relatedActorId!] = next;
         }
+      }
+      // Independently deliberate AFTER the original contact, without an
+      // additional player conversation or a model callback. The effective
+      // moment is the next COMMITTED event at/after the signed delay.
+      // Priorities and results are deterministic under event replay.
+      for (final decision in rulebook.delayedDecisions) {
+        if (life[decision.actorId] != NpcLifeState.present) continue;
+        final actorMemories = memory[decision.actorId];
+        if (actorMemories == null ||
+            actorMemories.any((m) =>
+                m.memoryId == decision.responseMemoryId)) continue;
+        NpcEventMemory? trigger;
+        for (final previous in actorMemories) {
+          if (previous.memoryId == decision.triggerMemoryId &&
+              previous.event.sceneId == decision.sceneId) {
+            trigger = previous;
+            break;
+          }
+        }
+        if (trigger == null ||
+            event.sequence < trigger.event.sequence +
+                decision.turnsAfterTrigger ||
+            (relations[decision.actorId]?['player'] ?? 0) <
+                decision.minimumTrust) {
+          continue;
+        }
+        if (actorMemories.length >= 64) {
+          throw const FormatException('NPC delayed decision overflow');
+        }
+        actorMemories.add(NpcEventMemory(
+          observerId: decision.actorId,
+          memoryId: decision.responseMemoryId,
+          kind: NpcMemoryKind.autonomousDecision,
+          event: event,
+          relatedActorId: null,
+          relationshipDelta: 0,
+          goalId: decision.nextGoalId,
+        ));
       }
     }
     final events = world.events;

@@ -164,6 +164,7 @@ final class RpgClientProtocol {
         'life_state': npc.lifeState,
         'current_private_goal': npc.currentGoal,
         'open_promise_ids': npc.openPromiseIds,
+        'autonomous_decision_ids': npc.autonomousDecisionIds,
       }
     ],
     'npc_item_owners': view.npcItemOwners,

@@ -135,6 +135,7 @@ class NpcRelationView {
     required this.memoryKinds, this.lifeState,
     this.currentGoal,
     this.openPromiseIds = const [],
+    this.autonomousDecisionIds = const [],
   });
 
   final String actorId;
@@ -148,6 +149,9 @@ class NpcRelationView {
   final String? currentGoal;
   /// Player/NPC promises still open in the verified event history.
   final List<String> openPromiseIds;
+  /// Model-independent future decisions from the signed rulebook,
+  /// each computed from hash-chained committed turns.
+  final List<String> autonomousDecisionIds;
 }
 
 /// Only the currently reached scene's trusted book provenance.
@@ -497,6 +501,9 @@ class RpgGameplayEngine {
           lifeState: hasLifeReview ? social.lifeState(actor).name : null,
           currentGoal: social.currentGoal(actor),
           openPromiseIds: social.openPromisesFor(actor),
+          autonomousDecisionIds: List.unmodifiable(memories
+              .where((m) => m.kind == NpcMemoryKind.autonomousDecision)
+              .map((m) => m.memoryId).toList()),
         ));
       }
     }
