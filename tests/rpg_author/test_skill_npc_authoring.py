@@ -21,7 +21,8 @@ from tools.rpg_author import project
 from tools.rpg_author.common import AuthoringError, canonical, digest
 from tools.rpg_author.npc_skill import (
     DOSSIERS_FORMAT, REVIEW_FORMAT, prepare_npc_dossiers,
-    prepare_npc_review, prepare_npc_v4_extension, verify_source_dossiers,
+    prepare_npc_review, prepare_npc_v4_extension,
+    preflight_pending_npc_enrichment, verify_source_dossiers,
 )
 from tools.rpg_author.rich_package import compile_rich_from_project
 from tools.rpg_author.native_v4_bridge import audited_extension
@@ -62,12 +63,14 @@ class SkillAuthorNpcTests(unittest.TestCase):
         self.overlay["choices"]["call_help"]["effects"].append({
             "op": "learn_fact", "id": NPC_FACT, "actor": self.actor,
         })
-        neutral = deepcopy(self.overlay)
-        neutral["choices"]["call_help"]["effects"].pop()
-        base, _ = compile_rich_from_project(self.project, neutral)
-        with zipfile.ZipFile(io.BytesIO(base)) as z:
-            self.base_bp = json.loads(z.read("scenario/blueprint.json"))
-            self.base_prov = json.loads(z.read("source/provenance.json"))
+        # A bare rich compilation MUST reject an NPC-scoped fact before
+        # the source-grounded identity exists. Build ONLY the source
+        # index/provenance for NPC citations, then compile with NPC review.
+        from tools.rpg_author.validate import candidate_blueprint
+        from tools.rpg_author.legacy_package import _provenance
+        self.base_bp = candidate_blueprint(self.story, self.idx)
+        self.base_prov = _provenance(
+            self.story, self.idx, self.analyses, self.base_bp)
         self.social_proposal = {
             "format": REVIEW_FORMAT,
             "knowledge_grants": [{
@@ -135,6 +138,21 @@ class SkillAuthorNpcTests(unittest.TestCase):
             verify_source_dossiers(altered, self.idx,
                                    self.story, self.analyses)
         self.assertEqual(e.exception.code, "skill_npc_dossiers_stale")
+
+    def test_native_enrichment_is_deferred_until_npc_cast_is_signed(self):
+        # A real pending NPC-scoped effect cannot pass native without an
+        # actor list. The source-only check must not claim it did.
+        self.assertEqual(preflight_pending_npc_enrichment(
+            self.overlay, self.dossiers, self.idx, self.story), self.overlay)
+        with self.assertRaises(AuthoringError):
+            compile_rich_from_project(self.project, self.overlay)
+        invalid = deepcopy(self.overlay)
+        invalid["choices"]["call_help"]["effects"][-1]["actor"] = (
+            "npc_" + "f" * 32)
+        with self.assertRaises(AuthoringError) as e:
+            preflight_pending_npc_enrichment(
+                invalid, self.dossiers, self.idx, self.story)
+        self.assertEqual(e.exception.code, "skill_npc_actor_unknown")
 
     def test_source_grants_and_witnesses_compile_using_existing_native_v3(self):
         native = self.create_review()

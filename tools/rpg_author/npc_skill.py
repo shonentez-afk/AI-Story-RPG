@@ -163,6 +163,42 @@ def verify_source_dossiers(dossiers: dict, index: dict, story: dict,
     return checked
 
 
+
+def preflight_pending_npc_enrichment(enrichment: dict, dossiers: dict,
+                                     index: dict, story: dict) -> dict:
+    """Only validate revision and actor IDs pending REAL native compilation.
+
+    It is impossible to compile a NPC-scoped learn_fact before that actor
+    has an independently approved native NPC v3 review. This is NOT
+    gameplay validation; it explicitly defers it to the native writer.
+    """
+    fields(enrichment, {"format", "source_fingerprint", "story_sha256",
+                        "hero", "stats", "items", "facts",
+                        "scene_names", "choices"}, "pending NPC enrichment")
+    require(enrichment["format"] == "rpg_author_rich_enrichment_v1" and
+            enrichment["source_fingerprint"] == index["source_fingerprint"]
+            and enrichment["story_sha256"] == digest(canonical(story)),
+            "wrong_enrichment",
+            "Pending NPC enrichment is not bound to this edition and story")
+    require(type(enrichment["choices"]) is dict,
+            "skill_npc_enrichment_invalid",
+            "NPC rule overlays must be structured before native compilation")
+    permitted = {"player", *(c["character_id"]
+                             for c in dossiers["characters"])}
+    for row in enrichment["choices"].values():
+        require(type(row) is dict and
+                type(row.get("conditions")) is list and
+                type(row.get("effects")) is list,
+                "skill_npc_enrichment_invalid",
+                "NPC choice rules must have conditions and effects")
+        for rule in row["conditions"] + row["effects"]:
+            require(type(rule) is dict and
+                    ("actor" not in rule or rule["actor"] in permitted),
+                    "skill_npc_actor_unknown",
+                    "NPC-specific rule cannot name an unreviewed actor")
+    return enrichment
+
+
 def prepare_npc_review(response: dict, dossiers: dict, index: dict,
                        story: dict, analyses: list[dict], enrichment: dict,
                        blueprint: dict, provenance: dict,

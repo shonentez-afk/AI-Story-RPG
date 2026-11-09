@@ -33,7 +33,8 @@ from .native_v4_bridge import (_MAX_V4_BYTES, _inspect_v4,
 from .rich_package import compile_rich_from_project
 from .npc_skill import (
     prepare_npc_dossiers, prepare_npc_review,
-    prepare_npc_v4_extension, verify_source_dossiers,
+    prepare_npc_v4_extension, preflight_pending_npc_enrichment,
+    verify_source_dossiers,
 )
 from .validate import (assertion_registry, candidate_blueprint,
                        validate_analysis, validate_story)
@@ -348,8 +349,11 @@ def author_complete_book(*, project_root: Path, workdir: Path,
     enrich_path = private / _STAGE_FILES["enrichment"]
     if enrich_path.exists():
         overlay = read_json(enrich_path)
-        compile_rich_from_project(root, overlay,
-                                  npc_review=native_npc_review)
+        if dossiers is not None and dossiers["characters"]:
+            preflight_pending_npc_enrichment(overlay, dossiers, idx, story)
+        else:
+            compile_rich_from_project(root, overlay,
+                                      npc_review=native_npc_review)
     else:
         def checked_enrichment(response):
             require(response.get("source_fingerprint", idx["source_fingerprint"])
@@ -363,8 +367,12 @@ def author_complete_book(*, project_root: Path, workdir: Path,
             require(response.get("story_sha256", value["story_sha256"])
                     == value["story_sha256"], "wrong_enrichment",
                     "Enrichment references another story revision")
-            compile_rich_from_project(root, value,
-                                      npc_review=native_npc_review)
+            if dossiers is not None and dossiers["characters"]:
+                preflight_pending_npc_enrichment(
+                    value, dossiers, idx, story)
+            else:
+                compile_rich_from_project(root, value,
+                                          npc_review=native_npc_review)
             return value
         overlay = _ask_verified(
             provider, "enrichment",
@@ -383,10 +391,14 @@ def author_complete_book(*, project_root: Path, workdir: Path,
     # The original rich world is the source authority for NPC citations
     # and choices. The Skill supplies assertion_id, never a quote digest.
     if dossiers is not None and dossiers["characters"]:
-        bare_raw, _ = compile_rich_from_project(root, overlay)
-        with zipfile.ZipFile(io.BytesIO(bare_raw)) as archive:
-            bare_bp = parse_json(archive.read("scenario/blueprint.json"))
-            bare_prov = parse_json(archive.read("source/provenance.json"))
+        # Source witness graph must be composed BEFORE native enrichment:
+        # the final overlay may already grant NPC-scoped facts, and compiling
+        # it without the newly reviewed actor list would be correctly
+        # rejected by the native RPG catalog validator.
+        from .validate import candidate_blueprint
+        from .legacy_package import _provenance
+        bare_bp = candidate_blueprint(story, idx)
+        bare_prov = _provenance(story, idx, analyses, bare_bp)
         npc_review_path = private / _STAGE_FILES["npc_review"]
         if npc_review_path.exists():
             native_npc_review = read_json(npc_review_path)
