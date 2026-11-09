@@ -504,4 +504,154 @@ void main() {
     }
   });
 
+  test('two source-reviewed NPCs react autonomously: witnessed warning '
+      'relays a verified fact and blocks the future canon', () async {
+    const boris = 'npc_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb';
+    final sourceBytes = Uint8List.fromList(utf8.encode(
+      List.generate(720, (i) => 'Анна и Борис стояли у старой башни. '
+        'Событие книги номер ${i.toString()} было описано свидетелем.')
+          .join('\n')));
+    final index = BookSourceIndexer.index(
+        BookImporter.parse('two_npc.txt', sourceBytes));
+    const canon = LocalRpgLiteralCanonApi();
+    final prep = canon.prepareIndex(index);
+    final original = canon.compileIndex(index,
+        approvedDigest: prep.approvalDigest, userConfirmed: true);
+    final originalWorld =
+        const RichPrivateBookworldImporter().inspect(original);
+    final scenes = originalWorld.blueprint.scenes.keys.toList();
+    expect(scenes.length, greaterThan(2));
+    final firstQuote =
+        originalWorld.sceneOrigins[scenes.first]!.sourceQuoteSha256;
+    final secondQuote =
+        originalWorld.sceneOrigins[scenes[1]]!.sourceQuoteSha256;
+    final review = {
+      'format': ReviewedCanonCausalBookworldWriter.graphReviewFormat,
+      'review_scope': 'human_reviewed_private_story_causality',
+      'source_fingerprint': originalWorld.sourceFingerprint,
+      'base_archive_sha256': originalWorld.archiveSha256,
+      'user_confirmed': true,
+      'semantic_canon_automatically_verified': false,
+      'witnesses': [
+        {
+          'scene_id': scenes.first,
+          'actor_id': _anna,
+          'display_name': 'Анна',
+          'source_quote_sha256': firstQuote,
+          'mode': 'present',
+        },
+        {
+          'scene_id': scenes.first,
+          'actor_id': boris,
+          'display_name': 'Борис',
+          'source_quote_sha256': firstQuote,
+          'mode': 'present',
+        },
+      ],
+      'invariants': [{
+        'scene_id': scenes[1],
+        'actor_id': _anna,
+        'forbidden_memory_id': 'gm_never_used',
+        'minimum_trust': null,
+        'maximum_trust': null,
+        'source_quote_sha256': secondQuote,
+      }],
+      'event_graph': [
+        for (var i = 0; i < scenes.length; i++)
+          {
+            'scene_id': scenes[i],
+            'source_quote_sha256':
+                originalWorld.sceneOrigins[scenes[i]]!.sourceQuoteSha256,
+            'depends_on': i == 0 ? <String>[] : [scenes[i - 1]],
+            'preconditions': i == 1 ? [{
+              'op': 'fact_unknown', 'actor_id': boris,
+              'id': 'gm_signal', 'value': null,
+            }] : <Object>[],
+            'effects': <Object>[],
+          }
+      ],
+      'npc_reactions': [{
+        'scene_id': scenes.first,
+        'source_quote_sha256': firstQuote,
+        'actor_id': _anna,
+        'trigger_memory_id': 'gm_anna_receives_signal',
+        'minimum_trust': 2,
+        'response_memory_id': 'gm_anna_warns_boris',
+        'next_goal_id': 'gm_help_boris',
+        'relay_fact_id': 'gm_signal',
+        'relay_to_actor_id': boris,
+      }],
+    };
+    final reviewJson = canonicalJson(review);
+    final archive = canon.compileReviewedCausality(
+      verifiedBaseArchive: original,
+      sourceIndex: Map<String, dynamic>.from(index.toJson()),
+      reviewJson: reviewJson,
+      approvedDigest:
+          ReviewedCanonCausalBookworldWriter.digest(reviewJson),
+      userConfirmed: true,
+    );
+    final checked = const RichPrivateBookworldImporter().inspect(archive);
+    expect(checked.npcSocialRulebook!.automaticReactions.length, 1);
+    final dir = await Directory.systemTemp.createTemp('two_npc_reaction_');
+    BookworldCampaignStore? store;
+    try {
+      store = BookworldCampaignStore.openPrivateDirectory(dir.path);
+      final game = LocalRpgGameApi(store);
+      final installed = game.install(archive);
+      final id = game.start(installed.archiveHash);
+      FreeformActionDraft draft(Map<String, Object?> input) =>
+          FreeformActionDraft.fromJson(input);
+      final learning = draft({
+        'format': FreeformActionDraft.format,
+        'scope': FreeformActionDraft.fictionScope,
+        'player_text': 'Я узнал сигнал',
+        'narration': 'Герой запомнил условный сигнал.',
+        'effects': [
+          {'op': 'learn_fact', 'actor': 'player', 'id': 'gm_signal'}
+        ],
+      });
+      final first = game.previewFreeform(id, learning, expectedRevision: 0);
+      game.commitFreeform(id, actionId: 'learn_signal', draft: learning,
+          expectedRevision: 0, approvalDigest: first.approvalDigest,
+          userConfirmed: true);
+      final warning = draft({
+        'format': FreeformActionDraft.format,
+        'scope': FreeformActionDraft.fictionScope,
+        'player_text': 'Я сообщил Анне сигнал',
+        'narration': 'Анна решила предупредить Бориса.',
+        'effects': <Object>[],
+        'npc_interaction': {
+          'actor_id': _anna,
+          'memory_id': 'gm_anna_receives_signal',
+          'kind': 'warned',
+          'trust_delta': 3,
+          'goal_id': 'gm_anna_considers',
+          'learn_fact_id': 'gm_signal',
+        },
+      });
+      final pre = game.previewFreeform(id, warning, expectedRevision: 1);
+      final done = game.commitFreeform(id, actionId: 'npc_relays',
+          draft: warning, expectedRevision: 1,
+          approvalDigest: pre.approvalDigest, userConfirmed: true);
+      expect(done.view.activePlotMode, 'ALTER_FATE');
+      final anna = done.view.npcRelations
+          .singleWhere((npc) => npc.actorId == _anna);
+      final friend = done.view.npcRelations
+          .singleWhere((npc) => npc.actorId == boris);
+      expect(anna.currentGoal, 'gm_help_boris');
+      expect(anna.memoryCount, 2);
+      expect(friend.memoryCount, 1);
+      final portable = game.exportSave(id);
+      final clone = game.importSave(portable,
+          expectedWorldHash: installed.archiveHash);
+      expect(game.load(clone).stateHash, done.view.stateHash);
+      expect(game.load(clone).npcRelations
+          .singleWhere((npc) => npc.actorId == boris).memoryCount, 1);
+    } finally {
+      store?.close();
+      await dir.delete(recursive: true);
+    }
+  });
+
 }

@@ -558,6 +558,10 @@ class StoryWorld {
         if (reaction.sceneId != _state.sceneId ||
             !reaction.activated(contact, trust)) continue;
         if (reaction.relayToActorId != null) {
+          if (previousSocial.lifeState(reaction.relayToActorId!) !=
+              NpcLifeState.present) {
+            return _denied('npc_reaction_target_unavailable');
+          }
           knowledge.putIfAbsent(reaction.relayToActorId!, () => <String>{})
               .add(reaction.relayFactId!);
         }

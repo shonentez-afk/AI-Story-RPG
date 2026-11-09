@@ -847,6 +847,9 @@ class NpcSocialLedger {
             goalId: reaction.nextGoalId,
           ));
           if (reaction.relayToActorId != null) {
+            if (life[reaction.relayToActorId] != NpcLifeState.present) {
+              throw const FormatException('Absent NPC cannot receive rumor');
+            }
             final recipient = memory.putIfAbsent(
                 reaction.relayToActorId!, () => <NpcEventMemory>[]);
             if (recipient.any((m) => m.memoryId == reaction.responseMemoryId) ||
