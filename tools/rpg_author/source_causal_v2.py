@@ -458,7 +458,7 @@ def author_causal_v5(*, project_root: Path, base_world: Path,
     workdir, output = outside_repository(workdir), outside_repository(output)
     require(project_root != workdir and project_root not in workdir.parents and
             workdir not in project_root.parents and output.suffix == ".json" and
-            not output.exists(),
+            not output.is_symlink(),
             "causal_private_paths", "Keep the source and original private review separate")
     _, state, index, _, _ = project.load_project(project_root)
     data = _read_native_base(base_world, index)
