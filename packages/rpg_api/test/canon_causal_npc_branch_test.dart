@@ -214,6 +214,50 @@ void main() {
     }
   });
 
+  test('benign witnessed NPC memory keeps the honest CANON timeline: '
+      'only a reviewed causal contradiction may branch', () async {
+    final files = _files();
+    final dir = await Directory.systemTemp.createTemp('canon_safe_npc_');
+    BookworldCampaignStore? store;
+    try {
+      store = BookworldCampaignStore.openPrivateDirectory(dir.path);
+      final api = LocalRpgGameApi(store);
+      final entry = api.install(files.reviewed);
+      final id = api.start(entry.archiveHash);
+      final harmless = FreeformActionDraft.fromJson(_proposal(
+        player: 'Поговорить с Анной о дороге',
+        memory: 'gm_anna_weather_chat',
+        narrative: 'Анна услышала вопрос о погоде, книга не изменилась.',
+        trustDelta: 0,
+        goal: 'gm_anna_looks_at_clouds',
+      ));
+      final preview = api.previewFreeform(id, harmless,
+          expectedRevision: 0);
+      final changed = api.commitFreeform(id,
+          actionId: 'chat_anna_1', draft: harmless,
+          expectedRevision: 0,
+          approvalDigest: preview.approvalDigest,
+          userConfirmed: true);
+      expect(changed.applied, true);
+      expect(changed.view.activePlotMode, 'CANON');
+      expect(changed.view.sceneId, 'canon_00000');
+      expect(changed.view.npcRelations.single.memoryCount, 1);
+      expect(changed.view.npcRelations.single.currentGoal,
+          'gm_anna_looks_at_clouds');
+      final advanced = api.choose(id,
+          actionId: 'book_advance_2', choiceId: 'canon_next_00000',
+          expectedRevision: 1);
+      expect(advanced.applied, true);
+      expect(advanced.view.activePlotMode, 'CANON');
+      expect(advanced.view.sceneId, 'canon_00001');
+      expect(advanced.view.sceneSource?.isSourcePassage, true);
+      expect(advanced.view.npcRelations.single.memoryCount, 1);
+    } finally {
+      store?.close();
+      await dir.delete(recursive: true);
+    }
+  });
+
   test('fake NPC identity, missing witness, stale approval, early ending '
       'and uncited canonical obligation fail closed', () async {
     final files = _files();
@@ -249,7 +293,7 @@ void main() {
         ..._proposal(),
         'npc_interaction': {
           ...(_proposal()['npc_interaction'] as Map),
-          'actor_id': 'npc_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+          'actor_id': 'npc_' + 'b' * 32,
         },
       });
       expect(() => game.previewFreeform(id, unreviewed,
