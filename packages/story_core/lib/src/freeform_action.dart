@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'blueprint.dart';
 import 'codec.dart';
 import 'world_state.dart';
+import 'alternate_plot.dart';
 
 /// Source-reviewed NPC contact, with a NEW durable memory/goal. Identity,
 /// witness presence, life and cause checkpoints are checked by story_core.
@@ -90,7 +91,7 @@ final class FreeformNpcInteraction {
 /// knowledge, NPC custody, source scenes, or the book's chronology.
 final class FreeformActionDraft {
   FreeformActionDraft._(this.playerText, this.narration,
-      this.effects, this.npcInteraction, this.plotIntent, this._json);
+      this.effects, this.npcInteraction, this.plotIntent, this.plotBeat, this._json);
 
   static const format = 'ai_story_freeform_action_v1';
   static const fictionScope = 'private_noncanonical_interlude';
@@ -107,6 +108,7 @@ final class FreeformActionDraft {
   final FreeformNpcInteraction? npcInteraction;
   /// continue (default), explicitly diverge or finish an existing branch.
   final String plotIntent;
+  final AlternateStoryBeat? plotBeat;
   final Map<String, dynamic> _json;
   Map<String, dynamic> toJson() =>
       Map<String, dynamic>.from(
@@ -118,7 +120,7 @@ final class FreeformActionDraft {
     const required = {
       'format', 'scope', 'player_text', 'narration', 'effects'
     };
-    const optional = {'npc_interaction', 'plot_intent'};
+    const optional = {'npc_interaction', 'plot_intent', 'plot_beat'};
     if (raw is! Map<String, dynamic> ||
         !raw.keys.toSet().containsAll(required) ||
         raw.keys.toSet().difference({...required, ...optional}).isNotEmpty ||
@@ -167,7 +169,10 @@ final class FreeformActionDraft {
     }
     return FreeformActionDraft._(
       player, narration, List.unmodifiable(effects),
-      npcInteraction, intent, Map.unmodifiable(Map<String, dynamic>.from(
+      npcInteraction, intent,
+      raw.containsKey('plot_beat')
+          ? AlternateStoryBeat.fromJson(raw['plot_beat']) : null,
+      Map.unmodifiable(Map<String, dynamic>.from(
           jsonDecode(canonicalJson(raw)) as Map)),
     );
   }

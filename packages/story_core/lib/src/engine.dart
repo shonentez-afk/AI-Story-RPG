@@ -7,6 +7,7 @@ import 'codec.dart';
 import 'world_state.dart';
 import 'freeform_action.dart';
 import 'npc_social_ledger.dart';
+import 'alternate_plot.dart';
 
 enum DecisionStatus { applied, denied, duplicate }
 
@@ -186,6 +187,8 @@ class StoryWorld {
 
   WorldState get state => _state;
   List<WorldEvent> get events => List.unmodifiable(_events);
+  AlternatePlotSnapshot get alternatePlot =>
+      AlternatePlotLedger.replay(_events);
   bool get isTerminal => _state.alternateScene?.terminal ??
       blueprint.scenes[_state.sceneId]!.terminal;
 
@@ -659,6 +662,45 @@ class StoryWorld {
         diverged = true;
       }
     }
+    // An alternate plot is a causal chain, not an unconnected sequence of
+    // generated paragraphs. Validate plans and participants against replayed
+    // history and reviewed NPC contact before publishing any world event.
+    final priorPlot = alternatePlot;
+    final currentSocial = socialRulebook == null ? null :
+        NpcSocialLedger.inspect(this, socialRulebook!);
+    final knownNpc = <String>{
+      if (socialRulebook != null)
+        for (final witness in socialRulebook!.witnesses)
+          if (witness.sceneId == _state.sceneId &&
+              witness.mode == NpcWitnessMode.present)
+            witness.actorId,
+      if (currentSocial != null)
+        for (final npc in blueprint.actors.difference({'player'}))
+          if (currentSocial.memoriesFor(npc).isNotEmpty) npc,
+    };
+    final beat = draft.plotBeat;
+    final currentLeadGoal = beat == null || currentSocial == null ||
+        beat.leadActorId == 'player' ? null :
+        currentSocial.currentGoal(beat.leadActorId);
+    final autoGoal = beat == null || socialRulebook == null ? null :
+        (socialRulebook!.automaticReactions
+            .where((reaction) => reaction.sceneId == _state.sceneId &&
+                reaction.actorId == beat.leadActorId &&
+                contact != null &&
+                reaction.activated(contact,
+                    (currentSocial?.directedScore(contact.actorId,
+                          'player') ?? 0) + contact.trustDelta))
+            .map((reaction) => reaction.nextGoalId)
+            .firstOrNull);
+    final beatReason = AlternatePlotLedger.checkProposal(
+      beat: beat, previous: priorPlot, blueprint: blueprint,
+      sceneId: _state.sceneId, diverged: diverged,
+      plotIntent: draft.plotIntent, encounteredActorIds: knownNpc,
+      currentLeadGoal: currentLeadGoal,
+      offeredLeadGoal: contact?.actorId == beat?.leadActorId
+          ? (autoGoal ?? contact?.goalId) : null,
+    );
+    if (beatReason != null) return _denied(beatReason);
     final alt = diverged
         ? AlternateNarrativeScene(
             id: 'gm_scene_' + (_state.revision + 1).toString(),
@@ -696,6 +738,7 @@ class StoryWorld {
       preview._byAction[actionId] = event;
       try {
         NpcSocialLedger.inspect(preview, socialRulebook!);
+        AlternatePlotLedger.replay(preview.events);
       } on FormatException {
         return _denied('npc_social_conflict');
       }

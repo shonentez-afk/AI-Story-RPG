@@ -166,6 +166,7 @@ final class RpgClientProtocol {
       }
     ],
     'npc_item_owners': view.npcItemOwners,
+    'alternate_plot_continuity': view.alternatePlotContinuity,
     'dialogue': [
       for (final turn in view.sceneDialogueTurns ?? const []) {
         'speaker': turn.speaker,

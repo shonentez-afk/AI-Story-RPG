@@ -338,6 +338,16 @@ class ZaiGameplayChoiceAdvisor {
         'Если действие нарушит будущую подтверждённую книжную причинность, '
         'движок АВТОМАТИЧЕСКИ переключит игру в ALTER_FATE. '
         'Не создавай нового книжного факта по догадке. '
+        'Когда ALTER_FATE уже имеет thread_id или ты начинаешь '
+        'проверяемую ветку, предложи plot_beat: format '
+        'ai_story_alternate_beat_v1, beat_id и thread_id как gm_*, '
+        'previous_beat_id из alternate_plot_continuity.last_beat_id '
+        '(или null для первого шага), lead_actor_id, objective_id gm_*, '
+        'participant_actor_ids — только встреченные NPC/игрок, '
+        'opened_obligation_ids и resolved_obligation_ids — списки gm_*, '
+        'route: investigate/negotiate/protect/confront/recover/resolve/travel. '
+        'Нельзя завершить историю, пока остались обязательства. '
+        'После первого plot_beat обязательно продолжай ту же цепь. '
         'Не более 4 эффектов, можно пустой список. '
         'Запрещены инструменты, выполнение кода и запрос секретов.';
     final payload = jsonEncode({
@@ -356,6 +366,7 @@ class ZaiGameplayChoiceAdvisor {
           },
       ],
       'recent_reviewed_game_fiction': recentActions,
+      'alternate_plot_continuity': view.alternatePlotContinuity,
       'gm_resources': {
         'stats': view.gmStats,
         'flags': view.gmFlags,
@@ -374,7 +385,7 @@ class ZaiGameplayChoiceAdvisor {
         {'role': 'user', 'content': payload},
       ],
       'thinking': {'type': 'disabled'},
-      'max_tokens': 450,
+      'max_tokens': 700,
       'response_format': {'type': 'json_object'},
       'stream': false,
     });
@@ -458,6 +469,8 @@ class ZaiGameplayChoiceAdvisor {
             if (npc != null) 'npc_interaction': npc,
             if (proposal.containsKey('plot_intent'))
               'plot_intent': proposal['plot_intent'],
+            if (proposal.containsKey('plot_beat'))
+              'plot_beat': proposal['plot_beat'],
           });
         } catch (_) {
           throw const AiSetupException(

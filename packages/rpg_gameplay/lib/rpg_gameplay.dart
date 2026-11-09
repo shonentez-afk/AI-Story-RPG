@@ -187,6 +187,7 @@ class WorldGameView {
     this.npcDisplayNames = const {},
     this.npcLifeStates = const {},
     this.npcRelations = const [],
+    this.alternatePlotContinuity = const {},
   });
 
   final String campaignId;
@@ -261,6 +262,8 @@ class WorldGameView {
   /// Only already-met actors with signed NPC witness/event evidence.
   /// Derived from the committed SQLite event chain, never cloud prose.
   final List<NpcRelationView> npcRelations;
+  /// Pure replayed alternative obligations, safe for any client.
+  final Map<String, Object?> alternatePlotContinuity;
 }
 
 class WorldChoiceResult {
@@ -744,6 +747,9 @@ class RpgGameplayEngine {
             actor: npcDisplayNames[actor]!,
       }),
       npcRelations: List.unmodifiable(npcRelations),
+      alternatePlotContinuity: state.plotDiverged
+          ? AlternatePlotLedger.replay(coordinator.events).toJson()
+          : const {},
       npcLifeStates: Map.unmodifiable({
         if (social != null && socialRules != null)
           for (final npc in npcRelations)
