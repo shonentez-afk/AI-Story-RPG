@@ -217,6 +217,25 @@ def validate() -> list[str]:
         if direct_call in wizard_code:
             issues.append(f"{npc_wizard}: a compiler rule returned to Flutter: {direct_call}")
 
+    legacy_editor = ROOT / "apps" / "story_reader" / "lib" / "multi_act_trial_editor.dart"
+    legacy_code = legacy_editor.read_text(encoding="utf-8") if legacy_editor.is_file() else ""
+    for delegated in (
+        "_trialApi.compileTrial(", "_trialApi.previewOneGameplay(",
+        "_trialApi.previewWholeGameplay(", "_trialApi.acceptGameplay(",
+        "_trialApi.verifyPrivateWorld(",
+    ):
+        if delegated not in legacy_code:
+            issues.append(f"{legacy_editor}: multi-act editor must call public RPG API {delegated}")
+    for direct in (
+        "MultiActTrialCompiler.compile(",
+        "ReviewedGameplayCompiler.preview(",
+        "ReviewedGameplayCompiler.previewAcrossBatches(",
+        "ReviewedGameplayCompiler.compileAfterUserConfirmation(",
+        "RichPrivateBookworldImporter().inspect(",
+    ):
+        if direct in legacy_code:
+            issues.append(f"{legacy_editor}: engine rule returned to Flutter: {direct}")
+
     gateway = ROOT / "apps" / "story_reader" / "lib" / "world_library_gateway.dart"
     workers = ROOT / "apps" / "story_reader" / "lib" / "book_isolate_workers.dart"
     for path in (gateway, workers):

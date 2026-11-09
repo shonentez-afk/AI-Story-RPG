@@ -141,6 +141,27 @@ void main() {
         contains('Никаких effects'));
   });
 
+  test('legacy multi-act compiler is exposed via independent client API', () {
+    const RpgMultiActTrialApi api = LocalRpgMultiActTrialApi();
+    final archive = Uint8List.fromList(File(
+        '../../artifacts/bookworld/book_private_rich_items_python.bworld')
+        .readAsBytesSync());
+    final expected = const LocalRpgAuthoringApi().inspectPrivateWorld(archive);
+    final inspected = api.verifyPrivateWorld(archive,
+        expectedSourceFingerprint: expected.sourceFingerprint);
+    expect(inspected.archiveSha256, expected.archiveSha256);
+    expect(inspected.sourceFingerprint, expected.sourceFingerprint);
+    expect(inspected.requiresNetwork, isFalse);
+    expect(inspected.canDistributePublicly, isFalse);
+    expect(() => api.verifyPrivateWorld(archive,
+        expectedSourceFingerprint: 'forged-foreign-book'),
+        throwsFormatException);
+    expect(api.compileTrial, isNotNull);
+    expect(api.previewOneGameplay, isNotNull);
+    expect(api.previewWholeGameplay, isNotNull);
+    expect(api.acceptGameplay, isNotNull);
+  });
+
   test('public workflow API exposes the same pure Dart stage coordinator', () {
     const RpgCampaignWorkflowApi flow = LocalRpgCampaignWorkflowApi();
     expect(flow, isA<ReviewedCampaignWorkflow>());
