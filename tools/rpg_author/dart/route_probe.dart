@@ -1,8 +1,10 @@
-// Source-bound, frontend-independent PRIVATE gameplay acceptance via rpg_api.
+// Reviewed PRIVATE route replay via the ONLY native LocalRpgGameApi.
 //
-// Pure external CLI adapter: never implement RPG rules or expose unknown
-// NPC secrets. Uses the SAME public LocalRpgGameApi as Flutter, SQLite replay
-// and the native Bookworld importer. No private book files are written here.
+// The TWO reviewer-locked routes are replayed with a shared source prefix:
+// execute shared choices ONCE, fork the exact verified SQLite campaign head
+// through RpgGameApi.start(parentCampaignId:...), then independently replay
+// each distinct suffix. No parallel game rules, no forged state hashes and
+// no raw source text or portable saves on stdout.
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
@@ -27,11 +29,12 @@ Future<void> main() async {
     store = BookworldCampaignStore.openPrivateDirectory(temp.path);
     final RpgGameApi api = LocalRpgGameApi(store);
     final installed = api.install(world);
-    final validated = <Map<String, dynamic>>[];
     final routeIds = <String>{};
+    final routes = <({String id, List<String> choices})>[];
     for (final raw in input['routes'] as List) {
       if (raw is! Map<String, dynamic> ||
-          raw.keys.toSet().difference({'id', 'choice_ids'}).isNotEmpty) {
+          raw.keys.toSet().difference({'id', 'choice_ids'}).isNotEmpty ||
+          raw.keys.length != 2) {
         throw const FormatException('Unknown route evidence fields');
       }
       final id = raw['id'];
@@ -43,38 +46,87 @@ Future<void> main() async {
           submitted.any((s) => s is! String || s.isEmpty)) {
         throw const FormatException('Invalid native route identity or length');
       }
-      final steps = submitted.cast<String>();
-      final campaignId = api.start(installed.archiveHash);
+      routes.add((id: id, choices: submitted.cast<String>()));
+    }
+
+    final first = routes[0].choices;
+    final second = routes[1].choices;
+    var commonLength = 0;
+    while (commonLength < first.length && commonLength < second.length &&
+           first[commonLength] == second[commonLength]) {
+      commonLength++;
+    }
+
+    // Genuine SQLite state replay is authoritative for the shared prefix.
+    final commonCampaign = api.start(installed.archiveHash);
+    var commonState = api.load(commonCampaign);
+    final commonScenes = <String>[commonState.sceneId];
+    final commonChoices = <String>[];
+    for (var i = 0; i < commonLength; i++) {
+      final choiceId = first[i];
+      if (commonState.isTerminal) {
+        throw const FormatException('Reviewed common path ends prematurely');
+      }
+      final options = commonState.choices.where((choice) =>
+          choice.id == choiceId && choice.enabled).toList();
+      if (options.length != 1) {
+        throw const FormatException('Shared prefix contains unavailable decision');
+      }
+      final revision = commonState.revision;
+      final outcome = api.choose(commonCampaign,
+          actionId: 'review_shared_' + revision.toString(),
+          choiceId: choiceId, expectedRevision: revision);
+      if (!outcome.applied || outcome.view.revision != revision + 1) {
+        throw const FormatException('Native engine refused common path');
+      }
+      // choose() ALREADY returns the new native view; no second load().
+      commonState = outcome.view;
+      commonScenes.add(commonState.sceneId);
+      commonChoices.add(choiceId);
+    }
+
+    final validated = <Map<String, dynamic>>[];
+    for (final route in routes) {
+      // Two independent forks from precisely the same inspected source
+      // campaign, so no result is contaminated by the other ending.
+      final campaignId = api.start(installed.archiveHash,
+          parentCampaignId: commonCampaign);
       var state = api.load(campaignId);
-      final scenes = <String>[state.sceneId];
-      final sourceEvents = <String>[];
-      for (final choiceId in steps) {
+      if (state.revision != commonLength ||
+          state.sceneId != commonState.sceneId) {
+        throw const FormatException('Native campaign fork changed shared state');
+      }
+      final scenes = <String>[...commonScenes];
+      final sourceEvents = <String>[...commonChoices];
+      for (final choiceId in route.choices.skip(commonLength)) {
         if (state.isTerminal) {
           throw const FormatException('Route continues after terminal ending');
         }
         final options = state.choices.where((choice) =>
-            choice.id == choiceId).toList();
-        if (options.length != 1 || !options.single.enabled) {
+            choice.id == choiceId && choice.enabled).toList();
+        if (options.length != 1) {
           throw const FormatException('Route includes an unavailable decision');
         }
         final previousRevision = state.revision;
         final outcome = api.choose(campaignId,
-            actionId: 'review_' + id + '_' + previousRevision.toString(),
+            actionId: 'review_' + route.id + '_' + previousRevision.toString(),
             choiceId: choiceId, expectedRevision: previousRevision);
-        if (!outcome.applied) {
+        if (!outcome.applied ||
+            outcome.view.revision != previousRevision + 1) {
           throw const FormatException('Native RPG API refused reviewed choice');
         }
-        state = api.load(campaignId);
-        if (state.revision != previousRevision + 1) {
-          throw const FormatException('Invalid replayed campaign revision');
-        }
+        state = outcome.view;
         scenes.add(state.sceneId);
         sourceEvents.add(choiceId);
       }
-      if (!state.isTerminal || state.revision != steps.length ||
-          state.journal.length != steps.length) {
+      if (!state.isTerminal || state.revision != route.choices.length ||
+          state.journal.length != route.choices.length ||
+          sourceEvents.length != route.choices.length) {
         throw const FormatException('Route did not end in a playable conclusion');
       }
+
+      // Portable SQLite save/import is still verified for EACH ending,
+      // including the independently forked common event prefix.
       final before = store.loadCampaign(campaignId).metadata.stateHash;
       final saved = api.exportSave(campaignId);
       final importedId = api.importSave(saved,
@@ -87,7 +139,7 @@ Future<void> main() async {
         throw const FormatException('Portable save changed replayed native state');
       }
       validated.add({
-        'id': id,
+        'id': route.id,
         'choice_ids': sourceEvents,
         'scene_ids': scenes,
         'ending_scene_id': state.sceneId,
