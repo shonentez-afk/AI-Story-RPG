@@ -412,7 +412,8 @@ class RichPrivateBookworldImporter {
     // they do NOT silently introduce legacy NPC knowledge grants.
     if (blueprint.isReviewedCanon &&
         source.containsKey('canon_causality') &&
-        manifest['canon_causality_format'] == CanonCausalContract.format) {
+        {CanonCausalContract.format, CanonCausalContract.graphFormat}
+            .contains(manifest['canon_causality_format'])) {
       if (source.containsKey('npc_knowledge') ||
           manifest.containsKey('npc_knowledge_format')) {
         throw const FormatException('Mixed NPC source authority');
