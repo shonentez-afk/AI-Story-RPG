@@ -242,7 +242,8 @@ def _independent_review(answer: dict, template: dict,
 
 def author_complete_book(*, project_root: Path, workdir: Path,
                          output: Path, provider, book: Path | None = None,
-                         delegate_review: bool = False) -> dict:
+                         delegate_review: bool = False,
+                         npc_review_path: Path | None = None) -> dict:
     """One resumable command; never overwrite signed source or accepted stages."""
     check_contract()
     root = outside_repository(project_root)
@@ -256,6 +257,10 @@ def author_complete_book(*, project_root: Path, workdir: Path,
             "Book checkpoints, AI stage outputs and game must be separate private paths")
     if book is not None:
         book = outside_repository(book)
+    if npc_review_path is not None:
+        npc_review_path = outside_repository(npc_review_path)
+    native_npc_review = (read_json(npc_review_path)
+                         if npc_review_path is not None else None)
     if not root.exists():
         require(book is not None, "missing_book",
                 "A new private project needs an FB2/TXT book")
@@ -311,7 +316,8 @@ def author_complete_book(*, project_root: Path, workdir: Path,
     enrich_path = private / _STAGE_FILES["enrichment"]
     if enrich_path.exists():
         overlay = read_json(enrich_path)
-        compile_rich_from_project(root, overlay)
+        compile_rich_from_project(root, overlay,
+                                  npc_review=native_npc_review)
     else:
         def checked_enrichment(response):
             require(response.get("source_fingerprint", idx["source_fingerprint"])
@@ -325,7 +331,8 @@ def author_complete_book(*, project_root: Path, workdir: Path,
             require(response.get("story_sha256", value["story_sha256"])
                     == value["story_sha256"], "wrong_enrichment",
                     "Enrichment references another story revision")
-            compile_rich_from_project(root, value)
+            compile_rich_from_project(root, value,
+                                      npc_review=native_npc_review)
             return value
         overlay = _ask_verified(
             provider, "enrichment",
@@ -334,7 +341,8 @@ def author_complete_book(*, project_root: Path, workdir: Path,
             checked_enrichment)
         _fresh_or_existing(private, _STAGE_FILES["enrichment"], overlay)
 
-    base_raw, _ = compile_rich_from_project(root, overlay)
+    base_raw, _ = compile_rich_from_project(
+        root, overlay, npc_review=native_npc_review)
     with zipfile.ZipFile(io.BytesIO(base_raw)) as archive:
         base_bp = parse_json(archive.read("scenario/blueprint.json"))
 
@@ -347,7 +355,8 @@ def author_complete_book(*, project_root: Path, workdir: Path,
                 response, idx, story, overlay, base_bp,
                 allow_machine_review=delegate_review)
             if delegate_review:
-                audited_extension(root, overlay, value)
+                audited_extension(
+                    root, overlay, value, npc_review=native_npc_review)
             return value
         extension = _ask_verified(
             provider, "extension",
@@ -367,12 +376,13 @@ def author_complete_book(*, project_root: Path, workdir: Path,
                 "game_created": False, "user_ready": False,
                 "model_calls_this_run": provider.calls}
 
-    audited = audited_extension(root, overlay, extension)
+    audited = audited_extension(
+        root, overlay, extension, npc_review=native_npc_review)
     require(audited.get("act_count", 0) >= 2 and
             audited.get("chapters_without_source_scenes") == [],
             "incomplete_book_acts", "Bookwide story acts omit source chapters")
-    raw, _ = compile_extended_from_project(root, overlay,
-                                           extension=extension)
+    raw, _ = compile_extended_from_project(
+        root, overlay, npc_review=native_npc_review, extension=extension)
     _, bp_bytes, prov = _inspect_v4(raw)
     bp = parse_json(bp_bytes)
     candidates = _discover_real_endings(raw)
@@ -419,10 +429,39 @@ def author_complete_book(*, project_root: Path, workdir: Path,
                 "model_calls_this_run": provider.calls}
     result = finalize_extended_campaign(
         root, enrich_path, ext_path, review_path, output,
-        no_interactive_questions=True)
+        npc_review=npc_review_path, no_interactive_questions=True)
     require(result["native_routes"]["route_count"] == 2,
             "full_game_not_verified", "Two native routes are mandatory")
+    # The pinned native BookWorld still contains historical external
+    # authorship metadata. It is NOT evidence that ChatGPT generated a
+    # session actually served by Z.ai. Add an explicit truthful private
+    # receipt without changing the accepted native schema.
+    provider_name = ("zai" if isinstance(provider, ZaiProvider) else
+                     "private_json_unknown_model")
+    declared_model = (provider.model if isinstance(provider, ZaiProvider)
+                      else None)
+    receipt_path = private / "authoring_provenance.json"
+    receipt = {
+        "format": "rpg_author_ai_authorship_receipt_v1",
+        "source_fingerprint": idx["source_fingerprint"],
+        "bookworld_sha256": result["archive_sha256"],
+        "authoring_provider": provider_name,
+        "authoring_model_id": declared_model,
+        "model_id_status": "declared_not_cryptographically_attested",
+        "private_offline_answers_may_have_unknown_origin": True,
+        "workflow": REVISION,
+        "review_mode": ("explicitly_delegated_independent_ai_pass" if
+                        delegate_review else "owner_confirmed_private_review"),
+        "model_calls_in_final_invocation": provider.calls,
+        "book_content_in_receipt": False,
+        "api_key_in_receipt": False,
+        "native_package_model_label_is_not_author_proof": True,
+        "semantic_review_certified": False,
+        "device_playtest_completed": False,
+    }
+    _fresh_or_existing(private, receipt_path.name, receipt)
     result["authoring_workflow"] = REVISION
+    result["authoring_provenance_receipt"] = str(receipt_path)
     result["model_calls_this_run"] = provider.calls
     result["autonomous_review_requested"] = delegate_review
     result["user_ready"] = False

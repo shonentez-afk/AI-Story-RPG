@@ -114,6 +114,8 @@ def parser():
     autopilot.add_argument("--workdir", type=Path, required=True,
                            help="Private authoring JSON; never inside public checkout")
     autopilot.add_argument("--output", type=Path, required=True)
+    autopilot.add_argument("--npc-review", type=Path,
+                           help="Optional already source-reviewed NPC Social v5 dossier")
     autopilot.add_argument("--provider", choices=("zai", "private-json"),
                            default="private-json")
     autopilot.add_argument("--response-dir", type=Path,
@@ -245,7 +247,8 @@ def main(argv=None) -> int:
             result = author_complete_book(
                 project_root=args.project, workdir=args.workdir,
                 output=args.output, provider=provider, book=args.book,
-                delegate_review=args.delegate_review)
+                delegate_review=args.delegate_review,
+                npc_review_path=args.npc_review)
         elif name == "audit-extended":
             from .native_v4_bridge import audited_extension
             from .common import outside_repository

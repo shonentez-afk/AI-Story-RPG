@@ -593,6 +593,26 @@ def main():
             "safe", "help"
         }, discovered
         assert all(len(r["choice_ids"]) >= 2 for r in discovered)
+        # ONE complete in-process synthetic-book authoring run (no network):
+        # Fake AI proposes every response, while all evidence, compilation,
+        # native route discovery, editorial gates and SQLite are REAL.
+        from tests.rpg_author.test_auto_author import FakeSourceLockedAuthor
+        from tools.rpg_author.auto_author import author_complete_book
+        fake_llm = FakeSourceLockedAuthor()
+        autopilot_result = author_complete_book(
+            book=act_book, project_root=root / "autopilot_checkpoint",
+            workdir=root / "autopilot_private_answers",
+            output=root / "autopilot_real_native_v4.bworld",
+            provider=fake_llm, delegate_review=True)
+        assert autopilot_result["status"] == (
+            "native_multi_act_campaign_mechanically_verified"), autopilot_result
+        assert autopilot_result["native_routes"]["endings_verified"] == 2
+        assert autopilot_result["source_review"]["reviewed_book_chapters"] == 3
+        assert fake_llm.stages.count("analysis") == 3
+        assert fake_llm.stages[-1] == "literary_review"
+        assert (root / "autopilot_real_native_v4.bworld").exists()
+        assert not autopilot_result["user_ready"]
+        assert not autopilot_result["literary_truth_attested"]
         # ONE holistic acceptance, no micro-gate success claims: all reviewed
         # scenes, ALL original chapters, two truly different endings, real
         # LocalRpgGameApi/SQLite replay, private attribution and report.
@@ -686,7 +706,8 @@ def main():
                        "native_v4_npc_signed_dialogue_redaction_and_portraits": True,
                        "native_v4_npc_item_custody_public_api_save_verified": True,
                        "complete_private_book_two_native_ending_routes_verified": True,
-                       "automatic_native_two_distinct_ending_discovery": True}))
+                       "automatic_native_two_distinct_ending_discovery": True,
+                       "automatic_whole_book_fake_ai_real_native_v4_sqlite": True}))
 
 
 if __name__ == "__main__":
