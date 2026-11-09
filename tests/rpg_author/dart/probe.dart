@@ -200,6 +200,13 @@ Future<void> main() async {
           }
         ],
         'npc_life_states': view.npcLifeStates,
+        'npc_item_owners': view.npcItemOwners,
+        'scene_dialogue_turns': view.sceneDialogueTurns?.map((turn) => {
+          'speaker': turn.speaker,
+          'text': turn.text,
+        }).toList(),
+        'visible_speaker_actor_ids': view.visibleSpeakerActorIds,
+        'portrait_storage_key': view.portraitStorageKeyFor('Лодочник'),
         'choices': [
           for (final choice in view.choices) {
             'id': choice.id,

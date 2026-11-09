@@ -385,6 +385,10 @@ def extend_checked_world(blueprint, provenance, story, enrichment, index,
     if extension.get("format") == NPC_ACTS:
         return extend_reviewed_npc_acts(
             blueprint, provenance, story, enrichment, index, analyses, extension)
+    from .v4_npc_scene_items import FORMAT as NPC_SCENES, extend_reviewed_npc_scenes
+    if extension.get("format") == NPC_SCENES:
+        return extend_reviewed_npc_scenes(
+            blueprint, provenance, story, enrichment, index, analyses, extension)
     from .v4_expansion import FORMAT as BRIDGE, extend_reviewed_world
     require(extension.get("format") == BRIDGE, "invalid_extension",
             "Explicit v4 extension format must be recognized and versioned")

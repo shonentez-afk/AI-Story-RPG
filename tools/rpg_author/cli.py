@@ -90,7 +90,7 @@ def parser():
     native_v4.add_argument("--output", required=True, type=Path)
     native_v4.add_argument("--model-id", choices=["gpt-6"], default=None)
     native_v4.add_argument("--extension", type=Path,
-                           help="Opt-in v4 bridge, multi-act v1 or NPC-review multi-act v2 JSON")
+                           help="Explicit reviewed v4 scene batches, multi-acts or NPC dialogue/item scenes")
     ext_audit = commands.add_parser("audit-extended",
                                     help="Read-only v4 extension preflight; not native/semantic approval")
     ext_audit.add_argument("--project", required=True, type=Path)

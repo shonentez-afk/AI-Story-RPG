@@ -513,6 +513,77 @@ def main():
         e6j_sidecar_path.write_bytes(npc_act_sidecar)
         assert verify_extended_bundle(e6j_world_path,
                                       e6j_sidecar_path)["native_dart_verified"]
+        # E6k: exact signed two-speaker NPC dialogue, redaction, stable
+        # character-ID portraits and a first-act item acquired before
+        # its reviewed second-act transfer. NO second game rules runtime.
+        from tests.rpg_author import fixtures_npc_scene_items as e6k
+        item_overlay, item_npc_review = e6k.reviewed_base_with_owned_item()
+        item_v3, _ = compile_rich_from_project(
+            act_project, item_overlay, npc_review=item_npc_review)
+        with zipfile.ZipFile(io.BytesIO(item_v3)) as item_zip:
+            item_base_bp = json.loads(item_zip.read("scenario/blueprint.json"))
+            item_base_src = json.loads(item_zip.read("source/provenance.json"))
+        e6k_ext = e6k.reviewed_dialogue_and_custody(
+            item_base_bp, item_base_src, item_overlay)
+        e6k_report = audited_extension(
+            act_project, item_overlay, e6k_ext, npc_review=item_npc_review)
+        assert e6k_report["npc_dialogue_signed_turns"] == 2
+        assert e6k_report["npc_item_transfers_reviewed"] == 1
+        assert not e6k_report["dialogue_redaction_verified_by_native"]
+        item_npc_world, item_npc_attr = compile_extended_from_project(
+            act_project, item_overlay, npc_review=item_npc_review,
+            extension=e6k_ext)
+        with zipfile.ZipFile(io.BytesIO(item_npc_world)) as verified:
+            signed = json.loads(verified.read("source/provenance.json"))
+            item_bp = json.loads(verified.read("scenario/blueprint.json"))
+        assert len(item_bp["scenes"]) == 8
+        signed_scene = signed["presentation"]["scene_dialogues"]["rescue_decision"]
+        signed_actors = signed["presentation"]["scene_dialogue_knowledge"][
+            "rescue_decision"]
+        assert signed_scene["turns"][1]["speaker"] == "Лодочник"
+        assert signed_actors[1]["actor_id"] == npc_case.ACTOR
+        assert signed_actors[1]["required_social_memory_id"] == "shared_warning"
+        assert signed["npc_social"]["item_transfers"][0]["to_actor_id"] == npc_case.ACTOR
+        gained = dart({
+            "operation": "npc_public_api",
+            "data": base64.b64encode(item_npc_world).decode("ascii"),
+            "path": careful_path[:4],
+        })
+        missed = dart({
+            "operation": "npc_public_api",
+            "data": base64.b64encode(item_npc_world).decode("ascii"),
+            "path": hurried_path[:3],
+        })
+        assert gained["scene_id"] == "rescue_decision" and missed["scene_id"] == "rescue_decision"
+        assert gained["scene_dialogue_turns"][1]["speaker"] == "Лодочник", gained
+        assert gained["visible_speaker_actor_ids"]["Лодочник"] == npc_case.ACTOR
+        assert gained["portrait_storage_key"] == npc_case.ACTOR
+        assert missed["scene_dialogue_turns"][1]["speaker"] is None, missed
+        assert "недоступна" in missed["scene_dialogue_turns"][1]["text"], missed
+        assert "Лодочник" not in missed["visible_speaker_actor_ids"], missed
+        assert missed["portrait_storage_key"] != npc_case.ACTOR, missed
+        acquired = dart({
+            "operation": "npc_public_api",
+            "data": base64.b64encode(item_npc_world).decode("ascii"),
+            "path": careful_path,
+        })
+        assert acquired["terminal"] and acquired["portable_save_verified"], acquired
+        assert acquired["inventory"] == [], acquired
+        assert acquired["npc_item_owners"]["rope"] == npc_case.ACTOR, acquired
+        assert acquired["npc_life_states"][npc_case.ACTOR] == "absent", acquired
+        returned = dart({
+            "operation": "npc_public_api",
+            "data": base64.b64encode(item_npc_world).decode("ascii"),
+            "path": hurried_path,
+        })
+        assert returned["terminal"] and returned["portable_save_verified"]
+        assert "rope" in returned["inventory"], returned
+        assert returned["npc_item_owners"] == {}, returned
+        e6k_file = root / "npc_scene_items_v4.bworld"
+        e6k_sidecar = root / "npc_scene_items_v4.attribution.json"
+        e6k_file.write_bytes(item_npc_world)
+        e6k_sidecar.write_bytes(item_npc_attr)
+        assert verify_extended_bundle(e6k_file, e6k_sidecar)["native_dart_verified"]
     print(json.dumps({"source_comparisons": checked, "candidate_accepted_by_dart_blueprint": True,
                       "known_lossy_source_forms_refused": 1,
                       "application_modified": False,
@@ -537,7 +608,9 @@ def main():
                        "native_v4_stateful_knowledge_gate_and_save_replayed": True,
                        "native_v4_npc_actor_scoped_cross_act_grants_verified": True,
                        "native_v4_npc_social_memory_trust_and_life_replayed": True,
-                       "native_v4_npc_public_api_choice_gates_and_saves": True}))
+                       "native_v4_npc_public_api_choice_gates_and_saves": True,
+                       "native_v4_npc_signed_dialogue_redaction_and_portraits": True,
+                       "native_v4_npc_item_custody_public_api_save_verified": True}))
 
 
 if __name__ == "__main__":

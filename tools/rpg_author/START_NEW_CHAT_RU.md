@@ -1,3 +1,27 @@
+## E6k 0.3.0a10 — source-locked NPC dialogue and item ownership
+
+Работа ведётся только во внешнем генераторе, основной PR #133 —
+версионированная зависимость read-only. Новый отдельный контракт
+`rpg_author_v4_acts_v3` + `rpg_author_v4_npc_scene_review_v1`.
+
+Из native движка переиспользованы без копирования правил:
+`RichSceneDialogue` / Python `_exact_scene_dialogue`,
+`RichNpcDialogueKnowledge` и speaker actor-ID portrait binding,
+`RichNpcSocialContract` v5 для item_grants / item_transfers / NPC life,
+`LocalRpgGameApi` и SQLite campaign save/replay.
+Новое подтверждённое 2-персонажное общение даёт скрытый до обучения
+текст NPC, знание/память/доверие из предыдущего акта и стабильный
+character_id; предмет получает источник в главе 1 и меняет владельца
+в главе 3 без создания из ничего.
+
+**До exact-code CI E6k НЕ объявлять принятым**; негативные Python
+тесты, native Dart v4 импорт и публичный API — обязательные гейты.
+Это синтетический 3-главный публичный FB2 для механики, а НЕ
+подтверждённая литературная адаптация чужой книги.
+
+Документ: E6K_DIALOGUE_ITEM_CUSTODY_BRIDGE_RU_2026-11-09.md.
+
+---
 ## E6j 0.3.0a9: actor-scoped NPC continuity across reviewed v4 acts
 
 9 ноября 2026: внешний генератор, не основной движок.
