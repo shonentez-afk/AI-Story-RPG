@@ -1,6 +1,7 @@
 """Read-only compatibility guard. Never rewrite the application's contract."""
 from __future__ import annotations
 
+from pathlib import Path
 import hashlib
 import re
 
@@ -48,6 +49,33 @@ def check_contract() -> dict:
 
     require(not mismatches, "contract_drift",
             "Review upstream changes before continuing: " + ", ".join(mismatches))
+    return lock
+
+
+def check_native_contract(native_root: Path) -> dict:
+    """Fail closed if an external native checkout differs in any pinned blob.
+
+    Version names and branch labels are not source authorization. This checks
+    all 27 exact Git blob OIDs with the same logic as check_contract(), without
+    writing to the native checkout, and preserves independent repo boundaries.
+    """
+    lock = check_contract()
+    native_root = Path(native_root).expanduser().resolve()
+    mismatches = []
+    for name, expected in lock["files"].items():
+        candidate = native_root / name
+        if not candidate.is_file() or candidate.is_symlink():
+            mismatches.append(name)
+            continue
+        raw = read_bytes(candidate)
+        actual = hashlib.sha1(
+            b"blob " + str(len(raw)).encode("ascii") + b"\0" + raw
+        ).hexdigest()
+        if actual != expected:
+            mismatches.append(name)
+    require(not mismatches, "native_contract_drift",
+            "Native Dart tree differs from pinned source contract: " +
+            ", ".join(mismatches))
     return lock
 
 

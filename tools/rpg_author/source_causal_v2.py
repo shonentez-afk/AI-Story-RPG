@@ -27,7 +27,8 @@ NPC = re.compile(r"npc_[a-f0-9]{32}\Z")
 REF = re.compile(r"[a-z][a-z0-9_]{0,63}\Z")
 VALID_OPS = frozenset({
     "fact_known", "fact_unknown", "item_owner", "memory_present",
-    "memory_absent", "goal_is", "trust_min", "trust_max", "life_is", "flag_is",
+    "memory_absent", "goal_is", "promise_open", "promise_closed",
+    "trust_min", "trust_max", "life_is", "flag_is",
 })
 EFFECT_OPS = frozenset({
     "learn_fact", "grant_item", "consume_item", "stat_delta",
@@ -334,7 +335,8 @@ def _predicate(value: dict, actor_ids: set[str], blueprint: dict):
         ok = allowed_fact and val is None
     elif op == "item_owner":
         ok = allowed_item and val in all_actors
-    elif op in ("memory_present", "memory_absent", "goal_is"):
+    elif op in ("memory_present", "memory_absent", "goal_is",
+                "promise_open", "promise_closed"):
         ok = actor != "player" and gm(key) and val is None
     elif op in ("trust_min", "trust_max"):
         ok = actor != "player" and key is None and type(val) is int and -100 <= val <= 100
@@ -564,7 +566,15 @@ def author_causal_v5(*, project_root: Path, base_world: Path,
     encoded = canonical(review)
     require(len(encoded) <= 4 * 1024 * 1024,
             "causal_review_over_budget", "Native review size exceeds 4MiB")
-    atomic_write(output, encoded)
+    if output.exists():
+        # Resume only if byte-identical, source-locked and fully reviewed.
+        # Failed Dart compiles must not force a new literary answer or
+        # silently overwrite an earlier approved review.
+        require(not output.is_symlink() and read_bytes(output) == encoded,
+                "causal_review_changed",
+                "Existing private review differs from the reviewed source")
+    else:
+        atomic_write(output, encoded)
     world = None
     if native_root is not None:
         # The executable compiler MUST be the native PR#133 CLI, never a

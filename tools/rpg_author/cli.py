@@ -134,6 +134,19 @@ def parser():
                         help="Private final .bworld, requires --native-root")
     causal.add_argument("--user-confirmed", action="store_true",
                         help="Explicit owner approval, never inferred from AI output")
+    unified = commands.add_parser(
+        "author-game-v5",
+        help="One private FB2/TXT -> exact native literal v5 -> ChatGPT Skill causal review -> native RPG")
+    for field in ("book", "project", "workdir", "output"):
+        unified.add_argument("--" + field, required=True, type=Path)
+    unified.add_argument("--native-root", type=Path,
+                         help="Exact pinned native Dart checkout (default: this code checkout)")
+    unified.add_argument("--response-dir", type=Path,
+                         help="Private ChatGPT Skill inbox (never published)")
+    unified.add_argument("--user-confirmed", action="store_true",
+                         help="Explicit approval of native source compilation and reviewed causal game")
+    unified.add_argument("--literal-only", action="store_true",
+                         help="Explicitly skip causal NPC review; only exact book text, not a literary RPG")
     # One portable private ZIP contains immutable source checkpoints, all
     # ChatGPT Skill requests/answers and optionally the compiled game.
     session = commands.add_parser(
@@ -265,6 +278,16 @@ def main(argv=None) -> int:
                 output=args.output, provider=provider, book=args.book,
                 delegate_review=args.delegate_review,
                 npc_review_path=args.npc_review)
+        elif name == "author-game-v5":
+            from .unified_v5 import author_game_v5
+            from .ai_provider import PrivateResponseInbox
+            provider = PrivateResponseInbox(
+                args.response_dir or args.workdir / "skill-responses")
+            result = author_game_v5(
+                book=args.book, project_root=args.project, workdir=args.workdir,
+                output=args.output, provider=provider,
+                user_confirmed=args.user_confirmed,
+                native_root=args.native_root, literal_only=args.literal_only)
         elif name == "author-causal-v5":
             from .source_causal_v2 import author_causal_v5
             from .ai_provider import PrivateResponseInbox
@@ -310,7 +333,7 @@ def main(argv=None) -> int:
         print(json.dumps(result, ensure_ascii=False, indent=2, allow_nan=False))
         if name == "finalize" and result["status"] == "rejected":
             return 3
-        if name == "author-book" and result["status"].startswith("needs_"):
+        if name in ("author-book", "author-game-v5", "author-causal-v5") and result["status"].startswith("needs_"):
             return 3
         if name == "finalize-extended" and result["status"] == "needs_independent_editorial_review":
             return 3
