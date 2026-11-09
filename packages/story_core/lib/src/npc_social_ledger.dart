@@ -835,6 +835,23 @@ class NpcSocialLedger {
           owners[itemId] = 'player';
         }
       }
+      final interaction = event.freeform?.npcInteraction;
+      if (interaction != null) {
+        final give = interaction.giveItemId;
+        final take = interaction.takeItemId;
+        if (give != null) {
+          if (owners[give] != 'player') {
+            throw const FormatException('Unowned gift to NPC');
+          }
+          owners[give] = interaction.actorId;
+        }
+        if (take != null) {
+          if (owners[take] != interaction.actorId) {
+            throw const FormatException('NPC gave an unowned item');
+          }
+          owners[take] = 'player';
+        }
+      }
     }
     for (final item in {
       ...blueprint.items,

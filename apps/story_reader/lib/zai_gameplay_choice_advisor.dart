@@ -311,6 +311,8 @@ class ZaiGameplayChoiceAdvisor {
         'Верни ТОЛЬКО JSON с narration, effects и, если взаимодействует '
         'с ПРИСУТСТВУЮЩИМ проверенным NPC, npc_interaction. '
         'Форма NPC: {actor_id,memory_id,kind,trust_delta,goal_id}. '
+        'Дополнительно learn_fact_id — только уже известный игроку факт, '
+        'give_item_id — его предмет, take_item_id — предмет NPC. '
         'kind: warned/helped/betrayed/promise_received/'
         'promise_broken/rumor_heard/witnessed. memory_id и goal_id '
         'должны быть gm_*; goal_id может быть null. '

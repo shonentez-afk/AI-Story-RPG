@@ -64,6 +64,11 @@ final class BookCausalPredicate {
     if (op == 'life_is' && !{'present', 'absent', 'dead'}.contains(val)) {
       throw const FormatException('Invalid NPC life prerequisite');
     }
+    if (op == 'trust_min' || op == 'trust_max' || op == 'life_is') {
+      // Trust/life have no resource ID; retain the actor-bound signed value.
+    } else if (!needsId && val != null) {
+      throw const FormatException('Unexpected causal predicate value');
+    }
     if (op == 'flag_is' &&
         (id is! String ||
          !(bp.initial.flags.containsKey(id) || gm.hasMatch(id)) ||
@@ -137,7 +142,7 @@ final class BookCausalGraph {
   }
 
   static BookCausalGraph fromReview(Object? raw, StoryBlueprint bp) {
-    if (raw is! List || raw.isEmpty || raw.length > 2048) {
+    if (raw is! List || raw.isEmpty || raw.length > 5000) {
       throw const FormatException('Book causal graph is empty or over budget');
     }
     final sceneOrder = bp.scenes.keys.toList();
@@ -201,6 +206,14 @@ final class BookCausalGraph {
       events.add(BookCausalEvent(sceneId,
           List.unmodifiable(dependencies),
           List.unmodifiable(conditions), List.unmodifiable(effects)));
+    }
+    if (seen.length != bp.scenes.length) {
+      throw const FormatException('Incomplete source-wide causal event coverage');
+    }
+    for (final event in events) {
+      if (event.dependsOn.any((id) => !seen.contains(id))) {
+        throw const FormatException('Cause references an unreviewed event');
+      }
     }
     return BookCausalGraph(List.unmodifiable(events));
   }

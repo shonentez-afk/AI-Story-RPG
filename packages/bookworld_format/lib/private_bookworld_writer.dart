@@ -432,7 +432,7 @@ class RichPrivateBookworldWriter {
           ReviewedLiteralCanonReviewFormat.format,
       if (literalCanon && provenance.containsKey('canon_causality'))
         'canon_causality_format':
-            'ai_story_source_causal_review_v1',
+            (provenance['canon_causality'] as Map)['format'],
       'bookworld_id': checked.bookId,
       'source_fingerprint': checked.sourceFingerprint,
       'title': checked.title,

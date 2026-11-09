@@ -14,10 +14,19 @@ final class FreeformNpcInteraction {
     required this.kind,
     required this.trustDelta,
     this.goalId,
+    this.learnFactId,
+    this.giveItemId,
+    this.takeItemId,
   });
   final String actorId, memoryId, kind;
   final int trustDelta;
   final String? goalId;
+  /// New: the player explicitly communicates one ALREADY KNOWN fact.
+  final String? learnFactId;
+  /// Existing player item transferred to this NPC.
+  final String? giveItemId;
+  /// Existing NPC-owned item transferred back to the player.
+  final String? takeItemId;
 
   static final _actor = RegExp(r'^npc_[a-f0-9]{32}$');
   static final _gm = RegExp(r'^gm_[a-z0-9_]{1,59}$');
@@ -27,10 +36,13 @@ final class FreeformNpcInteraction {
   };
   factory FreeformNpcInteraction.fromJson(Object? source) {
     if (source is! Map<String, dynamic> ||
-        source.keys.toSet().length != 5 ||
         !source.keys.toSet().containsAll({
           'actor_id', 'memory_id', 'kind', 'trust_delta', 'goal_id',
         }) ||
+        source.keys.toSet().difference({
+          'actor_id', 'memory_id', 'kind', 'trust_delta', 'goal_id',
+          'learn_fact_id', 'give_item_id', 'take_item_id',
+        }).isNotEmpty ||
         source['actor_id'] is! String ||
         !_actor.hasMatch(source['actor_id'] as String) ||
         source['memory_id'] is! String ||
@@ -41,7 +53,13 @@ final class FreeformNpcInteraction {
         (source['trust_delta'] as int).abs() > 10 ||
         (source['goal_id'] != null &&
             (source['goal_id'] is! String ||
-             !_gm.hasMatch(source['goal_id'] as String)))) {
+             !_gm.hasMatch(source['goal_id'] as String))) ||
+        ['learn_fact_id', 'give_item_id', 'take_item_id'].any((key) =>
+          source.containsKey(key) &&
+          (source[key] is! String ||
+           (source[key] as String).isEmpty)) ||
+        (source.containsKey('give_item_id') &&
+         source.containsKey('take_item_id'))) {
       throw const FormatException('Unverified NPC freeform intervention');
     }
     return FreeformNpcInteraction._(
@@ -50,12 +68,18 @@ final class FreeformNpcInteraction {
       kind: source['kind'] as String,
       trustDelta: source['trust_delta'] as int,
       goalId: source['goal_id'] as String?,
+      learnFactId: source['learn_fact_id'] as String?,
+      giveItemId: source['give_item_id'] as String?,
+      takeItemId: source['take_item_id'] as String?,
     );
   }
 
   Map<String, dynamic> toJson() => {
     'actor_id': actorId, 'memory_id': memoryId,
     'kind': kind, 'trust_delta': trustDelta, 'goal_id': goalId,
+    if (learnFactId != null) 'learn_fact_id': learnFactId,
+    if (giveItemId != null) 'give_item_id': giveItemId,
+    if (takeItemId != null) 'take_item_id': takeItemId,
   };
 }
 
@@ -155,9 +179,23 @@ final class FreeformActionDraft {
         bp.scenes[current.sceneId]?.terminal != false) {
       throw const FormatException('This game does not allow dynamic actions');
     }
-    if (npcInteraction != null &&
-        !bp.actors.contains(npcInteraction!.actorId)) {
-      throw const FormatException('NPC not in source-reviewed cast');
+    if (npcInteraction != null) {
+      final interaction = npcInteraction!;
+      if (!bp.actors.contains(interaction.actorId)) {
+        throw const FormatException('NPC not in source-reviewed cast');
+      }
+      final fact = interaction.learnFactId;
+      if (fact != null &&
+          (!(bp.facts.contains(fact) || _gmName.hasMatch(fact)) ||
+           !(current.knowledge['player']?.contains(fact) ?? false))) {
+        throw const FormatException('NPC cannot learn an unowned fact');
+      }
+      for (final item in [interaction.giveItemId, interaction.takeItemId]) {
+        if (item != null &&
+            !(bp.items.contains(item) || _gmName.hasMatch(item))) {
+          throw const FormatException('NPC transfer references unapproved item');
+        }
+      }
     }
     for (final e in effects) {
       switch (e.op) {

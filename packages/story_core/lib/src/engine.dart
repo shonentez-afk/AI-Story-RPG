@@ -531,6 +531,25 @@ class StoryWorld {
     final knowledge = _state.knowledge.map((key, val) =>
         MapEntry(key, Set<String>.of(val)));
     var time = _state.tick + 1;
+    final contact = draft.npcInteraction;
+    if (contact != null &&
+        (contact.giveItemId != null || contact.takeItemId != null)) {
+      final social = NpcSocialLedger.inspect(this, socialRulebook!);
+      if (contact.giveItemId != null) {
+        if (!inventory.remove(contact.giveItemId)) {
+          return _denied('npc_transfer_missing_player_item');
+        }
+      } else if (social.itemOwner(contact.takeItemId!) == contact.actorId &&
+          !inventory.contains(contact.takeItemId)) {
+        inventory.add(contact.takeItemId!);
+      } else {
+        return _denied('npc_transfer_missing_npc_item');
+      }
+    }
+    if (contact?.learnFactId != null) {
+      knowledge.putIfAbsent(contact!.actorId, () => <String>{})
+          .add(contact.learnFactId!);
+    }
     for (final effect in draft.effects) {
       switch (effect.op) {
         case 'set_flag':

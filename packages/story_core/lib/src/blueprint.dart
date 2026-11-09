@@ -332,4 +332,12 @@ class TypedRule {
     }
     return TypedRule._(op, id, actor, amount as int?, value as bool?);
   }
+
+  Map<String, Object?> toJson() => {
+    'op': op,
+    if (id != null) 'id': id,
+    if (actor != null) 'actor': actor,
+    if (amount != null) 'amount': amount,
+    if (value != null) 'value': value,
+  };
 }
