@@ -55,9 +55,11 @@ class _ChosenWorldPicker extends FilePicker {
 
 class _ConfirmedGateway implements WorldLibraryGateway {
   int installations = 0;
+  Uint8List? installedArchive;
   @override
   Future<WorldLibraryItem> install(Uint8List archive) async {
     installations++;
+    installedArchive = Uint8List.fromList(archive);
     final proof = const LocalRpgWorldIntakeApi().inspect(archive);
     return WorldLibraryItem(
       archiveHash: proof.archiveHash,
@@ -68,6 +70,16 @@ class _ConfirmedGateway implements WorldLibraryGateway {
   @override
   Future<List<WorldCampaignItem>> campaigns({String? worldHash}) async =>
       const [];
+
+  @override
+  Future<Uint8List> exportWorld(String worldHash) async {
+    final bytes = installedArchive;
+    if (bytes == null ||
+        const LocalRpgWorldIntakeApi().inspect(bytes).archiveHash != worldHash) {
+      throw const FormatException('Неизвестный игровой мир');
+    }
+    return Uint8List.fromList(bytes);
+  }
 
   @override
   dynamic noSuchMethod(Invocation invocation) =>
@@ -187,12 +199,16 @@ void main() {
     await openStart(tester, gateway, _book);
     expect(find.byKey(const Key('world-intake-verified-causality')),
         findsOneWidget);
+    expect(find.byKey(const Key('world-intake-reviewed-hero')),
+        findsOneWidget);
     expect(gateway.installations, 0);
     await tester.tap(find.byKey(const Key('world-intake-confirm')));
     await tester.pumpAndSettle();
     expect(gateway.installations, 1);
     expect(find.byType(WorldCampaignsPage), findsOneWidget);
     expect(find.byKey(const ValueKey('world-start')), findsOneWidget);
+    expect(find.textContaining('Полная книжная RPG'), findsOneWidget);
+    expect(find.textContaining('Герой:'), findsWidgets);
     expect(tester.takeException(), isNull);
   });
 }
