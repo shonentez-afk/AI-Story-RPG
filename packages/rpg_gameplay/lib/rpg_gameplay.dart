@@ -173,7 +173,7 @@ class WorldGameView {
     this.heroSourceCharacterId, this.sourceReviewedHeroStart = false,
     this.freeformAvailable = false,
     this.sourceLiteralCanon = false,
-    this.activePlotMode = 'ALTER_FATE',
+    this.activePlotMode = 'CANON',
     this.availableNpcTargets = const {},
     this.gmStats = const {}, this.gmFlags = const {},
     this.gmItems = const [], this.gmFacts = const [],
@@ -366,7 +366,7 @@ class RpgGameplayEngine {
     final coordinator = record.coordinator;
     final blueprint = coordinator.blueprint;
     final state = coordinator.state;
-    final current = blueprint.scenes[coordinator.sceneId]!;
+    final current = blueprint.scenes[state.sceneId]!;
     final currentOrigin = origins[current.id];
     // The SQLite store already checked all events. Independently recompute
     // social memory from the exact replayed head, never from UI labels.
@@ -662,7 +662,7 @@ class RpgGameplayEngine {
         (state.knowledge['player'] ?? <String>{}).toList()..sort(),
       ),
       choices: List.unmodifiable((state.plotDiverged
-          ? const <RuntimeChoice>[] : coordinator.choices).map(
+          ? coordinator.choices.take(0) : coordinator.choices).map(
         (choice) => WorldChoiceView.fromVerifiedRules(
           signedChoice: current.choices.singleWhere(
               (signed) => signed.id == choice.id),
@@ -721,9 +721,10 @@ class RpgGameplayEngine {
       statNames: stats,
       factNames: facts,
       sceneNames: scenes,
-      sceneDialogueTurns: signedTurns,
-      sceneSpeakerIdentityReviewed: hasReviewedNpcTurns,
-      visibleSpeakerActorIds: visibleSpeakerActorIds,
+      sceneDialogueTurns: state.plotDiverged ? null : signedTurns,
+      sceneSpeakerIdentityReviewed: !state.plotDiverged && hasReviewedNpcTurns,
+      visibleSpeakerActorIds: state.plotDiverged
+          ? const {} : visibleSpeakerActorIds,
       // Public reader projections must not contain future NPC spoilers at
       // all, even for a new caller that forgets to filter its own widgets.
       // The authoritative social state remains untouched in story_core.

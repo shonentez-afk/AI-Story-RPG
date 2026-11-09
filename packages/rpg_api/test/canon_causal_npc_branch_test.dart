@@ -264,4 +264,73 @@ void main() {
       await dir.delete(recursive: true);
     }
   });
+
+  test('second-language JSON API compiles the same source-locked NPC world '
+      'and persists a real causal branch, not a frontend-only conversation',
+      () async {
+    final files = _files();
+    final dir = await Directory.systemTemp.createTemp('canon_causal_json_');
+    BookworldCampaignStore? store;
+    try {
+      store = BookworldCampaignStore.openPrivateDirectory(dir.path);
+      final client = RpgClientProtocol(LocalRpgGameApi(store));
+      Future<Map<String, dynamic>> invoke(
+          String op, Map<String, Object?> args) async {
+        final result = await client.handle({
+          'version': RpgClientProtocol.version,
+          'op': op, 'args': args,
+        });
+        expect(result['ok'], true, reason: result.toString());
+        return Map<String, dynamic>.from(result['result'] as Map);
+      }
+      final compiled = await invoke('compile_reviewed_causal_canon', {
+        'archive_base64': base64Encode(files.base),
+        'source_index': files.sourceIndex,
+        'review_json': files.reviewJson,
+        'approved_digest': files.approvedDigest,
+        'user_confirmed': true,
+      });
+      expect(compiled['reviewed_npc_actor_count'], 1);
+      expect(compiled['reviewed_causal_checkpoint_count'], 1);
+      expect(base64Decode(compiled['archive_base64'] as String),
+          files.reviewed);
+      final installed = await invoke('install_world', {
+        'archive_base64': compiled['archive_base64'],
+      });
+      final started = await invoke('start', {
+        'world_hash': installed['world_hash'],
+      });
+      expect(started['active_plot_mode'], 'CANON');
+      final cid = started['campaign_id'] as String;
+      final preview = await invoke('preview_dynamic_action', {
+        'campaign_id': cid,
+        'expected_revision': 0,
+        'proposal': _proposal(),
+      });
+      final applied = await invoke('commit_dynamic_action', {
+        'campaign_id': cid,
+        'expected_revision': 0,
+        'action_id': 'warn_via_json_1',
+        'proposal': _proposal(),
+        'approval_digest': preview['approval_digest'],
+        'user_confirmed': true,
+      });
+      expect(applied['applied'], true);
+      expect(applied['active_plot_mode'], 'ALTER_FATE');
+      expect(applied['scene_id'], 'gm_scene_1');
+      expect((applied['npc_encountered'] as List).single['directed_score'],
+          4);
+      expect((applied['npc_encountered'] as List).single
+          ['current_private_goal'], 'gm_anna_avoids_trap');
+      final denied = await invoke('choose', {
+        'campaign_id': cid, 'action_id': 'skip_causal_gate',
+        'choice_id': 'canon_next_00000', 'expected_revision': 1,
+      });
+      expect(denied['applied'], false);
+      expect(denied['reason'], 'timeline_diverged_into_alter_fate');
+    } finally {
+      store?.close();
+      await dir.delete(recursive: true);
+    }
+  });
 }

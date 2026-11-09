@@ -116,14 +116,16 @@ class StoryEngineCoordinator implements StoryRuntimeAdapter {
   }
 
   @override
-  String get sceneId => state.sceneId;
+  String get sceneId => state.activeSceneId;
 
   @override
-  String get sceneText => blueprint.scenes[sceneId]!.text;
+  String get sceneText => state.alternateScene?.text ??
+      blueprint.scenes[state.sceneId]!.text;
 
   @override
   List<RuntimeChoice> get choices {
     _ensureSynchronized();
+    if (state.plotDiverged) return const <RuntimeChoice>[];
     return List.unmodifiable(
       blueprint.scenes[sceneId]!.choices.map((choice) => RuntimeChoice(
         id: choice.id,
@@ -271,7 +273,7 @@ class StoryEngineCoordinator implements StoryRuntimeAdapter {
               expectedRevision: coordinator.state.revision,
             );
       if (!result.applied || result.event!.hash != event.hash ||
-          coordinator.sceneId != event.nextSceneId) {
+          coordinator.state.sceneId != event.nextSceneId) {
         throw const FormatException('Scenario/world replay disagreement');
       }
     }
