@@ -306,11 +306,11 @@ def validate() -> list[str]:
             issues.append(f"rpg_api: missing client-neutral operation {name}")
     pyclient = ROOT / "apps" / "rpg_cli" / "python_client.py"
     pycode = pyclient.read_text(encoding="utf-8") if pyclient.is_file() else ""
-    if "ProxyHandler({})" not in pycode or
+    if ("ProxyHandler({})" not in pycode or
             "127.0.0.1" not in pycode or
             "x-rpg-token" not in pycode or
             "sqlite3" in pycode or
-            "story_core" in pycode:
+            "story_core" in pycode):
         issues.append("Python adapter must connect DIRECTLY to local RPG API")
     return issues
 
