@@ -289,15 +289,18 @@ void main() {
       final game = LocalRpgGameApi(store);
       final world = game.install(files.reviewed);
       final id = game.start(world.archiveHash);
-      final unreviewed = FreeformActionDraft.fromJson({
-        ..._proposal(),
-        'npc_interaction': {
-          ...(_proposal()['npc_interaction'] as Map),
-          'actor_id': 'npc_' + 'b' * 32,
-        },
-      });
-      expect(() => game.previewFreeform(id, unreviewed,
-          expectedRevision: 0), throwsFormatException);
+      // An unreviewed actor must fail closed either during JSON admission
+      // or during the subsequent source-witness gameplay validation.
+      expect(() {
+        final unreviewed = FreeformActionDraft.fromJson({
+          ..._proposal(),
+          'npc_interaction': {
+            ...(_proposal()['npc_interaction'] as Map),
+            'actor_id': 'npc_' + 'b' * 32,
+          },
+        });
+        game.previewFreeform(id, unreviewed, expectedRevision: 0);
+      }, throwsFormatException);
       final prematureEnd = FreeformActionDraft.fromJson(
           _proposal(withNpc: false, intent: 'end'));
       expect(() => game.previewFreeform(id, prematureEnd,
