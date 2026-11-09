@@ -32,7 +32,7 @@ def _named(value: dict, where: str, maximum: int):
         string(entry, where + " label", maximum)
 
 
-def _enrich(blueprint, story, index, enrichment):
+def _enrich(blueprint, story, index, enrichment, *, npc_review=None):
     fields(enrichment, {"format", "source_fingerprint", "story_sha256",
                         "hero", "stats", "items", "facts",
                         "scene_names", "choices"}, "rich enrichment")
@@ -87,8 +87,15 @@ def _enrich(blueprint, story, index, enrichment):
     # Candidate was previously source checked, including all flag-only rules.
     # Copy-on-write; no mutation of the stored checkpoint or source citations.
     result = json.loads(canonical(blueprint))
+    identity = {"story": story, "overlay": enrichment}
+    if npc_review is not None:
+        from .npc_review import validate_review
+        actors = validate_review(npc_review, story, index, enrichment)
+        identity["npc_review"] = npc_review
+        result["actors"] = ["player", *actors]
+        result["initial_state"]["knowledge"] = {a: [] for a in result["actors"]}
     result["book_id"] = "rich_" + index["source_fingerprint"][:12] + "_" + \
-        digest(canonical({"story": story, "overlay": enrichment}))[:12]
+        digest(canonical(identity))[:12]
     result["items"] = sorted(items)
     result["facts"] = sorted(facts)
     result["initial_state"]["stats"] = stats_value
@@ -106,12 +113,16 @@ def _enrich(blueprint, story, index, enrichment):
         "scene_names": enrichment["scene_names"],
     }
     rich._blueprint(result)
-    rich._presentation(presentation, result)
+    # NPC speaker/social checks must run only after the signed provenance
+    # review has been attached; player-only v3 keeps the original validation.
+    if npc_review is None:
+        rich._presentation(presentation, result)
     return result, presentation
 
 
 def compile_rich_from_project(root: Path, enrichment: dict,
-                              *, model_id: str | None = None):
+                              *, model_id: str | None = None,
+                              npc_review: dict | None = None):
     check_contract()
     _, state, index, analyses, story = load_project(root)
     require(story is not None, "story_missing", "Reviewed story not yet supplied")
@@ -123,10 +134,13 @@ def compile_rich_from_project(root: Path, enrichment: dict,
     from tools.bookworld.bookworld import BookworldError
     try:
         blueprint, presentation = _enrich(candidate_blueprint(story, index),
-                                          story, index, enrichment)
+                                          story, index, enrichment, npc_review=npc_review)
         provenance = _provenance(story, index, analyses, blueprint)
         provenance["format"] = rich.PROVENANCE_FORMAT
         provenance["presentation"] = presentation
+        if npc_review is not None:
+            from .npc_review import add_review
+            add_review(blueprint, presentation, provenance, npc_review)
         provenance["model_provenance"] = {
             "provider": "openai",
             "model_id": model_id,
@@ -142,8 +156,11 @@ def compile_rich_from_project(root: Path, enrichment: dict,
     return raw, canonical(_attribution(raw, digest(canonical(blueprint)), provenance))
 
 
-def _attribution(archive: bytes, blueprint_sha256: str, provenance: dict) -> dict:
+def _attribution(archive: bytes, blueprint_sha256: str, provenance: dict,
+                 *, format_version: int = 3) -> dict:
     """Disclose only verified archive data; neither hashes nor labels attest a model."""
+    require(format_version in (3, 4), "invalid_format_version",
+            "Attribution is available only for private rich v3/v4")
     return {
         "format": "ai_story_external_attribution_v2",
         "bookworld_sha256": digest(archive),
@@ -152,8 +169,9 @@ def _attribution(archive: bytes, blueprint_sha256: str, provenance: dict) -> dic
         "scenario_generation": dict(provenance["model_provenance"]),
         "bookworld_packaging": {
             "method": "local_compiler",
-            "build_tool": "ai_story_private_rich_bookworld",
-            "version": "3.0",
+            "build_tool": ("ai_story_private_extended_bookworld"
+                           if format_version == 4 else "ai_story_private_rich_bookworld"),
+            "version": "4.0" if format_version == 4 else "3.0",
             "authorship_also_in_package": True,
         },
         "rights_status": "private_use_only",
@@ -164,7 +182,8 @@ def _attribution(archive: bytes, blueprint_sha256: str, provenance: dict) -> dic
 
 
 def build_rich(root: Path, enrichment_path: Path, output: Path,
-               *, model_id: str | None = None):
+               *, model_id: str | None = None,
+               npc_review_path: Path | None = None):
     output = outside_repository(output)
     root = outside_repository(root)
     require(output != root and root not in output.parents, "output_in_project",
@@ -174,8 +193,10 @@ def build_rich(root: Path, enrichment_path: Path, output: Path,
     sidecar = output.with_suffix(".attribution.json")
     require(not output.exists() and not sidecar.exists(), "output_exists",
             "Refusing to overwrite package or authorship disclosure")
-    raw, disclosure = compile_rich_from_project(root, read_json(enrichment_path),
-                                                 model_id=model_id)
+    raw, disclosure = compile_rich_from_project(
+        root, read_json(enrichment_path), model_id=model_id,
+        npc_review=(read_json(outside_repository(npc_review_path))
+                    if npc_review_path is not None else None))
     # Write disclosure first so a successful output always has attribution.
     atomic_write(sidecar, disclosure)
     try:

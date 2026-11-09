@@ -104,3 +104,42 @@ jobs:
         run: python3 tests/rpg_author/run_dart_parity.py
       - name: Ensure application sources remain untouched
         run: git diff --exit-code
+
+
+  causal-v5-native-integration:
+    name: Source-wide E6q -> actual PR133 Dart v5 BookWorld -> CLI replay
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: author
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/p0-bookwide-gameplay-readiness-20261107
+          path: native
+      - uses: dart-lang/setup-dart@v1
+        with:
+          sdk: stable
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Prepare pinned verified native SQLite for real integration
+        working-directory: native
+        run: |
+          python3 tools/ci_prepare_verified_sqlite.py --project packages/bookworld_format --project packages/campaign_manager --project packages/rpg_api --project apps/rpg_cli
+      - name: Resolve native CLI with real Dart dependencies
+        working-directory: native/apps/rpg_cli
+        run: dart pub get
+      - name: Compile an original synthetic FB2 through E6q and true native v5, then replay
+        working-directory: author
+        run: |
+          python3 -m tests.rpg_author.causal_v5_native_integration --native-root "$GITHUB_WORKSPACE/native"
+      - name: Verify all source files remain unchanged after temporary SQLite hook cleanup
+        run: |
+          # The verified SQLite preparation intentionally adds temporary
+          # hooks to four pubspec.yaml files. Restore ONLY those known CI
+          # entries before asserting the actual code checkout is pristine.
+          git -C native restore -- apps/rpg_cli/pubspec.yaml packages/bookworld_format/pubspec.yaml packages/campaign_manager/pubspec.yaml packages/rpg_api/pubspec.yaml
+          git -C author diff --exit-code
+          git -C native diff --exit-code

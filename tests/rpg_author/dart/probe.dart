@@ -6,8 +6,8 @@ import 'package:story_core/story_core.dart';
 import 'package:bookworld_format/bookworld_format.dart';
 import 'package:campaign_manager/campaign_manager.dart';
 
-// Import the source implementation directly. The Flutter app is only a client.
-import 'package:story_authoring/story_authoring.dart' show BookImporter, BookSourceIndexer;
+import 'package:story_authoring/story_authoring.dart';
+import 'package:rpg_api/rpg_api.dart';
 
 Future<void> main() async {
   final input = jsonDecode(await stdin.transform(utf8.decoder).join())
@@ -133,6 +133,7 @@ Future<void> main() async {
     }
     stdout.write(jsonEncode({
       'book_id': verified.bookworldId,
+      'format_version': verified.formatVersion,
       'source_fingerprint': verified.sourceFingerprint,
       'archive_sha256': verified.archiveSha256,
       'hero': verified.presentation['hero'],
@@ -143,6 +144,84 @@ Future<void> main() async {
       'v2_rejected_v3': olderRejected,
       'private_only': !verified.canDistributePublicly,
     }));
+  } else if (input['operation'] == 'npc_public_api') {
+    // Deliberately instantiate the SAME public API as Flutter and CLI.
+    // The test supplies the SQLite directory and checks canonical replay.
+    final archive = Uint8List.fromList(base64Decode(input['data'] as String));
+    final private = Directory.systemTemp.createTempSync('rpg_e6j_npc_api_');
+    BookworldCampaignStore? store;
+    try {
+      store = BookworldCampaignStore.openPrivateDirectory(private.path);
+      final RpgGameApi api = LocalRpgGameApi(store);
+      final installed = api.install(archive);
+      final campaignId = api.start(installed.archiveHash);
+      for (final choice in input['path'] as List<dynamic>) {
+        final previous = api.load(campaignId);
+        final outcome = api.choose(campaignId,
+          actionId: 'e6j_act_' + (previous.revision + 1).toString(),
+          choiceId: choice as String,
+          expectedRevision: previous.revision);
+        if (!outcome.applied) {
+          throw FormatException('Public RPG API refused selected NPC action: '
+            + choice.toString() + ' (' + outcome.reason.toString() + ')');
+        }
+      }
+      final view = api.load(campaignId);
+      final signed = store.loadCampaign(campaignId);
+      final hash = signed.metadata.stateHash;
+      final saved = api.exportSave(campaignId);
+      final importedId = api.importSave(saved,
+          expectedWorldHash: installed.archiveHash);
+      final imported = api.load(importedId);
+      final verifiedSave = store.loadCampaign(importedId);
+      if (verifiedSave.metadata.stateHash != hash ||
+          imported.revision != view.revision) {
+        throw const FormatException('NPC public API .bwsave lost verified state');
+      }
+      stdout.write(jsonEncode({
+        'revision': view.revision,
+        'scene_id': view.sceneId,
+        'terminal': view.isTerminal,
+        'tick': view.tick,
+        'inventory': view.inventory,
+        'known_facts': view.knownFacts,
+        'npc_knowledge': {
+          for (final actor in signed.coordinator.state.knowledge.keys)
+            if (actor != 'player')
+              actor: signed.coordinator.state.knowledge[actor]!.toList()..sort(),
+        },
+        'npc_relations': [
+          for (final relation in view.npcRelations) {
+            'actor_id': relation.actorId,
+            'directed_score': relation.directedScore,
+            'memory_count': relation.memoryCount,
+            'memory_kinds': relation.memoryKinds,
+            'life_state': relation.lifeState,
+          }
+        ],
+        'npc_life_states': view.npcLifeStates,
+        'npc_item_owners': view.npcItemOwners,
+        'scene_dialogue_turns': view.sceneDialogueTurns?.map((turn) => {
+          'speaker': turn.speaker,
+          'text': turn.text,
+        }).toList(),
+        'visible_speaker_actor_ids': view.visibleSpeakerActorIds,
+        'portrait_storage_key': view.portraitStorageKeyFor('Лодочник'),
+        'choices': [
+          for (final choice in view.choices) {
+            'id': choice.id,
+            'enabled': choice.enabled,
+            'lock_reason': choice.lockReason,
+          }
+        ],
+        'journal': view.journal.map((event) => event.choiceLabel).toList(),
+        'state_hash': hash,
+        'portable_save_verified': true,
+      }));
+    } finally {
+      store?.close();
+      private.deleteSync(recursive: true);
+    }
   } else if (input['operation'] == 'rich_campaign') {
     final archive = Uint8List.fromList(base64Decode(input['data'] as String));
     final temp = Directory.systemTemp.createTempSync('rpg_e4_campaign_');

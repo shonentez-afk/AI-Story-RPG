@@ -47,6 +47,8 @@ def parser():
                          help="Optional matching attribution sidecar for --bworld")
     quality.add_argument("--output", type=Path,
                          help="Write a private, immutable JSON report outside the repository")
+    quality.add_argument("--npc-review", type=Path,
+                         help="Private source-bound NPC review for project pre-audit")
     quality.add_argument("--strict", action="store_true",
                          help="Exit 3 when any mechanical quality warning remains")
     dialogue = commands.add_parser("dialogue-audit", help="E6c: read-only NPC question and answer QA")
@@ -56,6 +58,18 @@ def parser():
     dialogue.add_argument("--attribution", type=Path)
     dialogue.add_argument("--output", type=Path)
     dialogue.add_argument("--strict", action="store_true")
+    final = commands.add_parser("finalize", help="E6e: fail-closed private v3 build and QA report")
+    final.add_argument("--project", required=True, type=Path)
+    final.add_argument("--enrichment", required=True, type=Path)
+    final.add_argument("--review", required=True, type=Path)
+    final.add_argument("--npc-review", type=Path,
+                       help="Private source-locked, explicitly confirmed NPC social v1-v5 overlay")
+    final.add_argument("--output", required=True, type=Path)
+    final.add_argument("--report", type=Path)
+    final.add_argument("--dialogues", type=Path)
+    final.add_argument("--question-inventory", type=Path)
+    final.add_argument("--no-interactive-questions", action="store_true",
+                       help="Explicit author declaration; absence not independently proven")
     bundle = commands.add_parser("verify-bundle", help="Check package and sidecar SHA binding")
     bundle.add_argument("--input", required=True, type=Path)
     bundle.add_argument("--attribution", required=True, type=Path)
@@ -63,8 +77,90 @@ def parser():
                                  help="Build source-checked rich private v3 game and attribution")
     richer.add_argument("--project", required=True, type=Path)
     richer.add_argument("--enrichment", required=True, type=Path)
+    richer.add_argument("--npc-review", type=Path,
+                        help="Optional separately reviewed NPC witnesses, memories, items and life")
     richer.add_argument("--output", required=True, type=Path)
     richer.add_argument("--model-id", choices=["gpt-6"], default=None)
+    native_v4 = commands.add_parser(
+        "build-extended", help="Reviewed source -> native Dart v4, optional multi-act choices")
+    native_v4.add_argument("--project", required=True, type=Path)
+    native_v4.add_argument("--enrichment", required=True, type=Path)
+    native_v4.add_argument("--npc-review", type=Path,
+                           help="Optional previously reviewed NPC social v5 overlay")
+    native_v4.add_argument("--output", required=True, type=Path)
+    native_v4.add_argument("--model-id", choices=["gpt-6"], default=None)
+    native_v4.add_argument("--extension", type=Path,
+                           help="Explicit reviewed v4 scene batches, multi-acts or NPC dialogue/item scenes")
+    complete = commands.add_parser(
+        "finalize-extended",
+        help="One strict private native-v4 completion: every book scene + two terminal routes + SQLite")
+    for field in ("project", "enrichment", "extension", "review", "output"):
+        complete.add_argument("--" + field, type=Path, required=True)
+    complete.add_argument("--npc-review", type=Path,
+                          help="Separate source-reviewed NPC identity/social v5")
+    complete.add_argument("--report", type=Path,
+                          help="Immutable private, non-canon, no-device readiness report")
+    complete.add_argument("--dialogues", type=Path,
+                          help="Optional signed interactive-question manifest")
+    complete.add_argument("--question-inventory", type=Path)
+    complete.add_argument("--no-interactive-questions", action="store_true",
+                          help="Explicit declaration, not independently verified absence")
+    autopilot = commands.add_parser(
+        "author-book",
+        help="ChatGPT Skill -> private whole-book source review -> native v4 RPG")
+    autopilot.add_argument("--book", type=Path,
+                           help="Private FB2/TXT read and analyzed by the ChatGPT Skill")
+    autopilot.add_argument("--project", type=Path, required=True)
+    autopilot.add_argument("--workdir", type=Path, required=True,
+                           help="Private authoring JSON; never inside public checkout")
+    autopilot.add_argument("--output", type=Path, required=True)
+    autopilot.add_argument("--npc-review", type=Path,
+                           help="Optional already source-reviewed NPC Social v5 dossier")
+    autopilot.add_argument("--response-dir", type=Path,
+                           help="Private ChatGPT Skill responses (default: WORKDIR/skill-responses)")
+    autopilot.add_argument("--delegate-review", action="store_true",
+                           help="Owner permits separate AI literary review; NOT proof of canon")
+    causal = commands.add_parser(
+        "author-causal-v5",
+        help="ChatGPT Skill -> all exact-source CANON scenes -> native v2 review JSON")
+    causal.add_argument("--project", required=True, type=Path)
+    causal.add_argument("--base-world", required=True, type=Path)
+    causal.add_argument("--workdir", required=True, type=Path)
+    causal.add_argument("--output", required=True, type=Path)
+    causal.add_argument("--response-dir", type=Path)
+    causal.add_argument("--native-root", type=Path,
+                        help="Optional second checkout of PR#133 native API, with Dart installed")
+    causal.add_argument("--world-output", type=Path,
+                        help="Private final .bworld, requires --native-root")
+    causal.add_argument("--user-confirmed", action="store_true",
+                        help="Explicit owner approval, never inferred from AI output")
+    # One portable private ZIP contains immutable source checkpoints, all
+    # ChatGPT Skill requests/answers and optionally the compiled game.
+    session = commands.add_parser(
+        "snapshot-private", help="Create private hash-bound project + Skill session ZIP")
+    session.add_argument("--project", type=Path, required=True)
+    session.add_argument("--workdir", type=Path, required=True)
+    session.add_argument("--output", type=Path, required=True)
+    session.add_argument("--game", type=Path)
+    restore = commands.add_parser(
+        "restore-private", help="Restore immutable private session with original toolchain")
+    restore.add_argument("--input", type=Path, required=True)
+    restore.add_argument("--project", type=Path, required=True)
+    restore.add_argument("--workdir", type=Path, required=True)
+    restore.add_argument("--game", type=Path)
+    verify_session = commands.add_parser(
+        "verify-private", help="Read-only integrity check for private session ZIP")
+    verify_session.add_argument("--input", type=Path, required=True)
+    ext_audit = commands.add_parser("audit-extended",
+                                    help="Read-only v4 extension preflight; not native/semantic approval")
+    ext_audit.add_argument("--project", required=True, type=Path)
+    ext_audit.add_argument("--enrichment", required=True, type=Path)
+    ext_audit.add_argument("--extension", required=True, type=Path)
+    ext_audit.add_argument("--npc-review", type=Path)
+    native_v4_check = commands.add_parser(
+        "verify-extended", help="Require real Dart importer plus private v4 SHA and attribution checks")
+    native_v4_check.add_argument("--input", required=True, type=Path)
+    native_v4_check.add_argument("--attribution", required=True, type=Path)
     richer_check = commands.add_parser("verify", aliases=["verify-rich"],
                                        help="Verify v3 archive and matching attribution")
     richer_check.add_argument("--input", required=True, type=Path)
@@ -98,14 +194,16 @@ def main(argv=None) -> int:
             from .gameplay_quality import audit_archive, audit_project
             from .common import atomic_write, canonical, outside_repository, require
             if args.bworld is not None:
-                require(args.project is None and args.enrichment is None, "invalid_args",
+                require(args.project is None and args.enrichment is None and
+                        args.npc_review is None, "invalid_args",
                         "Use --bworld OR --project with --enrichment")
                 result = audit_archive(args.bworld, args.attribution)
             else:
                 require(args.project is not None and args.enrichment is not None
                         and args.attribution is None, "invalid_args",
                         "Provide --project and --enrichment, or --bworld")
-                result = audit_project(args.project, args.enrichment)
+                result = audit_project(args.project, args.enrichment,
+                                       npc_review_path=args.npc_review)
             if args.output is not None:
                 out = outside_repository(args.output)
                 require(not out.exists(), "output_exists", "Report cannot overwrite an existing file")
@@ -120,6 +218,14 @@ def main(argv=None) -> int:
                 require(not out.exists(), "output_exists", "Report cannot overwrite another file")
                 atomic_write(out, canonical(result))
                 result["report_output"] = str(out)
+        elif name == "finalize":
+            from .finalize import finalize
+            result = finalize(args.project, args.enrichment, args.review,
+                              args.output, dialogues=args.dialogues,
+                              question_inventory_path=args.question_inventory,
+                              no_interactive_questions=args.no_interactive_questions,
+                              report_path=args.report,
+                              npc_review_path=args.npc_review)
         elif name == "build-legacy":
             from .legacy_package import build_legacy
             result = build_legacy(args.project, args.output,
@@ -130,10 +236,67 @@ def main(argv=None) -> int:
             result = verify_bundle(args.input, args.attribution)
         elif name in ("build", "build-rich"):
             result = project.build(args.project, args.enrichment, args.output,
-                                   model_id=args.model_id)
+                                   model_id=args.model_id,
+                                   npc_review_path=args.npc_review)
         elif name in ("verify", "verify-rich"):
             from .rich_package import verify_rich_bundle
             result = verify_rich_bundle(args.input, args.attribution)
+        elif name == "build-extended":
+            from .native_v4_bridge import build_extended
+            result = build_extended(args.project, args.enrichment, args.output,
+                                    model_id=args.model_id,
+                                    npc_review_path=args.npc_review,
+                                    extension_path=args.extension)
+        elif name == "finalize-extended":
+            from .complete_game import finalize_extended_campaign
+            result = finalize_extended_campaign(
+                args.project, args.enrichment, args.extension, args.review,
+                args.output, npc_review=args.npc_review,
+                report_path=args.report, dialogues=args.dialogues,
+                question_inventory=args.question_inventory,
+                no_interactive_questions=args.no_interactive_questions)
+        elif name == "author-book":
+            from .auto_author import author_complete_book
+            from .ai_provider import PrivateResponseInbox
+            provider = PrivateResponseInbox(
+                args.response_dir or args.workdir / "skill-responses")
+            result = author_complete_book(
+                project_root=args.project, workdir=args.workdir,
+                output=args.output, provider=provider, book=args.book,
+                delegate_review=args.delegate_review,
+                npc_review_path=args.npc_review)
+        elif name == "author-causal-v5":
+            from .source_causal_v2 import author_causal_v5
+            from .ai_provider import PrivateResponseInbox
+            provider = PrivateResponseInbox(
+                args.response_dir or args.workdir / "skill-responses")
+            result = author_causal_v5(
+                project_root=args.project, base_world=args.base_world,
+                workdir=args.workdir, output=args.output, provider=provider,
+                user_confirmed=args.user_confirmed,
+                native_root=args.native_root, world_output=args.world_output)
+        elif name == "snapshot-private":
+            from .private_snapshot import snapshot_private
+            result = snapshot_private(args.project, args.workdir, args.output,
+                                      game_path=args.game)
+        elif name == "restore-private":
+            from .private_snapshot import restore_private_snapshot
+            result = restore_private_snapshot(args.input, args.project, args.workdir,
+                                              game_path=args.game)
+        elif name == "verify-private":
+            from .private_snapshot import verify_private_snapshot
+            result = verify_private_snapshot(args.input)
+        elif name == "audit-extended":
+            from .native_v4_bridge import audited_extension
+            from .common import outside_repository
+            result = audited_extension(
+                args.project, read_json(outside_repository(args.enrichment)),
+                read_json(outside_repository(args.extension)),
+                npc_review=read_json(outside_repository(args.npc_review))
+                if args.npc_review is not None else None)
+        elif name == "verify-extended":
+            from .native_v4_bridge import verify_extended_bundle
+            result = verify_extended_bundle(args.input, args.attribution)
         else:
             check_contract()
             from tools.bookworld import private_bookworld
@@ -145,10 +308,25 @@ def main(argv=None) -> int:
             except (BookworldError, KeyError, TypeError, ValueError) as exc:
                 raise AuthoringError("invalid_package", str(exc)) from exc
         print(json.dumps(result, ensure_ascii=False, indent=2, allow_nan=False))
+        if name == "finalize" and result["status"] == "rejected":
+            return 3
+        if name == "author-book" and result["status"].startswith("needs_"):
+            return 3
+        if name == "finalize-extended" and result["status"] == "needs_independent_editorial_review":
+            return 3
         if name in ("gameplay-audit", "dialogue-audit") and args.strict and result["warning_count"]:
             return 3
         return 0
     except AuthoringError as exc:
+        if exc.code in ("skill_response_needed", "skill_revision_required"):
+            # A ChatGPT Skill must read the emitted *private* request and
+            # author a JSON response. Not an error, network call, or fake PASS.
+            print(json.dumps({
+                "status": "needs_skill_response", "code": exc.code,
+                "message": str(exc),
+                "external_model_required": False, "game_created": False,
+            }, ensure_ascii=False, indent=2))
+            return 3
         print(json.dumps({"status": "error", "code": exc.code, "message": str(exc)},
                          ensure_ascii=False), file=sys.stderr)
         return 2
