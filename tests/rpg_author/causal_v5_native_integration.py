@@ -57,6 +57,18 @@ def main() -> None:
         assert results["unified_native_v5_workflow"] is True
         assert results["legacy_v4_saved_worlds_untouched"] is True
         assert results["cross_version_npc_ids_implicitly_migrated"] is False
+        # The same verified literal source also supports genuinely NPC-free
+        # books without inventing a character or making a causal-RPG claim.
+        literal_fallback = base / "literal-only-v5.bworld"
+        literal_result = author_game_v5(
+            book=source, project_root=private_project,
+            workdir=private_work, output=literal_fallback,
+            provider=FakePrivateBookSkill(), user_confirmed=True,
+            native_root=native, literal_only=True)
+        assert literal_result["status"] == "private_source_literal_v5_compiled"
+        assert literal_result["npc_causal_review_completed"] is False
+        assert literal_fallback.read_bytes() == (
+            private_work / "literal-source-v5.bworld").read_bytes()
         assert results["status"] == "private_causal_v5_native_compiled"
         assert results["native_causal_archive_compiled"] is True
         assert final_world.is_file()

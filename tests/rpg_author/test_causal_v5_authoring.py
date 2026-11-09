@@ -194,6 +194,19 @@ class WholeBookCausalV5Tests(unittest.TestCase):
         self.assertNotIn("_causal_reason", str(record))
         self.assertFalse(result["native_causal_archive_compiled"])
 
+    def test_immutable_review_resumes_without_overwrite_and_detects_tamper(self):
+        first = self._run()
+        saved = self.output.read_bytes()
+        second = self._run()
+        self.assertEqual(first, second)
+        self.assertEqual(self.output.read_bytes(), saved)
+        # Even whitespace changes to a signed private causal review are
+        # invalid; no alternate 'approved digest' may silently replace it.
+        self.output.write_bytes(saved + b" ")
+        with self.assertRaises(AuthoringError) as failure:
+            self._run()
+        self.assertEqual(failure.exception.code, "causal_review_changed")
+
     def test_no_confirmation_no_review_or_game_export(self):
         result = self._run(consent=False)
         self.assertEqual(result["status"],
