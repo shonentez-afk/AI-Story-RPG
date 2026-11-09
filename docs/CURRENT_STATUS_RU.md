@@ -1,3 +1,9 @@
+## 2026-11-09 — ПРИНЯТО: source-wide v2 causal graph, NPC-реакции, автономный replay
+
+**Код `f368f8c068a39592464c66fd518d155b705d596f`**; [Native CI #1111](https://github.com/shonentez-afk/AI-Story-RPG/actions/runs/42584271223), [M0 #1196](https://github.com/shonentez-afk/AI-Story-RPG/actions/runs/42584271237) и [Author #460](https://github.com/shonentez-afk/AI-Story-RPG/actions/runs/42584271206) — всё SUCCESS на том же SHA. Windows portable/Android APK опубликованы. Полный source-v5 graph по сценам, подтверждённые факты/предметы/воспоминания/отношения/цели/обязательства, автоматический переход в ALTER_FATE, свободная передача знаний и владения NPC, approved auto-react/rumor relay между двумя NPC, replay и multi-client API. Старые v1/v3/v4 сохранения остаются совместимыми. **Не завершены:** автоматический литературный source-wide authoring в ChatGPT Skill E6p, два реальных RU FB2 QA, физические устройства. Draft #133, main не менять.
+
+---
+
 # АКТУАЛЬНАЯ РАБОЧАЯ ПЕРЕДАЧА — 9 НОЯБРЯ 2026: CAUSAL GRAPH + NPC DYNAMIC
 
 **Новый связанный пакет в Draft PR #133:** source-wide review v2 для BookWorld v5, `BookCausalGraph` с явным source quote SHA для КАЖДОЙ канонической сцены, зависимостями (только прошлые), проверенными условиями фактов/памяти/доверия/целей/владения предметом/состояния NPC/флагов, source-reviewed typed эффекты по выходу из сцены. Движок автоматически выбирает ALTER_FATE при нарушении проверенного будущего causal event вследствие динамического NPC-действия, не возвращая игрока в исходный текст. Добавлены согласованные прямые передачи предметов игрок↔NPC и подтверждённая передача знания от героя NPC в том же едином journal/SQLite replay, через существующий API и Flutter. Формат v1 и старые save не получают новых обязательных полей.
