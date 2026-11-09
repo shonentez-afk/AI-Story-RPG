@@ -86,6 +86,55 @@ class ReviewedNpcDialogueItemTests(unittest.TestCase):
         self.assertFalse(report["dialogue_redaction_verified_by_native"])
         self.assertFalse(list(self.private.glob("*.bworld")))
 
+
+    def test_source_signed_dialogue_without_fictitious_item_custody(self):
+        # Original book supports speech, not necessarily an object exchange.
+        candidate = self.fixture()
+        choice = candidate["acts"][1]["scenes"][1]["choices"][0]
+        self.assertEqual(choice["conditions"][-1]["op"], "has_item")
+        self.assertEqual(choice["effects"][-1]["op"], "consume_item")
+        choice["conditions"].pop()
+        choice["effects"].pop()
+        choice["effect_assertion_ids"].pop()
+        candidate["npc_scene_review"]["item_grants"] = []
+        candidate["npc_scene_review"]["item_transfers"] = []
+        bp, provenance, report = self.expand(candidate)
+        self.assertEqual(report["npc_dialogue_scenes_reviewed"], 1)
+        self.assertEqual(report["npc_dialogue_signed_turns"], 2)
+        self.assertEqual(report["npc_source_items_reviewed"], 0)
+        self.assertEqual(report["npc_item_transfers_reviewed"], 0)
+        self.assertEqual(provenance["npc_social"]["item_transfers"], [])
+        self.assertEqual(len(bp["scenes"]), 8)
+
+    def test_real_item_custody_without_invented_spoken_lines(self):
+        # An explicitly reviewed witnessed transfer need not invent speech.
+        candidate = self.fixture()
+        candidate["acts"][1]["scenes"][0]["text"] = (
+            "У моста игрок выбирает дорогу, но никто не произносит слов.")
+        candidate["npc_scene_review"]["dialogues"] = []
+        _, provenance, report = self.expand(candidate)
+        self.assertEqual(report["npc_dialogue_scenes_reviewed"], 0)
+        self.assertEqual(report["npc_dialogue_signed_turns"], 0)
+        self.assertEqual(report["npc_source_items_reviewed"], 1)
+        self.assertEqual(report["npc_item_transfers_reviewed"], 1)
+        self.assertEqual(provenance["npc_social"]["item_transfers"][0]
+                         ["to_actor_id"], ACTOR)
+
+    def test_empty_or_one_sided_scene_review_fails_closed(self):
+        only_grant = self.fixture()
+        only_grant["npc_scene_review"]["item_transfers"] = []
+        with self.assertRaises(AuthoringError) as missing:
+            self.expand(only_grant)
+        self.assertEqual(missing.exception.code, "scene_unbalanced_item_review")
+        empty = self.fixture()
+        empty["acts"][1]["scenes"][0]["text"] = (
+            "Без речевых реплик и без передачи предметов.")
+        for key in ("dialogues", "item_grants", "item_transfers"):
+            empty["npc_scene_review"][key] = []
+        with self.assertRaises(AuthoringError) as missing:
+            self.expand(empty)
+        self.assertEqual(missing.exception.code, "scene_review_incomplete")
+
     def test_bad_source_approvals_and_speaker_spoofing_rejected(self):
         mutations = [
             ("scene_review_unapproved",

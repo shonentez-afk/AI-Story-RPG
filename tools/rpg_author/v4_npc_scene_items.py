@@ -55,10 +55,16 @@ def extend_reviewed_npc_scenes(
     for field in ("dialogues", "item_grants", "item_transfers"):
         require(type(review[field]) is list and len(review[field]) <= 48,
                 "scene_review_invalid", "NPC scene review list is malformed")
-    require(bool(review["dialogues"]) and
-            bool(review["item_grants"]) and bool(review["item_transfers"]),
+    # A book may contain a source-backed conversation without a transferable
+    # object, or real item custody without any attributable spoken line.
+    # Do NOT fabricate the missing kind merely to enter the reviewed v3 path.
+    require(any(review[name] for name in
+                ("dialogues", "item_grants", "item_transfers")),
             "scene_review_incomplete",
-            "Signed NPC speech and source-reviewed item custody are mandatory")
+            "A reviewed signed conversation or source-locked item transfer is required")
+    require(bool(review["item_grants"]) == bool(review["item_transfers"]),
+            "scene_unbalanced_item_review",
+            "A source-acquired item must have its separately reviewed transfer")
 
     base = deepcopy(proposal)
     base["format"] = NPC_V2

@@ -468,8 +468,10 @@ def author_complete_book(*, project_root: Path, workdir: Path,
              "required_act_count_at_least": 2,
              "instruction": "With NPC cast, prepare actor-scoped cross-act "
                             "source review using existing NPC Social v5. "
-                            "Use v3 only when ALL signed dialogue and "
-                            "source-acquired item transfers are reviewed."},
+                            "Use v3 for full signed dialogue review and/or "
+                            "a real source-acquired item with a typed transfer. "
+                            "Keep unsupported dialogue or item lists empty; "
+                            "never fabricate missing speech or ownership."},
             checked_extension)
         _fresh_or_existing(private, _STAGE_FILES["extension"], extension)
 
