@@ -33,7 +33,7 @@ export 'package:story_authoring/story_authoring.dart' show
     ReviewedHeroRole, NpcCampaignConsequencePreview,
     WholePlanGameplayBatchManifest, NpcCampaignDialogueDraft,
     ReviewedBookwideNpcCampaign, ReviewedCampaignStage,
-    ReviewedCampaignState;
+    ReviewedCampaignState, ReviewedCampaignWorkflow;
 export 'package:bookworld_format/bookworld_format.dart' show
     VerifiedRichPrivateBookworld;
 
