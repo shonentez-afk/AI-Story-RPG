@@ -1,0 +1,113 @@
+# AI Story RPG — единый процесс завершения всей частной RPG
+
+**9 ноября 2026 | внешний генератор `0.3.0a11` | единая функциональная приёмка**
+
+## Зачем сделано
+
+Ранее наружный генератор умел отдельно создавать v3/v4, авторить NPC
+в двух актах, подписывать говорящих, передавать предметы и выполнять
+раздельные аудиты, но не имел одного воспроизводимого условия завершения
+ВСЕЙ RPG из книги. В этой поставке один финализатор проверяет
+всё вместе — без микро-PR и без подмены двигателя Python-копией.
+
+## Граница ответственности
+
+- `tools/rpg_author`: сохраняемые source-locked checkpoints книги,
+  независимая декларативная редакторская проверка и локальная CLI-обвязка;
+- `packages/story_authoring` + `bookworld_format`: штатная сборка и
+  независимо проверенный исходник `.bworld v4`;
+- `packages/rpg_api`, `rpg_gameplay`, `story_core`, `campaign_manager`:
+  единственный исполняющий правила интерфейс и SQLite-сохранения;
+- Flutter, Dart CLI или будущий сервис — клиенты одного API.
+
+Внешний Dart probe `tools/rpg_author/dart/route_probe.dart` выполняет
+две законченные партии через `LocalRpgGameApi`, сверяет доступность
+каждого выбора, разные реальные концовки, целостность stateHash,
+перенос каждого `.bwsave`. Никаких своих правил боя, NPC, свободного
+текста, inventory или knowledge в Python нет. После проверки
+probe удаляет локальные приватные временные каталоги.
+
+## Вход одной команды
+
+1. Уже полностью проанализированный приватный FB2/TXT проект
+   `init → accept-analysis (ВСЕ chunks) → accept-story`.
+2. `rich_enrichment_v1` + при NPC отдельный `--npc-review` v5.
+3. `rpg_author_v4_acts_v1/v2/v3`, созданный при авторской
+   source-locked проверке; минимум два акта и одна исходная игровая
+   сцена в каждой физической главе исходника.
+4. `--review`: один отдельный `rpg_author_complete_multi_act_review_v1`.
+   Он содержит `format`, `source_fingerprint`, `extension_sha256`,
+   `blueprint_sha256`, `user_confirmed=true`,
+   `review_method=independent_ai_pass`, `review_completed=true`,
+   `literary_canon_verified=false`, `aspects` с шестью значениями `pass`,
+   пустой массив `issues`, `scenes`, `routes`.
+
+`scenes` — ОДНА запись для каждой скомпилированной сцены, включая
+старые сцены, NPC-разговоры и дополнительные акты:
+`{scene_id, verdict:"pass", notes, source_quote_sha256:[...]}`.
+Список SHA-256 обязан ТОЧНО совпадать с подписанными
+`provenance.scene_origins[*].source_refs`. Ни одного непроверенного
+фрагмента книги или пропущенной главы.
+
+`routes` — две записи `{id,choice_ids,expected_ending_scene_id,notes}`
+по 2–24 действия. Концовки обязаны быть РАЗНЫМИ, обе — терминальными;
+редактор не может объявить пути пройденными, не передав их в настоящий
+игровой API. Декларация PASS не доказывает качество художественной
+интерпретации, поэтому результат не ставит `user_ready=true`.
+
+## Запуск
+
+Сначала разрешить Dart зависимости (`dart pub get` в
+`packages/story_authoring` и в `tools/rpg_author/dart`, либо для CI
+в `tests/rpg_author/dart`). Все исходники и результаты — вне checkout.
+
+```bash
+python3 -m tools.rpg_author doctor
+python3 -m tools.rpg_author finalize-extended \
+  --project /private/author-project \
+  --enrichment /private/enrichment.json \
+  --npc-review /private/npc-base.json \
+  --extension /private/fully-reviewed-multi-act-v3.json \
+  --review /private/whole-book-editorial-review.json \
+  --no-interactive-questions \
+  --output /private/game.bworld
+python3 -m tools.rpg_author verify-extended \
+  --input /private/game.bworld \
+  --attribution /private/game.attribution.json
+```
+
+Если есть интерактивные вопросы (отличны от сценарных подписанных
+реплик NPC), передать `--dialogues` вместе с независимым
+`--question-inventory` вместо `--no-interactive-questions`.
+Декларация отсутствия вопросов не является независимым доказательством.
+
+Результат после ВСЕХ успешных проверок: `game.bworld`,
+`game.attribution.json`, `game.readiness.json`. Существующие
+файлы не перезаписываются. Если хоть один путь нельзя пройти
+или сохранение не восстановилось, файлы игры не публикуются.
+
+## Приёмка и честные ограничения
+
+Тест: авторская русская синтетическая FB2 «Три берега», 3 физические
+главы, 2 акта, 8 подписанных сцен, действующий NPC с постоянным
+character_id и памятью, два сценария с разными финалами,
+source-locked цитаты, реальное владение верёвкой, закрытые/открытые
+реплики и SQLite .bwsave. Все проверки Python и Dart на одном SHA
+обязательны до заявления о приёмке.
+
+Это **не** доказательство того, что ИИ теперь способен
+самостоятельно сочинить хорошую RPG из произвольного романа.
+Прежний навык ChatGPT закреплён на E6d; в рамках этого кода
+он не устанавливался и не изменялся. Нет реального
+литературного/модельного E2E на двух пользовательских русских FB2,
+нет Windows/Android device playtest и нет проверки качества
+свободной генерации диалогов ИИ в приложении.
+
+## Следующий большой блок (не микро-PR)
+
+После этой приёмки — единый генеративный маршрут от исходной книги:
+объединить анализ всей книги, главы/события/паспорта NPC,
+авторство маршрутов и исходно подтверждённый сценарий с
+`RpgMultiActTrialApi`, `RpgProposalReviewApi` и `RpgCampaignProseApi`.
+Потом одно сквозное испытание на двух настоящих FB2 и клиентах.
+Не возвращаться к PR на отдельное поле, кнопку, цитату или экран.

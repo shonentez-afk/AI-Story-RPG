@@ -1,0 +1,10 @@
+name: external_rpg_author_native_route_probe
+description: Native, Flutter-independent private RPG route acceptance
+publish_to: none
+environment:
+  sdk: '>=3.11.0 <4.0.0'
+dependencies:
+  rpg_api:
+    path: ../../../packages/rpg_api
+  campaign_manager:
+    path: ../../../packages/campaign_manager

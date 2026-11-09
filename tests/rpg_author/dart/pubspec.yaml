@@ -7,9 +7,13 @@ dependencies:
   xml: 6.6.1
   archive: 4.6.0
   crypto: 3.0.6
+  story_authoring:
+    path: ../../../packages/story_authoring
   campaign_manager:
     path: ../../../packages/campaign_manager
   bookworld_format:
     path: ../../../packages/bookworld_format
   story_core:
     path: ../../../packages/story_core
+  rpg_api:
+    path: ../../../packages/rpg_api
