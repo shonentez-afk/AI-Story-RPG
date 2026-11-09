@@ -1,0 +1,429 @@
+"""One resumable book -> AI authoring -> source-locked native-v4 RPG workflow.
+
+Strict separation:
+ * The model proposes Russian summaries, plot, enrichment, acts and criticism.
+ * Exact quotes, source references and all game rules belong to pinned code.
+ * Native Dart finds REAL reachable endings and replays private SQLite saves.
+ * Auto approval is EXPLICIT owner opt-in, never literary-canon attestation.
+ * Private model responses and original FB2/TXT never enter public GitHub.
+"""
+from __future__ import annotations
+
+import io
+import json
+from pathlib import Path
+import re
+import shutil
+import subprocess
+import tempfile
+import zipfile
+
+from .ai_provider import PrivateResponseInbox, ZaiProvider
+from .common import (AuthoringError, ROOT, atomic_write, canonical, digest,
+                     fields, outside_repository, parse_json, read_bytes,
+                     read_json, require, utf16_len)
+from .compatibility import check_contract
+from . import project
+from .complete_game import (REVIEW_FORMAT, prepare_full_review_template,
+                            review_complete_campaign,
+                            finalize_extended_campaign, replay_two_native_routes,
+                            verify_route_evidence)
+from .native_v4_bridge import (_MAX_V4_BYTES, _inspect_v4,
+                               audited_extension, compile_extended_from_project)
+from .rich_package import compile_rich_from_project
+from .validate import (assertion_registry, candidate_blueprint,
+                       validate_analysis, validate_story)
+from .v4_acts import FORMAT as ACT_FORMAT
+
+REVISION = "rpg_author_ai_book_pipeline_v1"
+MAX_AUTO_REVISIONS = 3
+_STAGE_FILES = {"enrichment": "enrichment.json",
+                "extension": "multi_act.json",
+                "literary_review": "literary_review.json"}
+_DART_ROUTE = ROOT / "tools/rpg_author/dart/discover_routes.dart"
+_DART_CONFIG = ROOT / "tools/rpg_author/dart/.dart_tool/package_config.json"
+_PARITY_CONFIG = ROOT / "tests/rpg_author/dart/.dart_tool/package_config.json"
+
+
+def _fresh_or_existing(folder: Path, name: str, content: dict) -> dict:
+    path = folder / name
+    require(not path.is_symlink(), "unsafe_private_file", "Private stage path is a symlink")
+    if path.exists():
+        existing = read_json(path)
+        require(canonical(existing) == canonical(content), "stage_changed",
+                "Do not overwrite source-bound private author data; make a new project revision")
+        return existing
+    atomic_write(path, canonical(content))
+    return content
+
+
+def _ask_verified(provider, stage: str, payload: dict, normalizer) -> dict:
+    feedback = ""
+    for _ in range(MAX_AUTO_REVISIONS):
+        proposed = provider.ask(stage, payload, feedback=feedback)
+        try:
+            require(type(proposed) is dict, "model_invalid_response",
+                    "Model JSON must be an object")
+            return normalizer(proposed)
+        except (AuthoringError, KeyError, TypeError, ValueError) as exc:
+            feedback = (exc.code if isinstance(exc, AuthoringError)
+                        else "invalid_model_structure")
+    raise AuthoringError("model_contract_rejected",
+                         "AI did not satisfy verified " + stage +
+                         " source and game contracts after bounded revision")
+
+
+def _source_analysis(response: dict, chunk: dict, fingerprint: str,
+                     ordinal: int) -> dict:
+    fields(response, {"summary", "assertions", "unresolved"}, "AI source analysis")
+    proposed = response["assertions"]
+    require(type(proposed) is list and len(proposed) <= 32,
+            "invalid_assertions", "Chunk has too many AI claims")
+    citations = []
+    seen = set()
+    for index, claim in enumerate(proposed):
+        fields(claim, {"statement", "kind", "quote"}, "source claim")
+        quote = claim["quote"]
+        require(type(quote) is str and 0 < utf16_len(quote) <= 180,
+                "invalid_quote", "AI claim must cite exact bounded source text")
+        require(chunk["text"].count(quote) == 1 and quote not in seen,
+                "ambiguous_quote", "Source quotation missing or ambiguous")
+        seen.add(quote)
+        start = chunk["text"].index(quote)
+        offset = chunk["start_utf16"] + utf16_len(chunk["text"][:start])
+        citations.append({
+            "id": "a_%05d_%02d" % (ordinal, index),
+            "statement": claim["statement"],
+            "kind": claim["kind"],
+            "start_utf16": offset,
+            "end_utf16": offset + utf16_len(quote),
+            "quote": quote,
+        })
+    checked = {
+        "format": "rpg_author_chunk_analysis_v1",
+        "source_fingerprint": fingerprint,
+        "chunk_id": chunk["id"], "source_sha256": chunk["sha256_text"],
+        "summary": response["summary"],
+        "assertions": citations,
+        "unresolved": response["unresolved"],
+    }
+    return validate_analysis(checked, {"source_fingerprint": fingerprint,
+                                       "chunks": [chunk]})
+
+
+def _brief_evidence(index: dict, analyses: list[dict]) -> list[dict]:
+    ordered = {a["chunk_id"]: a for a in analyses}
+    return [{
+        "chapter_index": chunk["chapter_index"],
+        "chunk_id": chunk["id"],
+        "summary": ordered[chunk["id"]]["summary"],
+        "claims": [{"id": c["id"], "kind": c["kind"],
+                    "statement": c["statement"], "quote": c["quote"]}
+                   for c in ordered[chunk["id"]]["assertions"]],
+        "unresolved": ordered[chunk["id"]]["unresolved"],
+    } for chunk in index["chunks"]]
+
+
+def _full_chapter_coverage(story: dict, index: dict) -> None:
+    require(index["chapter_count"] <= 192, "book_over_base_scene_limit",
+            "This source has more than 192 chapters; full-book base authoring "
+            "needs the native multi-act composer, not a truncated short story")
+    chapters = {s["chapter_index"] for s in story["scenes"]
+                if s["origin"] == "SOURCE_PASSAGE"}
+    require(chapters == set(range(index["chapter_count"])),
+            "bookwide_coverage_missing",
+            "The AI plan omitted source-grounded events from some chapters")
+
+
+def _derive_reviewed_extension(answer: dict, index: dict, story: dict,
+                               enrichment: dict, base_blueprint: dict,
+                               *, allow_machine_review: bool) -> dict:
+    fields(answer, {"acts", "initial_state"}, "AI authored v4 acts")
+    return {
+        "format": ACT_FORMAT,
+        "source_fingerprint": index["source_fingerprint"],
+        "story_sha256": digest(canonical(story)),
+        "enrichment_sha256": digest(canonical(enrichment)),
+        "base_blueprint_sha256": digest(canonical(base_blueprint)),
+        "editorial_review": {
+            "user_confirmed": allow_machine_review,
+            "transition_causality_reviewed": allow_machine_review,
+            "character_continuity_reviewed": allow_machine_review,
+            "literary_canon_verified": False,
+        },
+        "acts": answer["acts"],
+        "initial_state": answer["initial_state"],
+    }
+
+
+def _discover_real_endings(raw: bytes) -> list[dict]:
+    check_contract()
+    package_config = (_DART_CONFIG if _DART_CONFIG.is_file()
+                      else _PARITY_CONFIG)
+    require(_DART_ROUTE.is_file() and package_config.is_file() and
+            shutil.which("dart") is not None,
+            "native_route_not_resolved",
+            "Dart SDK and resolved rpg_api required for native route discovery")
+    require(len(raw) <= _MAX_V4_BYTES, "native_route_invalid_input",
+            "Oversized native v4 game")
+    import base64
+    request = {"format": "rpg_author_native_route_discovery_v1",
+               "archive_b64": base64.b64encode(raw).decode("ascii")}
+    with tempfile.TemporaryDirectory(prefix="ai_rpg_private_discover_") as tmp:
+        try:
+            response = subprocess.run(
+                ["dart", "--packages=" + str(package_config), str(_DART_ROUTE)],
+                cwd=tmp, input=json.dumps(request),
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                text=True, encoding="utf-8", timeout=600)
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            raise AuthoringError("native_discovery_unavailable",
+                                 "Native route discovery unavailable") from exc
+    require(response.returncode == 0, "native_route_not_found",
+            "Native public RPG API could not find two different playable endings")
+    reply = parse_json(response.stdout.encode("utf-8"))
+    routes = reply.get("routes")
+    require(reply.get("format") == "rpg_author_native_two_discovered_routes_v1"
+            and reply.get("archive_sha256") == digest(raw)
+            and reply.get("true_rpg_api") is True
+            and type(routes) is list and len(routes) == 2
+            and len({r["expected_ending_scene_id"] for r in routes}) == 2,
+            "native_discovery_invalid",
+            "Native route discovery is not bound to compiled BookWorld")
+    return routes
+
+
+def _independent_review(answer: dict, template: dict,
+                        discovered: list[dict],
+                        *, allow_machine_review: bool) -> dict:
+    fields(answer, {"aspects", "issues", "scenes", "routes"},
+           "independent AI literary review")
+    require(type(answer["scenes"]) is list and
+            type(answer["routes"]) is list and
+            len(answer["scenes"]) == len(template["scenes"]) and
+            len(answer["routes"]) == 2,
+            "review_missing_scenes", "AI review omitted scenes or complete routes")
+    by_scene = {s["scene_id"]: s for s in answer["scenes"]}
+    require(len(by_scene) == len(answer["scenes"]) and
+            set(by_scene) == {s["scene_id"] for s in template["scenes"]},
+            "review_missing_scenes", "AI review has invented or repeated scenes")
+    by_route = {r["id"]: r for r in answer["routes"]}
+    require(len(by_route) == 2 and
+            set(by_route) == {r["id"] for r in discovered},
+            "review_routes_changed", "Literary critic rewrote native route identities")
+    reviewed = dict(template)
+    reviewed["aspects"] = answer["aspects"]
+    reviewed["issues"] = answer["issues"]
+    reviewed["scenes"] = []
+    reviewed["routes"] = []
+    for signed in template["scenes"]:
+        suggestion = by_scene[signed["scene_id"]]
+        fields(suggestion, {"scene_id", "verdict", "notes"}, "literary scene verdict")
+        reviewed["scenes"].append({**signed,
+                                   "verdict": suggestion["verdict"],
+                                   "notes": suggestion["notes"]})
+    for fixed in discovered:
+        suggestion = by_route[fixed["id"]]
+        fields(suggestion, {"id", "choice_ids", "expected_ending_scene_id",
+                            "notes"}, "literary route verdict")
+        require(all(suggestion[key] == fixed[key] for key in
+                    ("id", "choice_ids", "expected_ending_scene_id")),
+                "review_routes_changed",
+                "AI review must NOT rewrite actually playable native routes")
+        reviewed["routes"].append(suggestion)
+    approved = (allow_machine_review and not reviewed["issues"] and
+                type(reviewed["aspects"]) is dict and
+                all(v == "pass" for v in reviewed["aspects"].values()) and
+                all(s["verdict"] == "pass" for s in reviewed["scenes"]))
+    reviewed["review_completed"] = approved
+    reviewed["user_confirmed"] = approved
+    return reviewed
+
+
+def author_complete_book(*, project_root: Path, workdir: Path,
+                         output: Path, provider, book: Path | None = None,
+                         delegate_review: bool = False) -> dict:
+    """One resumable command; never overwrite signed source or accepted stages."""
+    check_contract()
+    root = outside_repository(project_root)
+    private = outside_repository(workdir)
+    output = outside_repository(output)
+    require(root != private and root not in private.parents and
+            private != root and private not in root.parents and
+            output not in (root, private) and root not in output.parents and
+            output.suffix.lower() == ".bworld",
+            "invalid_authoring_paths",
+            "Book checkpoints, AI stage outputs and game must be separate private paths")
+    if book is not None:
+        book = outside_repository(book)
+    if not root.exists():
+        require(book is not None, "missing_book",
+                "A new private project needs an FB2/TXT book")
+        project.init_project(root, book, 4096)
+    if book is not None:
+        _, state, _, _, _ = project.load_project(root)
+        require(book.name == state["source_name"] and
+                digest(read_bytes(book, 20 * 1024 * 1024)) ==
+                state["source_bytes_sha256"],
+                "book_changed",
+                "Source book differs from the preserved private checkpoint")
+    private.mkdir(parents=True, exist_ok=True, mode=0o700)
+    _, state, idx, analyses, story = project.load_project(root)
+
+    # All source chunks are checked individually and atomically checkpointed.
+    chunk_order = {c["id"]: i for i, c in enumerate(idx["chunks"])}
+    existing = {a["chunk_id"] for a in analyses}
+    for chunk in idx["chunks"]:
+        if chunk["id"] in existing:
+            continue
+        payload = {"title": idx["title"], "author": idx["author"],
+                   "chapter_count": idx["chapter_count"], "chunk": chunk,
+                   "instruction": "Cite unique exact contiguous source excerpts"}
+        checked = _ask_verified(
+            provider, "analysis", payload,
+            lambda response: _source_analysis(
+                response, chunk, idx["source_fingerprint"],
+                chunk_order[chunk["id"]]))
+        project.submit_analysis(root, checked)
+    _, state, idx, analyses, story = project.load_project(root)
+    evidence = _brief_evidence(idx, analyses)
+    if story is None:
+        def checked_story(response):
+            require(response.get("source_fingerprint", idx["source_fingerprint"])
+                    == idx["source_fingerprint"], "wrong_source",
+                    "Model story references another source")
+            value = {"format": "rpg_author_story_plan_v1",
+                     "source_fingerprint": idx["source_fingerprint"],
+                     **{k: v for k, v in response.items()
+                        if k not in ("format", "source_fingerprint")}}
+            _full_chapter_coverage(value, idx)
+            validate_story(value, idx, analyses)
+            return value
+        story = _ask_verified(
+            provider, "story",
+            {"book_title": idx["title"], "chapter_count": idx["chapter_count"],
+             "all_verified_evidence": evidence,
+             "instruction": "Two distinct endings; no omitted chapter evidence"},
+            checked_story)
+        project.submit_story(root, story)
+    _full_chapter_coverage(story, idx)
+
+    enrich_path = private / _STAGE_FILES["enrichment"]
+    if enrich_path.exists():
+        overlay = read_json(enrich_path)
+        compile_rich_from_project(root, overlay)
+    else:
+        def checked_enrichment(response):
+            require(response.get("source_fingerprint", idx["source_fingerprint"])
+                    == idx["source_fingerprint"], "wrong_source",
+                    "Enrichment references another book")
+            value = {"format": "rpg_author_rich_enrichment_v1",
+                     "source_fingerprint": idx["source_fingerprint"],
+                     "story_sha256": digest(canonical(story)),
+                     **{k: v for k, v in response.items()
+                        if k not in ("format", "source_fingerprint", "story_sha256")}}
+            require(response.get("story_sha256", value["story_sha256"])
+                    == value["story_sha256"], "wrong_enrichment",
+                    "Enrichment references another story revision")
+            compile_rich_from_project(root, value)
+            return value
+        overlay = _ask_verified(
+            provider, "enrichment",
+            {"story": story, "verified_evidence": evidence,
+             "instruction": "Typed rule IDs only; empty catalogs are valid"},
+            checked_enrichment)
+        _fresh_or_existing(private, _STAGE_FILES["enrichment"], overlay)
+
+    base_raw, _ = compile_rich_from_project(root, overlay)
+    with zipfile.ZipFile(io.BytesIO(base_raw)) as archive:
+        base_bp = parse_json(archive.read("scenario/blueprint.json"))
+
+    ext_path = private / _STAGE_FILES["extension"]
+    if ext_path.exists():
+        extension = read_json(ext_path)
+    else:
+        def checked_extension(response):
+            value = _derive_reviewed_extension(
+                response, idx, story, overlay, base_bp,
+                allow_machine_review=delegate_review)
+            if delegate_review:
+                audited_extension(root, overlay, value)
+            return value
+        extension = _ask_verified(
+            provider, "extension",
+            {"book_title": idx["title"], "verified_evidence": evidence,
+             "story": story, "enrichment": overlay,
+             "base_blueprint": base_bp, "required_format": ACT_FORMAT,
+             "review_declared_by_user": delegate_review,
+             "required_act_count_at_least": 2},
+            checked_extension)
+        _fresh_or_existing(private, _STAGE_FILES["extension"], extension)
+
+    if not extension["editorial_review"]["user_confirmed"]:
+        return {"status": "needs_explicit_act_review",
+                "extension": str(ext_path),
+                "book_chapters_analyzed": idx["chapter_count"],
+                "source_chunks_analyzed": len(idx["chunks"]),
+                "game_created": False, "user_ready": False,
+                "model_calls_this_run": provider.calls}
+
+    audited = audited_extension(root, overlay, extension)
+    require(audited.get("act_count", 0) >= 2 and
+            audited.get("chapters_without_source_scenes") == [],
+            "incomplete_book_acts", "Bookwide story acts omit source chapters")
+    raw, _ = compile_extended_from_project(root, overlay,
+                                           extension=extension)
+    _, bp_bytes, prov = _inspect_v4(raw)
+    bp = parse_json(bp_bytes)
+    candidates = _discover_real_endings(raw)
+    template = prepare_full_review_template(bp, prov, extension)
+    review_path = private / _STAGE_FILES["literary_review"]
+
+    if review_path.exists():
+        review = read_json(review_path)
+    elif not delegate_review:
+        _fresh_or_existing(private, _STAGE_FILES["literary_review"], template)
+        return {"status": "needs_independent_editorial_review",
+                "review_template": str(review_path),
+                "two_native_ending_routes_discovered": True,
+                "book_chapters_analyzed": idx["chapter_count"],
+                "game_created": False, "user_ready": False,
+                "model_calls_this_run": provider.calls}
+    else:
+        def checked_review(response):
+            value = _independent_review(
+                response, template, candidates,
+                allow_machine_review=delegate_review)
+            require(value["review_completed"] is True, "literary_review_failed",
+                    "Independent AI reviewer found unresolved evidence issues")
+            review_complete_campaign(value, bp, prov, extension)
+            # Execute the routes BEFORE persisting any acceptance:
+            evidence_report = replay_two_native_routes(raw, value["routes"])
+            verify_route_evidence(evidence_report, value["routes"], bp, prov, raw)
+            return value
+        review = _ask_verified(
+            provider, "literary_review",
+            {"book_title": idx["title"], "all_verified_evidence": evidence,
+             "source_locked_blueprint": bp,
+             "scene_origins": prov["scene_origins"],
+             "review_template": template,
+             "native_discovered_routes": candidates,
+             "explicit_machine_review_consent": delegate_review},
+            checked_review)
+        _fresh_or_existing(private, _STAGE_FILES["literary_review"], review)
+
+    if not review["review_completed"] or not review["user_confirmed"]:
+        return {"status": "needs_independent_editorial_review",
+                "review_template": str(review_path),
+                "game_created": False, "user_ready": False,
+                "model_calls_this_run": provider.calls}
+    result = finalize_extended_campaign(
+        root, enrich_path, ext_path, review_path, output,
+        no_interactive_questions=True)
+    require(result["native_routes"]["route_count"] == 2,
+            "full_game_not_verified", "Two native routes are mandatory")
+    result["authoring_workflow"] = REVISION
+    result["model_calls_this_run"] = provider.calls
+    result["autonomous_review_requested"] = delegate_review
+    result["user_ready"] = False
+    return result

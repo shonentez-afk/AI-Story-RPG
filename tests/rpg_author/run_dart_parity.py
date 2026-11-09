@@ -584,6 +584,15 @@ def main():
         e6k_file.write_bytes(item_npc_world)
         e6k_sidecar.write_bytes(item_npc_attr)
         assert verify_extended_bundle(e6k_file, e6k_sidecar)["native_dart_verified"]
+        # The author's complete-book automation must discover, not invent,
+        # two distinct endings via the public native game API.
+        from tools.rpg_author.auto_author import _discover_real_endings
+        discovered = _discover_real_endings(item_npc_world)
+        assert len(discovered) == 2
+        assert {r["expected_ending_scene_id"] for r in discovered} == {
+            "safe", "help"
+        }, discovered
+        assert all(len(r["choice_ids"]) >= 2 for r in discovered)
         # ONE holistic acceptance, no micro-gate success claims: all reviewed
         # scenes, ALL original chapters, two truly different endings, real
         # LocalRpgGameApi/SQLite replay, private attribution and report.
@@ -676,7 +685,8 @@ def main():
                        "native_v4_npc_public_api_choice_gates_and_saves": True,
                        "native_v4_npc_signed_dialogue_redaction_and_portraits": True,
                        "native_v4_npc_item_custody_public_api_save_verified": True,
-                       "complete_private_book_two_native_ending_routes_verified": True}))
+                       "complete_private_book_two_native_ending_routes_verified": True,
+                       "automatic_native_two_distinct_ending_discovery": True}))
 
 
 if __name__ == "__main__":

@@ -105,6 +105,24 @@ def parser():
     complete.add_argument("--question-inventory", type=Path)
     complete.add_argument("--no-interactive-questions", action="store_true",
                           help="Explicit declaration, not independently verified absence")
+    autopilot = commands.add_parser(
+        "author-book",
+        help="One private, resumable whole-book AI authoring -> native v4 completion")
+    autopilot.add_argument("--book", type=Path,
+                           help="FB2/TXT input on first invocation (never uploaded without consent)")
+    autopilot.add_argument("--project", type=Path, required=True)
+    autopilot.add_argument("--workdir", type=Path, required=True,
+                           help="Private authoring JSON; never inside public checkout")
+    autopilot.add_argument("--output", type=Path, required=True)
+    autopilot.add_argument("--provider", choices=("zai", "private-json"),
+                           default="private-json")
+    autopilot.add_argument("--response-dir", type=Path,
+                           help="External prepared JSON answers, not repository fixtures")
+    autopilot.add_argument("--model", default="glm-4.7-flash")
+    autopilot.add_argument("--allow-cloud-book", action="store_true",
+                           help="Explicitly allow private book text to leave this computer")
+    autopilot.add_argument("--delegate-review", action="store_true",
+                           help="Owner permits separate AI literary review; NOT proof of canon")
     ext_audit = commands.add_parser("audit-extended",
                                     help="Read-only v4 extension preflight; not native/semantic approval")
     ext_audit.add_argument("--project", required=True, type=Path)
@@ -209,6 +227,25 @@ def main(argv=None) -> int:
                 report_path=args.report, dialogues=args.dialogues,
                 question_inventory=args.question_inventory,
                 no_interactive_questions=args.no_interactive_questions)
+        elif name == "author-book":
+            from .auto_author import author_complete_book
+            from .ai_provider import PrivateResponseInbox, ZaiProvider
+            from .common import require
+            if args.provider == "zai":
+                require(args.response_dir is None, "invalid_args",
+                        "Cloud provider must not use the private JSON inbox")
+                provider = ZaiProvider(
+                    allow_cloud_book=args.allow_cloud_book, model=args.model)
+            else:
+                require(args.response_dir is not None and
+                        not args.allow_cloud_book and
+                        args.model == "glm-4.7-flash", "invalid_args",
+                        "Private JSON provider needs --response-dir, no cloud upload")
+                provider = PrivateResponseInbox(args.response_dir)
+            result = author_complete_book(
+                project_root=args.project, workdir=args.workdir,
+                output=args.output, provider=provider, book=args.book,
+                delegate_review=args.delegate_review)
         elif name == "audit-extended":
             from .native_v4_bridge import audited_extension
             from .common import outside_repository
@@ -232,6 +269,8 @@ def main(argv=None) -> int:
                 raise AuthoringError("invalid_package", str(exc)) from exc
         print(json.dumps(result, ensure_ascii=False, indent=2, allow_nan=False))
         if name == "finalize" and result["status"] == "rejected":
+            return 3
+        if name == "author-book" and result["status"].startswith("needs_"):
             return 3
         if name == "finalize-extended" and result["status"] == "needs_independent_editorial_review":
             return 3
