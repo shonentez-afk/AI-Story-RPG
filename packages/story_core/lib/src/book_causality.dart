@@ -22,9 +22,11 @@ final class BookCausalPredicate {
     final id = row['id'];
     final val = row['value'];
     const facts = {'fact_known', 'fact_unknown'};
+    const promises = {'promise_open', 'promise_closed'};
     const items = {'item_owner'};
     const npc = {'memory_present', 'memory_absent', 'goal_is',
-        'trust_min', 'trust_max', 'life_is'};
+        'trust_min', 'trust_max', 'life_is',
+        'promise_open', 'promise_closed'};
     const flags = {'flag_is'};
     if (op is! String ||
         !{...facts, ...items, ...npc, ...flags}.contains(op) ||
@@ -34,7 +36,8 @@ final class BookCausalPredicate {
       throw const FormatException('Unknown causal predicate or actor');
     }
     final needsId = facts.contains(op) || items.contains(op) ||
-        {'memory_present', 'memory_absent', 'goal_is', 'flag_is'}.contains(op);
+        {'memory_present', 'memory_absent', 'goal_is', 'flag_is',
+         ...promises}.contains(op);
     if ((needsId && (id is! String || id.isEmpty)) ||
         (!needsId && id != null)) {
       throw const FormatException('Causal predicate has incorrect id');
@@ -50,7 +53,8 @@ final class BookCausalPredicate {
          (val is! String || !bp.actors.contains(val)))) {
       throw const FormatException('Unregistered item or owner');
     }
-    if ({'memory_present', 'memory_absent', 'goal_is'}.contains(op) &&
+    if ({'memory_present', 'memory_absent', 'goal_is',
+         ...promises}.contains(op) &&
         (id is! String || !gm.hasMatch(id) || val != null)) {
       throw const FormatException('Unreviewed NPC memory or goal');
     }
@@ -97,6 +101,10 @@ final class BookCausalPredicate {
         return !social.hasMemory(actorId, id!);
       case 'goal_is':
         return social.currentGoal(actorId) == id;
+      case 'promise_open':
+        return social.hasOpenPromise(actorId, id!);
+      case 'promise_closed':
+        return !social.hasOpenPromise(actorId, id!);
       case 'trust_min':
         return social.directedScore(actorId, 'player') >= (value as int);
       case 'trust_max':

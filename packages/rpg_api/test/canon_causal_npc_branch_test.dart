@@ -712,11 +712,10 @@ void main() {
           ['gm_keep_promise']);
       expect(initial.view.alternatePlotContinuity['last_beat_id'],
           'gm_rescue_start');
-      expect(initial.view.alternatePlotContinuity['next_directions'],
-          contains({
-            'kind': 'resolve_obligation',
-            'obligation_id': 'gm_keep_promise',
-          }));
+      final directions = initial.view.alternatePlotContinuity['next_directions']
+          as List;
+      expect((directions.single as Map)['obligation_id'],
+          'gm_keep_promise');
 
       // A model cannot end the story without satisfying a commitment,
       // invent a predecessor or suppress the already active plan.
@@ -765,6 +764,74 @@ void main() {
       destination?.close();
       await first.delete(recursive: true);
       await second.delete(recursive: true);
+    }
+  });
+
+  test('NPC promise lifecycle is replayed and gates a future CANON event',
+      () async {
+    final fixture = _files();
+    final dir = await Directory.systemTemp.createTemp('npc_promise_lifecycle_');
+    BookworldCampaignStore? store;
+    try {
+      store = BookworldCampaignStore.openPrivateDirectory(dir.path);
+      final game = LocalRpgGameApi(store);
+      final world = game.install(fixture.reviewed);
+      final id = game.start(world.archiveHash);
+      FreeformActionDraft interaction(String label, String memory,
+          String kind, String promise) =>
+          FreeformActionDraft.fromJson({
+            'format': FreeformActionDraft.format,
+            'scope': FreeformActionDraft.fictionScope,
+            'player_text': label,
+            'narration': 'Последствие обещания влияет на будущие события.',
+            'effects': <Object>[],
+            'npc_interaction': {
+              'actor_id': _anna, 'memory_id': memory,
+              'kind': kind, 'trust_delta': 0, 'goal_id': null,
+              'promise_id': promise,
+            },
+          });
+      final impossible = interaction('Выдать обещание за выполненное',
+          'gm_fake_promise_result', 'promise_fulfilled',
+          'gm_find_safe_shelter');
+      expect(() => game.previewFreeform(id, impossible,
+          expectedRevision: 0), throwsFormatException);
+      final made = interaction('Пообещать Анне укрытие',
+          'gm_promise_given', 'promise_received', 'gm_find_safe_shelter');
+      final start = game.previewFreeform(id, made, expectedRevision: 0);
+      final offered = game.commitFreeform(id, actionId: 'promise_open_1',
+          draft: made, expectedRevision: 0,
+          approvalDigest: start.approvalDigest, userConfirmed: true);
+      expect(offered.view.npcRelations.single.openPromiseIds,
+          ['gm_find_safe_shelter']);
+      final duplicate = interaction('Ещё раз то же самое',
+          'gm_promise_duplicate_memory', 'promise_received',
+          'gm_find_safe_shelter');
+      expect(() => game.previewFreeform(id, duplicate,
+          expectedRevision: 1), throwsFormatException);
+      final fulfilled = interaction('Сдержать слово',
+          'gm_promise_kept', 'promise_fulfilled',
+          'gm_find_safe_shelter');
+      final ready = game.previewFreeform(id, fulfilled,
+          expectedRevision: 1);
+      final committed = game.commitFreeform(id,
+          actionId: 'promise_fulfill_2', draft: fulfilled,
+          expectedRevision: 1, approvalDigest: ready.approvalDigest,
+          userConfirmed: true);
+      expect(committed.view.npcRelations.single.openPromiseIds, isEmpty);
+      expect(committed.view.npcRelations.single.memoryKinds['promiseFulfilled'],
+          1);
+      final save = game.exportSave(id);
+      final restoredId = game.importSave(save,
+          expectedWorldHash: world.archiveHash);
+      final restored = game.load(restoredId);
+      expect(restored.stateHash, committed.view.stateHash);
+      expect(restored.npcRelations.single.openPromiseIds, isEmpty);
+      expect(() => game.previewFreeform(id, impossible,
+          expectedRevision: 2), throwsFormatException);
+    } finally {
+      store?.close();
+      await dir.delete(recursive: true);
     }
   });
 

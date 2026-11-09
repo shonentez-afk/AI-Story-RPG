@@ -15,6 +15,7 @@ enum NpcMemoryKind {
   witnessed,
   promiseReceived,
   promiseBroken,
+  promiseFulfilled,
   helped,
   betrayed,
   rumorHeard,
@@ -609,6 +610,7 @@ class NpcEventMemory {
     required this.relationshipDelta,
     this.witnessMode,
     this.goalId,
+    this.promiseId,
   });
 
   final String observerId;
@@ -622,6 +624,7 @@ class NpcEventMemory {
   /// reported for separately verified NPC observers.
   final NpcWitnessMode? witnessMode;
   final String? goalId;
+  final String? promiseId;
 }
 
 /// Safe read-only projection of *actual* committed events onto authored
@@ -685,6 +688,25 @@ class NpcSocialSnapshot {
     return null;
   }
 
+  /// An exact, replayed outstanding promise; a forgotten voice line cannot
+  /// fulfill an obligation, and a repeated promise ID cannot be recycled.
+  List<String> openPromisesFor(String actorId) {
+    final open = <String>{};
+    for (final memory in memoriesFor(actorId)) {
+      if (memory.promiseId == null) continue;
+      if (memory.kind == NpcMemoryKind.promiseReceived) {
+        open.add(memory.promiseId!);
+      } else if (memory.kind == NpcMemoryKind.promiseFulfilled ||
+                 memory.kind == NpcMemoryKind.promiseBroken) {
+        open.remove(memory.promiseId);
+      }
+    }
+    return List.unmodifiable(open.toList()..sort());
+  }
+
+  bool hasOpenPromise(String actorId, String promiseId) =>
+      openPromisesFor(actorId).contains(promiseId);
+
   bool hasMemory(String actorId, String memoryId) {
     jsonId(memoryId, 'memory_id');
     return memoriesFor(actorId).any((memory) => memory.memoryId == memoryId);
@@ -746,6 +768,8 @@ class NpcSocialLedger {
           () => <NpcSocialRule>[]).add(rule);
     }
     final memory = <String, List<NpcEventMemory>>{};
+    final pendingPromises = <String, Set<String>>{};
+    final usedPromises = <String, Set<String>>{};
     final witnessModes = {
       for (final witness in rulebook.witnesses)
         '${witness.sceneId}|${witness.actorId}': witness.mode,
@@ -813,9 +837,24 @@ class NpcSocialLedger {
           'betrayed' => NpcMemoryKind.betrayed,
           'promise_received' => NpcMemoryKind.promiseReceived,
           'promise_broken' => NpcMemoryKind.promiseBroken,
+          'promise_fulfilled' => NpcMemoryKind.promiseFulfilled,
           'rumor_heard' => NpcMemoryKind.rumorHeard,
           _ => NpcMemoryKind.witnessed,
         };
+        if (intervention.promiseId != null) {
+          final promise = intervention.promiseId!;
+          final pending = pendingPromises.putIfAbsent(
+              intervention.actorId, () => <String>{});
+          final used = usedPromises.putIfAbsent(
+              intervention.actorId, () => <String>{});
+          if (kind == NpcMemoryKind.promiseReceived) {
+            if (!used.add(promise) || !pending.add(promise)) {
+              throw const FormatException('Promise already exists in this story');
+            }
+          } else if (!pending.remove(promise)) {
+            throw const FormatException('Unmade or already closed NPC promise');
+          }
+        }
         final relation = relations.putIfAbsent(
             intervention.actorId, () => <String, int>{});
         final trust = (relation['player'] ?? 0) + intervention.trustDelta;
@@ -830,6 +869,7 @@ class NpcSocialLedger {
           relatedActorId: 'player',
           relationshipDelta: intervention.trustDelta,
           witnessMode: witness, goalId: intervention.goalId,
+          promiseId: intervention.promiseId,
         ));
         for (final reaction in rulebook.automaticReactions) {
           if (reaction.sceneId != event.sceneId ||

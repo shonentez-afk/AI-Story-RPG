@@ -134,6 +134,7 @@ class NpcRelationView {
     required this.directedScore, required this.memoryCount,
     required this.memoryKinds, this.lifeState,
     this.currentGoal,
+    this.openPromiseIds = const [],
   });
 
   final String actorId;
@@ -145,6 +146,8 @@ class NpcRelationView {
   /// Null if the signed world has no lifecycle events for this actor.
   final String? lifeState;
   final String? currentGoal;
+  /// Player/NPC promises still open in the verified event history.
+  final List<String> openPromiseIds;
 }
 
 /// Only the currently reached scene's trusted book provenance.
@@ -493,6 +496,7 @@ class RpgGameplayEngine {
           memoryKinds: Map.unmodifiable(kinds),
           lifeState: hasLifeReview ? social.lifeState(actor).name : null,
           currentGoal: social.currentGoal(actor),
+          openPromiseIds: social.openPromisesFor(actor),
         ));
       }
     }

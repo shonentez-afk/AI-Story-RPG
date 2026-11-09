@@ -314,8 +314,11 @@ class ZaiGameplayChoiceAdvisor {
         'Дополнительно learn_fact_id — только уже известный игроку факт, '
         'give_item_id — его предмет, take_item_id — предмет NPC. '
         'kind: warned/helped/betrayed/promise_received/'
-        'promise_broken/rumor_heard/witnessed. memory_id и goal_id '
+        'promise_fulfilled/promise_broken/rumor_heard/witnessed. memory_id и goal_id '
         'должны быть gm_*; goal_id может быть null. '
+        'Для promise_received/promise_fulfilled/promise_broken '
+        'задай promise_id gm_*; исполнить или нарушить можно '
+        'только ранее созданное и ещё открытое обещание. '
         'trust_delta от -10 до 10; доверие считает движок, не модель. '
         'plot_intent: continue (обычное действие), diverge '
         '(новый альтернативный сюжет) или end '
@@ -363,6 +366,7 @@ class ZaiGameplayChoiceAdvisor {
             'trust_to_player': npc.directedScore,
             'memory_count': npc.memoryCount,
             'current_private_goal': npc.currentGoal,
+            'open_promise_ids': npc.openPromiseIds,
           },
       ],
       'recent_reviewed_game_fiction': recentActions,

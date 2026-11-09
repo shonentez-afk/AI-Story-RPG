@@ -18,6 +18,7 @@ final class FreeformNpcInteraction {
     this.learnFactId,
     this.giveItemId,
     this.takeItemId,
+    this.promiseId,
   });
   final String actorId, memoryId, kind;
   final int trustDelta;
@@ -28,12 +29,14 @@ final class FreeformNpcInteraction {
   final String? giveItemId;
   /// Existing NPC-owned item transferred back to the player.
   final String? takeItemId;
+  /// A uniquely identified promise, never inferred from spoken prose.
+  final String? promiseId;
 
   static final _actor = RegExp(r'^npc_[a-f0-9]{32}$');
   static final _gm = RegExp(r'^gm_[a-z0-9_]{1,59}$');
   static const kinds = {
     'warned', 'helped', 'betrayed', 'promise_received',
-    'promise_broken', 'rumor_heard', 'witnessed',
+    'promise_broken', 'promise_fulfilled', 'rumor_heard', 'witnessed',
   };
   factory FreeformNpcInteraction.fromJson(Object? source) {
     if (source is! Map<String, dynamic> ||
@@ -42,7 +45,7 @@ final class FreeformNpcInteraction {
         }) ||
         source.keys.toSet().difference({
           'actor_id', 'memory_id', 'kind', 'trust_delta', 'goal_id',
-          'learn_fact_id', 'give_item_id', 'take_item_id',
+          'learn_fact_id', 'give_item_id', 'take_item_id', 'promise_id',
         }).isNotEmpty ||
         source['actor_id'] is! String ||
         !_actor.hasMatch(source['actor_id'] as String) ||
@@ -60,7 +63,15 @@ final class FreeformNpcInteraction {
           (source[key] is! String ||
            (source[key] as String).isEmpty)) ||
         (source.containsKey('give_item_id') &&
-         source.containsKey('take_item_id'))) {
+         source.containsKey('take_item_id')) ||
+        (source.containsKey('promise_id') &&
+            (source['promise_id'] is! String ||
+             !_gm.hasMatch(source['promise_id'] as String))) ||
+        (source['kind'] == 'promise_fulfilled' &&
+            !source.containsKey('promise_id')) ||
+        (source.containsKey('promise_id') &&
+            !{'promise_received', 'promise_fulfilled',
+              'promise_broken'}.contains(source['kind']))) {
       throw const FormatException('Unverified NPC freeform intervention');
     }
     return FreeformNpcInteraction._(
@@ -72,6 +83,7 @@ final class FreeformNpcInteraction {
       learnFactId: source['learn_fact_id'] as String?,
       giveItemId: source['give_item_id'] as String?,
       takeItemId: source['take_item_id'] as String?,
+      promiseId: source['promise_id'] as String?,
     );
   }
 
@@ -81,6 +93,7 @@ final class FreeformNpcInteraction {
     if (learnFactId != null) 'learn_fact_id': learnFactId,
     if (giveItemId != null) 'give_item_id': giveItemId,
     if (takeItemId != null) 'take_item_id': takeItemId,
+    if (promiseId != null) 'promise_id': promiseId,
   };
 }
 

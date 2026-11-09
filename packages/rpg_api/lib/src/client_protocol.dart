@@ -163,6 +163,7 @@ final class RpgClientProtocol {
         'memory_kinds': npc.memoryKinds,
         'life_state': npc.lifeState,
         'current_private_goal': npc.currentGoal,
+        'open_promise_ids': npc.openPromiseIds,
       }
     ],
     'npc_item_owners': view.npcItemOwners,
