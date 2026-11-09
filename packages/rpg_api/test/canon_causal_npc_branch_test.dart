@@ -835,4 +835,125 @@ void main() {
     }
   });
 
+  test('source-reviewed delayed NPC decision acts on later turns without '
+      'another player contact, then autonomously breaks CANON', () async {
+    final prepared = _files();
+    final original = const RichPrivateBookworldImporter()
+        .inspect(prepared.base);
+    final sceneIds = original.blueprint.scenes.keys.toList();
+    final review = _review(original);
+    review['format'] = ReviewedCanonCausalBookworldWriter.graphReviewFormat;
+    (review['invariants'] as List).first['forbidden_memory_id'] =
+        'gm_never_seen_elsewhere';
+    review['event_graph'] = [
+      for (var i = 0; i < sceneIds.length; i++) {
+        'scene_id': sceneIds[i],
+        'source_quote_sha256':
+            original.sceneOrigins[sceneIds[i]]!.sourceQuoteSha256,
+        'depends_on': i == 0 ? <String>[] : [sceneIds[i - 1]],
+        'preconditions': i == 1 ? [{
+          'op': 'goal_is',
+          'actor_id': _anna,
+          'id': 'gm_anna_waits',
+          'value': null,
+        }] : <Object>[],
+        'effects': <Object>[],
+      },
+    ];
+    review['npc_delayed_decisions'] = [{
+      'scene_id': sceneIds.first,
+      'source_quote_sha256':
+          original.sceneOrigins[sceneIds.first]!.sourceQuoteSha256,
+      'actor_id': _anna,
+      'trigger_memory_id': 'gm_anna_warning',
+      'turns_after_trigger': 2,
+      'minimum_trust': 2,
+      'response_memory_id': 'gm_anna_decides_to_leave',
+      'next_goal_id': 'gm_anna_seeks_shelter',
+    }];
+    Uint8List build(Map<String, dynamic> reviewed) {
+      final json = canonicalJson(reviewed);
+      return const LocalRpgLiteralCanonApi().compileReviewedCausality(
+        verifiedBaseArchive: prepared.base,
+        sourceIndex: prepared.sourceIndex,
+        reviewJson: json,
+        approvedDigest: ReviewedCanonCausalBookworldWriter.digest(json),
+        userConfirmed: true,
+      );
+    }
+    final negative = jsonDecode(jsonEncode(review)) as Map<String, dynamic>;
+    (negative['npc_delayed_decisions'] as List).first[
+        'turns_after_trigger'] = 0;
+    expect(() => build(negative), throwsFormatException);
+    (negative['npc_delayed_decisions'] as List).first[
+        'turns_after_trigger'] = 2;
+    (negative['npc_delayed_decisions'] as List).first[
+        'source_quote_sha256'] = '0' * 64;
+    expect(() => build(negative), throwsFormatException);
+
+    final archive = build(review);
+    final compiled = const RichPrivateBookworldImporter().inspect(archive);
+    expect(compiled.npcSocialRulebook!.delayedDecisions, hasLength(1));
+    final dir = await Directory.systemTemp.createTemp('npc_future_agency_');
+    BookworldCampaignStore? store;
+    try {
+      store = BookworldCampaignStore.openPrivateDirectory(dir.path);
+      final game = LocalRpgGameApi(store);
+      final installed = game.install(archive);
+      final id = game.start(installed.archiveHash);
+      final warning = FreeformActionDraft.fromJson({
+        ..._proposal(player: 'Анна, подожди у моста',
+          memory: 'gm_anna_warning', goal: 'gm_anna_waits',
+          narrative: 'Анна услышала предупреждение и стала ждать.'),
+      });
+      final p = game.previewFreeform(id, warning, expectedRevision: 0);
+      final first = game.commitFreeform(id, actionId: 'warn_without_diverge',
+          draft: warning, expectedRevision: 0,
+          approvalDigest: p.approvalDigest, userConfirmed: true);
+      expect(first.view.activePlotMode, 'CANON');
+      expect(first.view.npcRelations.single.currentGoal, 'gm_anna_waits');
+      expect(first.view.npcRelations.single.autonomousDecisionIds, isEmpty);
+      FreeformActionDraft passTurn(int n) =>
+          FreeformActionDraft.fromJson(_proposal(
+            player: 'Исследовать берег $n',
+            narrative: 'Герой продолжает свои исследования без разговора с Анной.',
+            withNpc: false));
+      final step2 = passTurn(2);
+      final p2 = game.previewFreeform(id, step2, expectedRevision: 1);
+      final second = game.commitFreeform(id, actionId: 'without_npc_2',
+          draft: step2, expectedRevision: 1,
+          approvalDigest: p2.approvalDigest, userConfirmed: true);
+      expect(second.view.activePlotMode, 'CANON');
+      expect(second.view.npcRelations.single.currentGoal, 'gm_anna_waits');
+      final step3 = passTurn(3);
+      final p3 = game.previewFreeform(id, step3, expectedRevision: 2);
+      final third = game.commitFreeform(id, actionId: 'without_npc_3',
+          draft: step3, expectedRevision: 2,
+          approvalDigest: p3.approvalDigest, userConfirmed: true);
+      expect(third.view.activePlotMode, 'ALTER_FATE');
+      expect(third.view.npcRelations.single.currentGoal,
+          'gm_anna_seeks_shelter');
+      expect(third.view.npcRelations.single.autonomousDecisionIds,
+          ['gm_anna_decides_to_leave']);
+      final projected = RpgClientProtocol.projectView(third.view);
+      final npcData = (projected['npc_encountered'] as List).single as Map;
+      expect(npcData['autonomous_decision_ids'],
+          ['gm_anna_decides_to_leave']);
+      final exported = game.exportSave(id);
+      final imported = game.importSave(exported,
+          expectedWorldHash: installed.archiveHash);
+      final replay = game.load(imported);
+      expect(replay.stateHash, third.view.stateHash);
+      expect(replay.npcRelations.single.autonomousDecisionIds,
+          third.view.npcRelations.single.autonomousDecisionIds);
+      expect(replay.alternatePlotContinuity,
+          third.view.alternatePlotContinuity);
+      expect(game.choose(id, actionId: 'illegal_book_continuation',
+        choiceId: 'canon_next_00000', expectedRevision: 3).applied, false);
+    } finally {
+      store?.close();
+      await dir.delete(recursive: true);
+    }
+  });
+
 }
