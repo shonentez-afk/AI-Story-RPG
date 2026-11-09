@@ -12,6 +12,8 @@ import 'package:campaign_manager/campaign_manager.dart';
 import 'package:rpg_gameplay/rpg_gameplay.dart';
 import 'package:story_authoring/story_authoring.dart';
 
+export 'src/world_intake.dart';
+
 export 'package:rpg_gameplay/rpg_gameplay.dart' show
     WorldLibraryItem, WorldCampaignItem, WorldSavePreview,
     WorldChoiceView, WorldEventView, NpcRelationView, WorldGameView,

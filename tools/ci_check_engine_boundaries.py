@@ -253,6 +253,20 @@ def validate() -> list[str]:
             issues.append(f"{short_screen}: short game must use public RpgCreationApi, not {direct}")
     if "_api.compileShort(" not in short_code or "_api.previewShort(" not in short_code:
         issues.append(f"{short_screen}: short game must call the creation API")
+    world_intake = ROOT / "packages" / "rpg_api" / "lib" / "src" / "world_intake.dart"
+    intake_code = world_intake.read_text(encoding="utf-8") if world_intake.is_file() else ""
+    if ("RichPrivateBookworldImporter().inspect(" not in intake_code or
+            "archive_sha256" not in intake_code or
+            "rpg_author_complete_native_campaign_acceptance_v1" not in intake_code):
+        issues.append(f"{world_intake}: generated v4 acceptance must reuse native importer")
+    if "package:flutter/" in intake_code or "FilePicker" in intake_code:
+        issues.append(f"{world_intake}: generated-world intake is a pure SDK contract")
+    library_screen = ROOT / "apps" / "story_reader" / "lib" / "home_page.dart"
+    library_code = library_screen.read_text(encoding="utf-8") if library_screen.is_file() else ""
+    if "WorldImportReviewFlow.confirmAndInstall(" not in library_code or
+            "gateway.install(bytes)" in library_code:
+        issues.append(f"{library_screen}: externally authored world needs explicit intake review")
+
     gateway = ROOT / "apps" / "story_reader" / "lib" / "world_library_gateway.dart"
     workers = ROOT / "apps" / "story_reader" / "lib" / "book_isolate_workers.dart"
     for path in (gateway, workers):

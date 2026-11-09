@@ -11,6 +11,118 @@ Uint8List _bytes(String source) =>
     Uint8List.fromList(utf8.encode(source));
 
 void main() {
+  test('generator v4 acceptance report is SHA-bound; import stays engine-owned',
+      () {
+    const RpgWorldIntakeApi api = LocalRpgWorldIntakeApi();
+    final richV3 = Uint8List.fromList(File(
+      '../../artifacts/bookworld/book_private_rich_items_python.bworld')
+        .readAsBytesSync());
+    final v3 = api.inspect(richV3);
+    expect(v3.formatVersion, 3);
+    expect(v3.isPrivate, true);
+    expect(v3.generatorReportAttached, false);
+    expect(v3.literaryCanonProven, false);
+    final bytes = Uint8List.fromList(File(
+      '../../artifacts/bookworld/book_private_extended_dart.bworld')
+        .readAsBytesSync());
+    final v4 = api.inspect(bytes);
+    expect(v4.formatVersion, 4);
+    expect(v4.sceneCount, greaterThanOrEqualTo(3));
+    expect(v4.endingCount, greaterThanOrEqualTo(2));
+    expect(v4.sourceFingerprint, isNotNull);
+    final world = const LocalRpgAuthoringApi().inspectPrivateWorld(bytes);
+    final terminals = world.blueprint.scenes.entries
+        .where((entry) => entry.value.terminal)
+        .map((entry) => entry.key).toList();
+    expect(terminals, hasLength(greaterThanOrEqualTo(2)));
+    final routes = [
+      for (var i = 0; i < 2; i++) {
+        'route_id': 'route_${i+1}',
+        'ending_scene_id': terminals[i],
+        'replayed_choices': 2,
+        'portable_save_verified': true,
+        'native_state_sha256': i == 0 ? 'a' * 64 : 'b' * 64,
+      },
+    ];
+    final source = {
+      'verified_scene_review_records': v4.sceneCount,
+      'source_evidence_binds_exact_revision': true,
+      'review_report_complete': true,
+      'literary_truth_attested': false,
+      'reviewed_full_routes': 2,
+      'reviewed_distinct_ending_scenes': 2,
+      'reviewed_book_chapters': 3,
+      'source_chapters_with_gameplay': 3,
+    };
+    Map<String, dynamic> report() => {
+      'format': 'rpg_author_complete_native_campaign_acceptance_v1',
+      'status': 'native_multi_act_campaign_mechanically_verified',
+      'format_version': 4,
+      'archive_sha256': v4.archiveHash,
+      'source_fingerprint': v4.sourceFingerprint,
+      'private_only': true,
+      'literary_truth_attested': false,
+      'automatic_ai_book_canon_verified': false,
+      'user_ready': false,
+      'source_review': source,
+      'reviewed_extension': {
+        'act_count': 2, 'chapters_without_source_scenes': [],
+      },
+      'native_routes': {
+        'status': 'two_complete_routes_native_rpg_api_and_sqlite_verified',
+        'archive_sha256': v4.archiveHash,
+        'route_count': 2, 'endings_verified': 2,
+        'native_game_rules_reused': true,
+        'python_game_rule_fork_used': false,
+        'routes': routes,
+      },
+    };
+    final attached = api.inspect(bytes, readinessJson: jsonEncode(report()));
+    expect(attached.generatorReportAttached, true);
+    expect(attached.producerClaimsTwoReplayedRoutes, true);
+    expect(attached.literaryCanonProven, false);
+    for (final invalid in [
+      {...report(), 'archive_sha256': '0' * 64},
+      {...report(), 'source_fingerprint': '0' * 64},
+      {...report(), 'user_ready': true},
+      {...report(), 'format_version': 3},
+      {...report(), 'source_review': {...source,
+          'verified_scene_review_records': v4.sceneCount - 1}},
+      {...report(), 'native_routes': {
+          ...(report()['native_routes'] as Map<String, dynamic>),
+          'routes': [routes.first, routes.first],
+      }},
+      {...report(), 'native_routes': {
+          ...(report()['native_routes'] as Map<String, dynamic>),
+          'routes': [{...routes.first, 'ending_scene_id': 'forged'},
+                     routes.last],
+      }},
+    ]) {
+      expect(() => api.inspect(bytes, readinessJson: jsonEncode(invalid)),
+          throwsFormatException);
+    }
+    expect(() => api.inspect(richV3, readinessJson: jsonEncode(report())),
+        throwsFormatException);
+    expect(() => api.inspect(Uint8List.fromList(List.filled(40, 1))),
+        throwsFormatException);
+    // Same native game API as the generator's Dart probe and Flutter.
+    final temp = Directory.systemTemp.createTempSync('rpg_generator_intake_');
+    BookworldCampaignStore? store;
+    try {
+      store = BookworldCampaignStore.openPrivateDirectory(temp.path);
+      final RpgGameApi game = LocalRpgGameApi(store);
+      final installed = game.install(bytes);
+      expect(installed.archiveHash, attached.archiveHash);
+      final id = game.start(installed.archiveHash);
+      final initial = game.load(id);
+      expect(initial.revision, 0);
+      expect(initial.worldTitle, attached.title);
+    } finally {
+      store?.close();
+      temp.deleteSync(recursive: true);
+    }
+  });
+
   test('public authoring API indexes and scans without Flutter or cloud',
       () async {
     const RpgAuthoringApi api = LocalRpgAuthoringApi();
