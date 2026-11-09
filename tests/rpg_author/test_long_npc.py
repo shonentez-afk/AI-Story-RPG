@@ -215,6 +215,21 @@ class FirstMentionCastTests(unittest.TestCase):
                 fake.ask("npc_review", {}), dossier, self.index,
                 story, self.analyses, overlay, bp, origin,
                 user_confirmed=True)
+            # A catalog entry that exists ONLY in a future v4 act is
+            # invalid at the base v3 compilation boundary. We must never
+            # relax this native causal invariant to make a fixture pass.
+            broken_overlay = deepcopy(overlay)
+            broken_overlay["choices"]["go_100_160"]["effects"] = [
+                effect for effect in
+                broken_overlay["choices"]["go_100_160"]["effects"]
+                if effect["id"] != late.FACT_LATER
+            ]
+            with self.assertRaises(AuthoringError) as unreachable:
+                compile_rich_from_project(
+                    checkpoint, broken_overlay, npc_review=signed)
+            self.assertEqual(unreachable.exception.code, "rich_compile_rejected")
+            self.assertIn("Unreachable item/fact catalog",
+                          str(unreachable.exception))
             raw, attribution = compile_rich_from_project(
                 checkpoint, overlay, npc_review=signed)
             self.assertTrue(raw.startswith(b"PK"))

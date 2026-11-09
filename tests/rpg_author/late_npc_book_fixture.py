@@ -125,13 +125,19 @@ class FakeLateNpcAuthor(plain.FakeLongSourceLockedAuthor):
                 "character_id"]
             response["facts"] = {
                 FACT_FIRST: "Лодочник знает, что путница встретила его.",
-                FACT_LATER: "Лодочник помнит, как он помог ей позже.",
+                # This fact is source-witnessed at the ACTUAL first meeting:
+                # he shows her the road in chapter 100. It must already be
+                # reachable from the base StoryPlan before v4 may use it.
+                # No future chapter 101 knowledge is invented here.
+                FACT_LATER: "Лодочник показал путнице дорогу.",
             }
             response["choices"]["go_100_160"] = {
-                "conditions": [], "effects": [{
-                    "op": "learn_fact", "id": FACT_FIRST,
-                    "actor": self.actor_id,
-                }],
+                "conditions": [], "effects": [
+                    {"op": "learn_fact", "id": FACT_FIRST,
+                     "actor": self.actor_id},
+                    {"op": "learn_fact", "id": FACT_LATER,
+                     "actor": "player"},
+                ],
             }
             return response
         if stage == "npc_review":
