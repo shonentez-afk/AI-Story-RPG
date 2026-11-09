@@ -40,6 +40,8 @@ class _RichViewGateway implements WorldLibraryGateway {
                   'Узнано: Мальчик спасён у реки'],
       ),
     ],
+    heroSourceCharacterId: 'npc_0123456789abcdef0123456789abcdef',
+    sourceReviewedHeroStart: false,
     heroName: 'Лена',
     heroDescription: 'Путешественница, помогающая мальчику у реки.',
     sceneSource: WorldSceneSourceView(
@@ -161,7 +163,7 @@ void main() {
     await tester.tap(find.text('Герой'));
     await tester.pumpAndSettle();
     expect(find.text('Герой: Лена'), findsOneWidget);
-    expect(find.text('Роль: проверенная карточка персонажа'),
+    expect(find.text('Роль: проверенный книжный персонаж'),
         findsOneWidget);
     // A stable actor ID is useful for troubleshooting, not normal prose.
     // The user can explicitly expand it without reading future NPC metadata.
