@@ -6,7 +6,7 @@
 
 - Есть **один** игровой исполнитель: story_core / story_runtime_adapter / campaign_manager / rpg_gameplay, доступ через rpg_api. Ни Python, ни HTTP-сервер не считают игровые правила, не подписывают выдуманные события, не пишут SQLite самостоятельно.
 - rpg_api содержит независимый от транспорта RpgClientProtocol с **единым safe-JSON представлением**: текущая сцена, проверенный origin текущей главы, герой, предметы только в наличии, встреченные NPC, подтверждённая память/доверие, диалоги, выборы и журнал. **Нельзя** выгружать blueprint целиком, будущие сцены или непроверенную приватную биографию NPC.
-- CLI и HTTP используют один RpgClientProtocol.projectView. Старый CLI сохраняет существующие команды и основные поля.
+- CLI и HTTP используют один RpgClientProtocol.projectView. Публичный protocol теперь также предлагает read-only world intake/causal audit и безопасную подсказку разрешённого хода. Старый CLI сохраняет существующие команды и основные поля.
 - apps/rpg_cli/lib/rpg_loopback_server.dart — **только платформенный адаптер**. Открывает один private SQLite store, запускает LocalRpgGameApi, serializes requests и принимает только POST /v1/rpg.
 - apps/rpg_cli/python_client.py — **настоящий клиент другого языка**, использует стандартную библиотеку Python и JSON. Код игры в нём отсутствует.
 
@@ -45,6 +45,9 @@
 | Операция | Аргументы | Результат |
 |---|---|---|
 | capabilities, worlds | нет | Политика доступных режимов / список установленных миров |
+| inspect_world | archive_base64, readiness_json? | Read-only native intake: SHA, главы, сцены, NPC, предметы и правдивые generator claims; не выдаёт литературную аттестацию |
+| audit_world | archive_base64, max_states?, max_moves? | Настоящий StoryWorld causal audit со статусом playable/blocked/inconclusive; inconclusive — не успех |
+| suggest_action | campaign_id, text | Только подсказки существующих разрешённых choiceId по текущему verified view; **не** динамический AI-GM |
 | install_world | archive_base64 | Verified native BookWorld; source/gameplay rules не дублируются |
 | export_world, delete_world | world_hash | Приватный архив / подтверждение удаления |
 | campaigns | world_hash? | Список с revision |

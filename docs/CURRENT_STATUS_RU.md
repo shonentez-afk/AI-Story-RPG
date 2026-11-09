@@ -1,3 +1,15 @@
+# СТАТУС 9 НОЯБРЯ 2026 — ПРОВЕРЕННАЯ MULTI-CLIENT RPG-ОСНОВА
+
+**Первый большой пакет принят:** [CI #1083](https://github.com/shonentez-afk/AI-Story-RPG/actions/runs/42554271712) полный SUCCESS на `31372b0b657fb0d0fa37476c1fcbc9fe614be525`, включая Python/Dart/M1.7/Flutter, Windows release bundle и Android debug APK. [M0 #1168](https://github.com/shonentez-afk/AI-Story-RPG/actions/runs/42554271699) SUCCESS. Готов отдельный Python-клиент, token-auth loopback HTTP host, единый чистый `RpgClientProtocol` v1 и настоящее SQLite/.bwsave сквозное E2E. До физического QA и продакшен Web/gRPC далеко.
+
+**Второй функциональный пакет:** read-only `inspect_world`, native `audit_world` с `playable/blocked/inconclusive`, `suggest_action` только разрешённых choiceId и E2E по v3/v4 через Python; **точную новую приёмку смотреть после кода**, не выдавать прошлый #1083 за новый проход.
+
+**Внешний автор 0.3.0a13** — stage E6k+ несмотря на старый branch E6g, [CI #414 SUCCESS](https://github.com/shonentez-afk/AI-Story-RPG/actions/runs/42554315131). Но `External RPG author tests #413` в PR #133 FAIL: pin source `contract_drift` и не найден Dart пакет `story_authoring` в старом external probe. Согласование без отключения безопасности, права на другой branch не захватывать.
+
+**Главные P0:** настоящий книжный CANON/BOOK_CHARACTER, dynamic AI GM с проверенным подписанным событием, полный source-locked whole-book pipeline, общий native/E6k+ compatibility, 2 реальные RU FB2 и физический Win/Android E2E. Только один Draft PR #133, без микро-PR и правок main.
+
+---
+
 # ТЕКУЩИЙ СТАТУС — 2026-11-09: мультиклиентный RPG-движок (приоритет)
 
 **План:** [RPG_ENGINE_FULL_AUTONOMY_MULTICLIENT_PLAN_RU_2026-11-09.md](RPG_ENGINE_FULL_AUTONOMY_MULTICLIENT_PLAN_RU_2026-11-09.md). **Передача:** [START_NEW_CHAT_RU.md](../START_NEW_CHAT_RU.md). Записи ниже исторические, старые E6g/E6d-ярлыки неактуальны.

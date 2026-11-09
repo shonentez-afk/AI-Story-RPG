@@ -1,3 +1,15 @@
+# АКТУАЛЬНЫЙ HANDOFF — 9 НОЯБРЯ 2026: ПЕРВЫЙ КРУПНЫЙ API-ПАКЕТ ПРИНЯТ, ВТОРОЙ — НА ПРИЁМКЕ
+
+**Проверенное:** код `31372b0b657fb0d0fa37476c1fcbc9fe614be525`, [основной CI #1083](https://github.com/shonentez-afk/AI-Story-RPG/actions/runs/42554271712) **COMPLETED SUCCESS** на ТОЧНО этом SHA (Python, Dart, M1.7, отдельный Python → HTTP → Dart → SQLite, Flutter, Windows portable, Android debug). [M0 #1168](https://github.com/shonentez-afk/AI-Story-RPG/actions/runs/42554271699) **SUCCESS**. Это первая официально проверенная клиентонезависимая RPG API-граница: `RpgClientProtocol` v1 в чистом `rpg_api`, auth loopback HTTP в `apps/rpg_cli`, Python-клиент без RPG-правил, единая безопасная projection. Приёмка CI **не** подтверждает физический UX Android/Windows и литературный CANON.
+
+**Новый второй связанный кодовый пакет в том же Draft PR #133 — ДО НОВОГО EXACT-HEAD CI НЕ ПРИНИМАТЬ:** API `inspect_world` (настоящий read-only native BookWorld v1–v4 intake), `audit_world` (bounded `StoryWorld` causal playable/blocked/inconclusive, без ложного доказательства канона), `suggest_action` (только проверенные существующие выборы), и Python/Dart E2E v3/v4/replay. **Ни Flutter, ни Python не получили копию игровых правил.** Проверить точный новый SHA и новые Actions после git push.
+
+**Внешний автор:** уже **0.3.0a13**, несмотря на историческое название ветки `feature/external-rpg-author-e6g-pr133-compat-20261108`; [author CI #414](https://github.com/shonentez-afk/AI-Story-RPG/actions/runs/42554315131) **SUCCESS** на `1f154a0eda9d046b7f355d4399f2b79cb2a3e2d3`. ChatGPT Skill пишет литературные данные; Python — приватные задания/проверка, Dart — единственный runtime. **Отдельный native branch External RPG author tests #413 FAIL**: pinned `contract_drift` шести source files + старое `tests/rpg_author/dart` не разрешает `package:story_authoring`. НЕ отключать проверку и НЕ обновлять чужой `compatibility.json` без точного аудита и повторного parity.
+
+**Главный незакрытый маршрут (одним PR, не микро-PR):** полностью source-reviewed CANON и BOOK_CHARACTER, действительно проверенный freeform AI GM, единый large-book/story authoring + native/E6k+ exact interchange, 2 реальные RU FB2 с истинной литературной проверкой, перенос saves, физические Windows/Android устройства, миграция/порты для новых клиентов. [План](docs/RPG_ENGINE_FULL_AUTONOMY_MULTICLIENT_PLAN_RU_2026-11-09.md), [протокол](docs/RPG_CLIENT_PROTOCOL_V1_RU_2026-11-09.md). `main` и генераторную ветку из native-чата не трогать.
+
+---
+
 # АКТУАЛЬНАЯ ПЕРЕДАЧА — 9 ноября 2026: автономный RPG-движок для любых клиентов
 
 > **Приоритет над всеми историческими записями ниже.** Новый обязательный план: [RPG_ENGINE_FULL_AUTONOMY_MULTICLIENT_PLAN_RU_2026-11-09.md](docs/RPG_ENGINE_FULL_AUTONOMY_MULTICLIENT_PLAN_RU_2026-11-09.md). Старые названия генератора E6d/E6g и промежуточные статусы CI ниже являются архивом, не текущим состоянием.

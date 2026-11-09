@@ -12,6 +12,7 @@ import 'package:bookworld_format/bookworld_format.dart';
 import 'package:campaign_manager/campaign_manager.dart';
 import 'package:rpg_gameplay/rpg_gameplay.dart';
 import 'package:story_authoring/story_authoring.dart';
+import 'src/world_intake.dart';
 
 export 'src/world_intake.dart';
 export 'src/bookwide_gameplay_audit.dart';

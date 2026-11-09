@@ -194,6 +194,83 @@ final class RpgClientProtocol {
       case 'worlds':
         _fields(args);
         return {'worlds': [for (final item in game.worlds()) _world(item)]};
+      case 'inspect_world':
+        _fields(args, must: {'archive_base64'}, may: {'readiness_json'});
+        final receipt = const LocalRpgWorldIntakeApi().inspect(
+          _bytes(args, 'archive_base64', maxArchiveBytes),
+          readinessJson: args.containsKey('readiness_json')
+              ? _text(args, 'readiness_json', maxLength: 1024 * 1024)
+              : null,
+        );
+        return {
+          'title': receipt.title,
+          'world_hash': receipt.archiveHash,
+          'bookworld_id': receipt.bookworldId,
+          'format_version': receipt.formatVersion,
+          'source_fingerprint': receipt.sourceFingerprint,
+          'scene_count': receipt.sceneCount,
+          'ending_count': receipt.endingCount,
+          'npc_actor_count': receipt.npcActorCount,
+          'item_count': receipt.itemCount,
+          'is_private': receipt.isPrivate,
+          'chapters_total': receipt.sourceChaptersTotal,
+          'chapters_indexed': receipt.sourceChaptersIndexed,
+          'chapters_with_gameplay': receipt.sourceChaptersWithGameplay,
+          'all_source_chapters_covered': receipt.allSourceChaptersCovered,
+          'generator_report_attached': receipt.generatorReportAttached,
+          'producer_claims_two_replayed_routes':
+              receipt.producerClaimsTwoReplayedRoutes,
+          'literary_canon_proven': receipt.literaryCanonProven,
+          'allowed_to_publish': receipt.allowedToPublish,
+        };
+      case 'audit_world':
+        _fields(args, must: {'archive_base64'},
+            may: {'max_states', 'max_moves'});
+        final maxStates = args.containsKey('max_states')
+            ? _number(args, 'max_states') : 4096;
+        final maxMoves = args.containsKey('max_moves')
+            ? _number(args, 'max_moves') : 512;
+        if (maxStates < 1 || maxStates > 4096 ||
+            maxMoves < 1 || maxMoves > 512) {
+          throw const FormatException('Audit budget exceeded');
+        }
+        final audit = const LocalRpgBookGameplayAuditApi().inspect(
+            _bytes(args, 'archive_base64', maxArchiveBytes),
+            maxStates: maxStates, maxMoves: maxMoves);
+        return {
+          'world_hash': audit.archiveHash,
+          'status': audit.status.name,
+          'explored_states': audit.exploredStates,
+          'exhaustive': audit.exhaustive,
+          'reached_endings': audit.reachedEndingCount,
+          'total_endings': audit.totalEndingCount,
+          'trap_count': audit.trapCount,
+          'cycle_count': audit.cycleCount,
+          'proven_all_endings': audit.provenAllEndings,
+          'literary_canon_verified': audit.sourceLiteraryCanonVerified,
+          'exact_generator_routes_replayed':
+              audit.exactGeneratorRoutesReplayed,
+        };
+      case 'suggest_action':
+        _fields(args, must: {'campaign_id', 'text'});
+        final view = game.load(_text(args, 'campaign_id'));
+        final preview = FreeTextActionGate.preview(
+            FreeTextWorldGatewayPort.headFromView(view),
+            _text(args, 'text', maxLength: 1000));
+        return {
+          'error': preview.error,
+          'offers': [
+            for (final offer in preview.offers) {
+              'choice_id': offer.choiceId,
+              'label': offer.label,
+              'score': offer.score,
+              'scene_id': offer.sceneId,
+              'expected_revision': offer.expectedRevision,
+              'fingerprint': offer.fingerprint,
+            }
+          ],
+          'dynamic_ai_game_master': false,
+        };
       case 'install_world':
         _fields(args, must: {'archive_base64'});
         final item = game.install(_bytes(

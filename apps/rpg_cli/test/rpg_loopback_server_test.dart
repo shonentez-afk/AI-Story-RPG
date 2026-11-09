@@ -64,6 +64,18 @@ void main() {
       expect((caps.$2['result'] as Map)['dynamic_ai_game_master'], false);
 
       final world = base64Encode(fixture.readAsBytesSync());
+      final preview = await send('inspect_world',
+          {'archive_base64': world});
+      expect(preview.$2['ok'], true);
+      expect((preview.$2['result'] as Map)['is_private'], true);
+      expect((preview.$2['result'] as Map)['literary_canon_proven'], false);
+      final audit = await send('audit_world', {
+        'archive_base64': world, 'max_states': 2048, 'max_moves': 96,
+      });
+      expect(audit.$2['ok'], true);
+      expect(['playable', 'blocked', 'inconclusive'],
+          contains((audit.$2['result'] as Map)['status']));
+
       final first = await send('install_world', {'archive_base64': world});
       final second = await invokeLocal(
           'install_world', {'archive_base64': world});
@@ -81,6 +93,15 @@ void main() {
       expect(remoteView['choices'], localView['choices']);
       expect(remoteView['npc_encountered'], localView['npc_encountered']);
       final httpId = remoteView['campaign_id'] as String;
+      final waitLabel = (remoteView['choices'] as List)
+          .cast<Map>().firstWhere((c) => c['id'] == 'wait')['label'] as String;
+      final offered = await send('suggest_action', {
+        'campaign_id': httpId, 'text': waitLabel,
+      });
+      expect(offered.$2['ok'], true);
+      expect(((offered.$2['result'] as Map)['offers'] as List).first['choice_id'],
+          'wait');
+
       final localId = localView['campaign_id'] as String;
 
       final forbidden = await send('choose', {

@@ -17,6 +17,7 @@ from python_client import RpgClientError, RpgHttpClient
 
 HERE = Path(__file__).resolve().parent
 FIXTURE = HERE.parent.parent / "artifacts/bookworld/book_private_rich_items_python.bworld"
+V4_FIXTURE = HERE.parent.parent / "artifacts/bookworld/book_private_extended_dart.bworld"
 
 
 class PythonRemoteRpgTests(unittest.TestCase):
@@ -50,6 +51,12 @@ class PythonRemoteRpgTests(unittest.TestCase):
                     "archive_base64": base64.b64encode(
                         FIXTURE.read_bytes()).decode("ascii")
                 })
+                receipt = client.call("inspect_world", {
+                    "archive_base64": base64.b64encode(
+                        FIXTURE.read_bytes()).decode("ascii")
+                })
+                self.assertTrue(receipt["is_private"])
+                self.assertFalse(receipt["literary_canon_proven"])
                 world_hash = world["world_hash"]
                 self.assertEqual(len(world_hash), 64)
                 session = client.call("start", {"world_hash": world_hash})
@@ -57,6 +64,16 @@ class PythonRemoteRpgTests(unittest.TestCase):
                 self.assertIn("choices", session)
                 self.assertIn("npc_encountered", session)
                 campaign_id = session["campaign_id"]
+                wait_label = next(
+                    choice["label"] for choice in session["choices"]
+                    if choice["id"] == "wait"
+                )
+                offers = client.call("suggest_action", {
+                    "campaign_id": campaign_id,
+                    "text": wait_label,
+                })
+                self.assertEqual(offers["offers"][0]["choice_id"], "wait")
+
 
                 denied = client.call("choose", {
                     "campaign_id": campaign_id,
@@ -95,6 +112,28 @@ class PythonRemoteRpgTests(unittest.TestCase):
                 ):
                     self.assertEqual(imported[field], moved[field], field)
                 self.assertEqual(len(client.call("worlds")["worlds"]), 1)
+                # Same external client can import the REAL native Dart v4,
+                # not a rewritten Python gameplay approximation.
+                self.assertTrue(V4_FIXTURE.is_file())
+                v4_b64 = base64.b64encode(
+                    V4_FIXTURE.read_bytes()).decode("ascii")
+                v4_preflight = client.call("inspect_world", {
+                    "archive_base64": v4_b64,
+                })
+                self.assertEqual(v4_preflight["format_version"], 4)
+                self.assertGreaterEqual(v4_preflight["scene_count"], 3)
+                self.assertFalse(v4_preflight["literary_canon_proven"])
+                v4_install = client.call("install_world", {
+                    "archive_base64": v4_b64,
+                })
+                v4_started = client.call("start", {
+                    "world_hash": v4_install["world_hash"],
+                })
+                self.assertEqual(v4_started["revision"], 0)
+                self.assertIn("npc_encountered", v4_started)
+                self.assertIn("journal", v4_started)
+                self.assertIn("scene_origin", v4_started)
+
                 with self.assertRaises(RpgClientError):
                     client.call("import_save", {
                         "world_hash": "f" * 64,
