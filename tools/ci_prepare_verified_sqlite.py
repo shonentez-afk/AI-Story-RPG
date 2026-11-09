@@ -102,6 +102,7 @@ def prepare(repo: pathlib.Path, projects: list[str]) -> None:
         "packages/campaign_manager",
         "packages/story_authoring",
         "packages/rpg_api",
+        "packages/rpg_gameplay",
         "apps/rpg_cli",
     }
     if any(project not in allowed for project in projects):

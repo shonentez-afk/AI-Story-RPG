@@ -110,7 +110,7 @@ jobs:
           sdk: stable
       - name: Prepare verified native SQLite source for Linux test workspaces
         run: |
-          python3 tools/ci_prepare_verified_sqlite.py --project packages/bookworld_format --project packages/campaign_manager --project packages/story_authoring --project packages/rpg_api --project apps/rpg_cli
+          python3 tools/ci_prepare_verified_sqlite.py --project packages/bookworld_format --project packages/campaign_manager --project packages/story_authoring --project packages/rpg_gameplay --project packages/rpg_api --project apps/rpg_cli
       - name: Verify reusable Dart engine dependency direction
         run: python3 tools/ci_check_engine_boundaries.py
       - name: Analyze pure Dart story_core
