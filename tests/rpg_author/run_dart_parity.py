@@ -600,6 +600,23 @@ def main():
         complete_overlay.write_bytes(canonical(item_overlay))
         complete_npc.write_bytes(canonical(item_npc_review))
         complete_extension.write_bytes(canonical(e6k_ext))
+        # First invocation produces a source-bound, UNAPPROVED private
+        # worksheet without writing a world or pretending review is complete.
+        with patch_function(
+            "tools.rpg_author.complete_game.compile_extended_from_project",
+            return_value=(item_npc_world, item_npc_attr)
+        ):
+            needs_review = finalize_extended_campaign(
+                act_project, complete_overlay, complete_extension,
+                complete_editorial, complete_target,
+                npc_review=complete_npc,
+                no_interactive_questions=True)
+        assert needs_review["status"] == "needs_independent_editorial_review"
+        assert not complete_target.exists() and complete_editorial.is_file()
+        pending = json.loads(complete_editorial.read_text(encoding="utf-8"))
+        assert len(pending["scenes"]) == 8 and pending["routes"] == []
+        assert not pending["user_confirmed"] and not pending["review_completed"]
+        # The private independent editorial/AI pass now fills the worksheet.
         complete_editorial.write_bytes(canonical(complete_review))
         # Compilation of exactly these bytes was ALREADY executed with the
         # native Dart writer above. Avoid a second expensive native compile

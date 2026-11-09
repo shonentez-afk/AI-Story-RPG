@@ -82,8 +82,10 @@ def review_complete_campaign(review: dict, blueprint: dict, provenance: dict,
             "campaign_not_multi_act",
             "A complete campaign must include at least two source-reviewed acts")
     require(blueprint["rights_status"] == "private_adaptation" and
-            provenance["rights_status"] == "private_adaptation",
-            "campaign_not_private", "This workflow accepts private adaptation only")
+            provenance["rights_status"] == "private_use_only" and
+            provenance["publication_authorized"] is False,
+            "campaign_not_private",
+            "This workflow requires a private adaptation and nonpublishable source")
     scenes = {scene["id"]: scene for scene in blueprint["scenes"]}
     sources = provenance["scene_origins"]
     origin_by_id = {row["scene_id"]: row for row in sources}
@@ -108,12 +110,15 @@ def review_complete_campaign(review: dict, blueprint: dict, provenance: dict,
             "One explicitly reviewed scene record is required per signed scene")
     seen = set()
     for item in reviews:
-        fields(item, {"scene_id", "verdict", "notes", "source_quote_sha256"},
+        fields(item, {"scene_id", "origin", "verdict", "notes", "source_quote_sha256"},
                "complete-game scene review")
         sid = item["scene_id"]
         require(sid in scenes and sid not in seen and item["verdict"] == "pass",
                 "campaign_review_scene_missing",
                 "A signed scene must have exactly one passing review")
+        require(item["origin"] == origin_by_id[sid]["origin"],
+                "campaign_source_review_mismatch",
+                "An explicit game adaptation must never be relabeled as book text")
         _reviewed_text(item["notes"], "Scene " + sid)
         quote_hashes = [ref["quote_sha256"]
                         for ref in origin_by_id[sid]["source_refs"]]
@@ -140,7 +145,7 @@ def review_complete_campaign(review: dict, blueprint: dict, provenance: dict,
         require(route["id"] not in route_ids and
                 type(ending) is str and ending in scenes and
                 scenes[ending]["terminal"] is True and ending not in endings and
-                type(seq) is list and 2 <= len(seq) <= 24 and
+                type(seq) is list and 2 <= len(seq) <= 512 and
                 all(type(x) is str for x in seq) and
                 tuple(seq) not in sequences,
                 "campaign_route_review_invalid",
@@ -164,6 +169,41 @@ def review_complete_campaign(review: dict, blueprint: dict, provenance: dict,
         "review_report_complete": True,
         "literary_truth_attested": False,
         "author_report_cannot_prove_literary_quality": True,
+    }
+
+
+def prepare_full_review_template(blueprint: dict, provenance: dict,
+                                 extension: dict) -> dict:
+    """A private, deliberately UNACCEPTED source-locked editorial worksheet.
+
+    Exact signed scene/quote hashes are filled mechanically so that the
+    external AI reviewer cannot accidentally invent citations. No scene,
+    causal route, canon, decision or quality verdict is auto-approved.
+    """
+    origins = {row["scene_id"]: row for row in provenance["scene_origins"]}
+    require(len(origins) == len(blueprint["scenes"]),
+            "campaign_source_incomplete", "Cannot prepare stale source worksheet")
+    return {
+        "format": REVIEW_FORMAT,
+        "source_fingerprint": blueprint["source_fingerprint"],
+        "extension_sha256": digest(canonical(extension)),
+        "blueprint_sha256": digest(canonical(blueprint)),
+        "user_confirmed": False,
+        "review_method": "independent_ai_pass",
+        "review_completed": False,
+        "literary_canon_verified": False,
+        "aspects": {aspect: "pending" for aspect in sorted(ASPECTS)},
+        "issues": [],
+        "scenes": [
+            {"scene_id": scene["id"], "origin": origins[scene["id"]]["origin"],
+             "verdict": "pending", "notes": "",
+             "source_quote_sha256": sorted({
+                 ref["quote_sha256"]
+                 for ref in origins[scene["id"]]["source_refs"]
+             })}
+            for scene in blueprint["scenes"]
+        ],
+        "routes": [],
     }
 
 
@@ -191,7 +231,7 @@ def replay_two_native_routes(raw: bytes, routes: list[dict]) -> dict:
                 ["dart", "--packages=" + str(package_config), str(_DART_SCRIPT)],
                 cwd=tmp, input=json.dumps(request, ensure_ascii=False),
                 stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                text=True, encoding="utf-8", timeout=240)
+                text=True, encoding="utf-8", timeout=600)
         except (OSError, subprocess.TimeoutExpired) as exc:
             raise AuthoringError("native_route_unavailable",
                                  "Native public RPG API route check could not run") from exc
@@ -324,7 +364,7 @@ def finalize_extended_campaign(project: Path, enrichment: Path, extension: Path,
             "campaign_source_invalid", "Original book review is not complete")
     overlay = read_json(overlay_path)
     proposal = read_json(extension_path)
-    reviewer = read_json(review_path)
+    reviewer = read_json(review_path) if review_path.exists() else None
     npc_review_data = read_json(review_npc_path) if review_npc_path else None
     preliminary = audited_extension(root, overlay, proposal,
                                     npc_review=npc_review_data)
@@ -343,6 +383,34 @@ def finalize_extended_campaign(project: Path, enrichment: Path, extension: Path,
             provenance.get("source_chapters_total") == index["chapter_count"],
             "campaign_native_source_mismatch",
             "Native v4 compilation changed the indexed source revision")
+    if reviewer is None:
+        # One command used twice: first it emits an exact signed worksheet
+        # without creating a misleading "finished" game. The AI/editor then
+        # reviews all scenes and supplies two complete routes; the second
+        # invocation compiles and verifies the final immutable BookWorld.
+        template = prepare_full_review_template(blueprint, provenance, proposal)
+        require(not review_path.exists(), "output_exists",
+                "Never overwrite a private editorial review")
+        atomic_write(review_path, canonical(template))
+        return {
+            "status": "needs_independent_editorial_review",
+            "review_template": str(review_path),
+            "source_fingerprint": index["source_fingerprint"],
+            "blueprint_sha256": digest(canonical(blueprint)),
+            "scenes_to_review": len(blueprint["scenes"]),
+            "chapters_to_review": provenance["source_chapters_total"],
+            "entry_scene_id": blueprint["entry_scene_id"],
+            "candidate_terminal_scene_ids": [
+                scene["id"] for scene in blueprint["scenes"]
+                if scene["terminal"] is True
+            ],
+            "game_created": False,
+            "user_ready": False,
+            "literary_truth_attested": False,
+            "instruction": "Review every scene and all six aspects, then provide two "
+                           "native-playable full routes with distinct endings. "
+                           "No game file exists until the next checked invocation.",
+        }
     editorial = review_complete_campaign(reviewer, blueprint, provenance,
                                          proposal)
 

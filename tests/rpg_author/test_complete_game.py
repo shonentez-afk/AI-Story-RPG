@@ -19,8 +19,8 @@ from tools.rpg_author.cli import parser
 from tools.rpg_author.common import AuthoringError, canonical, digest
 from tools.rpg_author.complete_game import (
     REVIEW_FORMAT, REPORT_FORMAT, ROUTE_RESULT_FORMAT,
-    finalize_extended_campaign, review_complete_campaign,
-    verify_route_evidence,
+    finalize_extended_campaign, prepare_full_review_template,
+    review_complete_campaign, verify_route_evidence,
 )
 from tools.rpg_author.rich_package import compile_rich_from_project
 from tools.rpg_author.v4_acts import extend_checked_world
@@ -57,6 +57,7 @@ def reviewed_campaign_fixture(blueprint, provenance, extension):
         "scenes": [
             {
                 "scene_id": origin["scene_id"],
+                "origin": origin["origin"],
                 "verdict": "pass",
                 "notes": "Отдельно проверены причина выбора и источник в этой сцене.",
                 "source_quote_sha256": sorted({
@@ -126,6 +127,28 @@ class CompleteBookCampaignReviewTests(unittest.TestCase):
         self.assertTrue(proof["author_report_cannot_prove_literary_quality"])
         self.assertEqual(self.extension_preflight["chapters_without_source_scenes"], [])
 
+    def test_first_pass_template_has_exact_quotes_but_no_automatic_approval(self):
+        template = prepare_full_review_template(
+            self.blueprint, self.provenance, self.extension)
+        self.assertEqual(template["format"], REVIEW_FORMAT)
+        self.assertEqual(len(template["scenes"]), 8)
+        self.assertTrue(all(row["verdict"] == "pending" and
+                            row["notes"] == "" for row in template["scenes"]))
+        self.assertEqual(template["routes"], [])
+        self.assertFalse(template["user_confirmed"])
+        self.assertFalse(template["review_completed"])
+        with self.assertRaises(AuthoringError) as error:
+            self.checked(template)
+        self.assertEqual(error.exception.code, "campaign_review_stale")
+
+    def test_long_novel_routes_are_not_artificially_limited_to_24(self):
+        proposal = deepcopy(self.review)
+        proposal["routes"][0]["choice_ids"] = CAREFUL_ROUTE + [
+            "source_reviewed_choice"] * 26
+        # This is only an editorial SHAPE check. The genuine native Dart
+        # runner must still reject any decision that is not executable.
+        self.assertEqual(self.checked(proposal)["reviewed_full_routes"], 2)
+
     def test_stale_revision_source_and_incomplete_scene_reviews_fail_closed(self):
         cases = [
             ("campaign_review_stale",
@@ -141,6 +164,9 @@ class CompleteBookCampaignReviewTests(unittest.TestCase):
             ("campaign_source_review_mismatch",
              lambda x: x["review"]["scenes"][0].update(
                  source_quote_sha256=["f"*64])),
+            ("campaign_source_review_mismatch",
+             lambda x: x["review"]["scenes"][0].update(
+                 origin="EXPLICIT_ADAPTATION")),
             ("campaign_review_notes_missing",
              lambda x: x["review"]["scenes"][0].update(notes="pass")),
             ("campaign_route_review_invalid",

@@ -39,7 +39,7 @@ Future<void> main() async {
       if (id is! String ||
           !RegExp(r'^[a-z][a-z0-9_]{0,63}$').hasMatch(id) ||
           !routeIds.add(id) || submitted is! List ||
-          submitted.isEmpty || submitted.length > 24 ||
+          submitted.isEmpty || submitted.length > 512 ||
           submitted.any((s) => s is! String || s.isEmpty)) {
         throw const FormatException('Invalid native route identity or length');
       }

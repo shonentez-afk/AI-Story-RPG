@@ -233,6 +233,8 @@ def main(argv=None) -> int:
         print(json.dumps(result, ensure_ascii=False, indent=2, allow_nan=False))
         if name == "finalize" and result["status"] == "rejected":
             return 3
+        if name == "finalize-extended" and result["status"] == "needs_independent_editorial_review":
+            return 3
         if name in ("gameplay-audit", "dialogue-audit") and args.strict and result["warning_count"]:
             return 3
         return 0
