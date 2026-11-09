@@ -9,6 +9,9 @@ from __future__ import annotations
 import io
 from pathlib import Path
 import re
+import shutil
+import subprocess
+import tempfile
 import zipfile
 
 from .common import (
@@ -386,19 +389,29 @@ def _window(answer: dict, requested: list[dict], scene_order: dict,
 
 def author_causal_v5(*, project_root: Path, base_world: Path,
                      workdir: Path, output: Path, provider,
-                     user_confirmed: bool = False) -> dict:
+                     user_confirmed: bool = False,
+                     native_root: Path | None = None,
+                     world_output: Path | None = None) -> dict:
     """Whole-book private ChatGPT analysis -> reviewed *DRAFT* for native v2.
 
     Output is NEVER a .bworld. The native importer must revalidate the
     returned JSON+SHA against the exact original archive/edition.
     """
+    if (native_root is None) != (world_output is None):
+        require(False, "causal_native_paths",
+                "Supply both native root and private .bworld output")
+    if world_output is not None:
+        world_output = outside_repository(world_output)
+        require(world_output.suffix.lower() == ".bworld" and
+                not world_output.exists(),
+                "causal_native_paths", "Native compiled target must be a fresh .bworld")
     project_root, base_world = outside_repository(project_root), outside_repository(base_world)
     workdir, output = outside_repository(workdir), outside_repository(output)
     require(project_root != workdir and project_root not in workdir.parents and
             workdir not in project_root.parents and output.suffix == ".json" and
             not output.exists(),
             "causal_private_paths", "Keep the source and original private review separate")
-    _, _, index, _, _ = project.load_project(project_root)
+    _, state, index, _, _ = project.load_project(project_root)
     data = _read_native_base(base_world, index)
     scenes, blueprint = _indexed_source(index, data)
     workdir.mkdir(parents=True, exist_ok=True, mode=0o700)
@@ -504,8 +517,68 @@ def author_causal_v5(*, project_root: Path, base_world: Path,
     require(len(encoded) <= 4 * 1024 * 1024,
             "causal_review_over_budget", "Native review size exceeds 4MiB")
     atomic_write(output, encoded)
+    world = None
+    if native_root is not None:
+        # The executable compiler MUST be the native PR#133 CLI, never a
+        # Python reimplementation of game rules or a model-created ZIP.
+        native_root = Path(native_root).expanduser().resolve()
+        script = native_root / "apps/rpg_cli/bin/rpg_cli.dart"
+        require(script.is_file() and
+                (native_root / "packages/rpg_api/lib/rpg_api.dart").is_file() and
+                shutil.which("dart") is not None,
+                "native_v5_compiler_unavailable",
+                "The separate checked-out native RPG project and Dart are required")
+        from .project import _get
+        source_bytes = _get(project_root, state["source_bytes_sha256"])
+        with tempfile.TemporaryDirectory(prefix="causal_v5_native_",
+                                          dir=workdir) as tmp:
+            temp_source = Path(tmp) / state["source_name"]
+            atomic_write(temp_source, source_bytes)
+            command = [
+                "dart", "run", "bin/rpg_cli.dart",
+                "compile-reviewed-causal-v5",
+                "--book", str(temp_source),
+                "--base-world", str(base_world),
+                "--review", str(output),
+                "--approved-digest", digest(encoded),
+                "--user-confirmed", "true",
+                "--output", str(world_output),
+            ]
+            try:
+                reply = subprocess.run(command,
+                                       cwd=native_root / "apps/rpg_cli",
+                                       stdout=subprocess.PIPE,
+                                       stderr=subprocess.PIPE,
+                                       encoding="utf-8", timeout=180)
+            except (OSError, subprocess.TimeoutExpired) as exc:
+                raise RuntimeError(
+                    "Native v5 CLI did not complete: no .bworld was accepted") from exc
+            require(reply.returncode == 0,
+                    "native_v5_compile_rejected",
+                    "The real Dart importer rejected this book/source review: "
+                    + reply.stderr[-1200:])
+            try:
+                outcome = parse_json(reply.stdout.encode("utf-8"))
+            except (UnicodeError, ValueError) as exc:
+                raise ValueError("Native v5 compiler returned invalid JSON") from exc
+            require(type(outcome) is dict and
+                    outcome.get("status") == "private_causal_v5_compiled" and
+                    outcome.get("source_fingerprint") == fingerprint and
+                    outcome.get("reviewed_npc_count") == len(cast["actor_ids"]) and
+                    world_output.is_file() and
+                    outcome.get("world_hash") ==
+                        digest(read_bytes(world_output, 12 * 1024 * 1024)),
+                    "native_v5_compiler_inconsistent",
+                    "The native v5 result does not match verified source/archive bytes")
+            world = {
+                "native_archive": str(world_output),
+                "world_hash": outcome["world_hash"],
+                "native_rpg_engine_used": True,
+                "no_python_game_engine": True,
+            }
     return {
-        "status": "review_ready_for_native_compiler",
+        "status": "private_causal_v5_native_compiled" if world else
+                  "review_ready_for_native_compiler",
         "review_json_path": str(output),
         "approved_digest": digest(encoded),
         "base_archive_sha256": data["archive_sha256"],
@@ -513,5 +586,6 @@ def author_causal_v5(*, project_root: Path, base_world: Path,
         "npc_actor_count": len(cast["actor_ids"]),
         "source_reviewed": True,
         "automatic_literary_canon_proven": False,
-        "native_causal_archive_compiled": False,
+        "native_causal_archive_compiled": world is not None,
+        "native_result": world,
     }

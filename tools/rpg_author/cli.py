@@ -128,6 +128,10 @@ def parser():
     causal.add_argument("--workdir", required=True, type=Path)
     causal.add_argument("--output", required=True, type=Path)
     causal.add_argument("--response-dir", type=Path)
+    causal.add_argument("--native-root", type=Path,
+                        help="Optional second checkout of PR#133 native API, with Dart installed")
+    causal.add_argument("--world-output", type=Path,
+                        help="Private final .bworld, requires --native-root")
     causal.add_argument("--user-confirmed", action="store_true",
                         help="Explicit owner approval, never inferred from AI output")
     # One portable private ZIP contains immutable source checkpoints, all
@@ -269,7 +273,8 @@ def main(argv=None) -> int:
             result = author_causal_v5(
                 project_root=args.project, base_world=args.base_world,
                 workdir=args.workdir, output=args.output, provider=provider,
-                user_confirmed=args.user_confirmed)
+                user_confirmed=args.user_confirmed,
+                native_root=args.native_root, world_output=args.world_output)
         elif name == "snapshot-private":
             from .private_snapshot import snapshot_private
             result = snapshot_private(args.project, args.workdir, args.output,
