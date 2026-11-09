@@ -68,20 +68,19 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('wrong readiness cannot silently authorize installation',
+  testWidgets('rich v3 remains importable but cannot claim a v4 author receipt',
       (tester) async {
     final gateway = _IntakeGateway();
     await launch(tester, gateway,
         pickReport: () async => '{"format":"fake"}');
-    await tester.tap(find.byKey(const Key('world-intake-attach-report')));
-    await tester.pumpAndSettle();
-    expect(find.byKey(const Key('world-intake-report-error')), findsOneWidget);
-    final button = tester.widget<FilledButton>(
-        find.byKey(const Key('world-intake-confirm')));
-    expect(button.onPressed, isNull);
+    // The synthetic Flutter fixture is rich v3. The v4-only reporting
+    // contract is deliberately NOT offered for legacy worlds.
+    final attach = tester.widget<OutlinedButton>(
+        find.byKey(const Key('world-intake-attach-report')));
+    expect(attach.onPressed, isNull);
+    expect(find.byKey(const Key('world-intake-report-error')), findsNothing);
+    expect(find.textContaining('не приложен'), findsWidgets);
     expect(gateway.installedCount, 0);
-    await tester.tap(find.byKey(const Key('world-intake-remove-report')));
-    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('world-intake-confirm')));
     await tester.pumpAndSettle();
     expect(gateway.installedCount, 1);
