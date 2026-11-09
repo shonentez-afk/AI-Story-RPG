@@ -654,4 +654,118 @@ void main() {
     }
   });
 
+  test('ALTER_FATE long-run plan: ordered beats, promises, NPC identity, '
+      'ending and independent SQLite replay', () async {
+    final fixture = _files();
+    final first = await Directory.systemTemp.createTemp('alter_plot_source_');
+    final second = await Directory.systemTemp.createTemp('alter_plot_other_');
+    BookworldCampaignStore? source, destination;
+    try {
+      source = BookworldCampaignStore.openPrivateDirectory(first.path);
+      final game = LocalRpgGameApi(source);
+      final world = game.install(fixture.reviewed);
+      final id = game.start(world.archiveHash);
+      FreeformActionDraft proposal(String action, String narrative,
+          {String intent = 'continue', Map<String, dynamic>? beat}) =>
+          FreeformActionDraft.fromJson({
+        'format': FreeformActionDraft.format,
+        'scope': FreeformActionDraft.fictionScope,
+        'player_text': action,
+        'narration': narrative,
+        'effects': <Object>[],
+        'plot_intent': intent,
+        if (beat != null) 'plot_beat': beat,
+      });
+      Map<String, dynamic> step(String beat, String? predecessor,
+          {List<String> opened = const [],
+           List<String> resolved = const [],
+           String lead = 'player', String objective = 'gm_save_anna'}) => {
+        'format': AlternateStoryBeat.format,
+        'beat_id': beat, 'thread_id': 'gm_anna_rescue_thread',
+        'previous_beat_id': predecessor,
+        'lead_actor_id': lead,
+        'objective_id': objective,
+        'participant_actor_ids': ['player', if (lead != 'player') lead],
+        'opened_obligation_ids': opened,
+        'resolved_obligation_ids': resolved,
+        'route': 'protect',
+      };
+      final opening = proposal('Остановить книжный путь',
+          'Герой решил действовать иначе, чем описано в книге.',
+          intent: 'diverge');
+      final preview = game.previewFreeform(id, opening, expectedRevision: 0);
+      final entered = game.commitFreeform(id, actionId: 'diverge_1',
+          draft: opening, expectedRevision: 0,
+          approvalDigest: preview.approvalDigest, userConfirmed: true);
+      expect(entered.view.activePlotMode, 'ALTER_FATE');
+      expect(entered.view.alternatePlotContinuity['beat_count'], 0);
+
+      final firstBeat = proposal('Обещать помочь',
+          'Герой обещал выполнить новую задачу.',
+          beat: step('gm_rescue_start', null,
+              opened: ['gm_keep_promise']));
+      final p1 = game.previewFreeform(id, firstBeat, expectedRevision: 1);
+      final initial = game.commitFreeform(id, actionId: 'beat_1',
+          draft: firstBeat, expectedRevision: 1,
+          approvalDigest: p1.approvalDigest, userConfirmed: true);
+      expect(initial.view.alternatePlotContinuity['open_obligation_ids'],
+          ['gm_keep_promise']);
+      expect(initial.view.alternatePlotContinuity['last_beat_id'],
+          'gm_rescue_start');
+      expect(initial.view.alternatePlotContinuity['next_directions'],
+          contains({
+            'kind': 'resolve_obligation',
+            'obligation_id': 'gm_keep_promise',
+          }));
+
+      // A model cannot end the story without satisfying a commitment,
+      // invent a predecessor or suppress the already active plan.
+      final skipped = proposal('Новый сюжет без обязательств',
+          'Всё забыли.');
+      expect(() => game.previewFreeform(id, skipped, expectedRevision: 2),
+          throwsFormatException);
+      final fake = proposal('Подменить прошлое', 'Новое предложение.',
+          beat: step('gm_fake_beat', 'gm_not_the_previous'));
+      expect(() => game.previewFreeform(id, fake, expectedRevision: 2),
+          throwsFormatException);
+      final earlyEnding = proposal('Конец', 'Незавершённая история.',
+          intent: 'end', beat: step(
+              'gm_early_end', 'gm_rescue_start'));
+      expect(() => game.previewFreeform(id, earlyEnding,
+          expectedRevision: 2), throwsFormatException);
+      expect(game.load(id).revision, 2);
+
+      final fulfilled = proposal('Сдержать обещание',
+          'Герой сдержал данное обещание и завершил свой путь.',
+          intent: 'end',
+          beat: step('gm_rescue_end', 'gm_rescue_start',
+              resolved: ['gm_keep_promise']));
+      final p2 = game.previewFreeform(id, fulfilled, expectedRevision: 2);
+      final ending = game.commitFreeform(id, actionId: 'beat_2',
+          draft: fulfilled, expectedRevision: 2,
+          approvalDigest: p2.approvalDigest, userConfirmed: true);
+      expect(ending.view.isTerminal, true);
+      expect(ending.view.alternatePlotContinuity['open_obligation_ids'],
+          isEmpty);
+      expect(ending.view.alternatePlotContinuity['beat_count'], 2);
+
+      final bytes = game.exportSave(id);
+      destination = BookworldCampaignStore.openPrivateDirectory(second.path);
+      final replica = LocalRpgGameApi(destination);
+      replica.install(fixture.reviewed);
+      final restoredId = replica.importSave(bytes,
+          expectedWorldHash: world.archiveHash);
+      final restored = replica.load(restoredId);
+      expect(restored.stateHash, ending.view.stateHash);
+      expect(restored.alternatePlotContinuity,
+          ending.view.alternatePlotContinuity);
+      expect(restored.journal.length, 3);
+    } finally {
+      source?.close();
+      destination?.close();
+      await first.delete(recursive: true);
+      await second.delete(recursive: true);
+    }
+  });
+
 }
