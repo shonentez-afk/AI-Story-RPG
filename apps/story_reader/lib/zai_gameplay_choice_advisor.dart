@@ -295,6 +295,17 @@ class ZaiGameplayChoiceAdvisor {
     if (_invalidText.hasMatch(snippet)) {
       throw const AiSetupException('Некорректный текст текущей сцены.');
     }
+    // Only user-visible, replay-verified noncanonical GM turns can be
+    // sent as bounded continuity memory. No canonical NPC/book secrets.
+    final remembered = view.journal
+        .where((entry) => entry.choiceLabel
+            .startsWith('Свободное действие (не текст книги): '))
+        .map((entry) => entry.choiceLabel)
+        .toList(growable: false);
+    final recentActions = remembered
+        .skip(remembered.length > 5 ? remembered.length - 5 : 0)
+        .map((line) => String.fromCharCodes(line.runes.take(280)))
+        .toList(growable: false);
     const prompt = 'Ты ведущий ЧАСТНЫХ неканонических игровых вставок. '
         'Игрок читает неизменяемую книгу. Верни ТОЛЬКО JSON '
         '{"narration":"русский текст неканонического действия",'
@@ -303,6 +314,8 @@ class ZaiGameplayChoiceAdvisor {
         'Не изменяй события/персонажей/мотивации/действительные факты '
         'книги, отношения и знания NPC; не утверждай, что выдуманное '
         'событие было в оригинале. Нельзя создавать новые главы или сцены. '
+        'Последние игровые записи — только вымышленная память, '
+        'а не события источника. '
         'Можно изменять имеющиеся и СОЗДАВАТЬ новые вымышленные '
         'ресурсы с ID строго вида gm_слово (ASCII a-z0-9_). '
         'Например gm_forest_stone — новая находка, не вещь из книги. '
@@ -316,6 +329,7 @@ class ZaiGameplayChoiceAdvisor {
       'current_scene_excerpt': snippet,
       'player_text': playerText,
       'fiction_only': true,
+      'recent_reviewed_game_fiction': recentActions,
       'gm_resources': {
         'stats': view.gmStats,
         'flags': view.gmFlags,

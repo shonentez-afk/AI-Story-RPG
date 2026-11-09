@@ -508,6 +508,33 @@ class _WorldPlayPageState extends State<WorldPlayPage> {
                                       setState(() => _dialogueFinished = finished);
                                     },
                                   ),
+                                // Only a COMMITTED and replay-verified latest
+                                // free action is displayed beside the book.
+                                // It is explicitly separated from the
+                                // immutable literal CANON scene text.
+                                if (view.sourceLiteralCanon &&
+                                    view.journal.isNotEmpty &&
+                                    view.journal.last.sequence == view.revision &&
+                                    view.journal.last.choiceLabel.startsWith(
+                                        'Свободное действие (не текст книги): ')) ...[
+                                  const SizedBox(height: 14),
+                                  Card(
+                                    key: const ValueKey('world-last-dynamic-event'),
+                                    child: Padding(
+                                      padding: const EdgeInsets.all(12),
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Text('Игровая вставка ИИ · не канон книги',
+                                              style: Theme.of(context).textTheme.titleSmall),
+                                          const SizedBox(height: 6),
+                                          Text(view.journal.last.choiceLabel,
+                                              style: Theme.of(context).textTheme.bodyMedium),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ],
                                 const SizedBox(height: 24),
                                 if (dialogue != null && !_dialogueFinished) ...[
                                   Text('Прочитайте диалог или выберите «Пропустить разговор», '

@@ -59,6 +59,50 @@ class _RichViewGateway implements WorldLibraryGateway {
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
+/// A replay-derived v5 view for display-only widget verification.
+class _LiteralAiViewGateway implements WorldLibraryGateway {
+  const _LiteralAiViewGateway();
+
+  @override
+  Future<WorldGameView> load(String id) async => WorldGameView(
+    campaignId: 'literal_ai_test',
+    worldTitle: 'Книга с частным ИИ',
+    sceneId: 'canon_00000',
+    sceneText: 'Дословный текст первой главы.',
+    revision: 1,
+    tick: 1,
+    stateHash: 'e' * 64,
+    isTerminal: false,
+    stats: const {'gm_resolve': 50},
+    inventory: const ['gm_found_stone'],
+    flags: const {'gm_noted': false},
+    knownFacts: const [],
+    choices: const [],
+    journal: const [
+      WorldEventView(
+        sequence: 1,
+        sceneId: 'canon_00000',
+        choiceLabel: 'Свободное действие (не текст книги): '
+            'Я нашёл камень — это выдуманная находка, не сюжет книги',
+        changes: ['Получено: gm_found_stone'],
+      ),
+    ],
+    heroName: 'Читатель',
+    freeformAvailable: true,
+    sourceLiteralCanon: true,
+    gmItems: const ['gm_found_stone'],
+    gmStats: const {'gm_resolve': 50},
+    sceneSource: const WorldSceneSourceView(
+      sourceTitle: 'Исходная книга', chapterIndex: 0,
+      chapterCount: 2, isSourcePassage: true,
+    ),
+  );
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) =>
+      super.noSuchMethod(invocation);
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -232,4 +276,25 @@ void main() {
     expect(view.itemNames[view.inventory.single], 'Верёвка');
     expect(view.itemDescriptions['rope'], 'Прочная верёвка у дороги');
   });
+
+  testWidgets('CANON shows exact source prose and committed AI fiction in '
+      'visually separate panels without changing the chapter badge',
+      (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    await tester.pumpWidget(const MaterialApp(home: WorldPlayPage(
+      gateway: _LiteralAiViewGateway(),
+      campaignId: 'literal_ai_test',
+    )));
+    await tester.pumpAndSettle();
+    expect(find.text('Дословный текст первой главы.'), findsOneWidget);
+    expect(find.textContaining('CANON · глава 1/2'), findsOneWidget);
+    expect(find.byKey(const Key('world-last-dynamic-event')),
+        findsOneWidget);
+    expect(find.textContaining('Игровая вставка ИИ · не канон книги'),
+        findsOneWidget);
+    expect(find.textContaining('Я нашёл камень'),
+        findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
 }

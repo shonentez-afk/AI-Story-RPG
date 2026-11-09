@@ -446,7 +446,10 @@ void main() {
     expect(action, findsOneWidget);
     await tester.ensureVisible(action);
     await tester.tap(action);
-    await tester.pumpAndSettle();
+    // The page deliberately shows an indeterminate progress animation
+    // while the confirmation dialog is open. Never pumpAndSettle then.
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
     expect(indexCount, 1);
     expect(find.text('Создать CANON всей книги?'), findsOneWidget);
     expect(find.textContaining('Глав: 2, фрагментов: 2'),

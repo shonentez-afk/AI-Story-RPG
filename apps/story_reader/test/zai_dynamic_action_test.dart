@@ -48,7 +48,8 @@ AiHttpResponse _proposal({Object? effects, String? narration}) =>
       }}],
     }));
 
-WorldGameView _view({bool available = true, bool terminal = false}) =>
+WorldGameView _view({bool available = true, bool terminal = false,
+    bool recent = false}) =>
     WorldGameView(
       campaignId: 'canon_test_campaign',
       worldTitle: 'Закрытая книга',
@@ -61,7 +62,13 @@ WorldGameView _view({bool available = true, bool terminal = false}) =>
       flags: const {'gm_noted': false},
       knownFacts: const [],
       choices: const [],
-      journal: const [],
+      journal: recent ? const [
+        WorldEventView(sequence: 1, sceneId: 'canon_00000',
+          choiceLabel: 'Обычное событие: секрет князя', changes: []),
+        WorldEventView(sequence: 2, sceneId: 'canon_00000',
+          choiceLabel: 'Свободное действие (не текст книги): '
+              'Я поднял камень — это вымышленное действие', changes: []),
+      ] : const [],
       gmStats: const {'gm_resolve': 50},
       gmFlags: const {'gm_noted': false},
       gmItems: const ['gm_keepsake'],
@@ -89,7 +96,7 @@ void main() {
     final http = _FakeTransport([_proposal()]);
     final advisor = await _service(http);
     final proposal = await advisor.suggestDynamic(
-      view: _view(),
+      view: _view(recent: true),
       playerText: 'Я оставляю свой знак на дороге.',
       consentForThisAction: true,
     );
@@ -103,6 +110,9 @@ void main() {
         ['content'] as String) as Map;
     expect(body['player_text'], contains('оставляю'));
     expect(body['gm_resources']['flags'], {'gm_noted': false});
+    expect(body['recent_reviewed_game_fiction'], hasLength(1));
+    expect(jsonEncode(body), contains('Я поднял камень'));
+    expect(jsonEncode(body), isNot(contains('секрет князя')));
     expect(body.containsKey('world_save'), false);
     expect(http.bodies.single, isNot(contains('test_secret_not_exportable')));
     expect(http.bodies.single, isNot(contains('canon_test_campaign')));

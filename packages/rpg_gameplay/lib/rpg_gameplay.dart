@@ -575,10 +575,17 @@ class RpgGameplayEngine {
               ? 'Передано персонажу: ' : 'Использовано: ') + (items[id] ?? id));
         }
         for (final id in (after.stats.keys.toList()..sort())) {
-          final amount = after.stats[id]! - before.stats[id]!;
+          final amount = after.stats[id]! - (before.stats[id] ?? 0);
           if (amount != 0) {
             changes.add((stats[id] ?? id) +
                 ': ' + (amount > 0 ? '+' : '') + amount.toString());
+          }
+        }
+        for (final entry in after.flags.entries) {
+          if (entry.key.startsWith('gm_') &&
+              before.flags[entry.key] != entry.value) {
+            changes.add('Игровой флаг: ' + entry.key +
+                ' = ' + entry.value.toString());
           }
         }
         final learned = (after.knowledge['player'] ?? <String>{})
