@@ -263,8 +263,8 @@ def validate() -> list[str]:
         issues.append(f"{world_intake}: generated-world intake is a pure SDK contract")
     library_screen = ROOT / "apps" / "story_reader" / "lib" / "home_page.dart"
     library_code = library_screen.read_text(encoding="utf-8") if library_screen.is_file() else ""
-    if "WorldImportReviewFlow.confirmAndInstall(" not in library_code or
-            "gateway.install(bytes)" in library_code:
+    if ("WorldImportReviewFlow.confirmAndInstall(" not in library_code or
+            "gateway.install(bytes)" in library_code):
         issues.append(f"{library_screen}: externally authored world needs explicit intake review")
 
     gateway = ROOT / "apps" / "story_reader" / "lib" / "world_library_gateway.dart"
