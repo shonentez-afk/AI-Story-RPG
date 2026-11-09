@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:bookworld_format/bookworld_format.dart';
+import 'package:rpg_api/rpg_api.dart' show RpgMultiActTrialApi, LocalRpgMultiActTrialApi;
 
 import 'book_source_index.dart';
 import 'bookwide_act_planner.dart';
@@ -10,7 +10,6 @@ import 'reviewed_hero_role.dart';
 import 'reviewed_hero_source_action.dart';
 import 'bookwide_npc_arc.dart';
 import 'cross_act_consequence_gate.dart';
-import 'multi_act_trial_compiler.dart';
 import 'source_locked_prose_preview_page.dart';
 import 'source_locked_prose_batch_page.dart';
 import 'reviewed_prose_scene_overlay.dart';
@@ -37,6 +36,7 @@ class MultiActTrialPage extends StatefulWidget {
     required this.draft,
     required this.gateway,
     this.heroRoleCatalog,
+    this.trialApi,
   });
 
   final BookSourceIndex index;
@@ -47,12 +47,16 @@ class MultiActTrialPage extends StatefulWidget {
   /// Defaults to existing local NPC editorial checkpoints, no network.
   /// Injectable for deterministic widget and source-identity tests.
   final ReviewedHeroRoleCatalog? heroRoleCatalog;
+  final RpgMultiActTrialApi? trialApi;
 
   @override
   State<MultiActTrialPage> createState() => _MultiActTrialPageState();
 }
 
 class _MultiActTrialPageState extends State<MultiActTrialPage> {
+  RpgMultiActTrialApi get _trialApi =>
+      widget.trialApi ?? const LocalRpgMultiActTrialApi();
+
   bool _reviewed = false;
   bool _privateFiction = false;
   bool _enforceEarlierOutcome = false;
@@ -462,7 +466,7 @@ class _MultiActTrialPageState extends State<MultiActTrialPage> {
         }
       }
       final effectivePlan = _effectivePlan(continuity: continuity);
-      final compiled = await MultiActTrialCompiler.compile(
+      final compiled = await _trialApi.compileTrial(
         index: widget.index,
         book: widget.book,
         bookMap: widget.bookMap,
@@ -492,7 +496,7 @@ class _MultiActTrialPageState extends State<MultiActTrialPage> {
         final ReviewedGameplayApprovalPreview preview;
         if (_wholeGameplaySelection != null) {
           final selection = _wholeGameplaySelection!;
-          preview = ReviewedGameplayCompiler.previewAcrossBatches(
+          preview = _trialApi.previewWholeGameplay(
             currentRichBookworld: compiled.archive,
             index: widget.index,
             book: widget.book,
@@ -503,7 +507,7 @@ class _MultiActTrialPageState extends State<MultiActTrialPage> {
           );
         } else {
           final selection = _gameplaySelection!;
-          preview = ReviewedGameplayCompiler.preview(
+          preview = _trialApi.previewOneGameplay(
             currentRichBookworld: compiled.archive,
             index: widget.index,
             book: widget.book,
@@ -551,7 +555,7 @@ class _MultiActTrialPageState extends State<MultiActTrialPage> {
           ),
         );
         if (approved != true || !mounted) return;
-        archive = await ReviewedGameplayCompiler.compileAfterUserConfirmation(
+        archive = await _trialApi.acceptGameplay(
           preview: preview,
           currentRichBookworld: compiled.archive,
           index: widget.index,
@@ -559,10 +563,8 @@ class _MultiActTrialPageState extends State<MultiActTrialPage> {
           approvedReviewDigest: preview.approvalDigest,
         );
       }
-      final finalCheck = const RichPrivateBookworldImporter().inspect(archive);
-      if (finalCheck.sourceFingerprint != widget.index.sourceFingerprint) {
-        throw const FormatException('Чужая исходная редакция игрового мира');
-      }
+      final finalCheck = _trialApi.verifyPrivateWorld(
+        archive, expectedSourceFingerprint: widget.index.sourceFingerprint);
       final installed = await widget.gateway.install(archive);
       if (installed.archiveHash != finalCheck.archiveSha256 ||
           installed.bookworldId != finalCheck.bookworldId) {

@@ -432,3 +432,180 @@ final class LocalRpgCampaignWorkflowApi extends ReviewedCampaignWorkflow
     implements RpgCampaignWorkflowApi {
   const LocalRpgCampaignWorkflowApi();
 }
+
+
+ 
+/// Adapter for the older multi-act private-fiction editor. Uses the same
+/// independent source, causality, gameplay and BookWorld compilers as the
+/// newer workflow. Does not import Flutter or own cloud transport.
+abstract interface class RpgMultiActTrialApi {
+  Future<StoryPlanTrialCompilation> compileTrial({
+    required BookSourceIndex index,
+    required NarrativeBookModel book,
+    required BookwideActPlan bookMap,
+    required MultiActStoryPlanDraft draft,
+    CrossActContinuityDraft? continuity,
+    WholeStoryLiteraryRecheckApproval? recheckedRepair,
+    WholeStoryLiteraryUnchangedApproval? unchangedReview,
+    required Set<String> sourceEventIdsReviewedByUser,
+    required bool privateUseConfirmed,
+    required bool fictionalTrialAcknowledged,
+    String heroName = 'Игрок',
+    ReviewedHeroRole? selectedHeroRole,
+    bool reviewedHeroSourceAction = false,
+    ReviewedHeroRole? npcEncounterRole,
+    bool reviewedNpcEncounter = false,
+    String npcPlayerLine = '',
+    String npcReplyLine = '',
+    Set<String> reviewedInteractiveEventIds = const {},
+    List<ReviewedProseSceneApproval> reviewedProse = const [],
+    bool expanded = false,
+  });
+
+  ReviewedGameplayApprovalPreview previewOneGameplay({
+    required Uint8List currentRichBookworld,
+    required BookSourceIndex index,
+    required NarrativeBookModel book,
+    required StoryPlan plan,
+    required SourceLockedGameplayContext context,
+    required GameplayCandidateDraft proposals,
+    required Map<String, String> selectedUserReviewNotes,
+  });
+
+  ReviewedGameplayApprovalPreview previewWholeGameplay({
+    required Uint8List currentRichBookworld,
+    required BookSourceIndex index,
+    required NarrativeBookModel book,
+    required StoryPlan plan,
+    required WholePlanGameplayBatchManifest manifest,
+    required List<GameplayCandidateDraft> proposals,
+    required Map<String, String> selectedUserReviewNotes,
+  });
+
+  Future<Uint8List> acceptGameplay({
+    required ReviewedGameplayApprovalPreview preview,
+    required Uint8List currentRichBookworld,
+    required BookSourceIndex index,
+    required bool explicitlyConfirmedPrivateGameFiction,
+    required String approvedReviewDigest,
+  });
+
+  VerifiedRichPrivateBookworld verifyPrivateWorld(
+      Uint8List archive, {required String expectedSourceFingerprint});
+}
+
+/// One public implementation: forwards every rules decision into
+/// story_authoring's existing proven compilers, never duplicates a rule.
+final class LocalRpgMultiActTrialApi implements RpgMultiActTrialApi {
+  const LocalRpgMultiActTrialApi();
+
+  @override
+  Future<StoryPlanTrialCompilation> compileTrial({
+    required BookSourceIndex index,
+    required NarrativeBookModel book,
+    required BookwideActPlan bookMap,
+    required MultiActStoryPlanDraft draft,
+    CrossActContinuityDraft? continuity,
+    WholeStoryLiteraryRecheckApproval? recheckedRepair,
+    WholeStoryLiteraryUnchangedApproval? unchangedReview,
+    required Set<String> sourceEventIdsReviewedByUser,
+    required bool privateUseConfirmed,
+    required bool fictionalTrialAcknowledged,
+    String heroName = 'Игрок',
+    ReviewedHeroRole? selectedHeroRole,
+    bool reviewedHeroSourceAction = false,
+    ReviewedHeroRole? npcEncounterRole,
+    bool reviewedNpcEncounter = false,
+    String npcPlayerLine = '',
+    String npcReplyLine = '',
+    Set<String> reviewedInteractiveEventIds = const {},
+    List<ReviewedProseSceneApproval> reviewedProse = const [],
+    bool expanded = false,
+  }) => MultiActTrialCompiler.compile(
+        index: index,
+        book: book,
+        bookMap: bookMap,
+        draft: draft,
+        continuity: continuity,
+        recheckedRepair: recheckedRepair,
+        unchangedReview: unchangedReview,
+        sourceEventIdsReviewedByUser: sourceEventIdsReviewedByUser,
+        privateUseConfirmed: privateUseConfirmed,
+        fictionalTrialAcknowledged: fictionalTrialAcknowledged,
+        heroName: heroName,
+        selectedHeroRole: selectedHeroRole,
+        reviewedHeroSourceAction: reviewedHeroSourceAction,
+        npcEncounterRole: npcEncounterRole,
+        reviewedNpcEncounter: reviewedNpcEncounter,
+        npcPlayerLine: npcPlayerLine,
+        npcReplyLine: npcReplyLine,
+        reviewedInteractiveEventIds: reviewedInteractiveEventIds,
+        reviewedProse: reviewedProse,
+        expanded: expanded,
+      );
+
+  @override
+  ReviewedGameplayApprovalPreview previewOneGameplay({
+    required Uint8List currentRichBookworld,
+    required BookSourceIndex index,
+    required NarrativeBookModel book,
+    required StoryPlan plan,
+    required SourceLockedGameplayContext context,
+    required GameplayCandidateDraft proposals,
+    required Map<String, String> selectedUserReviewNotes,
+  }) => ReviewedGameplayCompiler.preview(
+        currentRichBookworld: currentRichBookworld,
+        index: index,
+        book: book,
+        plan: plan,
+        context: context,
+        proposals: proposals,
+        selectedUserReviewNotes: selectedUserReviewNotes,
+      );
+
+  @override
+  ReviewedGameplayApprovalPreview previewWholeGameplay({
+    required Uint8List currentRichBookworld,
+    required BookSourceIndex index,
+    required NarrativeBookModel book,
+    required StoryPlan plan,
+    required WholePlanGameplayBatchManifest manifest,
+    required List<GameplayCandidateDraft> proposals,
+    required Map<String, String> selectedUserReviewNotes,
+  }) => ReviewedGameplayCompiler.previewAcrossBatches(
+        currentRichBookworld: currentRichBookworld,
+        index: index,
+        book: book,
+        plan: plan,
+        manifest: manifest,
+        proposals: proposals,
+        selectedUserReviewNotes: selectedUserReviewNotes,
+      );
+
+  @override
+  Future<Uint8List> acceptGameplay({
+    required ReviewedGameplayApprovalPreview preview,
+    required Uint8List currentRichBookworld,
+    required BookSourceIndex index,
+    required bool explicitlyConfirmedPrivateGameFiction,
+    required String approvedReviewDigest,
+  }) => ReviewedGameplayCompiler.compileAfterUserConfirmation(
+        preview: preview,
+        currentRichBookworld: currentRichBookworld,
+        index: index,
+        explicitlyConfirmedPrivateGameFiction:
+            explicitlyConfirmedPrivateGameFiction,
+        approvedReviewDigest: approvedReviewDigest,
+      );
+
+  @override
+  VerifiedRichPrivateBookworld verifyPrivateWorld(
+      Uint8List archive, {required String expectedSourceFingerprint}) {
+    final world = const RichPrivateBookworldImporter().inspect(archive);
+    if (world.sourceFingerprint != expectedSourceFingerprint ||
+        world.requiresNetwork || world.canDistributePublicly) {
+      throw const FormatException('Чужая исходная редакция игрового мира');
+    }
+    return world;
+  }
+}
