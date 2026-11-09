@@ -2,9 +2,9 @@
 
 No Python fork of the v4 causal rules or guessed initial-state citations.
 The E6g literary/gameplay review remains the source; Dart builds/validates v4.
-Until an explicitly reviewed v4 StoryPlan contract exists, this path retains
-E6f authoring's v3 scene/flag/item limits, even though the resulting archive
-has native format_version=4. Private sources and intermediate JSON live only
+The base E6g v3 StoryPlan stays strictly reviewed. Explicit opt-in v4 act
+proposals add branching scenes and typed effects; the native Dart compiler
+remains the one authoritative gameplay validator. Private sources and intermediate JSON live only
 inside an isolated temporary directory, never the repository or GitHub CI.
 """
 from __future__ import annotations
@@ -22,7 +22,7 @@ from .common import (AuthoringError, ROOT, atomic_write, canonical, digest,
 from .compatibility import check_contract
 from .project import _get, load_project
 from .rich_package import _attribution, compile_rich_from_project
-from .v4_expansion import extend_reviewed_world
+from .v4_acts import extend_checked_world
 
 _NATIVE_PROBE = ROOT / "tests/rpg_author/dart"
 _PACKAGE_CONFIG = _NATIVE_PROBE / ".dart_tool/package_config.json"
@@ -135,7 +135,7 @@ def compile_extended_from_project(root: Path, enrichment: dict,
     require(type(blueprint) is dict and type(provenance) is dict,
             "invalid_reviewed_authoring", "Missing reviewed v3 blueprint")
     if extension is not None:
-        blueprint, provenance, _ = extend_reviewed_world(
+        blueprint, provenance, _ = extend_checked_world(
             blueprint, provenance, story, enrichment, index, analyses, extension)
     # Only a reviewed extension is allowed to add initial possessions/ticks.
     require(extension is not None or not provenance.get("initial_state_review"),
@@ -248,6 +248,6 @@ def audited_extension(root: Path, enrichment: dict, extension: dict,
     with zipfile.ZipFile(io.BytesIO(checked)) as archive:
         bp = parse_json(archive.read("scenario/blueprint.json"))
         prov = parse_json(archive.read("source/provenance.json"))
-    _, _, report = extend_reviewed_world(bp, prov, story, enrichment,
+    _, _, report = extend_checked_world(bp, prov, story, enrichment,
                                          index, analyses, extension)
     return report

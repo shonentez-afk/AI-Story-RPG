@@ -82,7 +82,7 @@ def parser():
     richer.add_argument("--output", required=True, type=Path)
     richer.add_argument("--model-id", choices=["gpt-6"], default=None)
     native_v4 = commands.add_parser(
-        "build-extended", help="Explicit reviewed v3 source -> native Dart v4, without expanding story-plan limits")
+        "build-extended", help="Reviewed source -> native Dart v4, optional multi-act choices")
     native_v4.add_argument("--project", required=True, type=Path)
     native_v4.add_argument("--enrichment", required=True, type=Path)
     native_v4.add_argument("--npc-review", type=Path,
@@ -90,7 +90,7 @@ def parser():
     native_v4.add_argument("--output", required=True, type=Path)
     native_v4.add_argument("--model-id", choices=["gpt-6"], default=None)
     native_v4.add_argument("--extension", type=Path,
-                           help="Opt-in source-locked v4 scene batches and initial state")
+                           help="Opt-in reviewed v4 bridge or multi-act JSON")
     ext_audit = commands.add_parser("audit-extended",
                                     help="Read-only v4 extension preflight; not native/semantic approval")
     ext_audit.add_argument("--project", required=True, type=Path)

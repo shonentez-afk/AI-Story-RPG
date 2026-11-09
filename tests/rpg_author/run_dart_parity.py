@@ -374,6 +374,62 @@ def main():
         assert initial_bp["initial_state"]["inventory"] == ["rope"]
         assert initial_bp["initial_state"]["tick"] == 3
         assert initial_src["initial_state_review"]["user_confirmed"] is True
+        # E6i: original synthetic THREE-chapter FB2, TWO reviewed acts,
+        # player-knowledge gated branching, native Dart v4 runtime and saves.
+        from tests.rpg_author import fixtures_acts as act_case
+        from tools.rpg_author.native_v4_bridge import audited_extension
+        act_book = root / act_case.SOURCE_FILENAME
+        act_book.write_text(act_case.SOURCE, encoding="utf-8")
+        act_project = root / "act_checkpoint"
+        project.init_project(act_project, act_book)
+        for record in act_case.analyses():
+            project.submit_analysis(act_project, record)
+        project.submit_story(act_project, act_case.story_plan())
+        act_enrichment = act_case.rich_enrichment()
+        act_v3, _ = compile_rich_from_project(act_project, act_enrichment)
+        with zipfile.ZipFile(io.BytesIO(act_v3)) as archive:
+            base_blueprint = json.loads(archive.read("scenario/blueprint.json"))
+        act_review = act_case.reviewed_acts(base_blueprint)
+        act_report = audited_extension(act_project, act_enrichment, act_review)
+        assert act_report["act_count"] == 2 and act_report["distinct_source_events"] == 4
+        assert act_report["chapters_without_source_scenes"] == []
+        assert not act_report["native_causality_verified"]
+        act_world, act_sidecar_data = compile_extended_from_project(
+            act_project, act_enrichment, extension=act_review)
+        with zipfile.ZipFile(io.BytesIO(act_world)) as archive:
+            bp = json.loads(archive.read("scenario/blueprint.json"))
+            origin = json.loads(archive.read("source/provenance.json"))
+        assert len(bp["scenes"]) == 8
+        assert len(origin["scene_origins"]) == 8
+        assert origin["source_chapters_total"] == 3
+        careful_path = [
+            "take_rope", "study_bridge", "note_current",
+            "rescue", "careful_route", "pull_up",
+        ]
+        hurried_path = ["take_rope", "rush_on", "rescue", "bold_route"]
+        help_path = ["leave_rope", "call_help"]
+        played = dart({
+            "operation": "rich_private",
+            "data": base64.b64encode(act_world).decode("ascii"),
+            "paths": [careful_path, hurried_path, help_path],
+        })
+        assert played["format_version"] == 4
+        assert all(j["replay_ok"] and j["terminal"] for j in played["journeys"]), played
+        assert "current" in played["journeys"][0]["turns"][2]["facts"], played
+        assert played["journeys"][0]["turns"][-1]["journal"] == careful_path
+        assert played["journeys"][1]["turns"][-1]["journal"] == hurried_path
+        assert played["journeys"][2]["turns"][-1]["journal"] == help_path
+        persisted = dart({
+            "operation": "rich_campaign",
+            "data": base64.b64encode(act_world).decode("ascii"),
+            "path": careful_path,
+        })
+        assert persisted["restart_ok"] and persisted["save_import_ok"] and persisted["fork_ok"]
+        game_path = root / "multi_act_v4.bworld"
+        attribution_path = root / "multi_act_v4.attribution.json"
+        game_path.write_bytes(act_world)
+        attribution_path.write_bytes(act_sidecar_data)
+        assert verify_extended_bundle(game_path, attribution_path)["native_dart_verified"]
     print(json.dumps({"source_comparisons": checked, "candidate_accepted_by_dart_blueprint": True,
                       "known_lossy_source_forms_refused": 1,
                       "application_modified": False,
@@ -393,7 +449,9 @@ def main():
                        "native_v4_npc_v5_dart_sqlite": True,
                        "native_v4_attribution_mismatch_rejected": True,
                        "native_v4_203_source_locked_scenes_replayed": True,
-                       "native_v4_initial_item_and_tick_review_verified": True}))
+                       "native_v4_initial_item_and_tick_review_verified": True,
+                       "native_v4_three_chapter_two_act_branching_verified": True,
+                       "native_v4_stateful_knowledge_gate_and_save_replayed": True}))
 
 
 if __name__ == "__main__":
