@@ -312,10 +312,14 @@ def restore_private_snapshot(input_path: Path, project_root: Path,
                 published.append(target)
             if game is not None:
                 for name in sorted(k for k in members if k.startswith("game/")):
-                    suffix = name[len("game/game"):]
-                    target = game if not suffix else game.with_suffix(suffix)
-                    staged = (staging["game"] if not suffix else
-                              staging["game"].with_suffix(suffix))
+                    # The archive's game/game.bworld is not a sidecar:
+                    # map it to the caller's actual .bworld filename.
+                    if name == "game/game.bworld":
+                        target, staged = game, staging["game"]
+                    else:
+                        suffix = name[len("game/game"):]
+                        target = game.with_suffix(suffix)
+                        staged = staging["game"].with_suffix(suffix)
                     require(not target.exists(), "snapshot_restore_exists",
                             "Game destination appeared during restoration")
                     os.replace(staged, target)
