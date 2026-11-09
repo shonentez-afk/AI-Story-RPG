@@ -1,3 +1,17 @@
+# ОБЯЗАТЕЛЬНЫЙ HANDOFF — 9 НОЯБРЯ 2026: АВТОНОМНОСТЬ КЛИЕНТОВ ПРИНЯТА, КНИЖНЫЕ МЕХАНИКИ ЕЩЁ НЕ ПОЛНЫЕ
+
+**Проверенный code HEAD:** `071ed2b07bec9cc863aa22583288688337ed9eae` в Draft PR #133. [AI Story RPG CI #1087](https://github.com/shonentez-afk/AI-Story-RPG/actions/runs/42558128159) **COMPLETED SUCCESS на точном SHA**: Python, Dart/M1.7, настоящий Python→Dart HTTP→SQLite, v3/v4 перенос private `.bworld + .bwsave` в ПУСТУЮ библиотеку, replay/verified stateHash/journal/NPC/предметы, Flutter widget/analyze, Windows portable, Android debug APK. [M0 #1172](https://github.com/shonentez-afk/AI-Story-RPG/actions/runs/42558128175) **SUCCESS**. **Сборки — не физические пользовательские испытания.**
+
+**Реализовано в одном крупном пакете:** `RpgCampaignTransfer`, `export_bundle/inspect_bundle/import_bundle` с частным переносимым архивом (не generator snapshot), подтверждение импорта + checksum + оригинальный native ZIP и строгий replay; `WorldGameView.stateHash`, `journal_page` (CAS и пагинация), `confirm_suggestion` (согласие, повторная проверка fingerprint, actionId и допустимости); Python loopback не использует системный HTTP_PROXY. **Тот же механизм исполняет Flutter, CLI и Python-клиент; второго rule engine нет.**
+
+**Проверка полной автономности НЕ закрыта целиком.** [Независимый аудит](docs/RPG_ENGINE_CLIENT_AUTONOMY_AUDIT_RU_2026-11-09.md): игра на проверенном BookWorld автономна, но произвольный полный литературный CANON, действительная BOOK_CHARACTER с начальными знаниями/предметами, динамический AI-GM с подписанным story_core-переходом, все editor/authoring API для внешних языков, media/портреты в пакете и отдельный Browser/FFI/cloud adapter ещё не готовы. Найдены **две прямые ссылки на RichPrivateBookworldImporter в Flutter NPC-мастере** `whole_book_npc_campaign_page.dart` (~625 и ~682); заменить публичным `RpgAuthoringApi.inspectPrivateWorld` в **следующем одном крупном игровом/авторском пакете**, не отдельным микро-PR. `world_library_gateway.dart` напрямую открывает SQLite **только как платформенный storage adapter**, игровых правил там нет.
+
+**Генератор:** уже **E6m/0.3.0a16** (историческая ветка ещё содержит e6g в имени). [Авторский CI #420 SUCCESS](https://github.com/shonentez-afk/AI-Story-RPG/actions/runs/42556984326), code SHA `ce221f0454a5be61de6bc39297e11cc070342680`. ChatGPT Skill-first, его `snapshot-private` содержит приватную книгу и авторские ответы, и не является `.bwsave` игрока. **Native External RPG author tests #423 FAIL** (старый `contract_drift`/Dart probe), отдельная зелёная ветка ≠ единая совместимость. Не отключать doctor и не менять generator-owned файлы в нативной ветке.
+
+**СЛЕДУЮЩИЙ ПРИОРИТЕТ — ОДИН КРУПНЫЙ БЛОК:** source-reviewed CANON + BOOK_CHARACTER + typed dynamic AI freeform в движке, единый причинно проверенный whole-book authoring workflow, выравнивание Flutter и стороннего JSON API, затем семантическая E6m↔native parity и 2 реальные RU FB2/физический Win+Android. Никаких микро-PR; один Draft PR #133, `main` не трогать. [Полный план](docs/RPG_ENGINE_FULL_AUTONOMY_MULTICLIENT_PLAN_RU_2026-11-09.md).
+
+---
+
 # ПЕРЕДАЧА — 9 НОЯБРЯ 2026: ПОЛНАЯ КЛИЕНТСКАЯ ПЕРЕНОСИМОСТЬ RPG, НОВЫЙ КРУПНЫЙ ПАКЕТ
 
 **Цель без изменения:** один полностью самостоятельный RPG runtime/API, Flutter/CLI/Python и любые новые клиенты без копии правил. **Проверенный baseline:** native SHA `43930247ef0d2b3e67de7d05ac629fe5a9dd45a4`, [CI #1084](https://github.com/shonentez-afk/AI-Story-RPG/actions/runs/42555732659) SUCCESS: Python, Dart, M1.7, Flutter, Windows + Android.

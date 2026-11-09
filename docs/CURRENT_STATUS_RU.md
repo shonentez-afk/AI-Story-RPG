@@ -1,3 +1,11 @@
+## 9 ноября 2026 — ПРИНЯТО: самостоятельный игровой API и перенос кампаний между клиентами
+
+Код `071ed2b07bec9cc863aa22583288688337ed9eae` имеет **полный точный [CI #1087 SUCCESS](https://github.com/shonentez-afk/AI-Story-RPG/actions/runs/42558128159)**: Python reference, Dart, headless M1.7, Flutter, Windows Portable, Android APK; **M0 #1172 SUCCESS**. Replayed v3/v4 `.bworld` и private `.bwsave` можно одним self-contained `RpgCampaignTransfer` импортировать в чистое другое SQLite-хранилище (с явным согласием); тесты сравнивают проверенные `state_hash`, NPC/предметы/журнал/сцену. `journal_page` и `confirm_suggestion` проверяют revision/fingerprint и source authorization; Python HTTP-клиент работает без Flutter, без второй игровой логики и без HTTP_PROXY. **Не считать CI физическим UX или литературным QA.**
+
+Детальный [аудит автономности](RPG_ENGINE_CLIENT_AUTONOMY_AUDIT_RU_2026-11-09.md) подтвердил оставшиеся пробелы: CANON/BOOK_CHARACTER/действительно свободный AI-GM, полные внешние authoring DTO/порты, портреты/media, browser/FFI/cloud, два прямых `RichPrivateBookworldImporter` вызова в Flutter NPC-мastере, реальная литература и устройства. Генератор **E6m/0.3.0a16 CI #420 PASS**, общий native External author #423 FAIL (старые pin/legacy parity). **Только один PR #133, Draft, не merge; main и E6m ownership не трогать.**
+
+---
+
 ## 2026-11-09 — большой пакет client portability и проверка независимости
 
 Native baseline `43930247ef0d2b3e67de7d05ac629fe5a9dd45a4` — [CI #1084 SUCCESS](https://github.com/shonentez-afk/AI-Story-RPG/actions/runs/42555732659), Python/Dart/M1.7/Flutter, Windows, Android. **Новый пакет требует НОВЫЙ exact-HEAD CI:** клиентонезависимый `RpgCampaignTransfer` (вместе исходный ZIP .bworld, .bwsave, checksum, source campaign, revision, stateHash), проверенная повторная установка в чистую библиотеку только с согласием и replay, `confirm_suggestion` (исключает незаметный AI ход), `journal_page`, stateHash из story_core, Python direct loopback без системного HTTP_PROXY. Проверки: v3/v4 native SQLite + два Python/Dart клиента в разных процессах + отрицательные и state/CAS случаи. [Обязательный аудит автономности](RPG_ENGINE_CLIENT_AUTONOMY_AUDIT_RU_2026-11-09.md).
