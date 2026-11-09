@@ -141,4 +141,11 @@ void main() {
         contains('Никаких effects'));
   });
 
+  test('public workflow API exposes the same pure Dart stage coordinator', () {
+    const RpgCampaignWorkflowApi flow = LocalRpgCampaignWorkflowApi();
+    expect(flow, isA<ReviewedCampaignWorkflow>());
+    expect(ReviewedCampaignStage.values.length, 4);
+    expect(ReviewedCampaignStage.complete.name, 'complete');
+  });
+
 }

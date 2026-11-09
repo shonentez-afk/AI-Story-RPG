@@ -190,6 +190,17 @@ def validate() -> list[str]:
             "CampaignProseManifest._(" in prose_code):
         issues.append(f"{prose_adapter}: campaign prose rules returned to Flutter")
 
+    campaign_flow = ROOT / "packages" / "story_authoring" / "lib" / "src" / "reviewed_campaign_workflow.dart"
+    flow_code = campaign_flow.read_text(encoding="utf-8") if campaign_flow.is_file() else ""
+    if ("ReviewedCampaignWorkflow" not in flow_code or
+            "StoryCampaignCausalAudit.inspect" not in flow_code or
+            "BookwideNpcCampaignAuthoring.compile" not in flow_code or
+            "CampaignProseFinalizer.compile" not in flow_code):
+        issues.append(f"{campaign_flow}: workflow must call canonical compilers and audits")
+    if ("package:flutter/" in flow_code or "ai_connection.dart" in flow_code or
+            "ZaiModel." in flow_code):
+        issues.append(f"{campaign_flow}: workflow must remain standalone")
+
     gateway = ROOT / "apps" / "story_reader" / "lib" / "world_library_gateway.dart"
     workers = ROOT / "apps" / "story_reader" / "lib" / "book_isolate_workers.dart"
     for path in (gateway, workers):

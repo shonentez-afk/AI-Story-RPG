@@ -29,7 +29,11 @@ export 'package:story_authoring/story_authoring.dart' show
     AiProseFindingSeverity, AiProseAuditVerdict,
     AiProseAuditFinding, AiProseAuditReport,
     WholeBookNpcSourcePlan, CampaignProseManifest, CampaignProseEntry,
-    CampaignProseSession, CampaignProseRequest, campaignProseHash;
+    CampaignProseSession, CampaignProseRequest, campaignProseHash,
+    ReviewedHeroRole, NpcCampaignConsequencePreview,
+    WholePlanGameplayBatchManifest, NpcCampaignDialogueDraft,
+    ReviewedBookwideNpcCampaign, ReviewedCampaignStage,
+    ReviewedCampaignState;
 export 'package:bookworld_format/bookworld_format.dart' show
     VerifiedRichPrivateBookworld;
 
@@ -351,4 +355,80 @@ final class LocalRpgCampaignProseApi implements RpgCampaignProseApi {
       approvedDigest: approvedDigest,
       fullTextReviewed: fullTextReviewed,
       privateFictionConfirmed: privateFictionConfirmed);
+}
+
+
+/// One source-locked, stage-gated, provider-independent authoring interface.
+/// All gameplay, NPC and narration rules delegate to story_authoring.
+abstract interface class RpgCampaignWorkflowApi {
+  Future<ReviewedCampaignState> compileBase({
+    required WholeBookNpcSourcePlan source,
+    required List<ReviewedHeroRole> reviewedRoles,
+    required String approvedPlanDigest,
+    required String approvedHeroDigest,
+    required bool allShownQuotesReviewed,
+    required bool privateFictionConfirmed,
+  });
+  NpcCampaignConsequencePreview previewEffects({
+    required ReviewedCampaignState base,
+    required List<ReviewedHeroRole> reviewedRoles,
+    required WholePlanGameplayBatchManifest manifest,
+    required List<GameplayCandidateDraft> proposals,
+    required Map<String, String> reviewNotes,
+  });
+  Future<ReviewedCampaignState> acceptEffects({
+    required ReviewedCampaignState base,
+    required List<ReviewedHeroRole> reviewedRoles,
+    required NpcCampaignConsequencePreview review,
+    required String approvedDigest,
+    required bool explicitlyConfirmedPrivateFiction,
+  });
+  Future<ReviewedCampaignState> skipEffects({
+    required ReviewedCampaignState base,
+    required List<ReviewedHeroRole> reviewedRoles,
+    required bool explicitlyConfirmedNoEffects,
+  });
+  ReviewedBookwideNpcCampaign reviewNpc({
+    required ReviewedCampaignState gameplay,
+    required List<ReviewedHeroRole> reviewedRoles,
+    required List<NpcCampaignDialogueDraft> drafts,
+  });
+  Future<ReviewedCampaignState> acceptNpc({
+    required ReviewedCampaignState gameplay,
+    required List<ReviewedHeroRole> reviewedRoles,
+    required ReviewedBookwideNpcCampaign review,
+    required String approvedDigest,
+    required bool explicitlyConfirmedPrivateFiction,
+  });
+  Future<ReviewedCampaignState> skipNpc({
+    required ReviewedCampaignState gameplay,
+    required List<ReviewedHeroRole> reviewedRoles,
+    required bool explicitlyConfirmedNoNpcDialogues,
+  });
+  Future<CampaignProseManifest> prepareNarration({
+    required ReviewedCampaignState dialogue,
+    required List<ReviewedHeroRole> reviewedRoles,
+    required Future<void> Function() verifyCurrent,
+  });
+  Future<ReviewedCampaignState> completeWithoutNarration({
+    required ReviewedCampaignState dialogue,
+    required List<ReviewedHeroRole> reviewedRoles,
+    required bool explicitlyAcceptedExistingSceneText,
+  });
+  Future<ReviewedCampaignState> completeWithNarration({
+    required ReviewedCampaignState dialogue,
+    required List<ReviewedHeroRole> reviewedRoles,
+    required CampaignProseManifest manifest,
+    required CampaignProseSession session,
+    required Future<CampaignProseSession> Function() readLatest,
+    required String approvedDigest,
+    required bool fullTextReviewed,
+    required bool privateFictionConfirmed,
+  });
+}
+
+/// Flutter, CLI and any future HTTP bridge use the same pure Dart flow.
+final class LocalRpgCampaignWorkflowApi extends ReviewedCampaignWorkflow
+    implements RpgCampaignWorkflowApi {
+  const LocalRpgCampaignWorkflowApi();
 }
