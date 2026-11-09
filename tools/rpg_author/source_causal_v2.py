@@ -147,16 +147,20 @@ def _read_native_base(path: Path, index: dict) -> dict:
 
 
 def _cast(answer: dict, scenes: list[dict], index: dict) -> dict:
-    fields(answer, {"characters", "witnesses", "invariants", "npc_reactions"},
-           "ChatGPT causal cast")
+    required = {"characters", "witnesses", "invariants", "npc_reactions"}
+    if "delayed_decisions" in answer:
+        required.add("delayed_decisions")
+    fields(answer, required, "ChatGPT causal cast")
     by_id = {x["scene_id"]: x for x in scenes}
     characters, witnesses, invariants, reactions = (
         answer["characters"], answer["witnesses"],
         answer["invariants"], answer["npc_reactions"])
+    delayed = answer.get("delayed_decisions", [])
     require(type(characters) is list and 1 <= len(characters) <= 15 and
             type(witnesses) is list and 1 <= len(witnesses) <= 128 and
             type(invariants) is list and 1 <= len(invariants) <= 256 and
-            type(reactions) is list and len(reactions) <= 256,
+            type(reactions) is list and len(reactions) <= 256 and
+            type(delayed) is list and len(delayed) <= 256,
             "causal_cast_incomplete",
             "Native v2 requires reviewed NPC identities and a future invariant")
     actor_ids, by_ref, by_name = set(), {}, set()
@@ -267,10 +271,53 @@ def _cast(answer: dict, scenes: list[dict], index: dict) -> dict:
             "relay_fact_id": fact,
             "relay_to_actor_id": by_ref[receiver] if receiver else None,
         })
+    out_delayed = []
+    used_triggers = set()
+    produced = {(row["actor_id"], row["response_memory_id"])
+                for row in out_reactions}
+    for row in delayed:
+        fields(row, {
+            "scene_id", "actor_ref", "trigger_memory_id",
+            "turns_after_trigger", "minimum_trust",
+            "response_memory_id", "next_goal_id",
+        }, "source-delayed autonomous NPC decision")
+        scene = by_id.get(row["scene_id"])
+        ref = row["actor_ref"]
+        key = (ref, row["trigger_memory_id"])
+        response_key = (by_ref.get(ref), row["response_memory_id"])
+        require(scene is not None and ref in by_ref and
+                (row["scene_id"], ref) in witness_keys and
+                next(w["mode"] for w in witnesses
+                     if w["scene_id"] == row["scene_id"] and
+                     w["ref"] == ref) == "present" and
+                type(row["turns_after_trigger"]) is int and
+                1 <= row["turns_after_trigger"] <= 32 and
+                type(row["minimum_trust"]) is int and
+                -100 <= row["minimum_trust"] <= 100 and
+                all(type(row[field]) is str and GM.fullmatch(row[field])
+                    for field in ("trigger_memory_id",
+                                  "response_memory_id", "next_goal_id")) and
+                row["trigger_memory_id"] != row["response_memory_id"] and
+                key not in used_triggers and response_key not in produced,
+                "causal_delayed_decision_unproven",
+                "Autonomous delayed NPC response has no source-locked trigger")
+        used_triggers.add(key)
+        produced.add(response_key)
+        out_delayed.append({
+            "scene_id": row["scene_id"],
+            "source_quote_sha256": scene["source_quote_sha256"],
+            "actor_id": by_ref[ref],
+            "trigger_memory_id": row["trigger_memory_id"],
+            "turns_after_trigger": row["turns_after_trigger"],
+            "minimum_trust": row["minimum_trust"],
+            "response_memory_id": row["response_memory_id"],
+            "next_goal_id": row["next_goal_id"],
+        })
     return {
         "witnesses": out_witnesses, "invariants": out_invariants,
-        "npc_reactions": out_reactions, "actor_ids": actor_ids,
-        "ref_to_actor": by_ref,
+        "npc_reactions": out_reactions,
+        "npc_delayed_decisions": out_delayed,
+        "actor_ids": actor_ids, "ref_to_actor": by_ref,
     }
 
 
@@ -512,6 +559,7 @@ def author_causal_v5(*, project_root: Path, base_world: Path,
             for row in assembled
         ],
         "npc_reactions": cast["npc_reactions"],
+        "npc_delayed_decisions": cast["npc_delayed_decisions"],
     }
     encoded = canonical(review)
     require(len(encoded) <= 4 * 1024 * 1024,

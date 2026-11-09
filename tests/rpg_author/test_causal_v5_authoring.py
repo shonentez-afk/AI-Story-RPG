@@ -46,6 +46,15 @@ class FakePrivateBookSkill:
                     "forbidden_memory_id": "gm_storm_warning",
                     "minimum_trust": None, "maximum_trust": None,
                 }],
+                "delayed_decisions": [{
+                    "scene_id": "canon_00001",
+                    "actor_ref": "boatman",
+                    "trigger_memory_id": "gm_storm_warning",
+                    "turns_after_trigger": 2,
+                    "minimum_trust": 1,
+                    "response_memory_id": "gm_boatman_goes_ashore",
+                    "next_goal_id": "gm_find_shelter",
+                }],
                 "npc_reactions": [{
                     "scene_id": "canon_00001",
                     "actor_ref": "boatman",
@@ -175,6 +184,9 @@ class WholeBookCausalV5Tests(unittest.TestCase):
         self.assertEqual(len(record["event_graph"]), 3)
         self.assertEqual(len(record["witnesses"]), 1)
         self.assertEqual(len(record["npc_reactions"]), 1)
+        self.assertEqual(len(record["npc_delayed_decisions"]), 1)
+        self.assertEqual(record["npc_delayed_decisions"][0]
+                         ["turns_after_trigger"], 2)
         self.assertFalse(record["semantic_canon_automatically_verified"])
         self.assertEqual(record["base_archive_sha256"], digest(self.base.read_bytes()))
         self.assertEqual(digest(b"source-causal-review-v1\n" +
@@ -210,6 +222,20 @@ class WholeBookCausalV5Tests(unittest.TestCase):
             self._run()
         self.assertEqual(reason.exception.code, "native_archive_tampered")
         self.assertFalse(self.output.exists())
+
+    def test_delayed_decision_cannot_pretend_to_have_happened(self):
+        data = _read_native_base(self.base, self.index)
+        scenes, _ = _indexed_source(self.index, data)
+        answer = FakePrivateBookSkill().ask("causal_npc", {})
+        answer["delayed_decisions"][0]["turns_after_trigger"] = 0
+        with self.assertRaises(AuthoringError) as reason:
+            _cast(answer, scenes, self.index)
+        self.assertEqual(reason.exception.code,
+                         "causal_delayed_decision_unproven")
+        answer["delayed_decisions"][0]["turns_after_trigger"] = 2
+        answer["delayed_decisions"][0]["actor_ref"] = "unknown_author"
+        with self.assertRaises(AuthoringError):
+            _cast(answer, scenes, self.index)
 
     def test_first_encounter_cannot_be_backdated(self):
         data = _read_native_base(self.base, self.index)

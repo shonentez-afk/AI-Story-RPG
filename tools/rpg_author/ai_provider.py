@@ -26,7 +26,12 @@ SYSTEM = {
         "witnesses[{ref,scene_id,mode}], "
         "invariants[{ref,scene_id,forbidden_memory_id,minimum_trust,maximum_trust}], "
         "npc_reactions[{scene_id,actor_ref,trigger_memory_id,minimum_trust,"
-        "response_memory_id,next_goal_id,relay_fact_id,relay_to_ref}]. "
+        "response_memory_id,next_goal_id,relay_fact_id,relay_to_ref}], "
+        "delayed_decisions[{scene_id,actor_ref,trigger_memory_id,"
+        "turns_after_trigger,minimum_trust,response_memory_id,next_goal_id}]. "
+        "Отложенный ответ возможен только после ПОДТВЕРЖДЁННОЙ памяти "
+        "персонажа и одного или нескольких следующих подтверждённых ходов; "
+        "решение изменит память и цель NPC, не симулируй действия по таймеру. "
         "Ровно 1..15 подтверждённых персонажей с ИСХОДНЫМИ именами. "
         "Нельзя придумывать actor_id или хеши, программа выведет их сама. "
         "Отметь как present только очевидно присутствующих. Верни JSON."),
