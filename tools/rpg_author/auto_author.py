@@ -268,11 +268,18 @@ def _discover_real_endings(raw: bytes, *, strict_source_chapters: bool = False,
         except (OSError, subprocess.TimeoutExpired) as exc:
             raise AuthoringError("native_discovery_unavailable",
                                  "Native route discovery unavailable") from exc
+    # Dart route exploration prints no book text or private NPC lines.
+    # Preserve its bounded structural failure reason (missing chapter IDs,
+    # game-state path, BFS limit) so ChatGPT can fix the *actual* cause
+    # rather than repeatedly retry an opaque generic error.
+    failure_detail = response.stderr.strip().replace("\n", " ")[-1000:]
     require(response.returncode == 0,
             ("native_source_chapters_unplayable" if strict_source_chapters
              else "native_route_not_found"),
             "Native RPG API could not prove two endings and all original "
-            "chapters within bounded gameplay search")
+            "chapters within bounded gameplay search. "
+            + ("Dart reason: " + failure_detail if failure_detail
+               else "No native diagnostic output"))
     reply = parse_json(response.stdout.encode("utf-8"))
     routes = reply.get("routes")
     require(reply.get("format") == "rpg_author_native_two_discovered_routes_v1"
