@@ -1,3 +1,5 @@
+> **ПАКЕТ ПРИНЯТ:** code `46308802b15be6ed6afc2c191ae902ba24322aa5`, [точный CI #1090 SUCCESS](https://github.com/shonentez-afk/AI-Story-RPG/actions/runs/42562198099), [M0 #1175 SUCCESS](https://github.com/shonentez-afk/AI-Story-RPG/actions/runs/42562198620). Native v4 source quote + hero identity + начальные предметы/факты + выборы + SQLite/.bwsave replay + JSON/Python + Flutter PASS. Windows Portable и Android debug APK PASS. Все три прямых обращения Flutter NPC-мастера к RichPrivateBookworldImporter заменены `RpgAuthoringApi.inspectPrivateWorld`. Это подтверждённая **частная стартовая механика**, не source-wide CANON, не динамический AI-GM и не физические устройства.
+
 # Один крупный игровой пакет: проверенный книжный герой и начальная причинность
 
 9 ноября 2026. Native Draft PR #133. Этот пакет не повторяет ранее реализованные JSON API, импорт игр и перенос сохранений.

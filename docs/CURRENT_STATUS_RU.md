@@ -1,3 +1,11 @@
+## 2026-11-09 — ПРИНЯТО: источник → книжный герой → его реальные игровые действия
+
+Code SHA `46308802b15be6ed6afc2c191ae902ba24322aa5`, [CI #1090 SUCCESS](https://github.com/shonentez-afk/AI-Story-RPG/actions/runs/42562198099), [M0 #1175 SUCCESS](https://github.com/shonentez-afk/AI-Story-RPG/actions/runs/42562198620). Принят **единый крупный пакет BOOK_CHARACTER-start**: только подтверждённый постоянный источник/персонаж, начальные собственные вещи и известные игроку факты первой главы, настоящие `has_item`/`knows_fact` условия исполнимых решений, новый частный BookWorld v4, source / SHA / consent проверки, SQLite replay/save и отрицательные случаи. Flutter/NPC-мастер использует публичный API; все три прямых Rich importer вызова удалены. Подключены Dart API и JSON operations для внешних клиентов. Windows и Android артефакты #1090 опубликованы. **Не путать с полноценным CANON или AI-GM** — эти флаги остаются false.
+
+Генератор сейчас **0.3.0a18**, независимый CI #429 SUCCESS; native author CI #430 FAIL (старый contract_drift + unresolved `story_authoring` в parity). Следующий единый блок: честный source-wide CANON, настоящие новые причинные действия AI-GM, long-term BOOK_CHARACTER, затем native↔generator parity и реальные литературные/платформенные испытания. Не повторять готовое API, transfer и SQLite; Draft PR #133, без микро-PR.
+
+---
+
 ## Новая игровая функциональность 2026-11-09 — действительное стартовое состояние книжного героя
 
 Native PR #133, baseline code `071ed2b07bec9cc863aa22583288688337ed9eae` [CI #1087 PASS](https://github.com/shonentez-afk/AI-Story-RPG/actions/runs/42558128159). Готовится один новый крупный пакет, **пока требует собственный exact-code CI**: проверенный permanent characterId + источник первой главы + начальные предметы/факты, source-linked условия реальных выборов, новый проверяемый private v4 мир, RpgBookCharacterStartApi + JSON для внешних клиентов, показ проверенной роли в Flutter через движок, удаление двух прямых вызовов форматного импортёра NPC-мастером. [Техническая реализация и обязательные отрицательные тесты](RPG_BOOK_CHARACTER_START_INTEGRATION_RU_2026-11-09.md). CANON и свободный динамический AI-GM остаются открытыми; не размазывать пакет на микро-PR.
