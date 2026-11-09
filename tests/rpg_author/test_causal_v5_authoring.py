@@ -177,7 +177,8 @@ class WholeBookCausalV5Tests(unittest.TestCase):
         self.assertEqual(len(record["npc_reactions"]), 1)
         self.assertFalse(record["semantic_canon_automatically_verified"])
         self.assertEqual(record["base_archive_sha256"], digest(self.base.read_bytes()))
-        self.assertEqual(digest(canonical(record)), result["approved_digest"])
+        self.assertEqual(digest(b"source-causal-review-v1\\n" +
+                                canonical(record)), result["approved_digest"])
         self.assertNotIn("_causal_reason", str(record))
         self.assertFalse(result["native_causal_archive_compiled"])
 
