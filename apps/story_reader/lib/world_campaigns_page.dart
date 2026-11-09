@@ -4,11 +4,13 @@ import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:rpg_api/rpg_api.dart' show RpgWorldIntakePreview;
 
 import 'world_backup_actions.dart';
 import 'world_library_gateway.dart';
 import 'world_save_import_flow.dart';
 import 'world_play_page.dart';
+import 'world_import_review_worker.dart';
 
 /// Detail of a verified RPG world within the ONE existing library.
 class WorldCampaignsPage extends StatefulWidget {
@@ -29,11 +31,51 @@ class _WorldCampaignsPageState extends State<WorldCampaignsPage> {
   bool _busy = false;
   bool _opening = false;
   String? _failure;
+  RpgWorldIntakePreview? _reviewedCapabilities;
 
   @override
   void initState() {
     super.initState();
     _refresh();
+    unawaited(_loadCapabilities());
+  }
+
+  /// A world title alone carries no provenance. Read the installed archive
+  /// through the same native importer before describing CANON / ALTER_FATE.
+  Future<void> _loadCapabilities() async {
+    try {
+      final bytes = await widget.gateway.exportWorld(widget.world.archiveHash);
+      final checked = await reviewImportedWorldInWorker(bytes, null);
+      if (checked.archiveHash != widget.world.archiveHash ||
+          checked.bookworldId != widget.world.bookworldId) {
+        throw const FormatException('Подмена метаданных игрового мира');
+      }
+      if (mounted) {
+        setState(() => _reviewedCapabilities = checked);
+      }
+    } catch (_) {
+      // Reading optional capability descriptions must not block an already
+      // installed offline campaign, nor fall back to an invented game mode.
+    }
+  }
+
+  String get _gameType {
+    final review = _reviewedCapabilities;
+    if (review == null) {
+      return 'Доступные режимы и герой определяются самим '
+          'проверенным игровым пакетом.';
+    }
+    if (review.sourceCausalReviewVerified) {
+      return 'Полная книжная RPG: проверенные причины исходного CANON '
+          'и возможный ALTER_FATE после реальных действий.';
+    }
+    if (review.sourceLiteralCanonVerified) {
+      return 'Буквальный CANON всей книги: исходный текст сохранён, '
+          'но литературная причинность всех событий не проверена.';
+    }
+    return review.isPrivate
+        ? 'Частная подготовленная RPG с проверенными игровыми правилами.'
+        : 'Классическая офлайн-RPG с проверенными правилами.';
   }
 
   void _notice(String message) {
@@ -249,13 +291,21 @@ class _WorldCampaignsPageState extends State<WorldCampaignsPage> {
             Text('Подготовленный игровой мир',
                 style: typography.titleMedium),
             const SizedBox(height: 6),
-            const Text(
-              'Проверенный нативным движком игровой мир. '
-              'Он может содержать классическую историю, буквальный '
-              'CANON или подготовленный причинный CANON/ALTER_FATE. '
-              'Точный режим и последствия показаны внутри прохождения. '
-              'Без подтверждения хода игра не меняется.',
-            ),
+            Text(_gameType,
+                key: const Key('world-campaign-capabilities')),
+            if (_reviewedCapabilities != null) ...[
+              const SizedBox(height: 6),
+              Text('Сцен: ${_reviewedCapabilities!.sceneCount}, '
+                  'NPC: ${_reviewedCapabilities!.npcActorCount}, '
+                  'предметов: ${_reviewedCapabilities!.itemCount}.'),
+              if (_reviewedCapabilities!.sourceCausalReviewVerified)
+                const Text('Персонажи, обязательства и причинные '
+                    'ограничения подтверждены исходной редакцией '
+                    'и исполняются автономным движком.'),
+            ],
+            const Text('Прохождения сохраняются независимо. '
+                'Герой и правила определены установленным миром; '
+                'запуск не отправляет книгу в облако.'),
             const SizedBox(height: 16),
             FilledButton.icon(
               key: const ValueKey('world-start'),
