@@ -18,7 +18,10 @@ from tools.rpg_author.common import AuthoringError
 from tools.rpg_author.validate import candidate_blueprint
 from tests.rpg_author.fixtures import source, story, TEXT, analysis
 from tests.rpg_author.fixtures_rich import enrichment
+from tests.rpg_author.test_npc_review import reviewed_fixture, reviewed_transfer_fixture
 from tools.rpg_author.rich_package import compile_rich_from_project
+from tools.rpg_author.native_v4_bridge import (compile_extended_from_project,
+                                               verify_extended_bundle)
 from tools.rpg_author import project
 from tools.rpg_author.legacy_package import compile_from_project
 from tools.rpg_author.common import digest
@@ -191,6 +194,47 @@ def main():
         assert alternative["stats"]["insight"] == 2
         assert alternative["journal"] == ["leave_rope", "go_for_help"]
         assert alternative["restart_ok"] and alternative["save_import_ok"] and alternative["fork_ok"]
+        # E6f: the EXTERNAL Python author must emit a v5 NPC world that
+        # the actual Dart importer and SQLite replay understand. No fake
+        # social data, main engine modification, network or real book here.
+        reviewed_enrichment, reviewed_npc = reviewed_fixture()
+        npc_bytes, _ = compile_rich_from_project(
+            checkpoint, reviewed_enrichment, npc_review=reviewed_npc)
+        npc_world = dart({
+            "operation": "rich_private",
+            "data": base64.b64encode(npc_bytes).decode("ascii"),
+            "paths": [["take_rope", "rescue"], ["leave_rope", "go_for_help"]],
+        })
+        assert npc_world["private_only"] and npc_world["v2_rejected_v3"]
+        assert npc_world["archive_sha256"] == digest(npc_bytes)
+        assert npc_world["journeys"][0]["replay_ok"]
+        assert npc_world["journeys"][1]["replay_ok"]
+        npc_save = dart({
+            "operation": "rich_campaign",
+            "data": base64.b64encode(npc_bytes).decode("ascii"),
+            "path": ["take_rope", "rescue"],
+        })
+        assert npc_save["revision"] == 2
+        assert npc_save["restart_ok"] and npc_save["save_import_ok"]
+        assert npc_save["fork_ok"]
+        # E6f custody: source-backed player acquisition, NPC gift and
+        # departure are serialized by the external author and replayed by
+        # the main Dart importer/campaign store, not a forked engine.
+        transfer_plan, transfer_overlay, transfer_review = reviewed_transfer_fixture()
+        transfer_project = root / "transfer_project"
+        project.init_project(transfer_project, source_path)
+        project.submit_analysis(transfer_project, analysis())
+        project.submit_story(transfer_project, transfer_plan)
+        transferred_bytes, _ = compile_rich_from_project(
+            transfer_project, transfer_overlay, npc_review=transfer_review)
+        transferred = dart({
+            "operation": "rich_campaign",
+            "data": base64.b64encode(transferred_bytes).decode("ascii"),
+            "path": ["take_rope", "rescue"],
+        })
+        assert transferred["inventory"] == [] and transferred["revision"] == 2
+        assert (transferred["restart_ok"] and transferred["save_import_ok"]
+                and transferred["fork_ok"]), transferred
         # Verify Python -> Dart -> SQLite on both real flag-only routes.
         plain = enrichment()
         plain["items"] = {}
@@ -222,6 +266,170 @@ def main():
         assert plain_campaign["journal"] == ["leave_rope", "go_for_help"]
         assert (plain_campaign["restart_ok"] and
                 plain_campaign["save_import_ok"] and plain_campaign["fork_ok"])
+        # E6g v4: prepare the very same source-reviewed external E6f project,
+        # then call the ACTUAL standalone native Dart v4 authoring CLI. The
+        # Python writer never impersonates the 1024-scene v4 causal engine.
+        extended_bytes, extended_attribution = compile_extended_from_project(
+            checkpoint, enrichment())
+        v4_path = root / "private_extended_v4.bworld"
+        sidecar_path = root / "private_extended_v4.attribution.json"
+        v4_path.write_bytes(extended_bytes)
+        sidecar_path.write_bytes(extended_attribution)
+        verified_v4 = verify_extended_bundle(v4_path, sidecar_path)
+        assert verified_v4["format_version"] == 4, verified_v4
+        assert verified_v4["native_dart_verified"]
+        assert verified_v4["archive_sha256"] == digest(extended_bytes)
+        v4_world = dart({
+            "operation": "rich_private",
+            "data": base64.b64encode(extended_bytes).decode("ascii"),
+            "paths": [["take_rope", "rescue"], ["leave_rope", "go_for_help"]],
+        })
+        assert v4_world["format_version"] == 4, v4_world
+        assert v4_world["archive_sha256"] == digest(extended_bytes)
+        assert all(j["replay_ok"] and j["terminal"]
+                   for j in v4_world["journeys"]), v4_world
+        v4_restart = dart({
+            "operation": "rich_campaign",
+            "data": base64.b64encode(extended_bytes).decode("ascii"),
+            "path": ["take_rope", "rescue"],
+        })
+        assert v4_restart["restart_ok"] and v4_restart["save_import_ok"]
+        assert v4_restart["fork_ok"]
+        # Deliberately forged sidecar remains rejected even when Dart accepts
+        # the underlying v4 archive. Do not confuse hashes with model proof.
+        sidecar_data = json.loads(extended_attribution)
+        sidecar_data["scenario_generation"]["provider"] = "forged"
+        sidecar_path.write_text(json.dumps(sidecar_data), encoding="utf-8")
+        try:
+            verify_extended_bundle(v4_path, sidecar_path)
+        except AuthoringError as error:
+            assert error.code == "attribution_mismatch", error.code
+        else:
+            raise AssertionError("v4 accepted forged attribution")
+        sidecar_path.write_bytes(extended_attribution)
+        # NPC witness/social/custody/life v5 is still governed by native core.
+        npc_extended, npc_v4_attribution = compile_extended_from_project(
+            checkpoint, reviewed_enrichment, npc_review=reviewed_npc)
+        assert npc_extended != extended_bytes
+        npc_v4 = dart({
+            "operation": "rich_private",
+            "data": base64.b64encode(npc_extended).decode("ascii"),
+            "paths": [["take_rope", "rescue"], ["leave_rope", "go_for_help"]],
+        })
+        assert npc_v4["format_version"] == 4
+        assert all(j["replay_ok"] for j in npc_v4["journeys"]), npc_v4
+        npc_v4_save = dart({
+            "operation": "rich_campaign",
+            "data": base64.b64encode(npc_extended).decode("ascii"),
+            "path": ["take_rope", "rescue"],
+        })
+        assert npc_v4_save["restart_ok"] and npc_v4_save["save_import_ok"]
+        assert npc_v4_save["fork_ok"]
+        assert json.loads(npc_v4_attribution)["bookworld_packaging"]["version"] == "4.0"
+        # E6h: synthetic 203-scene source-locked, editor-confirmed
+        # bridge. The real Dart importer/SQLite must accept both endings.
+        # This is deliberately NOT a claim about a complete novel.
+        from tests.rpg_author.test_v4_expansion import proposal
+        import io
+        import zipfile
+        v3_for_ext, _ = compile_rich_from_project(checkpoint, enrichment())
+        with zipfile.ZipFile(io.BytesIO(v3_for_ext)) as base_archive:
+            base_bp = json.loads(base_archive.read("scenario/blueprint.json"))
+        expansion = proposal(base_bp)
+        long_world, long_attr = compile_extended_from_project(
+            checkpoint, enrichment(), extension=expansion)
+        with zipfile.ZipFile(io.BytesIO(long_world)) as zip_world:
+            long_bp = json.loads(zip_world.read("scenario/blueprint.json"))
+            long_origin = json.loads(zip_world.read("source/provenance.json"))
+        assert len(long_bp["scenes"]) == 203
+        assert len(long_origin["scene_origins"]) == 203
+        long_path = ["take_rope"] + [
+            f"pass_next_{i:03d}" for i in range(199)] + ["rescue"]
+        long_dart = dart({
+            "operation": "rich_private",
+            "data": base64.b64encode(long_world).decode("ascii"),
+            "paths": [long_path, ["leave_rope", "go_for_help"]],
+        })
+        assert long_dart["format_version"] == 4 and all(
+            j["replay_ok"] and j["terminal"] for j in long_dart["journeys"]), long_dart
+        long_extended_path = root / "long_v4.bworld"
+        long_extended_sidecar = root / "long_v4.attribution.json"
+        long_extended_path.write_bytes(long_world)
+        long_extended_sidecar.write_bytes(long_attr)
+        assert verify_extended_bundle(long_extended_path,
+                                      long_extended_sidecar)["native_dart_verified"]
+        # Initial item grants and clock need witnessed chapter-zero source,
+        # never invented catalog items or an unreviewed provenance field.
+        expansion_with_state = proposal(base_bp, 1)
+        expansion_with_state["initial_state"] = {
+            "tick": 3,
+            "items": [{"item_id": "rope", "assertion_id": "rescue_event"}],
+            "facts": [],
+        }
+        initial_bytes, _ = compile_extended_from_project(
+            checkpoint, enrichment(), extension=expansion_with_state)
+        with zipfile.ZipFile(io.BytesIO(initial_bytes)) as reviewed_zip:
+            initial_bp = json.loads(reviewed_zip.read("scenario/blueprint.json"))
+            initial_src = json.loads(reviewed_zip.read("source/provenance.json"))
+        assert initial_bp["initial_state"]["inventory"] == ["rope"]
+        assert initial_bp["initial_state"]["tick"] == 3
+        assert initial_src["initial_state_review"]["user_confirmed"] is True
+        # E6i: original synthetic THREE-chapter FB2, TWO reviewed acts,
+        # player-knowledge gated branching, native Dart v4 runtime and saves.
+        from tests.rpg_author import fixtures_acts as act_case
+        from tools.rpg_author.native_v4_bridge import audited_extension
+        act_book = root / act_case.SOURCE_FILENAME
+        act_book.write_text(act_case.SOURCE, encoding="utf-8")
+        act_project = root / "act_checkpoint"
+        project.init_project(act_project, act_book)
+        for record in act_case.analyses():
+            project.submit_analysis(act_project, record)
+        project.submit_story(act_project, act_case.story_plan())
+        act_enrichment = act_case.rich_enrichment()
+        act_v3, _ = compile_rich_from_project(act_project, act_enrichment)
+        with zipfile.ZipFile(io.BytesIO(act_v3)) as archive:
+            base_blueprint = json.loads(archive.read("scenario/blueprint.json"))
+        act_review = act_case.reviewed_acts(base_blueprint)
+        act_report = audited_extension(act_project, act_enrichment, act_review)
+        assert act_report["act_count"] == 2 and act_report["distinct_source_events"] == 4
+        assert act_report["chapters_without_source_scenes"] == []
+        assert not act_report["native_causality_verified"]
+        act_world, act_sidecar_data = compile_extended_from_project(
+            act_project, act_enrichment, extension=act_review)
+        with zipfile.ZipFile(io.BytesIO(act_world)) as archive:
+            bp = json.loads(archive.read("scenario/blueprint.json"))
+            origin = json.loads(archive.read("source/provenance.json"))
+        assert len(bp["scenes"]) == 8
+        assert len(origin["scene_origins"]) == 8
+        assert origin["source_chapters_total"] == 3
+        careful_path = [
+            "take_rope", "study_bridge", "note_current",
+            "rescue", "careful_route", "pull_up",
+        ]
+        hurried_path = ["take_rope", "rush_on", "rescue", "bold_route"]
+        help_path = ["leave_rope", "call_help"]
+        played = dart({
+            "operation": "rich_private",
+            "data": base64.b64encode(act_world).decode("ascii"),
+            "paths": [careful_path, hurried_path, help_path],
+        })
+        assert played["format_version"] == 4
+        assert all(j["replay_ok"] and j["terminal"] for j in played["journeys"]), played
+        assert "current" in played["journeys"][0]["turns"][2]["facts"], played
+        assert played["journeys"][0]["turns"][-1]["journal"] == careful_path
+        assert played["journeys"][1]["turns"][-1]["journal"] == hurried_path
+        assert played["journeys"][2]["turns"][-1]["journal"] == help_path
+        persisted = dart({
+            "operation": "rich_campaign",
+            "data": base64.b64encode(act_world).decode("ascii"),
+            "path": careful_path,
+        })
+        assert persisted["restart_ok"] and persisted["save_import_ok"] and persisted["fork_ok"]
+        game_path = root / "multi_act_v4.bworld"
+        attribution_path = root / "multi_act_v4.attribution.json"
+        game_path.write_bytes(act_world)
+        attribution_path.write_bytes(act_sidecar_data)
+        assert verify_extended_bundle(game_path, attribution_path)["native_dart_verified"]
     print(json.dumps({"source_comparisons": checked, "candidate_accepted_by_dart_blueprint": True,
                       "known_lossy_source_forms_refused": 1,
                       "application_modified": False,
@@ -233,7 +441,17 @@ def main():
                       "rich_v3_state_replayed_in_two_routes": True,
                       "legacy_v2_rejects_v3": True,
                       "rich_v3_sqlite_restart_fork_portable_save": True,
-                      "rich_v3_empty_catalogs_dart_sqlite": True}))
+                      "rich_v3_empty_catalogs_dart_sqlite": True,
+                      "external_reviewed_npc_social_v5_dart_sqlite": True,
+                      "external_reviewed_npc_item_custody_life_v5_dart_sqlite": True,
+                       "native_v4_python_reviewed_dart_compiled_and_imported": True,
+                       "native_v4_sqlite_replay_and_save": True,
+                       "native_v4_npc_v5_dart_sqlite": True,
+                       "native_v4_attribution_mismatch_rejected": True,
+                       "native_v4_203_source_locked_scenes_replayed": True,
+                       "native_v4_initial_item_and_tick_review_verified": True,
+                       "native_v4_three_chapter_two_act_branching_verified": True,
+                       "native_v4_stateful_knowledge_gate_and_save_replayed": True}))
 
 
 if __name__ == "__main__":

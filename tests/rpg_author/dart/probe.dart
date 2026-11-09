@@ -6,8 +6,7 @@ import 'package:story_core/story_core.dart';
 import 'package:bookworld_format/bookworld_format.dart';
 import 'package:campaign_manager/campaign_manager.dart';
 
-import '../../../apps/story_reader/lib/book_import.dart';
-import '../../../apps/story_reader/lib/book_source_index.dart';
+import 'package:story_authoring/story_authoring.dart';
 
 Future<void> main() async {
   final input = jsonDecode(await stdin.transform(utf8.decoder).join())
@@ -133,6 +132,7 @@ Future<void> main() async {
     }
     stdout.write(jsonEncode({
       'book_id': verified.bookworldId,
+      'format_version': verified.formatVersion,
       'source_fingerprint': verified.sourceFingerprint,
       'archive_sha256': verified.archiveSha256,
       'hero': verified.presentation['hero'],

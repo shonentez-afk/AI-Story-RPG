@@ -191,3 +191,112 @@ def check_npc_extension() -> dict:
         "real_user_consent_or_literary_canon_attested": False,
         "dart_device_e2e_tested_here": False,
     }
+
+
+def check_npc_social_v5() -> dict:
+    """Run true native v5 writer+reader+sidecar and fail-closed negative cases.
+
+    These reviews are deliberately SYNTHETIC. Real authoring requires a
+    separately supplied consented source-bound npc_review.json; this probe
+    does not auto-approve witnesses, secret knowledge, inventory or death.
+    """
+    require(getattr(rich, "NPC_SOCIAL_LIFE_FORMAT", None) ==
+            "ai_story_npc_social_witness_v5" and
+            getattr(rich, "NPC_SOCIAL_AUTHOR_ITEM_FORMAT", None) ==
+            "ai_story_npc_social_witness_v4" and
+            getattr(rich, "NPC_SOCIAL_ITEM_FORMAT", None) ==
+            "ai_story_npc_social_witness_v3" and
+            getattr(rich, "NPC_SOCIAL_GATE_FORMAT", None) ==
+            "ai_story_npc_social_witness_v2" and
+            getattr(rich, "NPC_SOCIAL_FORMAT", None) ==
+            "ai_story_npc_social_witness_v1",
+            "npc_social_contract_drift", "Main lost a versioned NPC social v1-v5 contract")
+
+    bp, prov, index = _reviewed_npc_world()
+    quote = prov["scene_origins"][0]["source_refs"][0]["quote_sha256"]
+    prov["npc_social"] = {
+        "format": rich.NPC_SOCIAL_LIFE_FORMAT,
+        "review_scope": "user_declared_private_game_fiction",
+        "source_fingerprint": bp["source_fingerprint"],
+        "user_confirmed": True,
+        "literary_canon_verified": False,
+        "witnesses": [{
+            "scene_id": "entry", "actor_id": NPC_ID, "mode": "present",
+            "source_quote_sha256": quote,
+        }],
+        "rules": [{
+            "memory_id": "reviewed_wait",
+            "scene_id": "entry", "choice_id": "wait",
+            "observer_id": NPC_ID, "kind": "witnessed",
+            "related_actor_id": "player", "relationship_delta": 1,
+            "max_triggers": 1, "source_quote_sha256": quote,
+        }],
+        "choice_gates": [],
+        "item_transfers": [],
+        "item_grants": [],
+        "life_transitions": [{
+            "scene_id": "entry", "choice_id": "wait",
+            "actor_id": NPC_ID, "next_state": "absent",
+            "source_quote_sha256": quote,
+        }],
+    }
+    raw = rich.build(bp, prov, index)
+    checked = rich.verify(raw)
+    require(checked["format_version"] == 3 and
+            raw == rich.build(bp, prov, index),
+            "npc_social_v5_incompatible",
+            "Native v5 world is not deterministic or verifiable")
+    with zipfile.ZipFile(io.BytesIO(raw)) as archive:
+        entries = archive.namelist()
+        manifest = json.loads(archive.read("manifest.json"))
+        blueprint_bytes = archive.read("scenario/blueprint.json")
+    require(entries == list(rich.PATHS) and len(entries) == 4 and
+            manifest.get("npc_social_format") == rich.NPC_SOCIAL_LIFE_FORMAT,
+            "npc_social_v5_incompatible", "Native rich-v3 v5 marker is inconsistent")
+    from .rich_package import _attribution, verify_rich_bundle
+    with tempfile.TemporaryDirectory(prefix="rpg-author-npc-v5-") as tmp:
+        target = Path(tmp) / "synthetic.bworld"
+        disclosure = Path(tmp) / "synthetic.attribution.json"
+        target.write_bytes(raw)
+        disclosure.write_bytes(canonical(_attribution(raw, digest(blueprint_bytes), prov)))
+        result = verify_rich_bundle(target, disclosure)
+    require(result["attribution_matches_archive"],
+            "npc_social_v5_incompatible", "External v5 sidecar failed verification")
+
+    cases = (
+        "bad_life", "player_life", "missing_choice", "forged_source",
+        "duplicate_transition", "missing_transition",
+        "version_downgrade", "consent_revoked", "orphan_witness",
+    )
+    for case in cases:
+        cb, cp, ci = deepcopy((bp, prov, index))
+        social = cp["npc_social"]
+        life = social["life_transitions"]
+        if case == "bad_life":
+            life[0]["next_state"] = "revived"
+        elif case == "player_life":
+            life[0]["actor_id"] = "player"
+        elif case == "missing_choice":
+            life[0]["choice_id"] = "phantom"
+        elif case == "forged_source":
+            life[0]["source_quote_sha256"] = "f" * 64
+        elif case == "duplicate_transition":
+            life.append(deepcopy(life[0]))
+        elif case == "missing_transition":
+            life.clear()
+        elif case == "version_downgrade":
+            social["format"] = rich.NPC_SOCIAL_AUTHOR_ITEM_FORMAT
+        elif case == "consent_revoked":
+            social["user_confirmed"] = False
+        elif case == "orphan_witness":
+            social["rules"].clear()
+        _must_reject(case, cb, cp, ci)
+
+    return {
+        "status": "native_python_v5_writer_verifier_and_sidecar_pass",
+        "format": rich.NPC_SOCIAL_LIFE_FORMAT,
+        "old_v3_preserved": True,
+        "negative_cases_rejected": len(cases),
+        "source_reviewed_user_consent_attested": False,
+        "device_e2e_tested_here": False,
+    }
