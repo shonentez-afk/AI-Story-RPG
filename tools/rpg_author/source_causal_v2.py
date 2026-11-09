@@ -104,6 +104,7 @@ def _indexed_source(index: dict, data: dict) -> tuple[list[dict], dict]:
             "source_quote_sha256": citations[0]["quote_sha256"],
             "source_evidence": citations,
             "scene_text_excerpt": scene["text"][:540],
+            "_full_source_scene": scene["text"],
         })
     require(len({s["scene_id"] for s in verified}) == len(verified),
             "duplicate_source_scene", "Canonical scenes must be unique")
@@ -119,6 +120,11 @@ def _read_native_base(path: Path, index: dict) -> dict:
         }
         require(set(archive.namelist()) == allowed,
                 "unsafe_native_archive", "Unexpected files in literal CANON world")
+        require(all(0 < archive.getinfo(name).file_size <= 12 * 1024 * 1024
+                    for name in allowed) and
+                sum(archive.getinfo(name).file_size for name in allowed)
+                    <= 20 * 1024 * 1024,
+                "unsafe_native_archive", "Unexpected decompressed archive size")
         payload = {name: archive.read(name) for name in allowed}
     manifest = parse_json(payload["manifest.json"])
     provenance = parse_json(payload["source/provenance.json"])
@@ -157,12 +163,12 @@ def _cast(answer: dict, scenes: list[dict], index: dict) -> dict:
         require(type(ref) is str and REF.fullmatch(ref) and
                 type(name) is str and 1 <= len(name) <= 85 and
                 scene in by_id and
-                name in by_id[scene]["scene_text_excerpt"] and
+                name in by_id[scene]["_full_source_scene"] and
                 ref not in by_ref and name.casefold() not in by_name,
                 "causal_npc_identity_unproven",
                 "First source NPC identity is missing or repeated")
         first = min((s["order"] for s in scenes
-                     if name in s["scene_text_excerpt"]), default=-1)
+                     if name in s["_full_source_scene"]), default=-1)
         require(first == by_id[scene]["order"],
                 "causal_npc_early_spoiler",
                 "NPC appears before the claimed first source encounter")
@@ -184,7 +190,7 @@ def _cast(answer: dict, scenes: list[dict], index: dict) -> dict:
         ref = w["ref"]
         require(ref in by_ref and scene is not None and
                 w["mode"] in ("present", "reported") and
-                selected[ref]["name"] in scene["scene_text_excerpt"] and
+                selected[ref]["name"] in scene["_full_source_scene"] and
                 (w["scene_id"], ref) not in witness_keys,
                 "causal_npc_witness_unproven",
                 "NPC presence or report lacks a source scene")
@@ -285,8 +291,10 @@ def _predicate(value: dict, actor_ids: set[str], blueprint: dict):
     elif op == "life_is":
         ok = actor != "player" and key is None and val in ("present", "absent", "dead")
     elif op == "flag_is":
-        ok = actor == "player" and
-            type(key) is str and key in blueprint["initial_state"]["flags"] and type(val) is bool
+        ok = (actor == "player" and
+              type(key) is str and
+              key in blueprint["initial_state"]["flags"] and
+              type(val) is bool)
     else:
         ok = False
     require(ok, "causal_invalid_prerequisite",
@@ -352,6 +360,7 @@ def _window(answer: dict, requested: list[dict], scene_order: dict,
         checks = row["preconditions"]
         effects = row["effects"]
         require(type(causes) is list and len(causes) <= 64 and
+                all(type(x) is str for x in causes) and
                 len(set(causes)) == len(causes) and
                 all(x in scene_order and scene_order[x] < scene_order[sid]
                     for x in causes) and
@@ -405,6 +414,10 @@ def author_causal_v5(*, project_root: Path, base_world: Path,
                        "witnesses, future obligations and source-reviewed NPC decisions. "
                        "Use only these source passages, never invent a character.",
     }
+    require(len(canonical(cast_payload)) <= 450 * 1024,
+            "causal_cast_context_over_budget",
+            "Source NPC roster exceeds one verified private Skill context; "
+            "review it in multiple source windows, never truncate.")
     cast_answer = provider.ask("causal_npc", cast_payload)
     cast = _cast(cast_answer, scenes, index)
     scene_order = {scene["scene_id"]: i for i, scene in enumerate(scenes)}
@@ -413,7 +426,9 @@ def author_causal_v5(*, project_root: Path, base_world: Path,
         rows = scenes[offset:offset + WINDOW]
         window_id = f"w{offset:04d}_{offset + len(rows) - 1:04d}"
         request = [
-            {"window_id": window_id, **s} for s in rows
+            {"window_id": window_id,
+             **{k: v for k, v in s.items() if not k.startswith("_")}}
+            for s in rows
         ]
         payload = {
             "window_id": window_id,
