@@ -1,3 +1,10 @@
+# АКТУАЛЬНО E6r — единый движок + генератор, принятый 09.11.2026
+
+**Код 9ddfec9a3b94444a043ef0f6270ef1ce9c9ec682**, генератор **0.3.0a22**. [Точный CI #42617298626](https://github.com/shonentez-afk/AI-Story-RPG/actions/runs/42617298626) — **SUCCESS**: Python 220+37, Dart parity и действительный FB2 -> native causal BookWorld v5 -> SQLite/portable save.
+В этой ветке объединены две кодовые базы: pinned native PR #133 92ef5d7 и ChatGPT author E6q.1. Единая команда **author-game-v5**, 43 pinned native blobs, проверенные NPC-причины и обещания, immutable review, literal-only fallback. Игровые правила только в Dart; старые v4 saves и NPC ID не мигрируются.
+Подробно: [E6r integration report](tools/rpg_author/E6R_ENGINE_GENERATOR_INTEGRATION_RU_2026-11-09.md). Два настоящих FB2 и физические устройства не приняты. Параллельный native UI commit 0b942df не включён. main и Draft PR #133 не менялись. Исторические записи ниже.
+
+---
 # ПРИЁМКА ТРЁХ БОЛЬШИХ ПАКЕТОВ — 09.11.2026 — АКТУАЛЬНЫЙ ФИНАЛЬНЫЙ СТАТУС
 
 **Проверенный КОД:** `92ef5d701637957e31e3e6e090f63d1e0bdb4173` в Draft PR #133. [Полный Native CI #1120](https://github.com/shonentez-afk/AI-Story-RPG/actions/runs/42597681279) **COMPLETED SUCCESS на этом SHA**: Python reference, Dart runtime, BookWorld+SQLite+M1.7+API, Flutter analyze/widget, Windows portable и Android debug APK — все SUCCESS. Артефакты Windows portable (15.4 MB) и Android debug (89 MB) доступны внутри #1120; отдельный job Publish test release был SKIPPED, поэтому НЕ утверждать, что опубликован отдельный GitHub Release. [M0 #1205](https://github.com/shonentez-afk/AI-Story-RPG/actions/runs/42597681258) SUCCESS; [Native External author #476](https://github.com/shonentez-afk/AI-Story-RPG/actions/runs/42597681193) SUCCESS.

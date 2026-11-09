@@ -1,3 +1,8 @@
+# АКТУАЛЬНО E6r — единый ChatGPT Skill-first автор и автономный Dart v5
+
+**Код 9ddfec9a3b94444a043ef0f6270ef1ce9c9ec682**, версия **0.3.0a22**, [CI #42617298626](https://github.com/shonentez-afk/AI-Story-RPG/actions/runs/42617298626) **SUCCESS** по всем трём задачам (Python 220+37, Dart parity и native causal v5/SQLite). **author-game-v5** от FB2 до проверенного приватного мира, 43 source-locked blobs, explicit approval; legacy v4 остаётся отдельным форматом. [Полный отчёт](E6R_ENGINE_GENERATOR_INTEGRATION_RU_2026-11-09.md). Реальное литературное QA двух FB2 и устройства открыты. Нижние E6q/E6p — исторические.
+
+---
 # E6q.1 — ПОЛНАЯ СКВОЗНАЯ ПРИЁМКА ГЕНЕРАТОРА 09.11.2026
 
 **Проверенный код генератора:** `0b7283653c9dc23a3a1380ca42bb68caf4451993`, версия `0.3.0a21`; workflow/doc SHA `8915286e7fe591bfeefa124850a427c8611aae7f`. [External RPG author CI #478](https://github.com/shonentez-afk/AI-Story-RPG/actions/runs/42598495752) **COMPLETED SUCCESS, ВСЕ JOBS**: author-tests, Dart-parity, реальный cross-branch E6q→native PR#133 E2E. Новый тест выполнил оригинальную синтетическую русскую FB2 → exact source-locked literal BookWorld v5 → ЧатGPT Skill-first причинный разбор каждого фрагмента с NPC и отложенными решениями → настоящий Dart CLI reviewed causal v5 → .bworld → приватная SQLite кампания через API → игровой ход → экспорт/import .bwsave с одинаковым state_hash. Строгое требование отсутствия незакоммиченных исходников сохранено; исходная временная SQLite hooks-ошибка #477 устранена в #478.
