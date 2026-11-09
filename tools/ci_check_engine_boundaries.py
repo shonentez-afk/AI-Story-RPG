@@ -201,6 +201,22 @@ def validate() -> list[str]:
             "ZaiModel." in flow_code):
         issues.append(f"{campaign_flow}: workflow must remain standalone")
 
+    npc_wizard = ROOT / "apps" / "story_reader" / "lib" / "whole_book_npc_campaign_page.dart"
+    wizard_code = npc_wizard.read_text(encoding="utf-8") if npc_wizard.is_file() else ""
+    for api_method in (
+        "_workflow.compileBase(", "_workflow.acceptEffects(",
+        "_workflow.acceptNpc(", "_workflow.prepareNarration(",
+        "_workflow.completeWithNarration(", "_workflow.completeWithoutNarration(",
+    ):
+        if api_method not in wizard_code:
+            issues.append(f"{npc_wizard}: missing RPG API call {api_method}")
+    for direct_call in (
+        "source.compileBase(", "NpcCampaignConsequences.accept(",
+        "BookwideNpcCampaignAuthoring.compile(", "CampaignProseManifest.prepare(",
+    ):
+        if direct_call in wizard_code:
+            issues.append(f"{npc_wizard}: a compiler rule returned to Flutter: {direct_call}")
+
     gateway = ROOT / "apps" / "story_reader" / "lib" / "world_library_gateway.dart"
     workers = ROOT / "apps" / "story_reader" / "lib" / "book_isolate_workers.dart"
     for path in (gateway, workers):
