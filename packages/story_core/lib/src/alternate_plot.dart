@@ -1,7 +1,6 @@
 import 'blueprint.dart';
 import 'codec.dart';
 import 'engine.dart';
-import 'freeform_action.dart';
 
 /// One executable noncanonical beat proposed by a client/model. The words
 /// remain fiction, while objective, participants and outstanding obligations
