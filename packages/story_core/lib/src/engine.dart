@@ -550,6 +550,19 @@ class StoryWorld {
       knowledge.putIfAbsent(contact!.actorId, () => <String>{})
           .add(contact.learnFactId!);
     }
+    if (contact != null && socialRulebook!.automaticReactions.isNotEmpty) {
+      final previousSocial = NpcSocialLedger.inspect(this, socialRulebook!);
+      final trust = previousSocial.directedScore(contact.actorId, 'player') +
+          contact.trustDelta;
+      for (final reaction in socialRulebook!.automaticReactions) {
+        if (reaction.sceneId != _state.sceneId ||
+            !reaction.activated(contact, trust)) continue;
+        if (reaction.relayToActorId != null) {
+          knowledge.putIfAbsent(reaction.relayToActorId!, () => <String>{})
+              .add(reaction.relayFactId!);
+        }
+      }
+    }
     for (final effect in draft.effects) {
       switch (effect.op) {
         case 'set_flag':

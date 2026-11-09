@@ -35,15 +35,18 @@ final class ReviewedCanonCausalBookworldWriter {
     final parsed = jsonDecode(reviewJson);
     final graphReview = parsed is Map<String, dynamic> &&
         parsed['format'] == graphReviewFormat;
+    final hasReactions = graphReview && parsed.containsKey('npc_reactions');
     if (parsed is! Map<String, dynamic> ||
         canonicalJson(parsed) != reviewJson ||
-        parsed.keys.toSet().length != (graphReview ? 9 : 8) ||
+        parsed.keys.toSet().length != (graphReview ?
+            (hasReactions ? 10 : 9) : 8) ||
         !parsed.keys.toSet().containsAll({
           'format', 'review_scope', 'source_fingerprint',
           'base_archive_sha256', 'user_confirmed',
           'semantic_canon_automatically_verified',
           'witnesses', 'invariants',
           if (graphReview) 'event_graph',
+          if (hasReactions) 'npc_reactions',
         })) {
       throw const FormatException('Noncanonical source causal review');
     }

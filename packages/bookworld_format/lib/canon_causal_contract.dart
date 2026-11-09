@@ -62,6 +62,7 @@ final class CanonCausalContract {
       'semantic_canon_automatically_verified',
       'witnesses', 'invariants',
       if (graphReview) 'event_graph',
+      if (graphReview && review.containsKey('npc_reactions')) 'npc_reactions',
     }, 'review');
     if (review['format'] != marker ||
         review['review_scope'] != 'human_reviewed_private_story_causality' ||
@@ -158,6 +159,45 @@ final class CanonCausalContract {
       ));
     }
     BookCausalGraph? bookGraph;
+    final reactions = <NpcAutomaticReaction>[];
+    if (graphReview && review.containsKey('npc_reactions')) {
+      final rows = review['npc_reactions'];
+      if (rows is! List || rows.length > 256) {
+        throw const FormatException('Invalid automatic NPC reaction catalog');
+      }
+      for (final raw in rows) {
+        final row = _map(raw, 'npc reaction');
+        _fields(row, {
+          'scene_id', 'source_quote_sha256', 'actor_id',
+          'trigger_memory_id', 'minimum_trust', 'response_memory_id',
+          'next_goal_id', 'relay_fact_id', 'relay_to_actor_id',
+        }, 'npc reaction');
+        final scene = row['scene_id'], quote = row['source_quote_sha256'];
+        if (scene is! String || quote is! String ||
+            !_cited(origins, scene, quote) ||
+            row['actor_id'] is! String ||
+            row['trigger_memory_id'] is! String ||
+            row['minimum_trust'] is! int ||
+            row['response_memory_id'] is! String ||
+            row['next_goal_id'] is! String ||
+            (row['relay_fact_id'] != null &&
+                row['relay_fact_id'] is! String) ||
+            (row['relay_to_actor_id'] != null &&
+                row['relay_to_actor_id'] is! String)) {
+          throw const FormatException('NPC reaction lacks reviewed evidence');
+        }
+        reactions.add(NpcAutomaticReaction(
+          sceneId: scene,
+          actorId: row['actor_id'] as String,
+          triggerMemoryId: row['trigger_memory_id'] as String,
+          minimumTrust: row['minimum_trust'] as int,
+          responseMemoryId: row['response_memory_id'] as String,
+          nextGoalId: row['next_goal_id'] as String,
+          relayFactId: row['relay_fact_id'] as String?,
+          relayToActorId: row['relay_to_actor_id'] as String?,
+        ));
+      }
+    }
     if (graphReview) {
       final rawEvents = review['event_graph'];
       if (rawEvents is! List) {
@@ -186,6 +226,7 @@ final class CanonCausalContract {
       requireReviewedWitnesses: true,
       dynamicInteractionsEnabled: true,
       bookCausality: bookGraph,
+      automaticReactions: reactions,
     );
     rulebook.validate(blueprint);
     return (rulebook: rulebook, names: Map.unmodifiable(names));
