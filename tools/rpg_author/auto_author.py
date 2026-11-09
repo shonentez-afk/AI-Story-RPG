@@ -39,6 +39,11 @@ from .npc_skill import (
 from .validate import (assertion_registry, candidate_blueprint,
                        validate_analysis, validate_story)
 from .v4_acts import FORMAT as ACT_FORMAT
+from .long_book import (
+    is_long_book, chapter_windows, review_chapter_window,
+    verify_chapter_window, outline_context, check_long_backbone,
+    verify_featured_gameplay, MAX_ANCHOR_GAP,
+)
 
 REVISION = "rpg_author_ai_book_pipeline_v1"
 MAX_AUTO_REVISIONS = 3
@@ -133,10 +138,14 @@ def _brief_evidence(index: dict, analyses: list[dict]) -> list[dict]:
     } for chunk in index["chunks"]]
 
 
-def _full_chapter_coverage(story: dict, index: dict) -> None:
-    require(index["chapter_count"] <= 192, "book_over_base_scene_limit",
-            "This source has more than 192 chapters; full-book base authoring "
-            "needs the native multi-act composer, not a truncated short story")
+def _full_chapter_coverage(story: dict, index: dict,
+                           analyses: list[dict] | None = None) -> None:
+    """Small books are exhaustive; long books require a checked act backbone."""
+    if is_long_book(index):
+        require(analyses is not None, "long_book_missing_analyses",
+                "A long source backbone must be bound to exact evidence")
+        check_long_backbone(story, index, analyses)
+        return
     chapters = {s["chapter_index"] for s in story["scenes"]
                 if s["origin"] == "SOURCE_PASSAGE"}
     require(chapters == set(range(index["chapter_count"])),
@@ -385,6 +394,27 @@ def author_complete_book(*, project_root: Path, workdir: Path,
         project.submit_analysis(root, checked)
     _, state, idx, analyses, story = project.load_project(root)
     evidence = _brief_evidence(idx, analyses)
+    long_mode = is_long_book(idx)
+    long_outlines = []
+    context = evidence
+    backbone = None
+    if long_mode:
+        # The Skill must read all source chunks, then author small, immutable
+        # cited windows before a sparse v3 base StoryPlan is even proposed.
+        # This avoids sending an entire novel in one private model request.
+        specs = chapter_windows(idx, analyses)
+        for spec in specs:
+            name = "chapter_outline_" + spec["window_id"] + ".json"
+            saved = private / name
+            if saved.exists():
+                checked = verify_chapter_window(read_json(saved), spec)
+            else:
+                checked = _ask_verified(
+                    provider, "chapter_outline", spec,
+                    lambda answer, spec=spec: review_chapter_window(answer, spec))
+                _fresh_or_existing(private, name, checked)
+            long_outlines.append(checked)
+        context = outline_context(long_outlines, idx, analyses)
     if story is None:
         def checked_story(response):
             require(response.get("source_fingerprint", idx["source_fingerprint"])
@@ -394,17 +424,41 @@ def author_complete_book(*, project_root: Path, workdir: Path,
                      "source_fingerprint": idx["source_fingerprint"],
                      **{k: v for k, v in response.items()
                         if k not in ("format", "source_fingerprint")}}
-            _full_chapter_coverage(value, idx)
+            _full_chapter_coverage(value, idx, analyses)
             validate_story(value, idx, analyses)
             return value
-        story = _ask_verified(
-            provider, "story",
-            {"book_title": idx["title"], "chapter_count": idx["chapter_count"],
-             "all_verified_evidence": evidence,
-             "instruction": "Two distinct endings; no omitted chapter evidence"},
-            checked_story)
+        if long_mode:
+            story_task = {
+                "book_title": idx["title"],
+                "chapter_count": idx["chapter_count"],
+                "reviewed_chapter_outlines": context,
+                "story_mode": "source_locked_sparse_v3_backbone_for_v4_acts",
+                "max_base_scenes": 192,
+                "max_gap_between_original_anchors": MAX_ANCHOR_GAP,
+                "instruction": "Create an actually playable sparse base "
+                               "StoryPlan with 3..192 scenes, SOURCE_PASSAGE "
+                               "anchors in chapter 0 and the LAST chapter, "
+                               "direct original-source choice edges no more "
+                               "than 96 chapters apart, two distinct endings "
+                               "and an EXPLICIT_ADAPTATION. Each anchor "
+                               "needs a NARRATED citation from its OWN chapter. "
+                               "The upcoming v4 acts MUST fill ALL missing "
+                               "chapters from the reviewed chapter outlines. "
+                               "Never fake a complete base plan.",
+            }
+        else:
+            story_task = {
+                "book_title": idx["title"],
+                "chapter_count": idx["chapter_count"],
+                "all_verified_evidence": context,
+                "instruction": "Two distinct endings; no omitted chapter evidence",
+            }
+        story = _ask_verified(provider, "story", story_task, checked_story)
         project.submit_story(root, story)
-    _full_chapter_coverage(story, idx)
+    _full_chapter_coverage(story, idx, analyses)
+    if long_mode:
+        backbone = check_long_backbone(story, idx, analyses)
+        _fresh_or_existing(private, "long_backbone.json", backbone)
 
     # A complete book first receives a literary NPC cast, with source-bound
     # permanent character IDs, BEFORE enrichment adds actor-scoped effects.
@@ -420,7 +474,7 @@ def author_complete_book(*, project_root: Path, workdir: Path,
             dossiers = _ask_verified(
                 provider, "npc_dossiers",
                 {"book_title": idx["title"], "story": story,
-                 "all_verified_evidence": evidence,
+                 "all_verified_evidence": context,
                  "source_fingerprint": idx["source_fingerprint"],
                  "instruction": "Identify every major evidenced NPC, or "
                                 "explain why none exist. Names must occur "
@@ -460,7 +514,7 @@ def author_complete_book(*, project_root: Path, workdir: Path,
             return value
         overlay = _ask_verified(
             provider, "enrichment",
-            {"story": story, "verified_evidence": evidence,
+            {"story": story, "verified_evidence": context,
              "npc_dossiers": dossiers,
              "existing_native_npc_actors": (
                  [] if native_npc_review is None
@@ -498,7 +552,7 @@ def author_complete_book(*, project_root: Path, workdir: Path,
             native_npc_review = _ask_verified(
                 provider, "npc_review",
                 {"book_title": idx["title"], "npc_dossiers": dossiers,
-                 "verified_evidence": evidence, "story": story,
+                 "verified_evidence": context, "story": story,
                  "enrichment": overlay, "base_blueprint": bare_bp,
                  "original_scene_origins": bare_prov["scene_origins"],
                  "instruction": "Sign all NPC grants, witnesses, memories, "
@@ -539,7 +593,7 @@ def author_complete_book(*, project_root: Path, workdir: Path,
             return value
         extension = _ask_verified(
             provider, "extension",
-            {"book_title": idx["title"], "verified_evidence": evidence,
+            {"book_title": idx["title"], "verified_evidence": context,
              "story": story, "enrichment": overlay,
              "base_blueprint": base_bp,
              "npc_dossiers": dossiers,
@@ -550,7 +604,21 @@ def author_complete_book(*, project_root: Path, workdir: Path,
                  if native_npc_review is not None else ACT_FORMAT),
              "review_declared_by_user": delegate_review,
              "required_act_count_at_least": 2,
-             "instruction": "With NPC cast, prepare actor-scoped cross-act "
+             "long_book_backbone": backbone,
+             "long_book_reviewed_chapter_outlines": (
+                 context if long_mode else None),
+             "instruction": ("For sources with more than 192 chapters, "
+                            "fill EVERY missing chapter in the confirmed "
+                            "source-to-source anchor gaps with a distinct "
+                            "NARRATED SOURCE_PASSAGE act event; include all "
+                            "featured assertions from each outline exactly "
+                            "once across base and v4 acts; at most 32 acts, "
+                            "128 events per act and 1024 total native scenes. "
+                            "Never silently discard a deferred assertion. "
+                            "Use every inserted act on a direct base choice. "
+                            "All acts must have a real branch and causal effect. "
+                            if long_mode else "") +
+                            "With NPC cast, prepare actor-scoped cross-act "
                             "source review using existing NPC Social v5. "
                             "Use v3 for full signed dialogue review and/or "
                             "a real source-acquired item with a typed transfer. "
@@ -576,6 +644,12 @@ def author_complete_book(*, project_root: Path, workdir: Path,
         root, overlay, npc_review=native_npc_review, extension=extension)
     _, bp_bytes, prov = _inspect_v4(raw)
     bp = parse_json(bp_bytes)
+    long_event_coverage = None
+    if long_mode:
+        long_event_coverage = verify_featured_gameplay(
+            idx, analyses, long_outlines, prov)
+        _fresh_or_existing(private, "long_event_coverage.json",
+                           long_event_coverage)
     # The compiled ZIP can claim source events in every chapter while some
     # chapters are actually inaccessible via native game choices. Prove
     # *playable* chapter coverage through the real Dart/SQLite client.
@@ -612,11 +686,14 @@ def author_complete_book(*, project_root: Path, workdir: Path,
             return value
         review = _ask_verified(
             provider, "literary_review",
-            {"book_title": idx["title"], "all_verified_evidence": evidence,
+            {"book_title": idx["title"], "all_verified_evidence": context,
              "source_locked_blueprint": bp,
              "scene_origins": prov["scene_origins"],
              "review_template": template,
              "native_discovered_routes": candidates,
+             "long_book_reviewed_chapter_outlines": (
+                 context if long_mode else None),
+             "long_book_event_coverage": long_event_coverage,
              "native_playable_chapter_proof": {
                  key: discovery[key] for key in (
                      "archive_sha256", "source_chapters_total",
@@ -674,6 +751,10 @@ def author_complete_book(*, project_root: Path, workdir: Path,
     _fresh_or_existing(private, receipt_path.name, receipt)
     result["authoring_workflow"] = REVISION
     result["native_all_source_chapters_playable"] = True
+    result["long_book_event_coverage"] = long_event_coverage
+    result["long_book_deferred_events_remain_unverified"] = (
+        long_event_coverage is not None and
+        not long_event_coverage["all_source_events_adapted"])
     result["native_playable_chapter_count"] = len(
         discovery["reachable_source_chapters"])
     result["native_chapter_playability_report"] = str(

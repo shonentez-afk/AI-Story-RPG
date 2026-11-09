@@ -8,6 +8,7 @@ The historical file name is retained so existing imports keep working.
 from __future__ import annotations
 
 from pathlib import Path
+import re
 
 from .common import (
     AuthoringError, atomic_write, canonical, outside_repository, parse_json,
@@ -15,7 +16,7 @@ from .common import (
 )
 
 MAX_BODY = 512 * 1024
-STAGES = frozenset(("analysis", "story", "npc_dossiers",
+STAGES = frozenset(("analysis", "chapter_outline", "story", "npc_dossiers",
                     "enrichment", "npc_review", "extension",
                     "literary_review"))
 SYSTEM = {
@@ -28,6 +29,18 @@ SYSTEM = {
         "до 180 UTF-16. Не придумывай слова и координаты. "
         "Извлекай проверяемые действия и отношения, а не домыслы."
     ),
+    "chapter_outline": (
+        "Ты литературный редактор ОДНОГО маленького окна глав длинной "
+        "книги. Верни строго JSON: window_id и chapters. Каждый chapter: "
+        "chapter_index,summary,featured_assertion_ids,deferred_assertion_ids,"
+        "deferred_reason. Укажи ТОЧНО ВСЕ главы окна по порядку. "
+        "Каждое NARRATED свидетельство нужно либо выбрать для реальной "
+        "сцены RPG (featured: от одного до трёх на главу), либо явно "
+        "отложить (deferred) с содержательной причиной длиной от 20 "
+        "символов. Нельзя пропустить, выдумать или перенести событие "
+        "в другую главу. REPORTED и INFERRED не выдавать за NARRATED. "
+        "Без markdown и посторонних полей."
+    ),
     "story": (
         "Ты автор причинной книжной текстовой RPG на русском языке. "
         "Используй только факты из проверенного индекса. Ответ — один "
@@ -35,8 +48,14 @@ SYSTEM = {
         "Сцена: id,chapter_index,origin,assertion_ids,text,terminal,choices. "
         "Выбор: id,label,next_scene_id,requires,forbids,adds,removes. "
         "Нужно 3..192 сцены, две достижимые РАЗНЫЕ концовки, "
-        "SOURCE_PASSAGE и EXPLICIT_ADAPTATION, хотя бы по одной "
-        "SOURCE_PASSAGE сцене в каждой главе, уникальные id из a-z/0-9/_. "
+        "SOURCE_PASSAGE и EXPLICIT_ADAPTATION. Для книги с 1..192 "
+        "главами исходная сцена обязательна для каждой главы. "
+        "Для длинных книг 193..384 главы планируй только "
+        "ПРОХОДИМЫЙ разреженный сюжетный каркас: первичная сцена "
+        "глав 0 и последней, прямые SOURCE_PASSAGE-переходы с "
+        "интервалами не более 96 глав для расширения v4 acts. "
+        "Сами пропущенные главы ОБЯЗАТЕЛЬНО будут заполнены многоактными "
+        "событиями до компиляции. Уникальные id из a-z/0-9/_. "
         "Не выдавай альтернативы за дословные события книги. Только JSON."
     ),
     "npc_dossiers": (
@@ -166,6 +185,12 @@ class PrivateResponseInbox:
                         for c in chunk),
                     "invalid_chunk", "Unsafe indexed chunk ID")
             name = "analysis_" + chunk + ".json"
+        elif stage == "chapter_outline":
+            window = payload.get("window_id")
+            require(type(window) is str and
+                    re.fullmatch(r"w[0-9]{4}_[0-9]{4}", window) is not None,
+                    "invalid_window", "Unsafe long book chapter window ID")
+            name = "chapter_outline_" + window + ".json"
         else:
             name = stage + ".json"
         answer = self.directory / name
