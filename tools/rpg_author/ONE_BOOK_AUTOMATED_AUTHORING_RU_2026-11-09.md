@@ -1,3 +1,17 @@
+## E6m — единая приватная сессия генератора: перенос между чатами
+
+Новая проверяемая функция `snapshot-private` / `verify-private` / `restore-private` сохраняет одним *приватным* ZIP весь immutable source project, все ответы и задания ChatGPT Skill, NPC dossier/review, актовый сценарий, литературный отчёт и при наличии `--game` сам BookWorld и его sidecar. Manifest фиксирует SHA-256 каждого файла, исходник и хеш текущего toolchain. Архив канонический и строго проверяет пути, ZIP-структуру, хеши, символические ссылки, размер, блокировку на запись и запрет перезаписи существующих данных. Restore выполняет реальный `project.load_project` **до публикации** восстановленных каталогов. Никаких книг и ответов в GitHub/CI — только синтетический тестовый текст. Не переносить на другую версию генератора без отдельной обоснованной миграции, не редактировать хеши вручную. **В архиве находятся текст частной книги и AI-ответы; хранить только приватно.**
+
+```bash
+python3 -m tools.rpg_author snapshot-private --project /private/project --workdir /private/author --output /private/story-session.zip --game /private/game.bworld
+python3 -m tools.rpg_author verify-private --input /private/story-session.zip
+python3 -m tools.rpg_author restore-private --input /private/story-session.zip --project /private/restored-project --workdir /private/restored-author --game /private/restored-game.bworld
+```
+
+**Состояние при создании:** код 0.3.0a16 требует новый exact-code Python + Dart CI; одни только snapshot тесты не подтверждают литературную полноту ни одной реальной FB2, портреты или физические устройства. Установленный ChatGPT skill E6d пока не обновлён автоматически, его bootstrap нельзя объявлять совместимым с этим форматом без новой упаковки. Реальные главы/книги остаются вне репозитория.
+
+---
+
 ## E6l — проверяемая синхронизация с самостоятельным многоклиентным ядром (9 ноября 2026)
 
 Авторский код 0.3.0a13 подтверждён Python+Dart CI #42554315131; новый 0.3.0a14 обновляет **только подтверждённые два read-only контракта** 27-позиционного lock и берёт native PR #133 `43930247ef0d2b3e67de7d05ac629fe5a9dd45a4` как неизменяемую версионированную основу. Остальные 25 lock blobs идентичны. Новый код требует своего exact-code CI и не является доказательством качества ни одной реальной книги. Внешний автор не вызывает Z.ai, не владеет игровыми правилами и не изменяет SQLite напрямую; runtime только `rpg_api / story_core`. Новый loopback JSON v1 + Python-клиент служат другим клиентам, но не являются заменой встроенной Flutter-читалки или публичным Web API.

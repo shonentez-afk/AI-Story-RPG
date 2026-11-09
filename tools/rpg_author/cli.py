@@ -120,6 +120,23 @@ def parser():
                            help="Private ChatGPT Skill responses (default: WORKDIR/skill-responses)")
     autopilot.add_argument("--delegate-review", action="store_true",
                            help="Owner permits separate AI literary review; NOT proof of canon")
+    # One portable private ZIP contains immutable source checkpoints, all
+    # ChatGPT Skill requests/answers and optionally the compiled game.
+    session = commands.add_parser(
+        "snapshot-private", help="Create private hash-bound project + Skill session ZIP")
+    session.add_argument("--project", type=Path, required=True)
+    session.add_argument("--workdir", type=Path, required=True)
+    session.add_argument("--output", type=Path, required=True)
+    session.add_argument("--game", type=Path)
+    restore = commands.add_parser(
+        "restore-private", help="Restore immutable private session with original toolchain")
+    restore.add_argument("--input", type=Path, required=True)
+    restore.add_argument("--project", type=Path, required=True)
+    restore.add_argument("--workdir", type=Path, required=True)
+    restore.add_argument("--game", type=Path)
+    verify_session = commands.add_parser(
+        "verify-private", help="Read-only integrity check for private session ZIP")
+    verify_session.add_argument("--input", type=Path, required=True)
     ext_audit = commands.add_parser("audit-extended",
                                     help="Read-only v4 extension preflight; not native/semantic approval")
     ext_audit.add_argument("--project", required=True, type=Path)
@@ -234,6 +251,17 @@ def main(argv=None) -> int:
                 output=args.output, provider=provider, book=args.book,
                 delegate_review=args.delegate_review,
                 npc_review_path=args.npc_review)
+        elif name == "snapshot-private":
+            from .private_snapshot import snapshot_private
+            result = snapshot_private(args.project, args.workdir, args.output,
+                                      game_path=args.game)
+        elif name == "restore-private":
+            from .private_snapshot import restore_private_snapshot
+            result = restore_private_snapshot(args.input, args.project, args.workdir,
+                                              game_path=args.game)
+        elif name == "verify-private":
+            from .private_snapshot import verify_private_snapshot
+            result = verify_private_snapshot(args.input)
         elif name == "audit-extended":
             from .native_v4_bridge import audited_extension
             from .common import outside_repository
