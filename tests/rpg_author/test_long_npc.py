@@ -177,6 +177,19 @@ class FirstMentionCastTests(unittest.TestCase):
             check_native_long_npc_continuity(
                 self.cast, bound, bp, broken)
 
+    def test_npc_life_event_does_not_lock_first_source_meeting(self):
+        # Native engine starts every verified NPC in state PRESENT.
+        # Do not redundantly set PRESENT in the only chapter-100 choice.
+        # The signed alternative ending may transition present -> absent.
+        fake = late.FakeLateNpcAuthor()
+        fake.actor_id = self.cast["characters"][0]["character_id"]
+        events = fake.ask("npc_review", {})["life_transitions"]
+        self.assertEqual(len(events), 1)
+        self.assertEqual(events[0]["scene_id"], "chapter_160")
+        self.assertEqual(events[0]["choice_id"], "alternative_ending")
+        self.assertEqual(events[0]["next_state"], "absent")
+        self.assertEqual(events[0]["assertion_id"], plain.aid(160))
+
     def test_approved_late_npc_compiles_real_base_v3_source_review(self):
         # Native Python writer/importer preflight; on failure this test
         # exposes the EXACT source/social validation, rather than hiding

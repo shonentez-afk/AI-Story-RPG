@@ -15,6 +15,9 @@ SOURCE = plain.SOURCE.replace(
     "В главе номер 101 путница увидела отметку 101 и продолжила путь.",
     "Лодочник объяснил путнице значение отметки 101 у дороги."
 ).replace(
+    "В главе номер 160 путница увидела отметку 160 и продолжила путь.",
+    "Лодочник с путницей достигли развилки в главе 160."
+).replace(
     "В главе номер 161 путница увидела отметку 161 и продолжила путь.",
     "Лодочник вспомнил о путнице возле отметки 161."
 )
@@ -33,6 +36,16 @@ def late_story():
     for scene in plan["scenes"]:
         if scene["id"] == "chapter_080":
             scene["choices"] = [plain.choice("go_080_100", "chapter_100")]
+        if scene["id"] == "chapter_160":
+            scene["text"] = "Лодочник и путница дошли до развилки в главе 160."
+            for choice in scene["choices"]:
+                if choice["id"] == "alternative_ending":
+                    choice["label"] = (
+                        "Расстаться с лодочником в альтернативном финале")
+        if scene["id"] == "other_end":
+            scene["text"] = (
+                "Альтернативное завершение: путница попрощалась "
+                "с лодочником и выбрала иную дорогу.")
     plan["scenes"].insert(2, {
         "id": "chapter_100", "chapter_index": FIRST_CHAPTER,
         "origin": "SOURCE_PASSAGE",
@@ -168,12 +181,16 @@ class FakeLateNpcAuthor(plain.FakeLongSourceLockedAuthor):
                 }],
                 "choice_gates": [], "item_grants": [],
                 "item_transfers": [],
+                # Native StoryWorld defaults known NPC actors to PRESENT.
+                # Redundant present -> present locks the first-contact
+                # choice. A source-witnessed alternative ending can instead
+                # move the already-present NPC to ABSENT.
                 "life_transitions": [{
-                    "scene_id": "chapter_100",
-                    "choice_id": "go_100_160",
+                    "scene_id": "chapter_160",
+                    "choice_id": "alternative_ending",
                     "actor_id": self.actor_id,
-                    "next_state": "present",
-                    "assertion_id": plain.aid(100),
+                    "next_state": "absent",
+                    "assertion_id": plain.aid(160),
                 }],
                 "dialogue_knowledge": {},
             }

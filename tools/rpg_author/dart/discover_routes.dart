@@ -122,6 +122,17 @@ Future<void> main() async {
       // distinct local outcome; skipping its redundant SQLite load is safe.
       // If a loop exists, the strict 512-step/3000-node limits still fail
       // closed rather than incorrectly claiming complete chapter coverage.
+      if (enabled.isEmpty) {
+        // Fail closed on native dead ends; surface only scene/choice IDs and
+        // lock codes, never private book text, dialogue, saves or characters.
+        final locks = state.choices
+            .take(16)
+            .map((c) => '${c.id}:${c.lockReason ?? "enabled"}')
+            .join(',');
+        throw FormatException(
+            'Native nonterminal dead end scene=${state.sceneId} '
+            'revision=${state.revision} choice_locks=$locks');
+      }
       if (enabled.length != 1) {
         final hash = store.loadCampaign(campaign).metadata.stateHash;
         if (!explored.add(hash)) continue;
