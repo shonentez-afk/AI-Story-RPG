@@ -100,7 +100,7 @@ class ReviewedNpcDialogueItemTests(unittest.TestCase):
             ("scene_unknown_assertion",
              lambda x: x["npc_scene_review"]["dialogues"][0]["turns"][1].__setitem__(
                  "assertion_id", "bank_rope")),
-            ("scene_invalid_acquisition",
+            ("scene_unknown_action",
              lambda x: x["npc_scene_review"]["item_grants"][0].__setitem__(
                  "choice_id", "rescue")),
             ("scene_unknown_actor",
