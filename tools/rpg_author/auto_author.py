@@ -767,9 +767,13 @@ def author_complete_book(*, project_root: Path, workdir: Path,
             require(value["review_completed"] is True, "literary_review_failed",
                     "Independent AI reviewer found unresolved evidence issues")
             review_complete_campaign(value, bp, prov, extension)
-            # Execute the routes BEFORE persisting any acceptance:
-            evidence_report = replay_two_native_routes(raw, value["routes"])
-            verify_route_evidence(evidence_report, value["routes"], bp, prov, raw)
+            # Do NOT replay both 200+-choice routes twice. The reviewed
+            # routes were discovered through the genuine Dart RPG API and
+            # cannot be altered by the literary reviewer. The one authoritative
+            # finalizer below recompiles the same source-bound archive, then
+            # runs replay_two_native_routes + verify_route_evidence and portable
+            # SQLite checks BEFORE writing any finished game or readiness
+            # receipt. A failed finalizer is NEVER a successful BookWorld.
             return value
         review = _ask_verified(
             provider, "literary_review",
