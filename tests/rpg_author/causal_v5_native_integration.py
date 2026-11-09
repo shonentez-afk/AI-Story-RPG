@@ -15,7 +15,7 @@ from tests.rpg_author.fixtures_acts import SOURCE, SOURCE_FILENAME
 from tests.rpg_author.test_causal_v5_authoring import FakePrivateBookSkill
 from tools.rpg_author import project
 from tools.rpg_author.common import digest
-from tools.rpg_author.source_causal_v2 import author_causal_v5
+from tools.rpg_author.unified_v5 import author_game_v5
 
 
 def main() -> None:
@@ -40,29 +40,23 @@ def main() -> None:
         source = base / SOURCE_FILENAME
         source.write_text(SOURCE, encoding="utf-8")
         private_project = base / "private-source-index"
-        project.init_project(private_project, source)
-        reviewed = base / "literal-v5.bworld"
-        preview = cli("prepare-literal-canon-v5", "--book", str(source))
-        assert preview["can_compile_literal_canon"] is True
-        receipt = cli("compile-literal-canon-v5",
-                      "--book", str(source),
-                      "--approved-digest", preview["approval_digest"],
-                      "--user-confirmed", "true",
-                      "--output", str(reviewed))
-        assert receipt["status"] == "private_literal_v5_compiled"
-        assert receipt["source_fingerprint"] == preview["source_fingerprint"]
-        assert reviewed.is_file()
-
-        review_file = base / "approved-causal-v2.json"
+        # The command itself creates/reuses the immutable source index,
+        # verifies native code OIDs, compiles source-literal v5 and asks the
+        # source-wide ChatGPT Skill for a native causal NPC review. No manual
+        # two-step authoring and no Python RPG runtime.
+        private_work = base / "skill-work"
+        review_file = private_work / "source-causal-review-v2.json"
         final_world = base / "causal-v5.bworld"
-        results = author_causal_v5(
-            project_root=private_project, base_world=reviewed,
-            workdir=base / "skill-work",
-            output=review_file,
+        results = author_game_v5(
+            book=source, project_root=private_project,
+            workdir=private_work, output=final_world,
             provider=FakePrivateBookSkill(),
             user_confirmed=True, native_root=native,
-            world_output=final_world,
         )
+        assert (private_work / "literal-source-v5.bworld").is_file()
+        assert results["unified_native_v5_workflow"] is True
+        assert results["legacy_v4_saved_worlds_untouched"] is True
+        assert results["cross_version_npc_ids_implicitly_migrated"] is False
         assert results["status"] == "private_causal_v5_native_compiled"
         assert results["native_causal_archive_compiled"] is True
         assert final_world.is_file()

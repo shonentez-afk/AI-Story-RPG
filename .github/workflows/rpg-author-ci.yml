@@ -116,7 +116,7 @@ jobs:
           path: author
       - uses: actions/checkout@v4
         with:
-          ref: feature/p0-bookwide-gameplay-readiness-20261107
+          ref: 92ef5d701637957e31e3e6e090f63d1e0bdb4173
           path: native
       - uses: dart-lang/setup-dart@v1
         with:
