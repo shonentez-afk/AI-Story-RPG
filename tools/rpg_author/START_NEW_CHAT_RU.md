@@ -14,7 +14,7 @@ actor_id, симулировать социальный движок на Python
 2 акта, NPC с постоянным character_id, 3 маршрута. Проверки через
 настоящий native Dart v4 и публичный rpg_api, включая закрытый выбор
 без ранее заработанного доверия, NPC memory/life и SQLite .bwsave.
-Это ещё не приёмка до получения обоих SUCCESS на exact-code SHA.
+**E6j ПРИНЯТ по exact-code:** SHA f087dbb7dac2f85f86b050c38bece1f23be7bd9b, [CI #42542369127](https://github.com/shonentez-afk/AI-Story-RPG/actions/runs/42542369127) COMPLETED SUCCESS: author-tests SUCCESS (141 Python tests + 37 supplemental OK), dart-parity SUCCESS. Реальный Dart v4 и публичный rpg_api подтвердили NPC actor-scoped fact grant, память и доверие между актами, отказ в выборе без памяти, последующий доступ, уход NPC, portable SQLite save/replay. Синтетическая 3-главная FB2, не литературный реальный роман.
 Не изменять main, PR #133, packages, apps или основной CI.
 Проверенная предыдущая база E6i: 96d4cfa; синхронизация native
 pin 081fc365. Установленный skill ChatGPT по-прежнему E6d.
