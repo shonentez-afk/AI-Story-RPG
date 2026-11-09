@@ -84,8 +84,16 @@ class LargeBookPlanningTests(unittest.TestCase):
         })
         answer = novel.FakeLongSourceLockedAuthor().ask(
             "chapter_outline", request)
-        with self.assertRaises(AuthoringError):
+        # The synthetic author initially selects both narrated facts.
+        # Deliberately DROP the second claim so the negative test really
+        # exercises silent omission instead of a valid complete outline.
+        answer["chapters"][0]["featured_assertion_ids"] = [
+            novel.aid(0)
+        ]
+        with self.assertRaises(AuthoringError) as missing:
             review_chapter_window(answer, request)
+        self.assertEqual(missing.exception.code,
+                         "long_book_source_events_dropped")
         answer["chapters"][0]["deferred_assertion_ids"] = [
             "extra_narrated_claim"
         ]
