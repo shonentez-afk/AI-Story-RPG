@@ -92,6 +92,29 @@ void main() {
     expect(indexingCalls, 1);
   });
 
+  testWidgets('mode chosen at library entry reaches the real offline engine',
+      (tester) async {
+    final index = BookSourceIndexer.index(_book);
+    await tester.pumpWidget(MaterialApp(home: BookRpgStartPage(
+      book: _book,
+      gateway: const DeviceWorldLibraryGateway(background: false),
+      indexer: (_) async => index,
+    )));
+    await tester.ensureVisible(find.byKey(const Key('rpg-start-quick-follow')));
+    await tester.tap(find.byKey(const Key('rpg-start-quick-follow')));
+    await tester.pumpAndSettle();
+    expect(tester.widget<ChoiceChip>(
+      find.byKey(const Key('rpg-start-quick-follow'))).selected, isTrue);
+    await tester.ensureVisible(find.byKey(const Key('rpg-start-offline')));
+    await tester.tap(find.byKey(const Key('rpg-start-offline')));
+    await tester.pumpAndSettle();
+    expect(find.byType(QuickRpgPage), findsOneWidget);
+    expect(tester.widget<ChoiceChip>(
+      find.byKey(const Key('quick-rpg-follow-book'))).selected, isTrue);
+    expect(tester.widget<ChoiceChip>(
+      find.byKey(const Key('quick-rpg-change-fate'))).selected, isFalse);
+  });
+
   testWidgets('offline path remains available without network or AI setup',
       (tester) async {
     final index = BookSourceIndexer.index(_book);

@@ -238,6 +238,21 @@ def validate() -> list[str]:
         if direct in legacy_code:
             issues.append(f"{legacy_editor}: engine rule returned to Flutter: {direct}")
 
+    creation_policy = ROOT / "packages" / "story_authoring" / "lib" / "src" / "rpg_creation_contract.dart"
+    policy_code = creation_policy.read_text(encoding="utf-8") if creation_policy.is_file() else ""
+    if ("RpgCreationPolicy" not in policy_code or
+            "RpgCreationPlot.canon" not in policy_code or
+            "RpgCreationInteraction.fixedChoices" not in policy_code):
+        issues.append(f"{creation_policy}: creation modes must be explicitly verified")
+    if "package:flutter/" in policy_code or "Zai" in policy_code:
+        issues.append(f"{creation_policy}: creation policy must not use a Flutter or cloud dependency")
+    short_screen = ROOT / "apps" / "story_reader" / "lib" / "quick_rpg_page.dart"
+    short_code = short_screen.read_text(encoding="utf-8") if short_screen.is_file() else ""
+    for direct in ("QuickRpgBuilder.propose(", "QuickRpgBuilder.proposeFromEventOutline(", "QuickRpgBuilder.compile("):
+        if direct in short_code:
+            issues.append(f"{short_screen}: short game must use public RpgCreationApi, not {direct}")
+    if "_api.compileShort(" not in short_code or "_api.previewShort(" not in short_code:
+        issues.append(f"{short_screen}: short game must call the creation API")
     gateway = ROOT / "apps" / "story_reader" / "lib" / "world_library_gateway.dart"
     workers = ROOT / "apps" / "story_reader" / "lib" / "book_isolate_workers.dart"
     for path in (gateway, workers):

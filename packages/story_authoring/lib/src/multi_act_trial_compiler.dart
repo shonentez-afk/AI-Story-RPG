@@ -4,6 +4,7 @@ import 'book_source_index.dart';
 import 'bookwide_act_planner.dart';
 import 'bookwide_campaign_contract.dart';
 import 'bookwide_storyplan_composer.dart';
+import 'rpg_creation_contract.dart';
 import 'multi_act_trial_plan_composer.dart';
 import 'branch_continuity_auditor.dart';
 import 'compiled_campaign_causal_gate.dart';
@@ -60,6 +61,14 @@ class MultiActTrialCompiler {
     /// Explicit v4: never silently promote ordinary v3 campaigns.
     bool expanded = false,
   }) async {
+    RpgCreationPolicy.inspect(
+      RpgCreationIntent.reviewedAlterFate(
+        hero: selectedHeroRole == null
+            ? RpgCreationHero.freePlayer
+            : RpgCreationHero.reviewedCharacterIdentity),
+      sourceFingerprint: index.sourceFingerprint,
+      reviewedHero: selectedHeroRole,
+    ).requireSupported();
     if (reviewedNpcEncounter &&
         (npcEncounterRole == null ||
          npcEncounterRole.sourceFingerprint != index.sourceFingerprint ||

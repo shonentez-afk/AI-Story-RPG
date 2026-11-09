@@ -33,7 +33,10 @@ export 'package:story_authoring/story_authoring.dart' show
     ReviewedHeroRole, NpcCampaignConsequencePreview,
     WholePlanGameplayBatchManifest, NpcCampaignDialogueDraft,
     ReviewedBookwideNpcCampaign, ReviewedCampaignStage,
-    ReviewedCampaignState, ReviewedCampaignWorkflow;
+    ReviewedCampaignState, ReviewedCampaignWorkflow,
+    RpgCreationIntent, RpgCreationRoute, RpgCreationPlot,
+    RpgCreationInteraction, RpgCreationHero, RpgCreationDecision,
+    QuickRpgMode, QuickRpgPlan, QuickRpgCompilation;
 export 'package:bookworld_format/bookworld_format.dart' show
     VerifiedRichPrivateBookworld;
 
@@ -659,5 +662,78 @@ final class LocalRpgMultiActTrialApi implements RpgMultiActTrialApi {
       throw const FormatException('Чужая исходная редакция игрового мира');
     }
     return world;
+  }
+}
+
+
+/// A single creation-mode/quick-world port for any frontend.
+/// Full reviewed campaigns continue into RpgCampaignWorkflowApi.
+abstract interface class RpgCreationApi {
+  RpgCreationDecision inspect(RpgCreationIntent intent, {
+    String? sourceFingerprint,
+    ReviewedHeroRole? reviewedHero,
+  });
+  QuickRpgPlan previewShort({
+    required BookSourceIndex index,
+    required RpgCreationIntent intent,
+    ZaiWholeBookEventOutline? eventOutline,
+  });
+  Future<QuickRpgCompilation> compileShort({
+    required QuickRpgPlan plan,
+    required RpgCreationIntent intent,
+    required bool allQuotesReviewedByUser,
+    required bool privateUseConfirmed,
+  });
+}
+
+final class LocalRpgCreationApi implements RpgCreationApi {
+  const LocalRpgCreationApi();
+
+  @override
+  RpgCreationDecision inspect(RpgCreationIntent intent, {
+    String? sourceFingerprint,
+    ReviewedHeroRole? reviewedHero,
+  }) => RpgCreationPolicy.inspect(intent,
+      sourceFingerprint: sourceFingerprint, reviewedHero: reviewedHero);
+
+  @override
+  QuickRpgPlan previewShort({
+    required BookSourceIndex index,
+    required RpgCreationIntent intent,
+    ZaiWholeBookEventOutline? eventOutline,
+  }) {
+    inspect(intent, sourceFingerprint: index.sourceFingerprint)
+        .requireSupported();
+    final mode = intent.quickMode;
+    return eventOutline == null
+        ? QuickRpgBuilder.propose(index, mode: mode)
+        : QuickRpgBuilder.proposeFromEventOutline(
+            index, eventOutline, mode: mode);
+  }
+
+  @override
+  Future<QuickRpgCompilation> compileShort({
+    required QuickRpgPlan plan,
+    required RpgCreationIntent intent,
+    required bool allQuotesReviewedByUser,
+    required bool privateUseConfirmed,
+  }) async {
+    inspect(intent, sourceFingerprint: plan.index.sourceFingerprint)
+        .requireSupported();
+    if (intent.quickMode != plan.mode) {
+      throw const FormatException(
+          'После показа цитат режим создания RPG был изменён.');
+    }
+    final result = await QuickRpgBuilder.compile(
+      plan: plan, allQuotesReviewedByUser: allQuotesReviewedByUser,
+      privateUseConfirmed: privateUseConfirmed);
+    final verified = const PrivateBookworldImporter().inspect(result.archive);
+    if (verified.sourceFingerprint != plan.index.sourceFingerprint ||
+        verified.archiveSha256 != result.archiveSha256 ||
+        verified.requiresNetwork || verified.canDistributePublicly) {
+      throw const FormatException(
+          'Короткая игра не прошла независимую проверку движка.');
+    }
+    return result;
   }
 }

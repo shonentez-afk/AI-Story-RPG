@@ -4,6 +4,7 @@ import 'dart:typed_data';
 
 import 'package:campaign_manager/campaign_manager.dart';
 import 'package:rpg_api/rpg_api.dart';
+import 'package:story_authoring/story_authoring.dart' show BookImporter, BookSourceIndexer;
 import 'package:test/test.dart';
 
 Uint8List _bytes(String source) =>
@@ -61,6 +62,69 @@ void main() {
     expect(repeat.status, prepared.status);
     await expectLater(api.prepareBook(complete, resume: cp),
         throwsFormatException);
+  });
+
+  test('one creation contract refuses fake CANON/freeform and preserves real short modes',
+      () async {
+    const RpgCreationApi api = LocalRpgCreationApi();
+    const follow = RpgCreationIntent.quickFollow();
+    const alter = RpgCreationIntent.quickAlterFate();
+    expect(RpgCreationIntent.fromJson(
+      Map<String, dynamic>.from(follow.toJson())).plot,
+        RpgCreationPlot.sourceExcerptRoute);
+    expect(api.inspect(follow).supported, isTrue);
+    expect(api.inspect(alter).supported, isTrue);
+    expect(api.inspect(follow).isFullLiteraryCanon, isFalse);
+    for (final denied in [
+      const RpgCreationIntent(
+          route: RpgCreationRoute.shortOffline,
+          plot: RpgCreationPlot.canon),
+      const RpgCreationIntent(
+          route: RpgCreationRoute.reviewedBookwide,
+          plot: RpgCreationPlot.canon),
+      const RpgCreationIntent(
+          route: RpgCreationRoute.reviewedBookwide,
+          plot: RpgCreationPlot.freeWorld),
+      const RpgCreationIntent(
+          route: RpgCreationRoute.reviewedBookwide,
+          plot: RpgCreationPlot.alterFate,
+          interaction: RpgCreationInteraction.aiFreeform),
+      const RpgCreationIntent(
+          route: RpgCreationRoute.shortOffline,
+          plot: RpgCreationPlot.alterFate,
+          hero: RpgCreationHero.reviewedCharacterIdentity),
+    ]) {
+      expect(api.inspect(denied).supported, isFalse);
+      expect(() => api.inspect(denied).requireSupported(),
+          throwsFormatException);
+    }
+    expect(() => RpgCreationIntent.fromJson({
+      ...follow.toJson(), 'plot': 'UNKNOWN_MODE',
+    }), throwsFormatException);
+    final input = _bytes(List.filled(8,
+        'Герой прошёл по лесу и встретил старого друга у озера. '
+        'Друг рассказал о дальнейшей дороге и решении. ').join('\n'));
+    final book = BookImporter.parse('story.txt', input);
+    final index = BookSourceIndexer.index(book);
+    final plan = api.previewShort(index: index, intent: follow);
+    expect(plan.mode, QuickRpgMode.followBook);
+    await expectLater(api.compileShort(
+      plan: plan, intent: alter,
+      allQuotesReviewedByUser: true, privateUseConfirmed: true),
+        throwsFormatException);
+    await expectLater(api.compileShort(
+      plan: plan, intent: follow,
+      allQuotesReviewedByUser: false, privateUseConfirmed: true),
+        throwsFormatException);
+    final built = await api.compileShort(
+      plan: plan, intent: follow,
+      allQuotesReviewedByUser: true, privateUseConfirmed: true);
+    expect(built.sourceFingerprint, index.sourceFingerprint);
+    expect(built.archive, isNotEmpty);
+    expect(built.requiresCloud, false);
+    expect(built.canDistributePublicly, false);
+    final another = api.previewShort(index: index, intent: alter);
+    expect(another.mode, QuickRpgMode.changeFate);
   });
 
   test('public game API keeps signed choices, SQLite replay and portable saves',

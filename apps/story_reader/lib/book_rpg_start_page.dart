@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:rpg_api/rpg_api.dart' show
+    RpgCreationApi, LocalRpgCreationApi, RpgCreationIntent;
 
 import 'book_import.dart';
 import 'package:story_authoring/story_authoring.dart'
@@ -61,6 +63,9 @@ class _BookRpgStartPageState extends State<BookRpgStartPage> {
       widget.manualCheckpointRepository ??
           const FileSourceAnalysisCheckpointRepository();
   int? _selectedChapter;
+  RpgCreationIntent _quickIntent =
+      const RpgCreationIntent.quickAlterFate();
+  static const RpgCreationApi _creationApi = LocalRpgCreationApi();
   bool _opening = false;
   String? _error;
 
@@ -90,12 +95,14 @@ class _BookRpgStartPageState extends State<BookRpgStartPage> {
       _error = null;
     });
     try {
+      _creationApi.inspect(_quickIntent).requireSupported();
       final sourceBook = _activeBook;
       await Navigator.of(context).push<void>(MaterialPageRoute(
         builder: (_) => QuickRpgFromBookPage(
           book: sourceBook,
           gateway: widget.gateway,
           indexer: widget.indexer,
+          initialIntent: _quickIntent, creationApi: _creationApi,
         ),
       ));
     } catch (error) {
@@ -115,6 +122,8 @@ class _BookRpgStartPageState extends State<BookRpgStartPage> {
       _error = null;
     });
     try {
+      _creationApi.inspect(const RpgCreationIntent.reviewedAlterFate())
+          .requireSupported();
       // Both actions use the SAME validated book index and local checkpoint.
       // No network request, stored consent, or revision inference here.
       final sourceBook = _activeBook;
@@ -247,6 +256,25 @@ class _BookRpgStartPageState extends State<BookRpgStartPage> {
                         style: Theme.of(context).textTheme.titleMedium),
                     const Text('Без сети и ИИ; короткая история по книге.'),
                     const SizedBox(height: 8),
+                    Wrap(spacing: 6, runSpacing: 4, children: [
+                      ChoiceChip(
+                        key: const Key('rpg-start-quick-follow'),
+                        label: const Text('По отрывкам книги'),
+                        selected: _quickIntent.plot.name == 'sourceExcerptRoute',
+                        onSelected: _opening ? null : (_) => setState(() =>
+                            _quickIntent = const RpgCreationIntent.quickFollow()),
+                      ),
+                      ChoiceChip(
+                        key: const Key('rpg-start-quick-alter'),
+                        label: const Text('Развилки судьбы'),
+                        selected: _quickIntent.plot.name == 'alterFate',
+                        onSelected: _opening ? null : (_) => setState(() =>
+                            _quickIntent = const RpgCreationIntent.quickAlterFate()),
+                      ),
+                    ]),
+                    Text(_creationApi.inspect(_quickIntent).explanation,
+                        key: const Key('rpg-start-mode-explanation')),
+                    const SizedBox(height: 8),
                     FilledButton.icon(
                       key: const Key('rpg-start-offline'),
                       onPressed: _opening ? null : _openOffline,
@@ -268,6 +296,8 @@ class _BookRpgStartPageState extends State<BookRpgStartPage> {
                         ? 'Поактовая подготовка всей книги'
                         : 'Подготовка выбранной истории',
                         style: Theme.of(context).textTheme.titleMedium),
+                    const Text('Частная ALTER_FATE-адаптация с редакторской '
+                        'проверкой. Выбор героя доступен после анализа.'),
                     const Text('Z.ai — только после отдельного согласия.'),
                     const SizedBox(height: 8),
                     OutlinedButton.icon(

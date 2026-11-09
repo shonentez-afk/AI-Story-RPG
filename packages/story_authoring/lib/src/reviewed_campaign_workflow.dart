@@ -7,6 +7,7 @@ import 'package:crypto/crypto.dart';
 import 'package:story_core/story_core.dart';
 
 import 'book_to_rpg_workflow.dart';
+import 'rpg_creation_contract.dart';
 import 'campaign_prose_contract.dart';
 import 'npc_campaign_consequences.dart';
 import 'reviewed_hero_role.dart';
@@ -109,6 +110,14 @@ class ReviewedCampaignWorkflow {
     required bool allShownQuotesReviewed,
     required bool privateFictionConfirmed,
   }) async {
+    RpgCreationPolicy.inspect(
+      RpgCreationIntent.reviewedAlterFate(
+        hero: source.selectedHeroRole == null
+            ? RpgCreationHero.freePlayer
+            : RpgCreationHero.reviewedCharacterIdentity),
+      sourceFingerprint: source.index.sourceFingerprint,
+      reviewedHero: source.selectedHeroRole,
+    ).requireSupported();
     if (!allShownQuotesReviewed || !privateFictionConfirmed ||
         approvedPlanDigest != source.planDigest ||
         approvedHeroDigest != source.heroReviewDigest) {
