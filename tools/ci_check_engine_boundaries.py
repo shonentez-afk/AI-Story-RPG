@@ -273,6 +273,21 @@ def validate() -> list[str]:
         if not path.is_file() or "package:rpg_api/rpg_api.dart" not in path.read_text(
                 encoding="utf-8"):
             issues.append(f"{path}: Flutter must use the public RPG API")
+    # A third-party client must use an authenticated transport over the SAME
+    # public API. It must never create a second engine or leak cloud secrets.
+    protocol = ROOT / "packages" / "rpg_api" / "lib" / "src" / "client_protocol.dart"
+    wire = protocol.read_text(encoding="utf-8") if protocol.is_file() else ""
+    if ("class RpgClientProtocol" not in wire or
+            "RpgGameApi" not in wire or "dart:io" in wire or
+            "package:flutter/" in wire):
+        issues.append("rpg_api: missing Flutter-free versioned client protocol")
+    host = ROOT / "apps" / "rpg_cli" / "lib" / "rpg_loopback_server.dart"
+    transport = host.read_text(encoding="utf-8") if host.is_file() else ""
+    if ("RpgClientProtocol(LocalRpgGameApi(" not in transport or
+            "InternetAddress.loopbackIPv4" not in transport or
+            "x-rpg-token" not in transport or
+            "package:story_core/" in transport):
+        issues.append("rpg_cli: HTTP transport must delegate without RPG rules")
     return issues
 
 

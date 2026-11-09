@@ -5,6 +5,7 @@
 /// persist platform paths, talk to a model or invent literary canon.
 library;
 
+import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:bookworld_format/bookworld_format.dart';
@@ -43,6 +44,8 @@ export 'package:story_authoring/story_authoring.dart' show
     QuickRpgMode, QuickRpgPlan, QuickRpgCompilation;
 export 'package:bookworld_format/bookworld_format.dart' show
     VerifiedRichPrivateBookworld;
+
+part 'src/client_protocol.dart';
 
 /// Contract version, not a promise that all planned game modes exist.
 abstract final class RpgApiContract {
