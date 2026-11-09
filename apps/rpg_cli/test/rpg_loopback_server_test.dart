@@ -102,6 +102,21 @@ void main() {
       expect(((offered.$2['result'] as Map)['offers'] as List).first['choice_id'],
           'wait');
 
+      final hinted = ((offered.$2['result'] as Map)['offers']
+          as List).first as Map;
+      final unconfirmed = await send('confirm_suggestion', {
+        'campaign_id': httpId, 'text': waitLabel,
+        'choice_id': 'wait', 'fingerprint': hinted['fingerprint'],
+        'expected_revision': 0, 'action_id': 'http_no_consent',
+        'user_confirmed': false,
+      });
+      expect(unconfirmed.$2['ok'], false);
+      expect((unconfirmed.$2['error'] as Map)['code'], 'invalid_input');
+      final journalBefore = await send('journal_page', {
+        'campaign_id': httpId, 'after_sequence': 0, 'limit': 1,
+      });
+      expect((journalBefore.$2['result'] as Map)['events'], isEmpty);
+
       final localId = localView['campaign_id'] as String;
 
       final forbidden = await send('choose', {
@@ -135,6 +150,21 @@ void main() {
       expect(repeated['duplicate'], true);
       expect(repeated['revision'], 1);
 
+      final journalAfter = (await send('journal_page', {
+        'campaign_id': httpId, 'after_sequence': 0, 'limit': 1,
+        'expected_revision': 1,
+      })).$2['result'] as Map;
+      expect(journalAfter['has_more'], false);
+      expect(journalAfter['state_hash'], httpChoice['state_hash']);
+      expect(journalAfter['events'], httpChoice['journal']);
+      final staleSuggestion = (await send('confirm_suggestion', {
+        'campaign_id': httpId, 'text': waitLabel,
+        'choice_id': 'wait', 'fingerprint': hinted['fingerprint'],
+        'expected_revision': 0, 'action_id': 'http_stale',
+        'user_confirmed': true,
+      })).$2;
+      expect(staleSuggestion['error'], {'code': 'stale_revision'});
+
       final saved = (await send('export_save', {
         'campaign_id': httpId
       })).$2['result'] as Map;
@@ -145,6 +175,20 @@ void main() {
       expect(imported['journal'], httpChoice['journal']);
       expect(imported['inventory'], httpChoice['inventory']);
       expect(imported['npc_encountered'], httpChoice['npc_encountered']);
+
+      final bundle = (await send('export_bundle', {
+        'campaign_id': httpId,
+      })).$2['result'] as Map;
+      expect((bundle['bundle'] as Map)['format'],
+          RpgCampaignTransfer.format);
+      final bundleReceipt = (await send('inspect_bundle', {
+        'bundle': bundle['bundle'],
+      })).$2['result'] as Map;
+      expect(bundleReceipt['save_replay_verified'], true);
+      final noImport = (await send('import_bundle', {
+        'bundle': bundle['bundle'], 'user_confirmed': false,
+      })).$2;
+      expect(noImport['ok'], false);
 
       final invalid = await send('import_save', {
         'world_hash': 'f' * 64, 'save_text': saved['save_text'],

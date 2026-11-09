@@ -8,6 +8,7 @@ import base64
 import json
 from pathlib import Path
 import select
+from unittest.mock import patch
 import subprocess
 import tempfile
 import unittest
@@ -46,6 +47,14 @@ class PythonRemoteRpgTests(unittest.TestCase):
                 self.assertTrue(capabilities["offline_play"])
                 self.assertFalse(capabilities["arbitrary_book_canon"])
                 self.assertFalse(capabilities["dynamic_ai_game_master"])
+                # Privileged credentials and source text must never be
+                # redirected to host HTTP_PROXY settings.
+                with patch.dict("os.environ", {
+                    "HTTP_PROXY": "http://127.0.0.1:9",
+                    "http_proxy": "http://127.0.0.1:9",
+                }):
+                    self.assertTrue(client.call("capabilities")["offline_play"])
+
 
                 world = client.call("install_world", {
                     "archive_base64": base64.b64encode(

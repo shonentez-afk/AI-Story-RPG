@@ -7,6 +7,7 @@ library;
 
 import 'dart:convert';
 import 'dart:typed_data';
+import 'package:crypto/crypto.dart';
 
 import 'package:bookworld_format/bookworld_format.dart';
 import 'package:campaign_manager/campaign_manager.dart';
@@ -47,6 +48,7 @@ export 'package:bookworld_format/bookworld_format.dart' show
     VerifiedRichPrivateBookworld;
 
 part 'src/client_protocol.dart';
+part 'src/campaign_transfer.dart';
 
 /// Contract version, not a promise that all planned game modes exist.
 abstract final class RpgApiContract {

@@ -161,6 +161,7 @@ class WorldGameView {
     required this.campaignId, required this.worldTitle,
     required this.sceneId, required this.sceneText,
     required this.revision, required this.tick, required this.isTerminal,
+    this.stateHash,
     required this.stats, required this.inventory,
     required this.flags, required this.knownFacts,
     required this.choices, required this.journal,
@@ -184,6 +185,8 @@ class WorldGameView {
   final int revision;
   final int tick;
   final bool isTerminal;
+  /// Confirmed story_core state digest; unavailable on synthetic UI views.
+  final String? stateHash;
   final Map<String, int> stats;
   final List<String> inventory;
   final Map<String, bool> flags;
@@ -590,6 +593,7 @@ class RpgGameplayEngine {
           ? 'Разговор с проверяемыми репликами.' : current.text,
       revision: state.revision,
       tick: state.tick,
+      stateHash: state.stateHash,
       isTerminal: coordinator.isTerminal,
       stats: Map.unmodifiable(state.stats),
       inventory: List.unmodifiable(state.inventory.toList()..sort()),

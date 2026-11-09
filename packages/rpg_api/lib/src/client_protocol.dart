@@ -2,6 +2,12 @@ part of '../rpg_api.dart';
 
 /// Versioned, transport-independent client protocol. No IO, Flutter, model
 /// connection or application state machine; all writes use RpgGameApi.
+/// Semantic faults for transport-independent client state transitions.
+final class _RpgProtocolFault implements Exception {
+  const _RpgProtocolFault(this.code);
+  final String code;
+}
+
 final class RpgClientProtocol {
   RpgClientProtocol(this.game, {RpgAuthoringApi? authoring})
       : _authoring = authoring ?? const LocalRpgAuthoringApi();
@@ -41,6 +47,8 @@ final class RpgClientProtocol {
       }
       final result = await _dispatch(op, rawArgs);
       return {'version': version, 'ok': true, 'result': result};
+    } on _RpgProtocolFault catch (fault) {
+      return _error(fault.code);
     } on FormatException {
       return _error('invalid_input');
     } on ArgumentError {
@@ -123,6 +131,7 @@ final class RpgClientProtocol {
       'is_source_passage': view.sceneSource!.isSourcePassage,
     },
     'revision': view.revision,
+    'state_hash': view.stateHash,
     'tick': view.tick,
     'terminal': view.isTerminal,
     'stats': view.stats,
@@ -157,13 +166,7 @@ final class RpgClientProtocol {
       }
     ],
     'journal': [
-      for (final event in view.journal) {
-        'sequence': event.sequence,
-        'scene_id': event.sceneId,
-        'scene_title': event.sceneTitle,
-        'choice': event.choiceLabel,
-        'changes': event.changes,
-      }
+      for (final event in view.journal) _event(event),
     ],
     'choices': [
       for (final choice in view.choices) {
@@ -173,6 +176,14 @@ final class RpgClientProtocol {
         'lock_reason': choice.lockReason,
       }
     ],
+  };
+
+  static Map<String, Object?> _event(WorldEventView event) => {
+    'sequence': event.sequence,
+    'scene_id': event.sceneId,
+    'scene_title': event.sceneTitle,
+    'choice': event.choiceLabel,
+    'changes': event.changes,
   };
 
   Future<Map<String, Object?>> _dispatch(
@@ -190,6 +201,14 @@ final class RpgClientProtocol {
           'dynamic_ai_game_master': RpgApiContract.dynamicAiGameMaster,
           'world_formats': [1, 2, 3, 4],
           'portable_save': true,
+          'self_contained_private_transfer': true,
+          'safe_free_text_confirmation': true,
+          'bounded_journal_paging': true,
+          'verified_state_hash': true,
+          'local_loopback_host': true,
+          'public_internet_host': false,
+          'web_runtime': false,
+          'complete_arbitrary_book_authoring': false,
         };
       case 'worlds':
         _fields(args);
@@ -271,6 +290,84 @@ final class RpgClientProtocol {
           ],
           'dynamic_ai_game_master': false,
         };
+      case 'journal_page':
+        _fields(args, must: {'campaign_id'},
+            may: {'after_sequence', 'limit', 'expected_revision'});
+        final view = game.load(_text(args, 'campaign_id'));
+        if (args.containsKey('expected_revision') &&
+            _number(args, 'expected_revision') != view.revision) {
+          throw const _RpgProtocolFault('stale_revision');
+        }
+        final after = args.containsKey('after_sequence')
+            ? _number(args, 'after_sequence') : 0;
+        final limit = args.containsKey('limit')
+            ? _number(args, 'limit') : 50;
+        if (limit < 1 || limit > 100 || after > view.revision) {
+          throw const FormatException('Invalid journal cursor');
+        }
+        final remaining = view.journal
+            .where((event) => event.sequence > after).toList();
+        final selected = remaining.take(limit).toList();
+        return {
+          'campaign_id': view.campaignId,
+          'revision': view.revision,
+          'state_hash': view.stateHash,
+          'events': [for (final event in selected) _event(event)],
+          'after_sequence': after,
+          'next_sequence': selected.isEmpty ? after : selected.last.sequence,
+          'has_more': remaining.length > selected.length,
+        };
+      case 'confirm_suggestion':
+        _fields(args, must: {
+          'campaign_id', 'text', 'choice_id', 'fingerprint',
+          'expected_revision', 'action_id', 'user_confirmed',
+        });
+        if (args['user_confirmed'] != true) {
+          throw const FormatException('Player confirmation required');
+        }
+        final campaignId = _text(args, 'campaign_id');
+        final current = game.load(campaignId);
+        final head = FreeTextWorldGatewayPort.headFromView(current);
+        if (current.revision != _number(args, 'expected_revision') ||
+            head.fingerprint != _text(args, 'fingerprint')) {
+          throw const _RpgProtocolFault('stale_revision');
+        }
+        final preview = FreeTextActionGate.preview(
+            head, _text(args, 'text', maxLength: 1000));
+        final selected = preview.offers
+            .where((offer) => offer.choiceId ==
+                _text(args, 'choice_id')).toList();
+        if (selected.length != 1) {
+          throw const FormatException('Choice was not reviewed');
+        }
+        final actionId = _text(args, 'action_id');
+        FreeTextActionGate.validate(
+          current: head, proposal: selected.single,
+          actionId: actionId, userConfirmed: true,
+        );
+        final result = game.choose(campaignId,
+            actionId: actionId,
+            choiceId: selected.single.choiceId,
+            expectedRevision: current.revision);
+        return {
+          'applied': result.applied,
+          'duplicate': result.duplicate,
+          'reason': result.reason,
+          ...projectView(result.view),
+        };
+      case 'export_bundle':
+        _fields(args, must: {'campaign_id'});
+        return {'bundle': RpgCampaignTransfer.create(
+            game, _text(args, 'campaign_id'))};
+      case 'inspect_bundle':
+        _fields(args, must: {'bundle'});
+        return RpgCampaignTransfer.inspect(game, args['bundle']);
+      case 'import_bundle':
+        _fields(args, must: {'bundle', 'user_confirmed'});
+        final id = RpgCampaignTransfer.restore(
+            game, args['bundle'],
+            confirmed: args['user_confirmed'] == true);
+        return {'status': 'imported', ...projectView(game.load(id))};
       case 'install_world':
         _fields(args, must: {'archive_base64'});
         final item = game.install(_bytes(

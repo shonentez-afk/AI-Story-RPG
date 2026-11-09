@@ -10,7 +10,7 @@ from __future__ import annotations
 import argparse
 import json
 from urllib.parse import urlparse
-from urllib.request import Request, urlopen
+from urllib.request import Request, build_opener, ProxyHandler
 
 
 PROTOCOL_VERSION = "ai_story_rpg_client_v1"
@@ -36,6 +36,10 @@ class RpgHttpClient:
             raise ValueError("Only an authenticated loopback RPG host is allowed")
         self.endpoint = endpoint
         self.token = token
+        # Force DIRECT loopback traffic. Python's default urlopen honors
+        # HTTP_PROXY and may otherwise leak private BookWorld text and token
+        # to a machine-wide proxy in enterprise installations.
+        self._direct = build_opener(ProxyHandler({}))
 
     def call(self, op: str, args: dict | None = None) -> dict:
         message = {
@@ -53,7 +57,7 @@ class RpgHttpClient:
                 "x-rpg-token": self.token,
             },
         )
-        with urlopen(request, timeout=60) as response:
+        with self._direct.open(request, timeout=60) as response:
             result = json.load(response)
         if not isinstance(result, dict) or result.get("version") != PROTOCOL_VERSION:
             raise RpgClientError("incompatible_protocol")

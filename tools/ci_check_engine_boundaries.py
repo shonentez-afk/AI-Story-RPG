@@ -288,6 +288,30 @@ def validate() -> list[str]:
             "x-rpg-token" not in transport or
             "package:story_core/" in transport):
         issues.append("rpg_cli: HTTP transport must delegate without RPG rules")
+    # Portability is pure SDK behavior: the HTTP host and Python client
+    # must not acquire book/game rules or leak private traffic to proxies.
+    transfer = ROOT / "packages" / "rpg_api" / "lib" / "src" / "campaign_transfer.dart"
+    transfer_code = transfer.read_text(encoding="utf-8") if transfer.is_file() else ""
+    if ("class RpgCampaignTransfer" not in transfer_code or
+            "RpgGameApi" not in transfer_code or
+            "LocalRpgWorldIntakeApi" not in transfer_code or
+            "dart:io" in transfer_code or
+            "package:flutter/" in transfer_code):
+        issues.append("rpg_api: bundled save/world transfer must remain a pure API")
+    wire = ROOT / "packages" / "rpg_api" / "lib" / "src" / "client_protocol.dart"
+    wire_code = wire.read_text(encoding="utf-8") if wire.is_file() else ""
+    for name in ("confirm_suggestion", "journal_page",
+                 "export_bundle", "inspect_bundle", "import_bundle"):
+        if "case '" + name + "'" not in wire_code:
+            issues.append(f"rpg_api: missing client-neutral operation {name}")
+    pyclient = ROOT / "apps" / "rpg_cli" / "python_client.py"
+    pycode = pyclient.read_text(encoding="utf-8") if pyclient.is_file() else ""
+    if "ProxyHandler({})" not in pycode or
+            "127.0.0.1" not in pycode or
+            "x-rpg-token" not in pycode or
+            "sqlite3" in pycode or
+            "story_core" in pycode:
+        issues.append("Python adapter must connect DIRECTLY to local RPG API")
     return issues
 
 

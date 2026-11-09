@@ -1,3 +1,5 @@
+> **Новый функциональный пакет, ожидает новый CI:** добавлены `confirm_suggestion` (replay + настоящее согласие + неизменный fingerprint/expected_revision), `journal_page` (revision, cursor, page, state_hash), `export_bundle / inspect_bundle / import_bundle` для одного **локального** переносимого private `.bworld + .bwsave`. Перенос содержит hash, replay/checksum; при пустой библиотеке `inspect_bundle` показывает `save_replay_verified: false` до реального импорта с согласия. В отличие от генераторского E6m `snapshot-private` он НЕ содержит приватные запросы ChatGPT Skill. Содержимое архива — приватно, никогда не выкладывать в GitHub Actions. [Полная матрица готовности](RPG_ENGINE_CLIENT_AUTONOMY_AUDIT_RU_2026-11-09.md).
+
 # AI Story RPG — единый протокол клиентов v1 (код нового пакета, ожидание exact CI)
 
 9 ноября 2026. Функциональный пакет для Draft PR #133. **До завершения exact-head GitHub Actions код НЕ объявлять принятым.** Ссылки и окончательный status обновить после CI.

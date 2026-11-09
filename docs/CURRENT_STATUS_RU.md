@@ -1,3 +1,11 @@
+## 2026-11-09 — большой пакет client portability и проверка независимости
+
+Native baseline `43930247ef0d2b3e67de7d05ac629fe5a9dd45a4` — [CI #1084 SUCCESS](https://github.com/shonentez-afk/AI-Story-RPG/actions/runs/42555732659), Python/Dart/M1.7/Flutter, Windows, Android. **Новый пакет требует НОВЫЙ exact-HEAD CI:** клиентонезависимый `RpgCampaignTransfer` (вместе исходный ZIP .bworld, .bwsave, checksum, source campaign, revision, stateHash), проверенная повторная установка в чистую библиотеку только с согласием и replay, `confirm_suggestion` (исключает незаметный AI ход), `journal_page`, stateHash из story_core, Python direct loopback без системного HTTP_PROXY. Проверки: v3/v4 native SQLite + два Python/Dart клиента в разных процессах + отрицательные и state/CAS случаи. [Обязательный аудит автономности](RPG_ENGINE_CLIENT_AUTONOMY_AUDIT_RU_2026-11-09.md).
+
+Внешний генератор уже **E6m / 0.3.0a16** [CI #420 SUCCESS](https://github.com/shonentez-afk/AI-Story-RPG/actions/runs/42556984326). Прежний native External author CI #415 FAIL (6 pinned blobs / старый Dart parity), генераторная ветка отдельно зелёная, это НЕ единая совместная приёмка. Не менять main/генератор. Следующий крупный блок — настоящий CANON, подтверждённая роль героя, динамический AI-GM и полный literary book-to-RPG, потом реальные FB2/устройства.
+
+---
+
 # СТАТУС 9 НОЯБРЯ 2026 — ПРОВЕРЕННАЯ MULTI-CLIENT RPG-ОСНОВА
 
 **Первый большой пакет принят:** [CI #1083](https://github.com/shonentez-afk/AI-Story-RPG/actions/runs/42554271712) полный SUCCESS на `31372b0b657fb0d0fa37476c1fcbc9fe614be525`, включая Python/Dart/M1.7/Flutter, Windows release bundle и Android debug APK. [M0 #1168](https://github.com/shonentez-afk/AI-Story-RPG/actions/runs/42554271699) SUCCESS. Готов отдельный Python-клиент, token-auth loopback HTTP host, единый чистый `RpgClientProtocol` v1 и настоящее SQLite/.bwsave сквозное E2E. До физического QA и продакшен Web/gRPC далеко.
