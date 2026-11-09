@@ -436,6 +436,7 @@ void main() {
         'effects': [
           {'op': 'learn_fact', 'actor': 'player',
            'id': 'gm_announcement'},
+          {'op': 'grant_item', 'id': 'gm_keepsake'},
         ],
       });
       final p = api.previewFreeform(id, learning, expectedRevision: 0);
@@ -457,6 +458,7 @@ void main() {
           'trust_delta': 2,
           'goal_id': 'gm_avoid_trap',
           'learn_fact_id': 'gm_announcement',
+          'give_item_id': 'gm_keepsake',
         },
       });
       final p2 = api.previewFreeform(id, share, expectedRevision: 1);
@@ -465,12 +467,36 @@ void main() {
         userConfirmed: true);
       expect(done.view.activePlotMode, 'ALTER_FATE');
       expect(done.view.npcRelations.single.currentGoal, 'gm_avoid_trap');
+      expect(done.view.inventory, isNot(contains('gm_keepsake')));
+      expect(done.view.npcItemOwners['gm_keepsake'], _anna);
+
+      final returnItem = FreeformActionDraft.fromJson({
+        'format': FreeformActionDraft.format,
+        'scope': FreeformActionDraft.fictionScope,
+        'player_text': 'Анна возвращает вещь',
+        'narration': 'Анна вернула сохранённую вещь герою.',
+        'effects': <Object>[],
+        'npc_interaction': {
+          'actor_id': _anna, 'memory_id': 'gm_item_return',
+          'kind': 'helped', 'trust_delta': 1,
+          'goal_id': 'gm_back_home',
+          'take_item_id': 'gm_keepsake',
+        },
+      });
+      final returnPreview = api.previewFreeform(id, returnItem,
+          expectedRevision: 2);
+      final returned = api.commitFreeform(id,
+          actionId: 'npc_item_return', draft: returnItem,
+          expectedRevision: 2,
+          approvalDigest: returnPreview.approvalDigest,
+          userConfirmed: true);
+      expect(returned.view.inventory, contains('gm_keepsake'));
       expect(api.choose(id, actionId: 'cannot_skip_to_book',
         choiceId: 'canon_next_00000', expectedRevision: 2).applied, false);
       final save = api.exportSave(id);
       final clone = api.importSave(save, expectedWorldHash: world.archiveHash);
       final replay = api.load(clone);
-      expect(replay.stateHash, done.view.stateHash);
+      expect(replay.stateHash, returned.view.stateHash);
       expect(replay.activePlotMode, 'ALTER_FATE');
     } finally {
       store?.close();
