@@ -779,12 +779,25 @@ def main():
         long_book = root / long_source.SOURCE_FILENAME
         long_book.write_text(long_source.SOURCE, encoding="utf-8")
         long_fake = long_source.FakeLateNpcAuthor()
-        long_result = author_complete_book(
-            book=long_book,
-            project_root=root / "large_201_checkpoint",
-            workdir=root / "large_201_private_skill",
-            output=root / "large_201_native.bworld",
-            provider=long_fake, delegate_review=True)
+        # The reviewer may only COPY the two routes actually discovered by
+        # native Dart. The finalizer must perform the single authoritative
+        # end-to-end native replay + two portable save imports BEFORE any
+        # .bworld success. Replaying them twice made 201-chapter NPC tests
+        # exceed the 10-minute CI limit; zero replays would be unsafe.
+        from unittest.mock import patch
+        from tools.rpg_author import complete_game as finalizer_module
+        real_replay = finalizer_module.replay_two_native_routes
+        with patch.object(finalizer_module, "replay_two_native_routes",
+                          wraps=real_replay) as native_replay:
+            long_result = author_complete_book(
+                book=long_book,
+                project_root=root / "large_201_checkpoint",
+                workdir=root / "large_201_private_skill",
+                output=root / "large_201_native.bworld",
+                provider=long_fake, delegate_review=True)
+        assert native_replay.call_count == 1, (
+            "The actual native two-route replay must run exactly once",
+            native_replay.call_count)
         assert long_result["status"] == (
             "native_multi_act_campaign_mechanically_verified"), long_result
         assert long_result["native_all_source_chapters_playable"] is True
