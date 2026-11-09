@@ -342,12 +342,14 @@ def prepare_npc_v4_extension(response: dict, index: dict, story: dict,
     from .v4_npc_scene_items import (
         FORMAT as ACTS_V3, REVIEW_FORMAT as SCENE_REVIEW,
     )
-    fields(response, {
-        "acts", "initial_state", "npc_actor_review", "npc_scene_review",
-    } if "npc_actor_review" in response or "npc_scene_review" in response
-           else {"acts", "initial_state"}, "skill reviewed v4 authoring")
     has_actor = "npc_actor_review" in response
     has_scene = "npc_scene_review" in response
+    expected = {"acts", "initial_state"}
+    if has_actor:
+        expected.add("npc_actor_review")
+    if has_scene:
+        expected.add("npc_scene_review")
+    fields(response, expected, "skill reviewed v4 authoring")
     require((not has_scene or has_actor) and (not has_actor or npc_present),
             "skill_npc_extension_invalid",
             "NPC-dependent act requires a reviewed base NPC identity")
