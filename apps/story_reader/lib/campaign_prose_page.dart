@@ -10,10 +10,23 @@ import 'zai_semantic_preview.dart';
 /// Final authoring step, not another library or runtime. Returns reviewed
 /// bytes to the SAME installation flow; opening this page never makes a POST.
 class CampaignProsePage extends StatefulWidget {
-  const CampaignProsePage({super.key, required this.manifest, this.store, this.service});
+  const CampaignProsePage({
+    super.key, required this.manifest, this.store, this.service,
+    this.acceptExisting, this.applyReviewed,
+  });
   final CampaignProseManifest manifest;
   final CampaignProseStore? store;
   final ZaiCampaignProse? service;
+  /// Client-supplied callbacks let the same stage-gated RPG API complete
+  /// both the original-text and approved full-narration paths.
+  final Future<Uint8List> Function()? acceptExisting;
+  final Future<Uint8List> Function(
+    CampaignProseSession session,
+    CampaignProseStore store,
+    String approvedDigest,
+    bool fullTextReviewed,
+    bool privateFictionConfirmed,
+  )? applyReviewed;
   @override State<CampaignProsePage> createState() => _CampaignProsePageState();
 }
 
@@ -105,7 +118,10 @@ class _CampaignProsePageState extends State<CampaignProsePage> {
     setState(() => _busy = true);
     try {
       await widget.manifest.verifyCurrent();
-      if (mounted) Navigator.pop<Uint8List>(context, widget.manifest.originalArchive);
+      final archive = widget.acceptExisting == null
+          ? widget.manifest.originalArchive
+          : await widget.acceptExisting!();
+      if (mounted) Navigator.pop<Uint8List>(context, archive);
     } catch (error) { if (mounted) setState(() => _error = error.toString()); }
     finally { if (mounted) setState(() => _busy = false); }
   }
@@ -116,10 +132,14 @@ class _CampaignProsePageState extends State<CampaignProsePage> {
     setState(() { _busy = true; _error = null; });
     try {
       final review = CampaignProseAcceptance.review(widget.manifest, session);
-      final archive = await CampaignProseAcceptance.build(manifest: widget.manifest,
-        store: _store, session: session,
-        approvedDigest: ReviewedCampaignProseWriter.digest(review),
-        fullTextReviewed: _reviewed, privateFictionConfirmed: _fiction);
+      final digest = ReviewedCampaignProseWriter.digest(review);
+      final archive = widget.applyReviewed == null
+          ? await CampaignProseAcceptance.build(
+              manifest: widget.manifest, store: _store, session: session,
+              approvedDigest: digest, fullTextReviewed: _reviewed,
+              privateFictionConfirmed: _fiction)
+          : await widget.applyReviewed!(
+              session, _store, digest, _reviewed, _fiction);
       if (mounted) Navigator.pop<Uint8List>(context, archive);
     } catch (error) {
       if (mounted) setState(() { _error = error.toString(); _invalidate(); });
