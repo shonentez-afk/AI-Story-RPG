@@ -16,7 +16,7 @@ from .common import (
 )
 
 MAX_BODY = 512 * 1024
-STAGES = frozenset(("analysis", "chapter_outline", "story", "npc_dossiers",
+STAGES = frozenset(("analysis", "chapter_outline", "npc_cast", "story", "npc_dossiers",
                     "enrichment", "npc_review", "extension",
                     "literary_review"))
 SYSTEM = {
@@ -40,6 +40,24 @@ SYSTEM = {
         "символов. Нельзя пропустить, выдумать или перенести событие "
         "в другую главу. REPORTED и INFERRED не выдавать за NARRATED. "
         "Без markdown и посторонних полей."
+    ),
+    "npc_cast": (
+        "Ты автор проверяемого литературного состава персонажей ПО ВСЕЙ "
+        "книге, а не только по базовым игровым сценам. "
+        "Ответ строго JSON: characters:[{ref,name,description,"
+        "first_chapter_index,identity_assertion_id}], absence_reason. "
+        "До 15 важных персонажей. Для каждого укажи ПЕРВОЕ упоминание "
+        "полного имени из исходного текста, совпадающее с точной "
+        "NARRATED-цитатой и featured assertion в соответствующей "
+        "главе. Ранние REPORTED/INFERRED слухи нельзя объявлять "
+        "наблюдаемой встречей. Не придумывай character_id, SHA и "
+        "сюжетную каноничность: их определит существующий валидатор. "
+        "После принятия каждое знакомство станет обязательной опорной "
+        "SOURCE_PASSAGE-сценой до компиляции v4 актов. "
+        "Если важных NPC нет, characters=[] и мотивированное "
+        "absence_reason от 20 символов, иначе null. "
+        "Это важные NPC, а НЕ подтверждённо исчерпывающий список "
+        "всех существующих персонажей. Только JSON."
     ),
     "story": (
         "Ты автор причинной книжной текстовой RPG на русском языке. "

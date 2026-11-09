@@ -1,3 +1,9 @@
+## E6p — source-wide NPC с точным первым появлением (0.3.0a19)
+
+**Новый крупный пакет, ожидает exact-code CI:** после всех `chapter_outline` ChatGPT Skill выполняет `npc_cast` для важных персонажей всей длинной книги, а не лишь начальных опор. Каждый выбранный NPC должен ссылаться на исходное NARRATED свидетельство с полным именем именно из самой ранней главы, где имя реально присутствует в FB2/TXT. Генератор вычисляет тот же постоянный `character_id`, требует обязательную `SOURCE_PASSAGE` сцену первого знакомства в базовом StoryPlan и переиспользует существующие `npc_dossiers`, `npc_review` и `npc_actor_review`. После сборки нативный `long_npc_continuity.json` проверяет roster, первую встречу, knowledge grant и отсутствие преждевременных NPC сведений. Пустой cast допустим лишь с мотивированным Skill-пояснением. Полнота всех второстепенных персонажей не объявляется автоматически. Нативный движок, Flutter и PR #133 НЕ меняются. Реальные FB2 и физические Win/Android E2E всё ещё открыты.
+
+---
+
 ## E6o ПРИНЯТО — целая 201-главная книга в автономном BookWorld v4
 
 **Точный проверенный SHA кода:** `0ba371f67e6122e3685976479332daa30c8b513f`; **генератор 0.3.0a18**. [External RPG author tests #42561455316](https://github.com/shonentez-afk/AI-Story-RPG/actions/runs/42561455316) **COMPLETED SUCCESS на этом SHA**. `author-tests`: 194 основных Python + 37 дополнительных Python PASS. `dart-parity`: SUCCESS с маркером `native_201_chapter_long_book_skill_windows_and_sqlite=true`, включая штатный native Dart importer, реальный `LocalRpgGameApi`, SQLite, два разных реально достижимых завершения и переносимые сохранения. Автоматическая проверка использует ИСКУССТВЕННО СОЧИНЁННУЮ 201-главную FB2 и `FakeLongSourceLockedAuthor`: реальные читательские/литературные E2E НЕ выполнены.

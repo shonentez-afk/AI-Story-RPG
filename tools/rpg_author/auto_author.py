@@ -39,6 +39,10 @@ from .npc_skill import (
 from .validate import (assertion_registry, candidate_blueprint,
                        validate_analysis, validate_story)
 from .v4_acts import FORMAT as ACT_FORMAT
+from .long_npc import (
+    prepare_long_npc_cast, verify_long_npc_cast, bind_long_npc_cast,
+    check_native_long_npc_continuity,
+)
 from .long_book import (
     is_long_book, chapter_windows, review_chapter_window,
     verify_chapter_window, outline_context, check_long_backbone,
@@ -48,6 +52,7 @@ from .long_book import (
 REVISION = "rpg_author_ai_book_pipeline_v1"
 MAX_AUTO_REVISIONS = 3
 _STAGE_FILES = {
+    "npc_cast": "long_npc_cast.json",
     "npc_dossiers": "npc_dossiers.json",
     "enrichment": "enrichment.json",
     "npc_review": "npc_review.json",
@@ -406,6 +411,9 @@ def author_complete_book(*, project_root: Path, workdir: Path,
     long_outlines = []
     context = evidence
     backbone = None
+    long_cast = None
+    long_dossiers = None
+    long_bindings = None
     if long_mode:
         # The Skill must read all source chunks, then author small, immutable
         # cited windows before a sparse v3 base StoryPlan is even proposed.
@@ -423,6 +431,33 @@ def author_complete_book(*, project_root: Path, workdir: Path,
                 _fresh_or_existing(private, name, checked)
             long_outlines.append(checked)
         context = outline_context(long_outlines, idx, analyses)
+        # The literary skill reviews the WHOLE indexed book before
+        # selecting major NPC identities. Later actors become mandatory
+        # first-mention base anchors, never guessed new v4 NPCs.
+        cast_file = private / _STAGE_FILES["npc_cast"]
+        if cast_file.exists():
+            long_cast = verify_long_npc_cast(
+                read_json(cast_file), idx, analyses, long_outlines)
+        else:
+            long_cast = _ask_verified(
+                provider, "npc_cast",
+                {"book_title": idx["title"],
+                 "source_fingerprint": idx["source_fingerprint"],
+                 "chapter_count": idx["chapter_count"],
+                 "reviewed_chapter_outlines": context,
+                 "instruction": "Select up to 15 significant source-attested "
+                                "characters from the ENTIRE book. Cite the "
+                                "EARLIEST full-name textual mention in an "
+                                "exact NARRATED featured assertion from that "
+                                "same chapter. New NPC first encounters "
+                                "become mandatory REAL StoryPlan anchors, "
+                                "even between current sparse anchors. "
+                                "Never invent or move an actor to an "
+                                "earlier chapter; Python derives actor IDs. "
+                                "If no major NPCs exist, explain why."},
+                lambda answer: prepare_long_npc_cast(
+                    answer, idx, analyses, long_outlines))
+            _fresh_or_existing(private, _STAGE_FILES["npc_cast"], long_cast)
     if story is None:
         def checked_story(response):
             require(response.get("source_fingerprint", idx["source_fingerprint"])
@@ -434,12 +469,17 @@ def author_complete_book(*, project_root: Path, workdir: Path,
                         if k not in ("format", "source_fingerprint")}}
             _full_chapter_coverage(value, idx, analyses)
             validate_story(value, idx, analyses)
+            if long_mode:
+                # Reject an invented or missing late first-contact anchor
+                # BEFORE this model StoryPlan enters immutable checkpoint.
+                bind_long_npc_cast(long_cast, value, idx, analyses)
             return value
         if long_mode:
             story_task = {
                 "book_title": idx["title"],
                 "chapter_count": idx["chapter_count"],
                 "reviewed_chapter_outlines": context,
+                "reviewed_major_npc_cast": long_cast["characters"],
                 "story_mode": "source_locked_sparse_v3_backbone_for_v4_acts",
                 "max_base_scenes": 192,
                 "max_gap_between_original_anchors": MAX_ANCHOR_GAP,
@@ -452,6 +492,14 @@ def author_complete_book(*, project_root: Path, workdir: Path,
                                "needs a NARRATED citation from its OWN chapter. "
                                "The upcoming v4 acts MUST fill ALL missing "
                                "chapters from the reviewed chapter outlines. "
+                               "For EACH reviewed major NPC also add a "
+                               "NONTERMINAL SOURCE_PASSAGE first-contact "
+                               "base scene with exactly its original "
+                               "first_chapter_index and "
+                               "identity_assertion_id. Keep all those "
+                               "anchors in chronological source-to-source "
+                               "edges; use real choices for the native "
+                               "NPC witness, memory and knowledge review. "
                                "Never fake a complete base plan.",
             }
         else:
@@ -467,6 +515,10 @@ def author_complete_book(*, project_root: Path, workdir: Path,
     if long_mode:
         backbone = check_long_backbone(story, idx, analyses)
         _fresh_or_existing(private, "long_backbone.json", backbone)
+        long_dossiers, long_bindings = bind_long_npc_cast(
+            long_cast, story, idx, analyses)
+        _fresh_or_existing(private, "long_npc_bound_anchors.json",
+                           long_bindings)
 
     # A complete book first receives a literary NPC cast, with source-bound
     # permanent character IDs, BEFORE enrichment adds actor-scoped effects.
@@ -475,7 +527,14 @@ def author_complete_book(*, project_root: Path, workdir: Path,
     dossiers = None
     if npc_review_path is None:
         dossiers_file = private / _STAGE_FILES["npc_dossiers"]
-        if dossiers_file.exists():
+        if long_mode:
+            # The literary identity is already source-checked in npc_cast.
+            # Reuse the pinned SAME native dossier contract, not a second
+            # character-ID or NPC rules implementation.
+            dossiers = long_dossiers
+            _fresh_or_existing(private, _STAGE_FILES["npc_dossiers"],
+                               dossiers)
+        elif dossiers_file.exists():
             dossiers = verify_source_dossiers(
                 read_json(dossiers_file), idx, story, analyses)
         else:
@@ -563,7 +622,13 @@ def author_complete_book(*, project_root: Path, workdir: Path,
                  "verified_evidence": context, "story": story,
                  "enrichment": overlay, "base_blueprint": bare_bp,
                  "original_scene_origins": bare_prov["scene_origins"],
-                 "instruction": "Sign all NPC grants, witnesses, memories, "
+                 "long_book_first_npc_contacts": (
+                     long_bindings["characters"] if long_mode else None),
+                 "instruction": "For each long-book NPC provide the first "
+                                "SOURCE_PASSAGE witness, knowledge grant "
+                                "and memory at its exact anchored chapter. "
+                                "Do not reveal future encounters. "
+                                "Sign all NPC grants, witnesses, memories, "
                                 "life events and dialogues with original "
                                 "assertion_id. Native quote SHA and IDs "
                                 "are computed by the verifier."},
@@ -613,6 +678,8 @@ def author_complete_book(*, project_root: Path, workdir: Path,
              "review_declared_by_user": delegate_review,
              "required_act_count_at_least": 2,
              "long_book_backbone": backbone,
+             "long_book_first_npc_contacts": (
+                 long_bindings["characters"] if long_mode else None),
              "long_book_reviewed_chapter_outlines": (
                  context if long_mode else None),
              "instruction": ("For sources with more than 192 chapters, "
@@ -653,11 +720,16 @@ def author_complete_book(*, project_root: Path, workdir: Path,
     _, bp_bytes, prov = _inspect_v4(raw)
     bp = parse_json(bp_bytes)
     long_event_coverage = None
+    long_npc_continuity = None
     if long_mode:
         long_event_coverage = verify_featured_gameplay(
             idx, analyses, long_outlines, prov)
         _fresh_or_existing(private, "long_event_coverage.json",
                            long_event_coverage)
+        long_npc_continuity = check_native_long_npc_continuity(
+            long_cast, long_bindings, bp, prov)
+        _fresh_or_existing(private, "long_npc_continuity.json",
+                           long_npc_continuity)
     # The compiled ZIP can claim source events in every chapter while some
     # chapters are actually inaccessible via native game choices. Prove
     # *playable* chapter coverage through the real Dart/SQLite client.
@@ -702,6 +774,7 @@ def author_complete_book(*, project_root: Path, workdir: Path,
              "long_book_reviewed_chapter_outlines": (
                  context if long_mode else None),
              "long_book_event_coverage": long_event_coverage,
+             "long_book_npc_source_continuity": long_npc_continuity,
              "native_playable_chapter_proof": {
                  key: discovery[key] for key in (
                      "archive_sha256", "source_chapters_total",
@@ -760,6 +833,7 @@ def author_complete_book(*, project_root: Path, workdir: Path,
     result["authoring_workflow"] = REVISION
     result["native_all_source_chapters_playable"] = True
     result["long_book_event_coverage"] = long_event_coverage
+    result["long_book_npc_source_continuity"] = long_npc_continuity
     result["long_book_deferred_events_remain_unverified"] = (
         long_event_coverage is not None and
         not long_event_coverage["all_source_events_adapted"])
