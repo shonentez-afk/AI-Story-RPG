@@ -19,6 +19,17 @@ void main() {
         .readAsBytesSync());
     final v3 = api.inspect(richV3);
     expect(v3.formatVersion, 3);
+    expect(v3.sourceChaptersTotal, greaterThanOrEqualTo(1));
+    expect(v3.sourceChaptersWithGameplay, greaterThanOrEqualTo(1));
+    final causal = const LocalRpgBookGameplayAuditApi()
+        .inspect(richV3, maxStates: 2048, maxMoves: 96);
+    expect(causal.archiveHash, v3.archiveHash);
+    expect(causal.exploredStates, greaterThan(0));
+    expect(causal.sourceLiteraryCanonVerified, false);
+    expect(causal.exactGeneratorRoutesReplayed, false);
+    if (causal.status == BookGameplayAuditStatus.inconclusive) {
+      expect(causal.provenAllEndings, false);
+    }
     expect(v3.isPrivate, true);
     expect(v3.generatorReportAttached, false);
     expect(v3.literaryCanonProven, false);
@@ -30,6 +41,8 @@ void main() {
     expect(v4.sceneCount, greaterThanOrEqualTo(3));
     expect(v4.endingCount, greaterThanOrEqualTo(2));
     expect(v4.sourceFingerprint, isNotNull);
+    expect(v4.sourceChaptersTotal, greaterThanOrEqualTo(2));
+    expect(v4.allSourceChaptersCovered, true);
     final world = const LocalRpgAuthoringApi().inspectPrivateWorld(bytes);
     final terminals = world.blueprint.scenes.entries
         .where((entry) => entry.value.terminal)
@@ -51,8 +64,8 @@ void main() {
       'literary_truth_attested': false,
       'reviewed_full_routes': 2,
       'reviewed_distinct_ending_scenes': 2,
-      'reviewed_book_chapters': 3,
-      'source_chapters_with_gameplay': 3,
+      'reviewed_book_chapters': v4.sourceChaptersTotal,
+      'source_chapters_with_gameplay': v4.sourceChaptersWithGameplay,
     };
     Map<String, dynamic> report() => {
       'format': 'rpg_author_complete_native_campaign_acceptance_v1',
@@ -79,6 +92,13 @@ void main() {
     };
     final attached = api.inspect(bytes, readinessJson: jsonEncode(report()));
     expect(attached.generatorReportAttached, true);
+    // The external generator now supports up to 512 signed actions.
+    final longReport = report();
+    (longReport['native_routes'] as Map<String, dynamic>)['routes'] = [
+      {...routes.first, 'replayed_choices': 512}, routes.last,
+    ];
+    expect(api.inspect(bytes, readinessJson: jsonEncode(longReport))
+        .generatorReportAttached, true);
     expect(attached.producerClaimsTwoReplayedRoutes, true);
     expect(attached.literaryCanonProven, false);
     for (final invalid in [
@@ -86,6 +106,15 @@ void main() {
       {...report(), 'source_fingerprint': '0' * 64},
       {...report(), 'user_ready': true},
       {...report(), 'format_version': 3},
+      {...report(), 'source_review': {...source,
+          'reviewed_book_chapters': v4.sourceChaptersTotal + 1}},
+      {...report(), 'source_review': {...source,
+          'source_chapters_with_gameplay': v4.sourceChaptersWithGameplay + 1}},
+      {...report(), 'native_routes': {
+          ...(report()['native_routes'] as Map<String, dynamic>),
+          'routes': [{...routes.first, 'replayed_choices': 513},
+                     routes.last],
+      }},
       {...report(), 'source_review': {...source,
           'verified_scene_review_records': v4.sceneCount - 1}},
       {...report(), 'native_routes': {

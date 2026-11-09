@@ -13,6 +13,9 @@ final class RpgWorldIntakePreview {
     required this.sourceFingerprint, required this.sceneCount,
     required this.endingCount, required this.npcActorCount,
     required this.itemCount, required this.isPrivate,
+    this.sourceChaptersTotal = 0,
+    this.sourceChaptersIndexed = 0,
+    this.sourceChaptersWithGameplay = 0,
     this.generatorReportAttached = false,
     this.producerClaimsTwoReplayedRoutes = false,
   });
@@ -21,6 +24,13 @@ final class RpgWorldIntakePreview {
   final int formatVersion, sceneCount, endingCount, npcActorCount, itemCount;
   final String? sourceFingerprint;
   final bool isPrivate;
+  /// Canonical BookWorld provenance, not an external JSON assertion.
+  final int sourceChaptersTotal, sourceChaptersIndexed;
+  final int sourceChaptersWithGameplay;
+  bool get allSourceChaptersCovered => sourceChaptersTotal > 0 &&
+      sourceChaptersIndexed == sourceChaptersTotal &&
+      sourceChaptersWithGameplay == sourceChaptersTotal;
+
   /// A SHA-bound producer statement; not a signature or an independent replay.
   final bool generatorReportAttached, producerClaimsTwoReplayedRoutes;
 
@@ -34,6 +44,9 @@ final class RpgWorldIntakePreview {
     formatVersion: formatVersion, sourceFingerprint: sourceFingerprint,
     sceneCount: sceneCount, endingCount: endingCount,
     npcActorCount: npcActorCount, itemCount: itemCount, isPrivate: isPrivate,
+    sourceChaptersTotal: sourceChaptersTotal,
+    sourceChaptersIndexed: sourceChaptersIndexed,
+    sourceChaptersWithGameplay: sourceChaptersWithGameplay,
     generatorReportAttached: true, producerClaimsTwoReplayedRoutes: true,
   );
 }
@@ -54,7 +67,7 @@ final class LocalRpgWorldIntakeApi implements RpgWorldIntakeApi {
     if (archive.isEmpty || archive.length > 12 * 1024 * 1024) {
       throw const FormatException('Игровой архив пуст или превышает 12 МБ.');
     }
-    final RpgWorldIntakePreview inspected;
+    late RpgWorldIntakePreview inspected;
     try {
       final world = const RichPrivateBookworldImporter().inspect(archive);
       final bp = world.blueprint;
@@ -66,6 +79,11 @@ final class LocalRpgWorldIntakeApi implements RpgWorldIntakeApi {
         endingCount: bp.scenes.values.where((s) => s.terminal).length,
         npcActorCount: bp.actors.where((a) => a != 'player').length,
         itemCount: bp.items.length, isPrivate: true,
+        sourceChaptersTotal: world.sourceChaptersTotal,
+        sourceChaptersIndexed: world.sourceChaptersIndexed,
+        sourceChaptersWithGameplay: world.sceneOrigins.values
+            .where((origin) => origin.isSourcePassage)
+            .map((origin) => origin.chapterIndex).toSet().length,
       );
     } on FormatException {
       try {
@@ -148,8 +166,10 @@ final class LocalRpgWorldIntakeApi implements RpgWorldIntakeApi {
         source['reviewed_distinct_ending_scenes'] != 2 ||
         source['reviewed_book_chapters'] is! int ||
         (source['reviewed_book_chapters'] as int) < 2 ||
+        source['reviewed_book_chapters'] != game.sourceChaptersTotal ||
         source['source_chapters_with_gameplay'] !=
-            source['reviewed_book_chapters'] ||
+            game.sourceChaptersWithGameplay ||
+        !game.allSourceChaptersCovered ||
         extension['act_count'] is! int ||
         (extension['act_count'] as int) < 2 ||
         extension['chapters_without_source_scenes'] is! List ||
@@ -174,7 +194,7 @@ final class LocalRpgWorldIntakeApi implements RpgWorldIntakeApi {
       if (id is! String || id.isEmpty || !seenRouteIds.add(id) ||
           end is! String || !terminal.contains(end) ||
           !seenEndings.add(end) || steps is! int ||
-          steps < 2 || steps > 24 ||
+          steps < 2 || steps > 512 ||
           value['portable_save_verified'] != true ||
           state is! String || !_hash.hasMatch(state)) {
         throw const FormatException(

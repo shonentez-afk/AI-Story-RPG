@@ -4,7 +4,8 @@ import 'dart:typed_data';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:rpg_api/rpg_api.dart'
-    show RpgWorldIntakePreview, WorldLibraryGateway, WorldLibraryItem;
+    show RpgWorldIntakePreview, WorldLibraryGateway, WorldLibraryItem,
+    RpgBookGameplayAudit, BookGameplayAuditStatus;
 
 import 'world_import_review_worker.dart';
 
@@ -93,7 +94,27 @@ class _WorldImportReviewDialog extends StatefulWidget {
 class _WorldImportReviewDialogState extends State<_WorldImportReviewDialog> {
   late RpgWorldIntakePreview _preview = widget.initial;
   String? _readiness, _error;
+  RpgBookGameplayAudit? _gameplayAudit;
   bool _loading = false;
+
+  Future<void> _auditGameplay() async {
+    if (_loading) return;
+    setState(() { _loading = true; _error = null; });
+    try {
+      final result = await auditImportedWorldInWorker(widget.archive);
+      if (!mounted) return;
+      if (result.archiveHash != _preview.archiveHash) {
+        throw const FormatException('Игровой архив изменён до проверки.');
+      }
+      setState(() => _gameplayAudit = result);
+    } catch (error) {
+      if (mounted) {
+        setState(() => _error = 'Проверка игрового маршрута: $error');
+      }
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
 
   Future<void> _attach() async {
     if (_loading) return;
@@ -137,6 +158,11 @@ class _WorldImportReviewDialogState extends State<_WorldImportReviewDialog> {
               '${_preview.endingCount} финалов, '
               '${_preview.npcActorCount} NPC, '
               '${_preview.itemCount} предметов.'),
+          if (_preview.sourceChaptersTotal > 0)
+            Text('По оригиналу подтверждены главы: '
+                '${_preview.sourceChaptersWithGameplay}/'
+                '${_preview.sourceChaptersTotal}. '
+                'Проверено источником BookWorld, не текстом отчёта.'),
           const SizedBox(height: 8),
           Text(_preview.isPrivate
               ? 'Частная игровая адаптация; публикация не разрешена.'
@@ -153,6 +179,21 @@ class _WorldImportReviewDialogState extends State<_WorldImportReviewDialog> {
             : 'Отчёт .readiness.json не приложен. '
               'Это не препятствует проверенному офлайн-импорту.',
             key: const Key('world-intake-report-status')),
+          if (_gameplayAudit != null) ...[
+            const SizedBox(height: 8),
+            Text(switch (_gameplayAudit!.status) {
+              BookGameplayAuditStatus.playable =>
+                  'Сам движок проверил все финалы и отсутствие '
+                  'безвыходных состояний за '
+                  '${_gameplayAudit!.exploredStates} состояний.',
+              BookGameplayAuditStatus.blocked =>
+                  'Движок нашёл недоступные финалы или сюжетную ловушку. '
+                  'Установка заблокирована.',
+              BookGameplayAuditStatus.inconclusive =>
+                  'Проверка игрового графа достигла лимита. '
+                  'Это не доказательство ошибки или полной готовности.',
+            }, key: const Key('world-intake-gameplay-audit')),
+          ],
           if (_loading) const LinearProgressIndicator(),
           if (_error != null) Padding(
             padding: const EdgeInsets.only(top: 8),
@@ -160,6 +201,12 @@ class _WorldImportReviewDialogState extends State<_WorldImportReviewDialog> {
                 style: TextStyle(color: Theme.of(context).colorScheme.error)),
           ),
           Wrap(spacing: 6, runSpacing: 4, children: [
+            OutlinedButton(
+              key: const Key('world-intake-audit-gameplay'),
+              onPressed: _loading || _preview.formatVersion < 3
+                  ? null : _auditGameplay,
+              child: const Text('Проверить игровые маршруты'),
+            ),
             OutlinedButton(
               key: const Key('world-intake-attach-report'),
               onPressed: _loading || _preview.formatVersion != 4
@@ -179,7 +226,8 @@ class _WorldImportReviewDialogState extends State<_WorldImportReviewDialog> {
         onPressed: _loading ? null : () => Navigator.pop(context),
         child: const Text('Отмена')),
       FilledButton(key: const Key('world-intake-confirm'),
-        onPressed: _loading || _error != null ? null
+        onPressed: _loading || _error != null ||
+            _gameplayAudit?.status == BookGameplayAuditStatus.blocked ? null
             : () => Navigator.pop(context,
                 _ReviewedImport(_preview, _readiness)),
         child: const Text('Добавить RPG')),

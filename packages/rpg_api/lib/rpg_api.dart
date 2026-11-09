@@ -13,10 +13,12 @@ import 'package:rpg_gameplay/rpg_gameplay.dart';
 import 'package:story_authoring/story_authoring.dart';
 
 export 'src/world_intake.dart';
+export 'src/bookwide_gameplay_audit.dart';
 
 export 'package:rpg_gameplay/rpg_gameplay.dart' show
     WorldLibraryItem, WorldCampaignItem, WorldSavePreview,
     WorldChoiceView, WorldEventView, NpcRelationView, WorldGameView,
+    WorldSceneSourceView,
     WorldChoiceResult, WorldLibraryGateway;
 export 'package:story_authoring/story_authoring.dart' show
     ImportedBook, BookSourceIndex, SourceLockedBook,

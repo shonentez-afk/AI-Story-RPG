@@ -20,18 +20,37 @@ class VerifiedRichPrivateBookworld {
     required this.archiveSha256,
     required this.provenanceSha256,
     required this.presentation,
+    this.sourceTitle = '',
+    this.sourceChaptersTotal = 0,
+    this.sourceChaptersIndexed = 0,
+    this.sceneOrigins = const {},
     this.npcSocialRulebook,
     this.formatVersion = 3,
   });
   final StoryBlueprint blueprint;
   final String sourceFingerprint, archiveSha256, provenanceSha256;
   final Map<String, dynamic> presentation;
+  /// Exact source fields checked against signed manifest and ZIP.
+  final String sourceTitle;
+  final int sourceChaptersTotal, sourceChaptersIndexed;
+  final Map<String, VerifiedBookSceneOrigin> sceneOrigins;
   final NpcSocialRulebook? npcSocialRulebook;
   /// 3 is the unchanged rich format; 4 is opt-in, strictly reviewed.
   final int formatVersion;
   String get bookworldId => blueprint.bookId;
   bool get canDistributePublicly => false;
   bool get requiresNetwork => false;
+}
+
+/// Canonically verified provenance of ONE signed book scene.
+final class VerifiedBookSceneOrigin {
+  const VerifiedBookSceneOrigin({
+    required this.sceneId, required this.chapterIndex,
+    required this.origin,
+  });
+  final String sceneId, origin;
+  final int chapterIndex;
+  bool get isSourcePassage => origin == 'SOURCE_PASSAGE';
 }
 
 /// Strict rich-v3 reader. Existing source/manifest/causal checks remain
@@ -648,6 +667,18 @@ class RichPrivateBookworldImporter {
       archiveSha256: sha256.convert(data).toString(),
       provenanceSha256: sha256.convert(files['source/provenance.json']!).toString(),
       presentation: presentation, npcSocialRulebook: socialRulebook,
+      sourceTitle: source['source_title'] as String,
+      sourceChaptersTotal: source['source_chapters_total'] as int,
+      sourceChaptersIndexed: source['source_chapters_indexed'] as int,
+      sceneOrigins: Map.unmodifiable({
+        for (final raw in source['scene_origins'] as List)
+          (raw as Map<String, dynamic>)['scene_id'] as String:
+              VerifiedBookSceneOrigin(
+                sceneId: raw['scene_id'] as String,
+                chapterIndex: raw['chapter_index'] as int,
+                origin: raw['origin'] as String,
+              ),
+      }),
       formatVersion: version as int,
     );
   }

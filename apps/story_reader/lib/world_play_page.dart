@@ -456,6 +456,21 @@ class _WorldPlayPageState extends State<WorldPlayPage> {
                                     side: BorderSide(
                                         color: ink.withValues(alpha: 0.25)),
                                   ),
+                                  if (view.sceneSource != null)
+                                    Chip(
+                                      key: const ValueKey('world-book-origin'),
+                                      label: Text(
+                                        (view.sceneSource!.isSourcePassage
+                                            ? 'По книге · глава '
+                                            : 'Альтернативный сюжет · глава ') +
+                                            '${view.sceneSource!.chapterNumber}/'
+                                            '${view.sceneSource!.chapterCount}',
+                                        style: TextStyle(color: ink),
+                                      ),
+                                      backgroundColor: prefs.background,
+                                      side: BorderSide(
+                                          color: ink.withValues(alpha: 0.25)),
+                                    ),
                                 ]),
                                 const SizedBox(height: 18),
                                 if (dialogue == null)
