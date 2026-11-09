@@ -336,7 +336,7 @@ final class RpgClientProtocol {
           verifiedBaseArchive:
               _bytes(args, 'archive_base64', maxArchiveBytes),
           sourceIndex: reviewedIndex,
-          reviewJson: _text(args, 'review_json', maxLength: 131072),
+          reviewJson: _text(args, 'review_json', maxLength: 4194304),
           approvedDigest: _text(args, 'approved_digest'),
           userConfirmed: true,
         );

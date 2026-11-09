@@ -204,8 +204,11 @@ class StoryWorld {
     }
     final evidence = <WorldEvent>[];
     for (final event in _events) {
-      final effects = event.freeform?.effects ?? blueprint.scenes[event.sceneId]!
-          .choices.singleWhere((c) => c.id == event.choiceId).effects;
+      final effects = event.freeform?.effects ?? [
+          ...blueprint.scenes[event.sceneId]!
+              .choices.singleWhere((c) => c.id == event.choiceId).effects,
+          ...sourceEffectsFor(event.sceneId),
+      ];
       if (effects.any((effect) =>
           effect.op == 'learn_fact' &&
           effect.actor == actorId &&
@@ -256,6 +259,9 @@ class StoryWorld {
 
   /// An isolated tentative world for coordinating with the scenario runtime.
   /// No I/O occurs here; a rejected proposal never mutates the live world.
+  List<TypedRule> sourceEffectsFor(String sceneId) =>
+      socialRulebook?.bookCausality?.at(sceneId)?.effects ?? const [];
+
   StoryWorld fork() {
     final draft = StoryWorld(blueprint, socialRulebook: socialRulebook);
     draft._state = _state;
@@ -411,7 +417,7 @@ class StoryWorld {
       (actor, facts) => MapEntry(actor, Set<String>.of(facts)),
     );
     var tick = _state.tick + 1;
-    for (final effect in choice.effects) {
+    for (final effect in [...choice.effects, ...sourceEffectsFor(_state.sceneId)]) {
       switch (effect.op) {
         case 'grant_item':
           items.add(effect.id!);
@@ -456,7 +462,8 @@ class StoryWorld {
     );
     if (socialRulebook != null &&
         (socialRulebook!.itemTransfers.isNotEmpty ||
-         socialRulebook!.lifeTransitions.isNotEmpty)) {
+         socialRulebook!.lifeTransitions.isNotEmpty ||
+         socialRulebook!.bookCausality != null)) {
       // Pre-commit verification must never let a partial transfer reach the
       // durable SQLite event chain. No world state is published on failure.
       final draft = fork();
@@ -464,9 +471,16 @@ class StoryWorld {
       draft._events.add(event);
       draft._byAction[actionId] = event;
       try {
-        NpcSocialLedger.inspect(draft, socialRulebook!);
+        final social = NpcSocialLedger.inspect(draft, socialRulebook!);
+        final graph = socialRulebook!.bookCausality;
+        if (graph != null && !graph.permits(choice.nextSceneId, nextState,
+            social, {blueprint.entrySceneId,
+              ...draft._events.map((event) => event.sceneId),
+              ...draft._events.map((event) => event.nextSceneId)})) {
+          return _denied('canon_event_prerequisite_broken');
+        }
       } on FormatException {
-        return _denied('npc_item_custody_conflict');
+        return _denied('npc_or_book_causality_conflict');
       }
     }
     _state = nextState;

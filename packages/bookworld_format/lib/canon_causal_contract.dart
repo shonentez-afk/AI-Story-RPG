@@ -7,6 +7,7 @@ final class CanonCausalContract {
   const CanonCausalContract._();
 
   static const format = 'ai_story_source_causal_review_v1';
+  static const graphFormat = 'ai_story_source_causal_review_v2';
   static final _sha = RegExp(r'^[0-9a-f]{64}$');
   static final _gm = RegExp(r'^gm_[a-z0-9_]{1,59}$');
 
@@ -49,18 +50,20 @@ final class CanonCausalContract {
     final raw = source['canon_causality'];
     final marker = manifest['canon_causality_format'];
     if (raw == null && marker == null) return null;
-    if (marker != format || !blueprint.isReviewedCanon ||
+    if (!{format, graphFormat}.contains(marker) || !blueprint.isReviewedCanon ||
         !blueprint.supportsFreeform || !manifest.containsKey('canon_review_format')) {
       throw const FormatException('Missing source-causal v5 authorization');
     }
     final review = _map(raw, 'review');
+    final graphReview = review['format'] == graphFormat;
     _fields(review, {
       'format', 'review_scope', 'source_fingerprint',
       'base_archive_sha256', 'user_confirmed',
       'semantic_canon_automatically_verified',
       'witnesses', 'invariants',
+      if (graphReview) 'event_graph',
     }, 'review');
-    if (review['format'] != format ||
+    if (review['format'] != marker ||
         review['review_scope'] != 'human_reviewed_private_story_causality' ||
         review['source_fingerprint'] != blueprint.sourceFingerprint ||
         review['base_archive_sha256'] is! String ||
@@ -154,12 +157,35 @@ final class CanonCausalContract {
         minimumTrust: min as int?, maximumTrust: max as int?,
       ));
     }
+    BookCausalGraph? bookGraph;
+    if (graphReview) {
+      final rawEvents = review['event_graph'];
+      if (rawEvents is! List) {
+        throw const FormatException('Missing reviewed full-book causes');
+      }
+      for (final raw in rawEvents) {
+        final row = _map(raw, 'causal event');
+        _fields(row, {'scene_id', 'source_quote_sha256',
+            'depends_on', 'preconditions', 'effects'}, 'causal event');
+        if (row['scene_id'] is! String ||
+            row['source_quote_sha256'] is! String ||
+            !_cited(origins, row['scene_id'] as String,
+                row['source_quote_sha256'] as String)) {
+          throw const FormatException('Causal event lacks signed book quote');
+        }
+      }
+      bookGraph = BookCausalGraph.fromReview([
+        for (final raw in rawEvents)
+          {...(raw as Map<String, dynamic>)}..remove('source_quote_sha256'),
+      ], blueprint);
+    }
     final rulebook = NpcSocialRulebook(
       blueprintHash: blueprint.blueprintHash,
       rules: const [], witnesses: verifiedWitnesses,
       canonInvariants: gates,
       requireReviewedWitnesses: true,
       dynamicInteractionsEnabled: true,
+      bookCausality: bookGraph,
     );
     rulebook.validate(blueprint);
     return (rulebook: rulebook, names: Map.unmodifiable(names));

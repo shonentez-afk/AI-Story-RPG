@@ -6,6 +6,7 @@ import 'blueprint.dart';
 import 'character_id.dart';
 import 'codec.dart';
 import 'engine.dart';
+import 'book_causality.dart';
 
 /// A reviewed *classification* of one committed game action, not a claim
 /// inferred from prose or from an actor's displayed name.
@@ -185,6 +186,7 @@ class NpcSocialRulebook {
     this.requireReviewedWitnesses = false,
     this.dynamicInteractionsEnabled = false,
     List<NpcCanonInvariant> canonInvariants = const [],
+    this.bookCausality,
   }) : canonInvariants = List.unmodifiable(canonInvariants),
        rules = List.unmodifiable(rules),
        witnesses = List.unmodifiable(witnesses),
@@ -199,12 +201,17 @@ class NpcSocialRulebook {
   final List<NpcItemTransfer> itemTransfers;
   final List<NpcLifeTransition> lifeTransitions;
   final List<NpcCanonInvariant> canonInvariants;
+  final BookCausalGraph? bookCausality;
   final bool dynamicInteractionsEnabled;
   /// Strict portable social rules must prove how each observer learned
   /// about the event. Old local preview rulebooks keep legacy semantics.
   final bool requireReviewedWitnesses;
 
   void validate(StoryBlueprint blueprint) {
+    if (bookCausality != null &&
+        (!blueprint.isReviewedCanon || !dynamicInteractionsEnabled)) {
+      throw const FormatException('Causal graph requires source-reviewed CANON');
+    }
     if (blueprintHash != blueprint.blueprintHash ||
         !RegExp(r'^[0-9a-f]{64}$').hasMatch(blueprintHash) ||
         rules.length > 512 || canonInvariants.length > 256 ||
@@ -499,6 +506,9 @@ class NpcSocialRulebook {
               .compareTo(b['scene_id'].toString() +
                   b['actor_id'].toString())));
     }
+    if (bookCausality != null) {
+      signed['book_causal_graph'] = bookCausality!.toJson();
+    }
     if (lifeTransitions.isNotEmpty) {
       final changes = lifeTransitions.map((change) => change.toJson()).toList()
         ..sort((a, b) =>
@@ -789,10 +799,12 @@ class NpcSocialLedger {
             transfer,
     };
     for (final event in events) {
-      final effects = event.freeform?.effects ??
-          blueprint.scenes[event.sceneId]!.choices
+      final effects = event.freeform?.effects ?? [
+          ...blueprint.scenes[event.sceneId]!.choices
               .singleWhere((candidate) => candidate.id == event.choiceId)
-              .effects;
+              .effects,
+          ...world.sourceEffectsFor(event.sceneId),
+      ];
       for (final effect in effects) {
         if (effect.op != 'grant_item' && effect.op != 'consume_item') continue;
         final itemId = effect.id!;

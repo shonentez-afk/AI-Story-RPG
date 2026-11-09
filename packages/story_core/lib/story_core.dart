@@ -11,3 +11,4 @@ export 'src/engine.dart';
 export 'src/npc_social_ledger.dart';
 export 'src/world_state.dart';
 export 'src/freeform_action.dart';
+export 'src/book_causality.dart';

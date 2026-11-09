@@ -15,6 +15,7 @@ import 'src/zip_v1.dart';
 final class ReviewedCanonCausalBookworldWriter {
   const ReviewedCanonCausalBookworldWriter();
   static const reviewFormat = 'ai_story_source_causal_review_v1';
+  static const graphReviewFormat = 'ai_story_source_causal_review_v2';
 
   static String digest(String reviewJson) =>
       sha256.convert(utf8.encode(
@@ -27,19 +28,22 @@ final class ReviewedCanonCausalBookworldWriter {
     required String approvedDigest,
     required bool userConfirmed,
   }) {
-    if (!userConfirmed || reviewJson.length > 131072 ||
+    if (!userConfirmed || reviewJson.length > 4194304 ||
         approvedDigest != digest(reviewJson)) {
       throw const FormatException('Source causal approval was not confirmed');
     }
     final parsed = jsonDecode(reviewJson);
+    final graphReview = parsed is Map<String, dynamic> &&
+        parsed['format'] == graphReviewFormat;
     if (parsed is! Map<String, dynamic> ||
         canonicalJson(parsed) != reviewJson ||
-        parsed.keys.toSet().length != 8 ||
+        parsed.keys.toSet().length != (graphReview ? 9 : 8) ||
         !parsed.keys.toSet().containsAll({
           'format', 'review_scope', 'source_fingerprint',
           'base_archive_sha256', 'user_confirmed',
           'semantic_canon_automatically_verified',
           'witnesses', 'invariants',
+          if (graphReview) 'event_graph',
         })) {
       throw const FormatException('Noncanonical source causal review');
     }
@@ -49,7 +53,7 @@ final class ReviewedCanonCausalBookworldWriter {
         !base.sourceLiteralCanonVerified ||
         base.npcSocialRulebook != null ||
         base.blueprint.actors.length != 1 ||
-        parsed['format'] != reviewFormat ||
+        !{reviewFormat, graphReviewFormat}.contains(parsed['format']) ||
         parsed['base_archive_sha256'] != base.archiveSha256 ||
         parsed['source_fingerprint'] != base.sourceFingerprint ||
         parsed['user_confirmed'] != true ||
