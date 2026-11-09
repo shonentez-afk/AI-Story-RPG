@@ -600,6 +600,48 @@ class StoryWorld {
         }
       }
     }
+    // Simulate the committed NPC outcome BEFORE choosing the next source
+    // scene. A changed knowledge, custody, goal or trust precondition makes
+    // the original book's next event impossible; never silently read on.
+    final graph = socialRulebook?.bookCausality;
+    if (!diverged && graph != null) {
+      final candidate = WorldState(
+        sceneId: _state.sceneId,
+        revision: _state.revision + 1,
+        tick: time,
+        stats: stats,
+        inventory: inventory,
+        flags: flags,
+        knowledge: knowledge,
+      );
+      final hypothetical = WorldEvent.create(
+        sequence: candidate.revision,
+        actionId: actionId,
+        actor: actor,
+        sceneId: _state.sceneId,
+        choiceId: FreeformActionDraft.reservedChoice,
+        nextSceneId: candidate.sceneId,
+        blueprintHash: blueprint.blueprintHash,
+        previousHash: _events.isEmpty ? null : _events.last.hash,
+        beforeStateHash: _state.stateHash,
+        afterStateHash: candidate.stateHash,
+        freeform: draft,
+      );
+      final trial = fork();
+      trial._state = candidate;
+      trial._events.add(hypothetical);
+      trial._byAction[actionId] = hypothetical;
+      final updated = NpcSocialLedger.inspect(trial, socialRulebook!);
+      final visited = {
+        blueprint.entrySceneId,
+        ...trial.events.map((event) => event.sceneId),
+        ...trial.events.map((event) => event.nextSceneId),
+      };
+      if (blueprint.scenes[_state.sceneId]!.choices.any((choice) =>
+          !graph.permits(choice.nextSceneId, candidate, updated, visited))) {
+        diverged = true;
+      }
+    }
     final alt = diverged
         ? AlternateNarrativeScene(
             id: 'gm_scene_' + (_state.revision + 1).toString(),

@@ -380,4 +380,102 @@ void main() {
       await dir.delete(recursive: true);
     }
   });
+  test('v2 causal graph: NPC learns and branches',
+      () async {
+    final baseline = _files();
+    final base = const RichPrivateBookworldImporter().inspect(baseline.base);
+    final raw = _review(base);
+    final scenes = base.blueprint.scenes.keys.toList();
+    raw['format'] = ReviewedCanonCausalBookworldWriter.graphReviewFormat;
+    raw['event_graph'] = [
+      for (var i = 0; i < scenes.length; i++)
+        {
+          'scene_id': scenes[i],
+          'source_quote_sha256':
+              base.sceneOrigins[scenes[i]]!.sourceQuoteSha256,
+          'depends_on': i == 0 ? <String>[] : [scenes[i - 1]],
+          'preconditions': i == 1 ? [{
+            'op': 'fact_unknown', 'actor_id': _anna,
+            'id': 'gm_announcement', 'value': null,
+          }] : <Object>[],
+          'effects': <Object>[],
+        }
+    ];
+    final json = canonicalJson(raw);
+    final checkedArchive = const LocalRpgLiteralCanonApi()
+        .compileReviewedCausality(
+          verifiedBaseArchive: baseline.base,
+          sourceIndex: baseline.sourceIndex,
+          reviewJson: json,
+          approvedDigest: ReviewedCanonCausalBookworldWriter.digest(json),
+          userConfirmed: true,
+        );
+    final imported = const RichPrivateBookworldImporter()
+        .inspect(checkedArchive);
+    expect(imported.npcSocialRulebook?.bookCausality?.nodes.length,
+        imported.blueprint.scenes.length);
+    final dir = await Directory.systemTemp.createTemp('causal_v2_');
+    BookworldCampaignStore? store;
+    try {
+      store = BookworldCampaignStore.openPrivateDirectory(dir.path);
+      final api = LocalRpgGameApi(store);
+      final world = api.install(checkedArchive);
+      final safeId = api.start(world.archiveHash);
+      final safeAdvance = api.choose(safeId,
+        actionId: 'advance', choiceId: 'canon_next_00000',
+        expectedRevision: 0);
+      expect(safeAdvance.applied, true);
+      expect(safeAdvance.view.activePlotMode, 'CANON');
+
+      final id = api.start(world.archiveHash);
+      final learning = FreeformActionDraft.fromJson({
+        'format': FreeformActionDraft.format,
+        'scope': FreeformActionDraft.fictionScope,
+        'player_text': 'Я узнал новость',
+        'narration': 'Игрок узнал новость до встречи.',
+        'effects': [
+          {'op': 'learn_fact', 'actor': 'player',
+           'id': 'gm_announcement'},
+        ],
+      });
+      final p = api.previewFreeform(id, learning, expectedRevision: 0);
+      final first = api.commitFreeform(id, actionId: 'learn', draft: learning,
+        expectedRevision: 0, approvalDigest: p.approvalDigest,
+        userConfirmed: true);
+      expect(first.view.activePlotMode, 'CANON');
+
+      final share = FreeformActionDraft.fromJson({
+        'format': FreeformActionDraft.format,
+        'scope': FreeformActionDraft.fictionScope,
+        'player_text': 'Я сообщил Анне новость',
+        'narration': 'Анна узнала новую информацию и изменила решение.',
+        'effects': <Object>[],
+        'npc_interaction': {
+          'actor_id': _anna,
+          'memory_id': 'gm_announcement_shared',
+          'kind': 'warned',
+          'trust_delta': 2,
+          'goal_id': 'gm_avoid_trap',
+          'learn_fact_id': 'gm_announcement',
+        },
+      });
+      final p2 = api.previewFreeform(id, share, expectedRevision: 1);
+      final done = api.commitFreeform(id, actionId: 'share', draft: share,
+        expectedRevision: 1, approvalDigest: p2.approvalDigest,
+        userConfirmed: true);
+      expect(done.view.activePlotMode, 'ALTER_FATE');
+      expect(done.view.npcRelations.single.currentGoal, 'gm_avoid_trap');
+      expect(api.choose(id, actionId: 'cannot_skip_to_book',
+        choiceId: 'canon_next_00000', expectedRevision: 2).applied, false);
+      final save = api.exportSave(id);
+      final clone = api.importSave(save, expectedWorldHash: world.archiveHash);
+      final replay = api.load(clone);
+      expect(replay.stateHash, done.view.stateHash);
+      expect(replay.activePlotMode, 'ALTER_FATE');
+    } finally {
+      store?.close();
+      await dir.delete(recursive: true);
+    }
+  });
+
 }

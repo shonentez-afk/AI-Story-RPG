@@ -210,6 +210,10 @@ final class BookCausalGraph {
     if (seen.length != bp.scenes.length) {
       throw const FormatException('Incomplete source-wide causal event coverage');
     }
+    final first = events.firstWhere((e) => e.sceneId == bp.entrySceneId);
+    if (first.dependsOn.isNotEmpty || first.preconditions.isNotEmpty) {
+      throw const FormatException('Entry source cannot require future events');
+    }
     for (final event in events) {
       if (event.dependsOn.any((id) => !seen.contains(id))) {
         throw const FormatException('Cause references an unreviewed event');
