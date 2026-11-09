@@ -220,7 +220,8 @@ def validate() -> list[str]:
     legacy_editor = ROOT / "apps" / "story_reader" / "lib" / "multi_act_trial_editor.dart"
     legacy_code = legacy_editor.read_text(encoding="utf-8") if legacy_editor.is_file() else ""
     for delegated in (
-        "_trialApi.compileTrial(", "_trialApi.previewOneGameplay(",
+        "_trialApi.compileTrial(", "_trialApi.composePreviewPlan(",
+        "_trialApi.previewOneGameplay(",
         "_trialApi.previewWholeGameplay(", "_trialApi.acceptGameplay(",
         "_trialApi.verifyPrivateWorld(",
     ):
@@ -228,6 +229,7 @@ def validate() -> list[str]:
             issues.append(f"{legacy_editor}: multi-act editor must call public RPG API {delegated}")
     for direct in (
         "MultiActTrialCompiler.compile(",
+        "BookwideSourceEncounters.attach(",
         "ReviewedGameplayCompiler.preview(",
         "ReviewedGameplayCompiler.previewAcrossBatches(",
         "ReviewedGameplayCompiler.compileAfterUserConfirmation(",

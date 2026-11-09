@@ -93,6 +93,40 @@ WholeBookNpcSourcePlan _reviewedPlan() {
 void main() {
   const flow = ReviewedCampaignWorkflow();
 
+  test('one headless plan composer is shared by preview and final compiler', () {
+    final source = _reviewedPlan();
+    final preview = MultiActTrialPlanComposer.compose(
+      index: source.index, book: source.book,
+      bookMap: source.bookMap, draft: source.draft,
+      reviewedInteractiveEventIds: source.extraEventIds,
+      fictionalTrialAcknowledged: true,
+      expanded: source.expanded,
+    );
+    expect(preview.npcArc, isNull);
+    expect(preview.plan.encode(expanded: source.expanded),
+        source.plan.encode(expanded: source.expanded));
+    // A selected NPC must not hide its original introduction opportunity
+    // in the unmodified preview, nor create a synthetic speaker.
+    final beforeNpc = MultiActTrialPlanComposer.compose(
+      index: source.index, book: source.book,
+      bookMap: source.bookMap, draft: source.draft,
+      reviewedInteractiveEventIds: source.extraEventIds,
+      reviewedNpcEncounter: true, includeNpc: false,
+      fictionalTrialAcknowledged: true,
+      expanded: source.expanded,
+    );
+    expect(beforeNpc.npcArc, isNull);
+    expect(beforeNpc.plan.encode(expanded: source.expanded),
+        preview.plan.encode(expanded: source.expanded));
+    expect(() => MultiActTrialPlanComposer.compose(
+      index: source.index, book: source.book,
+      bookMap: source.bookMap, draft: source.draft,
+      reviewedInteractiveEventIds: source.extraEventIds,
+      reviewedNpcEncounter: true, includeNpc: true,
+      fictionalTrialAcknowledged: true,
+    ), throwsFormatException);
+  });
+
   test('two acts compile and complete with no AI, no items or NPCs', () async {
     final source = _reviewedPlan();
     await expectLater(flow.compileBase(

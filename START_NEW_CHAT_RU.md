@@ -1,3 +1,16 @@
+## 2026-11-09 — единый многоактовый компоновщик сюжета
+
+`MultiActTrialPlanComposer` вынесен в `story_authoring`.
+Его вызывает и `MultiActTrialCompiler`, и независимый
+`RpgMultiActTrialApi.composePreviewPlan`; Flutter перестал
+собирать игровой план локально. Добавлен headless-тест
+паритета двухактового плана и безопасного `includeNpc:false`.
+Проверка границ CI теперь запрещает возврат сборки
+`BookwideSourceEncounters.attach` в Flutter.
+Новые изменения в Draft PR #133 требуют приёмки CI
+на точном текущем HEAD, прежде чем их считать завершёнными.
+Основное приложение и внешний генератор E6g не смешивать.
+
 ## 2026-11-09 — MultiActTrialPage подключён к публичному API
 
 После успешного основного CI #1070 (`e3daf03d`) добавлен
