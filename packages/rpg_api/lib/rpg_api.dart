@@ -63,7 +63,7 @@ abstract final class RpgApiContract {
   static const arbitraryBookCanon = false;
   /// Source-literal, fully reproduced book v5 (not interpretive literary QA).
   static const literalBookCanon = true;
-  static const dynamicAiGameMaster = false;
+  static const dynamicAiGameMaster = true;
 }
 
 /// Synchronous game port. The client provides a private, already-open store.
@@ -92,9 +92,23 @@ abstract interface class RpgGameApi {
   String importSave(String text, {required String expectedWorldHash});
 }
 
+/// Optional safe, real dynamic action API shared by CLI/Flutter/HTTP.
+abstract interface class RpgDynamicGameApi {
+  FreeformActionPreview previewFreeform(
+      String campaignId, FreeformActionDraft draft, {
+      required int expectedRevision});
+  WorldChoiceResult commitFreeform(String campaignId, {
+    required String actionId,
+    required FreeformActionDraft draft,
+    required int expectedRevision,
+    required String approvalDigest,
+    required bool userConfirmed,
+  });
+}
+
 /// The ONLY local game implementation delegates to the already-tested engine.
 /// Never duplicate choice, knowledge, NPC, inventory or replay semantics.
-final class LocalRpgGameApi implements RpgGameApi {
+final class LocalRpgGameApi implements RpgGameApi, RpgDynamicGameApi {
   LocalRpgGameApi(BookworldCampaignStore store)
       : _engine = RpgGameplayEngine(store);
 
@@ -125,6 +139,25 @@ final class LocalRpgGameApi implements RpgGameApi {
   }) => _engine.choose(campaignId,
       actionId: actionId, choiceId: choiceId,
       expectedRevision: expectedRevision);
+
+  @override
+  FreeformActionPreview previewFreeform(
+      String campaignId, FreeformActionDraft draft, {
+      required int expectedRevision}) =>
+      _engine.previewFreeform(campaignId, draft,
+          expectedRevision: expectedRevision);
+
+  @override
+  WorldChoiceResult commitFreeform(String campaignId, {
+    required String actionId,
+    required FreeformActionDraft draft,
+    required int expectedRevision,
+    required String approvalDigest,
+    required bool userConfirmed,
+  }) => _engine.commitFreeform(campaignId,
+      actionId: actionId, draft: draft,
+      expectedRevision: expectedRevision,
+      approvalDigest: approvalDigest, userConfirmed: userConfirmed);
 
   @override
   String exportSave(String campaignId) => _engine.exportSave(campaignId);

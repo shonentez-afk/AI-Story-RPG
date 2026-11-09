@@ -91,14 +91,13 @@ final class FreeformActionDraft {
     for (final e in effects) {
       switch (e.op) {
         case 'set_flag':
-          if (!bp.initial.flags.containsKey(e.id)) {
-            throw const FormatException('Unknown AI flag');
+          // New GM-only flags are persistent player-created fiction, not
+          // source-defined book state. No canonical flag can be overwritten.
+          if (!e.id!.startsWith('gm_')) {
+            throw const FormatException('Cannot change canonical flags');
           }
         case 'stat_delta':
-          if (!bp.initial.stats.containsKey(e.id)) {
-            throw const FormatException('Unknown AI stat');
-          }
-          final next = current.stats[e.id]! + e.amount!;
+          final next = (current.stats[e.id] ?? 0) + e.amount!;
           if (next < 0 || next > 1000000) {
             throw const FormatException('AI stat exceeds approved limits');
           }
@@ -107,16 +106,15 @@ final class FreeformActionDraft {
             throw const FormatException('AI time overflow');
           }
         case 'grant_item':
-          if (!bp.items.contains(e.id) || current.inventory.contains(e.id)) {
-            throw const FormatException('AI cannot invent/duplicate item');
+          if (current.inventory.contains(e.id)) {
+            throw const FormatException('AI cannot duplicate an owned item');
           }
         case 'consume_item':
-          if (!bp.items.contains(e.id) ||
-              !current.inventory.contains(e.id)) {
+          if (!current.inventory.contains(e.id)) {
             throw const FormatException('AI cannot spend an absent item');
           }
         case 'learn_fact':
-          if (e.actor != 'player' || !bp.facts.contains(e.id)) {
+          if (e.actor != 'player') {
             throw const FormatException('AI cannot reveal book/NPC secrets');
           }
         default:

@@ -505,7 +505,7 @@ class StoryWorld {
         case 'set_flag':
           flags[effect.id!] = effect.value!;
         case 'stat_delta':
-          stats[effect.id!] = stats[effect.id!]! + effect.amount!;
+          stats[effect.id!] = (stats[effect.id!] ?? 0) + effect.amount!;
         case 'advance_time':
           time += effect.amount!;
         case 'grant_item':
@@ -519,6 +519,13 @@ class StoryWorld {
         default:
           throw StateError('Unexpected verified GM effect');
       }
+    }
+    // Bound only local fictional state. Canon book scene order is untouched,
+    // but an AI cannot exhaust memory by inventing unlimited durable IDs.
+    if (stats.length > 16 || flags.length > 64 ||
+        inventory.length > 96 ||
+        (knowledge['player']?.length ?? 0) > 128) {
+      return _denied('too_many_private_gm_resources');
     }
     if (time > 100000000) return _denied('time_out_of_range');
     final next = WorldState(

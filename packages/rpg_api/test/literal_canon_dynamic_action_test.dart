@@ -141,10 +141,41 @@ void main() {
         expectedRevision: 0,
         approvalDigest: checked.approvalDigest,
         userConfirmed: true), throwsFormatException);
+      // A SECOND novel action can introduce genuinely new private resource
+      // identities, absent from the compiled book's item/fact catalog.
+      final invented = FreeformActionDraft.fromJson(newAction(
+        text: 'Я нашёл новый камень и запомнил дорожную примету.',
+        narration: 'Я получил камень и отметил вымышленный ориентир.',
+        effects: [
+          {'op': 'grant_item', 'id': 'gm_new_stone'},
+          {'op': 'learn_fact', 'id': 'gm_new_hint', 'actor': 'player'},
+          {'op': 'stat_delta', 'id': 'gm_new_courage', 'amount': 5},
+          {'op': 'set_flag', 'id': 'gm_new_visited', 'value': true},
+        ],
+      ));
+      final secondPreview = game.previewFreeform(id, invented,
+          expectedRevision: 1);
+      final second = game.commitFreeform(id,
+          actionId: 'free_3', draft: invented,
+          expectedRevision: 1,
+          approvalDigest: secondPreview.approvalDigest,
+          userConfirmed: true);
+      expect(second.applied, true);
+      expect(second.view.inventory, contains('gm_new_stone'));
+      expect(second.view.knownFacts, contains('gm_new_hint'));
+      expect(second.view.gmStats['gm_new_courage'], 5);
+      expect(second.view.gmFlags['gm_new_visited'], true);
+      expect(second.view.gmItems, contains('gm_new_stone'));
+      expect(second.view.gmFacts, contains('gm_new_hint'));
+      final invalidConsume = FreeformActionDraft.fromJson(newAction(
+          text: 'Отдать отсутствующий предмет',
+          effects: [{'op': 'consume_item', 'id': 'gm_never_owned'}]));
+      expect(() => game.previewFreeform(id, invalidConsume,
+          expectedRevision: 2), throwsFormatException);
       // The original authored story remains a separate, unchanged choice.
       final regular = game.choose(id,
           actionId: 'book_2', choiceId: 'canon_next_00000',
-          expectedRevision: 1);
+          expectedRevision: 2);
       expect(regular.applied, true);
       final save = game.exportSave(id);
       restoredStore = BookworldCampaignStore.openPrivateDirectory(other.path);
@@ -154,6 +185,9 @@ void main() {
           expectedWorldHash: world.archiveHash);
       expect(replica.load(revived).stateHash, regular.view.stateHash);
       expect(replica.load(revived).inventory, contains('gm_keepsake'));
+      expect(replica.load(revived).inventory, contains('gm_new_stone'));
+      expect(replica.load(revived).knownFacts, contains('gm_new_hint'));
+      expect(replica.load(revived).gmStats['gm_new_courage'], 5);
       expect(replica.load(revived).journal.first.choiceLabel,
           contains('Свободное действие'));
       expect(replica.load(revived).sourceLiteralCanon, true);

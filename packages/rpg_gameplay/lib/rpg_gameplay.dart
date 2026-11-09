@@ -662,10 +662,17 @@ class RpgGameplayEngine {
         for (final entry in state.flags.entries)
           if (entry.key.startsWith('gm_')) entry.key: entry.value,
       }),
-      gmItems: List.unmodifiable((blueprint.items
-          .where((id) => id.startsWith('gm_')).toList()..sort())),
-      gmFacts: List.unmodifiable((blueprint.facts
-          .where((id) => id.startsWith('gm_')).toList()..sort())),
+      // The palette includes already-created private IDs as well as initially
+      // approved slots. It never reveals hidden book/NPC facts.
+      gmItems: List.unmodifiable(({
+        ...blueprint.items.where((id) => id.startsWith('gm_')),
+        ...state.inventory.where((id) => id.startsWith('gm_')),
+      }.toList()..sort())),
+      gmFacts: List.unmodifiable(({
+        ...blueprint.facts.where((id) => id.startsWith('gm_')),
+        ...(state.knowledge['player'] ?? const <String>{})
+            .where((id) => id.startsWith('gm_')),
+      }.toList()..sort())),
       sceneSource: currentOrigin == null ? null : WorldSceneSourceView(
         chapterIndex: currentOrigin.chapterIndex,
         chapterCount: sourceChapterCount,
