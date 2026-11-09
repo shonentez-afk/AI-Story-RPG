@@ -386,6 +386,73 @@ void main() {
     }
   });
 
+  testWidgets('original scene text is accepted only through provided RPG API port', (tester) async {
+    final manifest = (await tester.runAsync(() => f.manifest()))!;
+    final store = CampaignProseStore(repository: MemorySourceAnalysisCheckpointRepository());
+    Uint8List? chosen;
+    var calls = 0;
+    await tester.binding.setSurfaceSize(const Size(360, 780));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(MaterialApp(home: Builder(builder: (ctx) =>
+      Scaffold(body: ElevatedButton(onPressed: () {
+        Navigator.of(ctx).push<Uint8List>(MaterialPageRoute(builder: (_) =>
+          CampaignProsePage(manifest: manifest, store: store,
+            acceptExisting: () async {
+              calls++;
+              return manifest.originalArchive;
+            }))).then((result) { chosen = result; });
+      }, child: const Text('Open RPG authoring'))))));
+    await tester.tap(find.text('Open RPG authoring'));
+    await tester.pumpAndSettle();
+    expect(calls, 0);
+    final keep = find.byKey(const Key('campaign-prose-keep-original'));
+    await tester.ensureVisible(keep);
+    await tester.tap(keep);
+    await tester.pumpAndSettle();
+    expect(calls, 1);
+    expect(chosen, orderedEquals(manifest.originalArchive));
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('reviewed scene text sends exact consent and digest to RPG API port', (tester) async {
+    final manifest = (await tester.runAsync(() => f.manifest()))!;
+    final store = CampaignProseStore(repository: MemorySourceAnalysisCheckpointRepository());
+    await _manual(manifest, store);
+    var calls = 0;
+    String? authorDigest;
+    await tester.binding.setSurfaceSize(const Size(360, 780));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(MaterialApp(home: CampaignProsePage(
+      manifest: manifest, store: store,
+      applyReviewed: (session, checkpointStore, digest, reviewed, fiction) async {
+        calls++;
+        expect(identical(checkpointStore, store), true);
+        expect(session.entries.length, manifest.sceneIds.length);
+        expect(reviewed, true);
+        expect(fiction, true);
+        authorDigest = digest;
+        return manifest.originalArchive;
+      },
+    )));
+    await tester.pumpAndSettle();
+    for (final key in ['campaign-prose-full-review', 'campaign-prose-fiction']) {
+      final choice = find.byKey(Key(key));
+      await tester.scrollUntilVisible(choice, 160,
+          maxScrolls: 65, scrollable: find.byType(Scrollable).first);
+      await tester.ensureVisible(choice);
+      await tester.pump();
+      await tester.tap(choice);
+      await tester.pumpAndSettle();
+    }
+    final accept = find.byKey(const Key('campaign-prose-accept'));
+    await tester.ensureVisible(accept);
+    await tester.tap(accept);
+    await tester.pumpAndSettle();
+    expect(calls, 1);
+    expect(authorDigest, hasLength(64));
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('phone opens complete local narration with unapproved controls and no request', (tester) async {
     final m = (await tester.runAsync(() => f.manifest()))!;
     final store = CampaignProseStore(repository: MemorySourceAnalysisCheckpointRepository());
