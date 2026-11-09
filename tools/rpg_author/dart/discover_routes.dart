@@ -114,8 +114,14 @@ Future<void> main() async {
         ..sort((a, b) => a.id.compareTo(b.id));
       for (final choice in enabled) {
         if (queue.length >= maxNodes) break;
-        final forked = api.start(installed.archiveHash,
-            parentCampaignId: campaign);
+        // A deterministic one-choice corridor needs no clone: this BFS
+        // node has exactly one successor and will never be reused. Mutating
+        // its own native campaign is safe and avoids O(n^2) SQLite history
+        // copying along 200+ chapter novels. Fork ONLY genuine branches.
+        final forked = enabled.length == 1
+            ? campaign
+            : api.start(installed.archiveHash,
+                parentCampaignId: campaign);
         final outcome = api.choose(forked,
             actionId: 'discover_' + state.revision.toString(),
             choiceId: choice.id, expectedRevision: state.revision);
