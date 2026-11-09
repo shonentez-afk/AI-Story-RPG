@@ -19,6 +19,7 @@ final class RpgWorldIntakePreview {
     this.generatorReportAttached = false,
     this.producerClaimsTwoReplayedRoutes = false,
     this.sourceLiteralCanonVerified = false,
+    this.sourceCausalReviewVerified = false,
   });
 
   final String title, bookworldId, archiveHash;
@@ -26,6 +27,9 @@ final class RpgWorldIntakePreview {
   final String? sourceFingerprint;
   final bool isPrivate;
   final bool sourceLiteralCanonVerified;
+  /// True only when the exact v5 source-backed full event graph has
+  /// passed the native importer; never derived from a producer label.
+  final bool sourceCausalReviewVerified;
   /// Canonical BookWorld provenance, not an external JSON assertion.
   final int sourceChaptersTotal, sourceChaptersIndexed;
   final int sourceChaptersWithGameplay;
@@ -51,6 +55,7 @@ final class RpgWorldIntakePreview {
     sourceChaptersWithGameplay: sourceChaptersWithGameplay,
     generatorReportAttached: true, producerClaimsTwoReplayedRoutes: true,
     sourceLiteralCanonVerified: sourceLiteralCanonVerified,
+    sourceCausalReviewVerified: sourceCausalReviewVerified,
   );
 }
 
@@ -83,6 +88,8 @@ final class LocalRpgWorldIntakeApi implements RpgWorldIntakeApi {
         npcActorCount: bp.actors.where((a) => a != 'player').length,
         itemCount: bp.items.length, isPrivate: true,
         sourceLiteralCanonVerified: world.sourceLiteralCanonVerified,
+        sourceCausalReviewVerified:
+            world.npcSocialRulebook?.bookCausality != null,
         sourceChaptersTotal: world.sourceChaptersTotal,
         sourceChaptersIndexed: world.sourceChaptersIndexed,
         sourceChaptersWithGameplay: world.sceneOrigins.values

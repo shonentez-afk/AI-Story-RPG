@@ -1,4 +1,6 @@
 import 'dart:isolate';
+import 'dart:typed_data';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:rpg_api/rpg_api.dart' show
     RpgCreationApi, LocalRpgCreationApi, RpgCreationIntent,
@@ -15,6 +17,9 @@ import 'book_source_index.dart';
 import 'quick_rpg_page.dart';
 import 'world_library_gateway.dart';
 import 'world_play_page.dart';
+import 'world_campaigns_page.dart';
+import 'world_import_review_flow.dart';
+import 'world_import_review_worker.dart';
 import 'zai_auto_whole_book_analysis.dart';
 import 'zai_whole_book_analysis_page.dart';
 
@@ -265,6 +270,65 @@ class _BookRpgStartPageState extends State<BookRpgStartPage> {
     }
   }
 
+  /// The external ChatGPT Skill prepares source-reviewed causal v5 offline.
+  /// Flutter only verifies the native package, exact selected edition and
+  /// explicit user consent; it never pretends to execute that Skill itself.
+  Future<void> _importReviewedCausal() async {
+    if (_opening) return;
+    setState(() { _opening = true; _error = null; });
+    try {
+      final files = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['bworld'], withData: true,
+        allowMultiple: false,
+      );
+      if (files == null) return;
+      if (files.files.length != 1 ||
+          files.files.single.size > 12 * 1024 * 1024 ||
+          !files.files.single.name.toLowerCase().endsWith('.bworld')) {
+        throw const FormatException(
+            'Нужен один проверенный .bworld не больше 12 МБ.');
+      }
+      final bytes = files.files.single.bytes;
+      if (bytes == null) {
+        throw const FormatException('Не удалось прочитать игровой архив.');
+      }
+      final immutable = Uint8List.fromList(bytes);
+      final preflight = await reviewImportedWorldInWorker(immutable, null);
+      if (preflight.formatVersion != 5 ||
+          !preflight.sourceLiteralCanonVerified ||
+          !preflight.sourceCausalReviewVerified || !preflight.isPrivate) {
+        throw const FormatException('Это не проверенный полный '
+            'причинный CANON v5. Подготовьте пакет через E6q.1.');
+      }
+      final index = await (widget.indexer ?? indexImportedBookInWorker)(
+          _activeBook);
+      if (preflight.sourceFingerprint != index.sourceFingerprint) {
+        throw const FormatException('Игровой мир создан для другой '
+            'редакции или главы. Выберите точную исходную книгу.');
+      }
+      if (!mounted) return;
+      final installed = await WorldImportReviewFlow.confirmAndInstall(
+        context: context, archive: immutable, gateway: widget.gateway);
+      if (!mounted || installed == null) return;
+      await Navigator.of(context).push<void>(MaterialPageRoute(
+        builder: (_) => WorldCampaignsPage(
+          world: installed, gateway: widget.gateway,
+        ),
+      ));
+    } on FormatException catch (error) {
+      if (mounted) setState(() => _error =
+          'Нельзя открыть проверенную RPG: ${error.message}. '
+          'Оригинальная книга и прежние кампании не изменены.');
+    } catch (error) {
+      if (mounted) setState(() => _error =
+          'Импорт подготовленной RPG не выполнен: $error. '
+          'Сохранённые книги и игры не изменены.');
+    } finally {
+      if (mounted) setState(() => _opening = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) => Scaffold(
     appBar: AppBar(title: const Text('Создать RPG по книге')),
@@ -411,6 +475,38 @@ class _BookRpgStartPageState extends State<BookRpgStartPage> {
                       onPressed: _opening ? null : _openLiteralCanon,
                       icon: const Icon(Icons.menu_book_outlined),
                       label: const Text('Создать CANON из всей книги'),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 6),
+            Card(
+              key: const Key('rpg-start-reviewed-causal-card'),
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text('Полная сюжетная RPG по проверенной книге',
+                        style: Theme.of(context).textTheme.titleMedium),
+                    const SizedBox(height: 6),
+                    const Text('Источник проверен, причины событий и '
+                        'последствия NPC подготовлены внешним '
+                        'ChatGPT Skill E6q.1. Автономный движок может '
+                        'переводить CANON в ALTER_FATE.'),
+                    const SizedBox(height: 6),
+                    const Text('Сначала подготовьте личный .bworld '
+                        'в ChatGPT. На телефоне и Windows можно '
+                        'импортировать готовый мир без API и без сети. '
+                        'Редакция книги и причинная модель будут '
+                        'повторно проверены перед добавлением.'),
+                    const SizedBox(height: 8),
+                    OutlinedButton.icon(
+                      key: const Key('rpg-start-import-reviewed-causal'),
+                      onPressed: _opening ? null : _importReviewedCausal,
+                      icon: const Icon(Icons.file_open_outlined),
+                      label: const Text('Открыть подготовленную RPG (.bworld)'),
                     ),
                   ],
                 ),

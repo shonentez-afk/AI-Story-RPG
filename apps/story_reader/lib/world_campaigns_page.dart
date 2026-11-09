@@ -250,8 +250,11 @@ class _WorldCampaignsPageState extends State<WorldCampaignsPage> {
                 style: typography.titleMedium),
             const SizedBox(height: 6),
             const Text(
-              'Классическая офлайн-RPG, а не чтение книги. '
-              'Прохождения сохраняются независимо.',
+              'Проверенный нативным движком игровой мир. '
+              'Он может содержать классическую историю, буквальный '
+              'CANON или подготовленный причинный CANON/ALTER_FATE. '
+              'Точный режим и последствия показаны внутри прохождения. '
+              'Без подтверждения хода игра не меняется.',
             ),
             const SizedBox(height: 16),
             FilledButton.icon(

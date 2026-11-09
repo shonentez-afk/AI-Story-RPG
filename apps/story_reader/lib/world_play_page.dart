@@ -13,6 +13,7 @@ import 'scene_dialogue_stage.dart';
 import 'reading_preferences.dart';
 import 'reading_settings_sheet.dart';
 import 'world_library_gateway.dart';
+import 'world_ui_presenter.dart';
 
 /// Real RPG screen for a verified BookWorld; never mutates local game state
 /// before the SQLite transaction has committed on a worker isolate.
@@ -483,6 +484,38 @@ class _WorldPlayPageState extends State<WorldPlayPage> {
                                     ),
                                 ]),
                                 const SizedBox(height: 18),
+                                if (view.sourceLiteralCanon &&
+                                    view.activePlotMode == 'ALTER_FATE') ...[
+                                  Card(
+                                    key: const ValueKey('world-alternate-continuity'),
+                                    child: Padding(
+                                      padding: const EdgeInsets.all(12),
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Text('Альтернативная история',
+                                              style: Theme.of(context)
+                                                  .textTheme.titleMedium),
+                                          const SizedBox(height: 4),
+                                          for (final line in
+                                              WorldUiPresenter.alternatePlot(view))
+                                            Padding(
+                                              padding: const EdgeInsets.only(
+                                                  bottom: 3),
+                                              child: Text(line),
+                                            ),
+                                          TextButton(
+                                            onPressed: () =>
+                                                _openPanel(GamePanel.journal),
+                                            child: const Text('Открыть журнал'),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 10),
+                                ],
                                 if (dialogue == null)
                                   Text(view.sceneText, style: readerText)
                                 else
@@ -704,6 +737,9 @@ class _WorldInfoSheet extends StatelessWidget {
     'witnessed' => 'Наблюдал',
     'promiseReceived' => 'Принял обещание',
     'promiseBroken' => 'Нарушенное обещание',
+    'promiseFulfilled' => 'Исполненное обещание',
+    'autonomousDecision' => 'Самостоятельное решение',
+    'warned' => 'Получил предупреждение',
     'helped' => 'Получил помощь',
     'betrayed' => 'Пережил предательство',
     'rumorHeard' => 'Услышал сведения',
@@ -748,6 +784,8 @@ class _WorldInfoSheet extends StatelessWidget {
               view.knownFacts
                   .map((id) => view.factNames[id] ?? id).join(', '),
         if (view.knownFacts.isEmpty) 'Открыто сведений: 0',
+        if (view.journal.isNotEmpty) 'Последние изменения героя и мира:',
+        ...WorldUiPresenter.heroRecentChanges(view),
         if (view.npcRelations.isNotEmpty)
           'Только встреченные персонажи:',
         for (final npc in view.npcRelations)
@@ -773,10 +811,18 @@ class _WorldInfoSheet extends StatelessWidget {
         for (final entry in visibleNpcItems)
           (view.itemNames[entry.key] ?? entry.key) + ' — у ' +
               encounteredNames[entry.value]!,
+        if (WorldUiPresenter.availableItemActions(view).isNotEmpty)
+          'Сейчас доступны действия с имеющимися предметами:',
+        ...WorldUiPresenter.availableItemActions(view),
         'Предметы и владельцы — только из подтверждённых ходов. '
-            'Применение предмета возможно через доступное решение сцены.',
+            'Передача или применение выполняются через разрешённый '
+            'выбор либо проверенное свободное действие.',
       ],
       GamePanel.journal => [
+        if (view.activePlotMode == 'ALTER_FATE') ...[
+          'Альтернативная ветка (вымысел, не текст книги):',
+          ...WorldUiPresenter.alternatePlot(view),
+        ],
         if (view.journal.isEmpty) 'Решений пока нет',
         for (final entry in view.journal)
           entry.sequence.toString() + '. ' +
@@ -846,6 +892,19 @@ class _WorldInfoSheet extends StatelessWidget {
                                           'dead' => 'погиб',
                                           _ => 'неизвестно',
                                         }),
+                                  if (npc.currentGoal != null)
+                                    Text('Текущая цель: ' +
+                                        WorldUiPresenter.record(npc.currentGoal!)),
+                                  if (npc.openPromiseIds.isNotEmpty) ...[
+                                    const Text('Открытые обещания:'),
+                                    for (final id in npc.openPromiseIds)
+                                      Text('• ' + WorldUiPresenter.record(id)),
+                                  ],
+                                  if (npc.autonomousDecisionIds.isNotEmpty) ...[
+                                    const Text('Самостоятельные решения:'),
+                                    for (final id in npc.autonomousDecisionIds)
+                                      Text('• ' + WorldUiPresenter.record(id)),
+                                  ],
                                   for (final kind in npc.memoryKinds.entries)
                                     Text(_memoryKindName(kind.key) + ': ' +
                                         kind.value.toString()),

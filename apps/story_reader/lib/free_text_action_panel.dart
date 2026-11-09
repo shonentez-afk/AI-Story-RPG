@@ -5,6 +5,7 @@ import 'free_text_world_gateway_port.dart';
 import 'ai_connection.dart';
 import 'zai_gameplay_choice_advisor.dart';
 import 'world_library_gateway.dart';
+import 'world_ui_presenter.dart';
 import 'package:story_core/story_core.dart' show FreeformActionDraft;
 
 /// Optional, collapsed in WorldPlayPage. No automatic action execution.
@@ -32,6 +33,7 @@ class _FreeTextActionPanelState extends State<FreeTextActionPanel> {
   FreeTextProposal? _selected;
   FreeformActionDraft? _dynamicDraft;
   FreeformActionPreview? _dynamicPreview;
+  WorldGameView? _draftSource;
   String? _error;
   String? _notice;
   bool _busy = false;
@@ -60,6 +62,7 @@ class _FreeTextActionPanelState extends State<FreeTextActionPanel> {
     _selected = null;
     _dynamicDraft = null;
     _dynamicPreview = null;
+    _draftSource = null;
     _error = null;
     _notice = null;
   }
@@ -293,6 +296,7 @@ class _FreeTextActionPanelState extends State<FreeTextActionPanel> {
       setState(() {
         _dynamicDraft = draft;
         _dynamicPreview = preview;
+        _draftSource = before;
         _notice = 'Новое игровое событие ещё НЕ записано. '
             'Проверьте последствия ниже и подтвердите.';
         _error = null;
@@ -487,10 +491,24 @@ class _FreeTextActionPanelState extends State<FreeTextActionPanel> {
             Text(_dynamicDraft!.narration,
                 key: const Key('free-text-dynamic-narration')),
             const SizedBox(height: 6),
-            Text('Изменения игровых ресурсов: ' +
-                (_dynamicDraft!.effects.isEmpty ? 'Только новое событие'
-                : _dynamicDraft!.effects.map((e) =>
-                    e.op + ': ' + (e.id ?? 'время')).join(', '))),
+            const Text('Движок проверил предложение, но это ещё '
+                'не сохранённое событие. Последствия и режим после '
+                'записи будут показаны из нового состояния игры.'),
+            const SizedBox(height: 6),
+            if (_draftSource != null)
+              Column(
+                key: const Key('free-text-dynamic-impact'),
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  for (final line in WorldUiPresenter.dynamicImpact(
+                    _dynamicDraft!, _draftSource!,
+                  ))
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 4),
+                      child: Text(line),
+                    ),
+                ],
+              ),
             FilledButton.icon(
               key: const Key('free-text-dynamic-confirm'),
               onPressed: _busy ? null : _commitDynamic,
