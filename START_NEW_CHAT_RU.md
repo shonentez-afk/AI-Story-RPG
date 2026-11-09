@@ -1,3 +1,19 @@
+# АКТУАЛЬНАЯ ПЕРЕДАЧА — 9 ноября 2026: автономный RPG-движок для любых клиентов
+
+> **Приоритет над всеми историческими записями ниже.** Новый обязательный план: [RPG_ENGINE_FULL_AUTONOMY_MULTICLIENT_PLAN_RU_2026-11-09.md](docs/RPG_ENGINE_FULL_AUTONOMY_MULTICLIENT_PLAN_RU_2026-11-09.md). Старые названия генератора E6d/E6g и промежуточные статусы CI ниже являются архивом, не текущим состоянием.
+
+**Требование пользователя:** полностью самостоятельный RPG-движок с одним источником правил, подключаемый к Flutter, CLI и любым будущим клиентам. Все сцены, герой, NPC, знания, память, отношения, предметы, владельцы, реплики, проверка действий, журнал, причинность, сохранения и сценарное авторство принадлежат движковым пакетам и публичному `rpg_api`. Flutter отвечает за UI, платформенный ввод/вывод, ключи, сеть и пользовательские согласия — не за механики. Нужен реальный версионированный контракт и официальный adapter для других языков/HTTP, без копирования ядра. Сейчас есть **локальный Dart API 0.1.0, НЕ HTTP/Web-сервер**.
+
+**Native PR #133:** Draft, последний проверенный code HEAD `8ba62b197d2b61f3f17a83f4da95ba80072a002a`. [CI #1082](https://github.com/shonentez-afk/AI-Story-RPG/actions/runs/42550384516) **FAIL**: Python, Dart и M1.7/SQLite PASS; Flutter виджет-тесты FAIL (четыре проверки всё ещё ожидают «Добавить книгу», тогда как UI содержит «Добавить книгу или RPG»), Windows/Android SKIPPED. [M0 #1167](https://github.com/shonentez-afk/AI-Story-RPG/actions/runs/42550384628) PASS. Документальные commits с `[skip ci]` не заменяют exact-code CI.
+
+**Генератор уже E6k+ / версия 0.3.0a12 — НЕ E6g.** Имя отдельной GitHub-ветки `feature/external-rpg-author-e6g-pr133-compat-20261108` — историческое. Последний проверенный функциональный SHA `44521f48250b804ce95eb4d79085c51e819b46f5`; документационный SHA `6c0eb8cacf1459a4ef8d3137b417f609cb25b9ad`. [External author CI #409](https://github.com/shonentez-afk/AI-Story-RPG/actions/runs/42551908380) PASS (Python+Dart на синтетической книге). Актуальная архитектура: **ChatGPT Skill — литературный автор**, Python — локальная приватная очередь/валидатор, Dart native — проверяющий компилятор и единственный RPG runtime. **Не возвращать обязательный GLM/Z.ai API для генератора.** Установленный Skill ещё может быть старым E6d. На native PR external-author test FAIL (`contract_drift` плюс разрешение пакета `story_authoring` в старом Dart parity). Не отключать проверку pin.
+
+**Готово в native:** семь независимых Dart-пакетов и один `rpg_api`, Flutter + CLI, replay SQLite/.bwsave, NPC/предметы/журнал, verified BookWorld v3/v4, native тест 203 сцен, безопасное происхождение текущей сцены, intake и causal audit `playable/blocked/inconclusive`. **Не готово:** официальный cross-language / HTTP / web adapter, полный стабильный клиентский DTO/capabilities/storage lifecycle, настоящий CANON, полноценный BOOK_CHARACTER с исходными знаниями/вещами, динамический AI_FREEFORM, завершённый автоматически проверенный whole-book authoring workflow и две реальные RU FB2 с Windows/Android E2E.
+
+**Работа в следующем чате, единым PR #133, не микро-PR:** (1) восстановить точный полный CI, (2) завершить полный многоклиентный API и настоящий adapter, (3) довести RPG режимы/героя/ИИ до проверяемых переходов, (4) согласовать native и E6k+ через versioned contract, (5) общая книжная, SQLite/backup и устройственная приёмка. **Не затрагивать main и generator-owned tools/rpg_author**, не дублировать игровой движок и не объявлять непроверенное DONE.
+
+---
+
 ## 2026-11-09 — доверенная книга внутри игрового API
 
 Единым функциональным блоком в PR #133:
