@@ -150,8 +150,19 @@ Future<void> main() async {
       }
     }
     if (found.length != 2) {
-      throw const FormatException(
-          'Two distinct reachable native endings were not found in budget');
+      // Source-safe failure metadata is essential for distinguishing a
+      // real unplayable branch from an exhausted bounded exploration.
+      // Only numeric counters and opaque game scene IDs; no book prose,
+      // NPC secrets or portable saves are printed.
+      final sortedChapters = reachedChapters.toList()..sort();
+      final lastChapter = sortedChapters.isEmpty ? -1 : sortedChapters.last;
+      final verifiedEndings = endings.toList()..sort();
+      throw FormatException(
+          'Two distinct reachable native endings were not found in budget'
+          ' explored=$cursor/$maxNodes frontier=${frontier.length}'
+          ' terminals=$verifiedEndings'
+          ' reachable_chapters=${reachedChapters.length}/$totalChapters'
+          ' last_reached_chapter=$lastChapter');
     }
     if (strictCoverage && reachedChapters.length != totalChapters) {
       final missing = [
