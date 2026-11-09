@@ -1,3 +1,14 @@
+# ТЕКУЩИЙ СТАТУС — 2026-11-09: мультиклиентный RPG-движок (приоритет)
+
+**План:** [RPG_ENGINE_FULL_AUTONOMY_MULTICLIENT_PLAN_RU_2026-11-09.md](RPG_ENGINE_FULL_AUTONOMY_MULTICLIENT_PLAN_RU_2026-11-09.md). **Передача:** [START_NEW_CHAT_RU.md](../START_NEW_CHAT_RU.md). Записи ниже исторические, старые E6g/E6d-ярлыки неактуальны.
+
+- Native Draft PR #133 на code SHA `8ba62b197d2b61f3f17a83f4da95ba80072a002a`, семь Flutter-independent Dart пакетов, локальный Dart API 0.1.0, Flutter + CLI; **нет** готового HTTP/gRPC/Web client gateway.
+- CI #1082 **FAIL**: четыре Flutter теста ожидают «Добавить книгу» вместо «Добавить книгу или RPG»; Python/Dart/M1.7 PASS; Windows/Android SKIPPED. M0 #1167 PASS. Не объявлять общий CI зелёным.
+- Генератор **E6k+ 0.3.0a12**, functional `44521f48250b804ce95eb4d79085c51e819b46f5`, docs `6c0eb8cacf1459a4ef8d3137b417f609cb25b9ad`. Историческое имя ветки всё ещё содержит E6g. Автор: ChatGPT Skill, приватные задания, Python/Dart native validator без обязательного Z.ai. External CI #409 PASS, синтетический, а native PR external parity FAIL (`contract_drift` и `story_authoring` dependency resolution).
+- Открыто: multi-client versioned API + transport adapter, CANON/BOOK_CHARACTER/AI_FREEFORM, полная книга/роли/NPC/causal, совместная native↔generator parity, 2 реальные русские FB2 и Win/Android E2E. Не дробить PR #133, main и generator-owned код не трогать.
+
+---
+
 ## 2026-11-09 — доверенная книга внутри игрового API
 
 Единым функциональным блоком в PR #133:
