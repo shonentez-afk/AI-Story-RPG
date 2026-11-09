@@ -168,6 +168,18 @@ class _WorldImportReviewDialogState extends State<_WorldImportReviewDialog> {
               ? 'Частная игровая адаптация; публикация не разрешена.'
               : 'Демонстрационный мир, а не частная адаптация.'),
           const SizedBox(height: 8),
+          if (_preview.sourceCausalReviewVerified) ...[
+            const SizedBox(height: 8),
+            const Text('Подтверждён исходный причинный граф v5: '
+                'условия событий и NPC проверены штатным движком. '
+                'Литературные мотивы требуют отдельной оценки.',
+                key: Key('world-intake-verified-causality')),
+          ] else if (_preview.sourceLiteralCanonVerified) ...[
+            const SizedBox(height: 8),
+            const Text('Буквальный CANON подтверждён, но полный '
+                'причинный обзор книги не приложен.',
+                key: Key('world-intake-literal-only')),
+          ],
           const Text('Точный ZIP и игровые правила проверяются '
               'независимым движком. Литературный канон и качество '
               'автоматически не подтверждаются.'),

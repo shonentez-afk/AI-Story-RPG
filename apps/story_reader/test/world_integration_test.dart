@@ -2,6 +2,12 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
+import 'package:rpg_api/rpg_api.dart' show
+    BookImporter, BookSourceIndexer, LocalRpgLiteralCanonApi,
+    LocalRpgWorldIntakeApi, FreeformActionDraft;
+import 'package:bookworld_format/bookworld_format.dart' show
+    RichPrivateBookworldImporter, ReviewedCanonCausalBookworldWriter;
+import 'package:story_core/story_core.dart' show canonicalJson;
 
 import 'package:ai_story_reader/home_page.dart';
 import 'package:ai_story_reader/campaign_store.dart';
@@ -128,6 +134,116 @@ void main() {
     await settleWorker(tester);
     expect(tester.takeException(), isNull);
   }
+
+
+  testWidgets('native source-causal v5 drives the same Flutter NPC '
+      'and CANON/ALTER_FATE view through real SQLite', (tester) async {
+    const actor = 'npc_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+    final bytes = Uint8List.fromList(utf8.encode(
+      List.generate(900, (i) => 'Анна стоит рядом с мостом. '
+          'Событие в главе номер $i описано очевидцем.')
+          .join('\\n')));
+    final index = BookSourceIndexer.index(
+        BookImporter.parse('source_book.txt', bytes));
+    const api = LocalRpgLiteralCanonApi();
+    final prepared = api.prepareIndex(index);
+    final literal = api.compileIndex(index,
+        approvedDigest: prepared.approvalDigest, userConfirmed: true);
+    final original = const RichPrivateBookworldImporter().inspect(literal);
+    final sceneIds = original.blueprint.scenes.keys.toList();
+    expect(sceneIds.length, greaterThan(1));
+    final first = original.sceneOrigins[sceneIds.first]!;
+    final second = original.sceneOrigins[sceneIds[1]]!;
+    final review = canonicalJson({
+      'format': ReviewedCanonCausalBookworldWriter.graphReviewFormat,
+      'review_scope': 'human_reviewed_private_story_causality',
+      'source_fingerprint': original.sourceFingerprint,
+      'base_archive_sha256': original.archiveSha256,
+      'user_confirmed': true,
+      'semantic_canon_automatically_verified': false,
+      'witnesses': [{
+        'scene_id': sceneIds.first, 'actor_id': actor,
+        'display_name': 'Анна', 'source_quote_sha256': first.sourceQuoteSha256,
+        'mode': 'present',
+      }],
+      'invariants': [{
+        'scene_id': sceneIds[1], 'actor_id': actor,
+        'forbidden_memory_id': 'gm_anna_warning',
+        'minimum_trust': null, 'maximum_trust': null,
+        'source_quote_sha256': second.sourceQuoteSha256,
+      }],
+      'event_graph': [
+        for (var i = 0; i < sceneIds.length; i++) {
+          'scene_id': sceneIds[i],
+          'source_quote_sha256':
+              original.sceneOrigins[sceneIds[i]]!.sourceQuoteSha256,
+          'depends_on': i == 0 ? <String>[] : [sceneIds[i - 1]],
+          'preconditions': <Object>[], 'effects': <Object>[],
+        },
+      ],
+    });
+    final reviewed = api.compileReviewedCausality(
+      verifiedBaseArchive: literal,
+      sourceIndex: Map<String, dynamic>.from(index.toJson()),
+      reviewJson: review,
+      approvedDigest: ReviewedCanonCausalBookworldWriter.digest(review),
+      userConfirmed: true,
+    );
+    const native = LocalRpgWorldIntakeApi();
+    expect(native.inspect(literal).sourceLiteralCanonVerified, true);
+    expect(native.inspect(literal).sourceCausalReviewVerified, false);
+    expect(native.inspect(reviewed).sourceCausalReviewVerified, true);
+    final installed = await gateway.install(reviewed);
+    final id = await gateway.start(installed.archiveHash);
+    final before = await gateway.load(id);
+    expect(before.sourceLiteralCanon, true);
+    expect(before.activePlotMode, 'CANON');
+    expect(before.npcRelations.single.displayName, 'Анна');
+    await tester.pumpWidget(MaterialApp(home: WorldPlayPage(
+      gateway: gateway, campaignId: id,
+    )));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('NPC'));
+    await tester.pumpAndSettle();
+    expect(find.text('Анна'), findsOneWidget);
+    await tester.tap(find.byTooltip('Закрыть'));
+    await tester.pumpAndSettle();
+
+    final action = FreeformActionDraft.fromJson({
+      'format': FreeformActionDraft.format,
+      'scope': FreeformActionDraft.fictionScope,
+      'player_text': 'Предупредить Анну о ловушке',
+      'narration': 'Анна услышала предупреждение и решила сменить цель.',
+      'effects': <Object>[],
+      'npc_interaction': {
+        'actor_id': actor, 'memory_id': 'gm_anna_warning',
+        'kind': 'warned', 'trust_delta': 3,
+        'goal_id': 'gm_find_shelter',
+      },
+    });
+    final preview = await gateway.previewDynamic(id, action,
+        expectedRevision: before.revision);
+    final accepted = await gateway.commitDynamic(id,
+        actionId: 'ui_parity_real_v5_action', draft: action,
+        expectedRevision: before.revision,
+        approvalDigest: preview.approvalDigest,
+        userConfirmed: true);
+    expect(accepted.applied, true);
+    expect(accepted.view.activePlotMode, 'ALTER_FATE');
+    expect(accepted.view.npcRelations.single.currentGoal,
+        'gm_find_shelter');
+    await tester.pumpWidget(MaterialApp(home: WorldPlayPage(
+      key: const Key('world-v5-after-action'),
+      gateway: gateway, campaignId: id,
+    )));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('world-alternate-continuity')),
+        findsOneWidget);
+    await tester.tap(find.text('NPC'));
+    await tester.pumpAndSettle();
+    expect(find.text('Текущая цель: find shelter'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
 
   test('default worker isolate reads and writes exact BookWorld', () async {
     const worker = DeviceWorldLibraryGateway();
