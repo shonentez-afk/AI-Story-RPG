@@ -6,6 +6,12 @@ import 'package:ai_story_rpg_cli/rpg_cli_client.dart';
 const usage = '''
 AI Story RPG — offline API client, JSON responses.
   prepare     --book FILE.fb2|FILE.txt [--chapter N]
+  prepare-literal-canon-v5 --book FILE.fb2|FILE.txt
+  compile-literal-canon-v5 --book FILE --approved-digest SHA256
+                           --user-confirmed true --output PRIVATE.bworld
+  compile-reviewed-causal-v5 --book FILE --base-world LITERAL.bworld
+                             --review PRIVATE.json --approved-digest SHA256
+                             --user-confirmed true --output PRIVATE.bworld
   install     --store PRIVATE_DIR --world FILE.bworld
   worlds      --store PRIVATE_DIR
   campaigns   --store PRIVATE_DIR [--world-hash SHA256]

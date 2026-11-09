@@ -103,4 +103,37 @@ void main() {
       await dir.delete(recursive: true);
     }
   });
+  test('standalone CLI compiles exact-source CANON v5 with explicit consent',
+      () async {
+    final dir = await Directory.systemTemp.createTemp('rpg_cli_literal_v5_');
+    try {
+      final path = dir.path + '/story.txt';
+      final file = File(path);
+      await file.writeAsString('Анна шла через лес. '
+          'Она встретила Бориса у моста. '
+          'Они вернулись к деревне.');
+      final preview = await cli.execute([
+        'prepare-literal-canon-v5', '--book', path]);
+      expect(preview['can_compile_literal_canon'], true);
+      final archivePath = dir.path + '/literal.bworld';
+      final world = await cli.execute([
+        'compile-literal-canon-v5', '--book', path,
+        '--approved-digest', preview['approval_digest'] as String,
+        '--user-confirmed', 'true', '--output', archivePath]);
+      expect(world['status'], 'private_literal_v5_compiled');
+      expect(world['reviewed_npc_count'], 0);
+      expect(File(archivePath).existsSync(), true);
+      expect(world['literary_semantics_automatically_verified'], false);
+      await expectLater(cli.execute([
+        'compile-literal-canon-v5', '--book', path,
+        '--approved-digest', 'f' * 64,
+        '--user-confirmed', 'true',
+        '--output', dir.path + '/invalid.bworld']),
+        throwsFormatException);
+      expect(File(dir.path + '/invalid.bworld').existsSync(), false);
+    } finally {
+      await dir.delete(recursive: true);
+    }
+  });
+
 }

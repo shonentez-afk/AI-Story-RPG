@@ -26,7 +26,8 @@ export 'package:rpg_gameplay/rpg_gameplay.dart' show
     WorldDynamicActionGateway, FreeformActionPreview,
     FreeformActionDraft;
 export 'package:story_authoring/story_authoring.dart' show
-    ImportedBook, BookSourceIndex, SourceLockedBook,
+    ImportedBook, BookSourceIndex, BookImporter, BookSourceIndexer,
+    SourceLockedBook,
     OfflineSourceReview, OfflineScanCheckpoint,
     BookPreparationSnapshot, BookToRpgWorkflow,
     NpcContinuityAudit, DraftSceneGraphOverview,

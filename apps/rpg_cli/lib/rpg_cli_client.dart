@@ -25,6 +25,65 @@ class RpgCliClient {
     if (argv.isEmpty) throw const FormatException('Command is required');
     final command = argv.first;
     final args = _Options(argv.skip(1).toList());
+    if (command == 'prepare-literal-canon-v5' ||
+        command == 'compile-literal-canon-v5' ||
+        command == 'compile-reviewed-causal-v5') {
+      final bookPath = args.take('book');
+      final bytes = _read(bookPath);
+      if (bytes.length > 16 * 1024 * 1024) {
+        throw const FormatException('Private original exceeds 16MiB');
+      }
+      final book = BookImporter.parse(
+          File(bookPath).uri.pathSegments.last, bytes);
+      final sourceIndex = BookSourceIndexer.index(book);
+      const native = LocalRpgLiteralCanonApi();
+      if (command == 'prepare-literal-canon-v5') {
+        args.done();
+        return native.prepareIndex(sourceIndex).toJson();
+      }
+      final digest = args.take('approved-digest');
+      final confirmed = args.take('user-confirmed');
+      if (!RegExp(r'^[0-9a-f]{64}$').hasMatch(digest) ||
+          confirmed != 'true') {
+        throw const FormatException('Exact source digest and owner approval required');
+      }
+      final destination = args.take('output');
+      final archive = command == 'compile-literal-canon-v5'
+          ? native.compileIndex(sourceIndex,
+              approvedDigest: digest, userConfirmed: true)
+          : native.compileReviewedCausality(
+              verifiedBaseArchive: _read(args.take('base-world')),
+              sourceIndex: Map<String, dynamic>.from(sourceIndex.toJson()),
+              reviewJson: utf8.decode(_read(args.take('review'))),
+              approvedDigest: digest, userConfirmed: true);
+      args.done();
+      final verified = const LocalRpgWorldIntakeApi().inspect(archive);
+      if (!verified.isPrivate ||
+          !verified.sourceLiteralCanonVerified ||
+          verified.sourceFingerprint != sourceIndex.sourceFingerprint ||
+          (command == 'compile-reviewed-causal-v5' &&
+           verified.npcActorCount < 1)) {
+        throw const FormatException('Native reviewed source proof failed');
+      }
+      final file = File(destination);
+      file.createSync(exclusive: true);
+      try {
+        file.writeAsBytesSync(archive, flush: true);
+      } catch (_) {
+        if (file.existsSync()) file.deleteSync();
+        rethrow;
+      }
+      return {
+        'status': command == 'compile-reviewed-causal-v5'
+            ? 'private_causal_v5_compiled' : 'private_literal_v5_compiled',
+        'world_hash': verified.archiveHash,
+        'source_fingerprint': verified.sourceFingerprint,
+        'scene_count': verified.sceneCount,
+        'reviewed_npc_count': verified.npcActorCount,
+        'literary_semantics_automatically_verified': false,
+        'output': destination,
+      };
+    }
     if (command == 'prepare') {
       final path = args.take('book');
       final chapter = args.positive('chapter');
