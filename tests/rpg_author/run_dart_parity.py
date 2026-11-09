@@ -769,6 +769,40 @@ def main():
         assert verify_extended_bundle(
             complete_target,
             complete_target.with_suffix(".attribution.json"))["native_dart_verified"]
+
+        # E6o: one continuous 201-chapter synthetic FB2, 26 signed chapter
+        # reviews, 197 additional SOURCE_PASSAGE events over three acts.
+        # The fake provider ONLY writes proposals. The real native Dart
+        # compiler, importer, forked BFS, SQLite and route replay must pass.
+        # No user book enters CI, no second game engine and no model API.
+        from tests.rpg_author import long_book_fixture as long_source
+        long_book = root / long_source.SOURCE_FILENAME
+        long_book.write_text(long_source.SOURCE, encoding="utf-8")
+        long_fake = long_source.FakeLongSourceLockedAuthor()
+        long_result = author_complete_book(
+            book=long_book,
+            project_root=root / "large_201_checkpoint",
+            workdir=root / "large_201_private_skill",
+            output=root / "large_201_native.bworld",
+            provider=long_fake, delegate_review=True)
+        assert long_result["status"] == (
+            "native_multi_act_campaign_mechanically_verified"), long_result
+        assert long_result["native_all_source_chapters_playable"] is True
+        assert long_result["native_playable_chapter_count"] == 201
+        assert long_result["source_review"]["reviewed_book_chapters"] == 201
+        assert long_result["reviewed_extension"]["act_count"] == 3
+        assert long_result["long_book_event_coverage"][
+            "featured_source_events_in_game"] == 201
+        assert long_result["long_book_event_coverage"][
+            "deferred_original_events_not_attested_as_playable"] == 0
+        assert long_result["native_routes"]["endings_verified"] == 2
+        assert long_fake.stages.count("analysis") == 201
+        assert long_fake.stages.count("chapter_outline") == 26
+        assert long_fake.stages[-1] == "literary_review"
+        assert (root / "large_201_private_skill" /
+                "native_chapter_playability.json").exists()
+        assert not long_result["user_ready"]
+        assert not long_result["literary_truth_attested"]
     print(json.dumps({"source_comparisons": checked, "candidate_accepted_by_dart_blueprint": True,
                       "known_lossy_source_forms_refused": 1,
                       "application_modified": False,
@@ -799,7 +833,8 @@ def main():
                        "native_v4_npc_item_custody_public_api_save_verified": True,
                        "complete_private_book_two_native_ending_routes_verified": True,
                        "automatic_native_two_distinct_ending_discovery": True,
-                       "automatic_whole_book_fake_ai_real_native_v4_sqlite": True}))
+                       "automatic_whole_book_fake_ai_real_native_v4_sqlite": True,
+                       "native_201_chapter_long_book_skill_windows_and_sqlite": True}))
 
 
 if __name__ == "__main__":

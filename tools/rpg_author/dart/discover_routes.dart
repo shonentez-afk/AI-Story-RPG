@@ -62,7 +62,15 @@ Future<void> main() async {
     store = BookworldCampaignStore.openPrivateDirectory(temp.path);
     final RpgGameApi api = LocalRpgGameApi(store);
     final installed = api.install(world);
-    final queue = <List<String>>[<String>[]];
+    // Native start(parentCampaignId:) clones the exact verified campaign head.
+    // Old discovery started a fresh game and replayed the ENTIRE path for
+    // every BFS state: quadratic replay amplified by long books. Never
+    // simulate a rule or invent a state hash here; fork the REAL SQLite
+    // campaign through LocalRpgGameApi and choose one enabled action.
+    final rootCampaign = api.start(installed.archiveHash);
+    final queue = <({String campaignId, List<String> path})>[
+      (campaignId: rootCampaign, path: <String>[]),
+    ];
     var cursor = 0;
     final endings = <String>{};
     final found = <Map<String, Object?>>[];
@@ -75,23 +83,10 @@ Future<void> main() async {
     while (cursor < queue.length && cursor < maxNodes &&
            (found.length < 2 ||
             (strictCoverage && reachedChapters.length < totalChapters))) {
-      final path = queue[cursor++];
-      final campaign = api.start(installed.archiveHash);
-      var state = api.load(campaign);
-      for (final id in path) {
-        final matches = state.choices.where(
-            (choice) => choice.id == id && choice.enabled).toList();
-        if (matches.length != 1 || state.isTerminal) {
-          throw const FormatException('Native BFS reconstructed invalid path');
-        }
-        final outcome = api.choose(campaign,
-            actionId: 'discover_' + state.revision.toString(),
-            choiceId: id, expectedRevision: state.revision);
-        if (!outcome.applied) {
-          throw const FormatException('Native API refused discovered path');
-        }
-        state = api.load(campaign);
-      }
+      final current = queue[cursor++];
+      final path = current.path;
+      final campaign = current.campaignId;
+      final state = api.load(campaign);
 
       if (strictCoverage) {
         final chapter = byScene[state.sceneId];
@@ -119,7 +114,15 @@ Future<void> main() async {
         ..sort((a, b) => a.id.compareTo(b.id));
       for (final choice in enabled) {
         if (queue.length >= maxNodes) break;
-        queue.add([...path, choice.id]);
+        final forked = api.start(installed.archiveHash,
+            parentCampaignId: campaign);
+        final outcome = api.choose(forked,
+            actionId: 'discover_' + state.revision.toString(),
+            choiceId: choice.id, expectedRevision: state.revision);
+        if (!outcome.applied) {
+          throw const FormatException('Native fork refused enabled decision');
+        }
+        queue.add((campaignId: forked, path: [...path, choice.id]));
       }
     }
     if (found.length != 2) {
