@@ -62,6 +62,14 @@ class FakeSourceLockedAuthor:
                     self.mapping[x] for x in scene["assertion_ids"]
                 ]
             return story
+        if stage == "npc_dossiers":
+            # Legacy player-only fixture deliberately opts out; rich NPC
+            # authoring is separately tested with source-based identifiers.
+            return {
+                "characters": [],
+                "absence_reason":
+                    "Synthetic regression covers the original player-only path.",
+            }
         if stage == "enrichment":
             return book.rich_enrichment(book.index(), payload["story"])
         if stage == "extension":
@@ -125,7 +133,8 @@ class BookAutopilotTests(unittest.TestCase):
         self.assertEqual(status["book_chapters_analyzed"], 3)
         self.assertEqual(status["source_chunks_analyzed"], 3)
         self.assertEqual(fake.stages,
-                         ["analysis"] * 3 + ["story", "enrichment", "extension"])
+                         ["analysis"] * 3 +
+                         ["story", "npc_dossiers", "enrichment", "extension"])
         current = project.status(self.project)
         self.assertEqual(current["chunks_with_analysis"], 3)
         self.assertEqual(current["stage"], "validated_candidate")

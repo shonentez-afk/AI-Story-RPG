@@ -15,7 +15,8 @@ from .common import (
 )
 
 MAX_BODY = 512 * 1024
-STAGES = frozenset(("analysis", "story", "enrichment", "extension",
+STAGES = frozenset(("analysis", "story", "npc_dossiers",
+                    "enrichment", "npc_review", "extension",
                     "literary_review"))
 SYSTEM = {
     "analysis": (
@@ -38,6 +39,39 @@ SYSTEM = {
         "SOURCE_PASSAGE сцене в каждой главе, уникальные id из a-z/0-9/_. "
         "Не выдавай альтернативы за дословные события книги. Только JSON."
     ),
+    "npc_dossiers": (
+        "Ты литературный автор навыка Живая книга. Проанализируй всю "
+        "подтверждённую книгу, выдели важных NPC со стабильными "
+        "человекочитаемыми ref. Верни JSON строго с полями: "
+        "characters:[{ref,name,description,source_scene_id,assertion_id}], "
+        "absence_reason. Для каждого NPC cite только NARRATED утверждение "
+        "из исходной SOURCE_PASSAGE-сцены, содержащее его точное имя; "
+        "никаких вымышленных персонажей как канона. Постоянный "
+        "character_id и SHA цитаты вычисляет программа; их НЕ придумывать. "
+        "Если NPC действительно нет, characters=[] и мотивированное "
+        "absence_reason длиной от 20 символов; иначе absence_reason=null. "
+        "Никакого markdown."
+    ),
+    "npc_review": (
+        "Ты автор событий NPC для автономного движка. Используй ТОЛЬКО "
+        "постоянные character_id из ранее проверенных npc_dossiers, "
+        "реальные choice_id и assert_id SOURCE_PASSAGE. Верни JSON с "
+        "форматом rpg_author_skill_npc_review_v1 и СПИСКАМИ: "
+        "knowledge_grants, witnesses, rules, choice_gates, "
+        "item_grants, item_transfers, life_transitions; "
+        "dialogue_knowledge — dict scene_id -> reviewed speaker turns. "
+        "Каждый ряд события имеет scene_id, assertion_id точного "
+        "источника; SHA и подпись source_quote_sha256 НЕ указывать. "
+        "grants:{scene_id,choice_id,actor_id,fact_id,assertion_id}; "
+        "witnesses:{scene_id,actor_id,mode,assertion_id}; "
+        "rules:{memory_id,scene_id,choice_id,observer_id,kind,"
+        "related_actor_id,relationship_delta,max_triggers,assertion_id}; "
+        "остальные разделы по контракту native NPC social v5. "
+        "Нужно минимум одно доказанное свидетельство и память, "
+        "нельзя приписывать NPC знание из будущего, предмет или "
+        "дословный голос без оснований. Программный валидатор "
+        "преобразует assertion_id в точный хеш. Только JSON."
+    ),
     "enrichment": (
         "Ты оформляешь русский игровой мир по проверенному StoryPlan. "
         "Ответ JSON: hero:{name,description},stats,items,facts,scene_names,"
@@ -56,6 +90,17 @@ SYSTEM = {
         "Каждая исходная цитата используется в новых событиях не более "
         "одного раза, в каждом акте есть реальный эффект и ветвление. "
         "Не выдумывай операции, предметы, NPC, факты или свидетельства. "
+        "Если присутствуют подтверждённые NPC, ОБЯЗАТЕЛЬНО "
+        "добавь npc_actor_review:{knowledge_grants,witnesses,memories,"
+        "choice_gates,life_transitions} в соответствии с source-locked "
+        "NPC v4 acts v2 и ранее изученной social v5 историей. "
+        "Добавь npc_scene_review:{dialogues,item_grants,item_transfers} "
+        "ТОЛЬКО если подписанные живые диалоги и реальная выдача/"
+        "передача предмета обоснованы книгой; тогда версия v3. "
+        "Подписанный диалог — точные строки speaker: «текст», "
+        "с полным сопоставлением actor_id, уже полученных знаний "
+        "и ранее заслуженной памяти; вымысел помечай отдельно. "
+        "Никогда не вычисляй сам source_quote_sha256. "
         "Соблюдай проверенный контракт и прилагаемый оригинальный пример."
     ),
     "literary_review": (

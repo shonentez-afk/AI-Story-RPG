@@ -31,15 +31,23 @@ from .complete_game import (REVIEW_FORMAT, prepare_full_review_template,
 from .native_v4_bridge import (_MAX_V4_BYTES, _inspect_v4,
                                audited_extension, compile_extended_from_project)
 from .rich_package import compile_rich_from_project
+from .npc_skill import (
+    prepare_npc_dossiers, prepare_npc_review,
+    prepare_npc_v4_extension, verify_source_dossiers,
+)
 from .validate import (assertion_registry, candidate_blueprint,
                        validate_analysis, validate_story)
 from .v4_acts import FORMAT as ACT_FORMAT
 
 REVISION = "rpg_author_ai_book_pipeline_v1"
 MAX_AUTO_REVISIONS = 3
-_STAGE_FILES = {"enrichment": "enrichment.json",
-                "extension": "multi_act.json",
-                "literary_review": "literary_review.json"}
+_STAGE_FILES = {
+    "npc_dossiers": "npc_dossiers.json",
+    "enrichment": "enrichment.json",
+    "npc_review": "npc_review.json",
+    "extension": "multi_act.json",
+    "literary_review": "literary_review.json",
+}
 _DART_ROUTE = ROOT / "tools/rpg_author/dart/discover_routes.dart"
 _DART_CONFIG = ROOT / "tools/rpg_author/dart/.dart_tool/package_config.json"
 _PARITY_CONFIG = ROOT / "tests/rpg_author/dart/.dart_tool/package_config.json"
@@ -313,6 +321,30 @@ def author_complete_book(*, project_root: Path, workdir: Path,
         project.submit_story(root, story)
     _full_chapter_coverage(story, idx)
 
+    # A complete book first receives a literary NPC cast, with source-bound
+    # permanent character IDs, BEFORE enrichment adds actor-scoped effects.
+    # An already signed, externally reviewed native NPC v3 dossier remains
+    # supported and is never silently replaced by a Skill proposal.
+    dossiers = None
+    if npc_review_path is None:
+        dossiers_file = private / _STAGE_FILES["npc_dossiers"]
+        if dossiers_file.exists():
+            dossiers = verify_source_dossiers(
+                read_json(dossiers_file), idx, story, analyses)
+        else:
+            dossiers = _ask_verified(
+                provider, "npc_dossiers",
+                {"book_title": idx["title"], "story": story,
+                 "all_verified_evidence": evidence,
+                 "source_fingerprint": idx["source_fingerprint"],
+                 "instruction": "Identify every major evidenced NPC, or "
+                                "explain why none exist. Names must occur "
+                                "in the exact NARRATED source assertion."},
+                lambda response: prepare_npc_dossiers(
+                    response, idx, story, analyses))
+            _fresh_or_existing(private, _STAGE_FILES["npc_dossiers"],
+                               dossiers)
+
     enrich_path = private / _STAGE_FILES["enrichment"]
     if enrich_path.exists():
         overlay = read_json(enrich_path)
@@ -337,23 +369,74 @@ def author_complete_book(*, project_root: Path, workdir: Path,
         overlay = _ask_verified(
             provider, "enrichment",
             {"story": story, "verified_evidence": evidence,
-             "instruction": "Typed rule IDs only; empty catalogs are valid"},
+             "npc_dossiers": dossiers,
+             "existing_native_npc_actors": (
+                 [] if native_npc_review is None
+                 else native_npc_review["actors"]),
+             "instruction": "Typed rule IDs only; when NPC dossiers exist, "
+                            "use their exact permanent character_id in "
+                            "actor-scoped learn_fact and knows_fact rules. "
+                            "No fabricated items, knowledge or identities."},
             checked_enrichment)
         _fresh_or_existing(private, _STAGE_FILES["enrichment"], overlay)
+
+    # The original rich world is the source authority for NPC citations
+    # and choices. The Skill supplies assertion_id, never a quote digest.
+    if dossiers is not None and dossiers["characters"]:
+        bare_raw, _ = compile_rich_from_project(root, overlay)
+        with zipfile.ZipFile(io.BytesIO(bare_raw)) as archive:
+            bare_bp = parse_json(archive.read("scenario/blueprint.json"))
+            bare_prov = parse_json(archive.read("source/provenance.json"))
+        npc_review_path = private / _STAGE_FILES["npc_review"]
+        if npc_review_path.exists():
+            native_npc_review = read_json(npc_review_path)
+        else:
+            def checked_npc(response):
+                proposed = prepare_npc_review(
+                    response, dossiers, idx, story, analyses, overlay,
+                    bare_bp, bare_prov, user_confirmed=delegate_review)
+                if delegate_review:
+                    compile_rich_from_project(
+                        root, overlay, npc_review=proposed)
+                return proposed
+            native_npc_review = _ask_verified(
+                provider, "npc_review",
+                {"book_title": idx["title"], "npc_dossiers": dossiers,
+                 "verified_evidence": evidence, "story": story,
+                 "enrichment": overlay, "base_blueprint": bare_bp,
+                 "original_scene_origins": bare_prov["scene_origins"],
+                 "instruction": "Sign all NPC grants, witnesses, memories, "
+                                "life events and dialogues with original "
+                                "assertion_id. Native quote SHA and IDs "
+                                "are computed by the verifier."},
+                checked_npc)
+            _fresh_or_existing(private, _STAGE_FILES["npc_review"],
+                               native_npc_review)
+        if (native_npc_review["npc_knowledge"]["user_confirmed"] is not True
+                or native_npc_review["npc_social"]["user_confirmed"] is not True):
+            return {
+                "status": "needs_explicit_npc_review",
+                "npc_dossiers": str(private / _STAGE_FILES["npc_dossiers"]),
+                "npc_review": str(npc_review_path),
+                "game_created": False, "user_ready": False,
+                "skill_responses_this_run": provider.calls,
+            }
 
     base_raw, _ = compile_rich_from_project(
         root, overlay, npc_review=native_npc_review)
     with zipfile.ZipFile(io.BytesIO(base_raw)) as archive:
         base_bp = parse_json(archive.read("scenario/blueprint.json"))
+        base_prov = parse_json(archive.read("source/provenance.json"))
 
     ext_path = private / _STAGE_FILES["extension"]
     if ext_path.exists():
         extension = read_json(ext_path)
     else:
         def checked_extension(response):
-            value = _derive_reviewed_extension(
-                response, idx, story, overlay, base_bp,
-                allow_machine_review=delegate_review)
+            value = prepare_npc_v4_extension(
+                response, idx, story, overlay, base_bp, base_prov,
+                npc_present=native_npc_review is not None,
+                user_confirmed=delegate_review)
             if delegate_review:
                 audited_extension(
                     root, overlay, value, npc_review=native_npc_review)
@@ -362,9 +445,19 @@ def author_complete_book(*, project_root: Path, workdir: Path,
             provider, "extension",
             {"book_title": idx["title"], "verified_evidence": evidence,
              "story": story, "enrichment": overlay,
-             "base_blueprint": base_bp, "required_format": ACT_FORMAT,
+             "base_blueprint": base_bp,
+             "npc_dossiers": dossiers,
+             "base_npc_knowledge": base_prov.get("npc_knowledge"),
+             "base_npc_social": base_prov.get("npc_social"),
+             "required_format": (
+                 "rpg_author_v4_acts_v2_or_v3"
+                 if native_npc_review is not None else ACT_FORMAT),
              "review_declared_by_user": delegate_review,
-             "required_act_count_at_least": 2},
+             "required_act_count_at_least": 2,
+             "instruction": "With NPC cast, prepare actor-scoped cross-act "
+                            "source review using existing NPC Social v5. "
+                            "Use v3 only when ALL signed dialogue and "
+                            "source-acquired item transfers are reviewed."},
             checked_extension)
         _fresh_or_existing(private, _STAGE_FILES["extension"], extension)
 
