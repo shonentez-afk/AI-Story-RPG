@@ -1,5 +1,3 @@
-import 'dart:typed_data';
-
 import 'package:flutter/foundation.dart';
 import 'package:rpg_api/rpg_api.dart' show
     LocalRpgWorldIntakeApi, RpgWorldIntakePreview;
