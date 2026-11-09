@@ -168,6 +168,14 @@ class _WorldImportReviewDialogState extends State<_WorldImportReviewDialog> {
               ? 'Частная игровая адаптация; публикация не разрешена.'
               : 'Демонстрационный мир, а не частная адаптация.'),
           const SizedBox(height: 8),
+          if (_preview.heroName != null &&
+              _preview.heroName!.trim().isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Text('Герой: ${_preview.heroName!}. '
+                'Роль задана в проверенном игровом пакете; '
+                'для её изменения нужна новая подготовка.',
+                key: const Key('world-intake-reviewed-hero')),
+          ],
           if (_preview.sourceCausalReviewVerified) ...[
             const SizedBox(height: 8),
             const Text('Подтверждён исходный причинный граф v5: '
@@ -180,6 +188,10 @@ class _WorldImportReviewDialogState extends State<_WorldImportReviewDialog> {
                 'причинный обзор книги не приложен.',
                 key: Key('world-intake-literal-only')),
           ],
+          if (_preview.dynamicAiActionsAvailable)
+            const Text('Свободные ИИ-действия доступны после '
+                'подключения модели и отдельного подтверждения каждого хода. '
+                'Без подключения игра остаётся автономной.'),
           const Text('Точный ZIP и игровые правила проверяются '
               'независимым движком. Литературный канон и качество '
               'автоматически не подтверждаются.'),

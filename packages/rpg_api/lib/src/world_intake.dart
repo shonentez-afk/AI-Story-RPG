@@ -20,6 +20,8 @@ final class RpgWorldIntakePreview {
     this.producerClaimsTwoReplayedRoutes = false,
     this.sourceLiteralCanonVerified = false,
     this.sourceCausalReviewVerified = false,
+    this.heroName,
+    this.dynamicAiActionsAvailable = false,
   });
 
   final String title, bookworldId, archiveHash;
@@ -30,6 +32,10 @@ final class RpgWorldIntakePreview {
   /// True only when the exact v5 source-backed full event graph has
   /// passed the native importer; never derived from a producer label.
   final bool sourceCausalReviewVerified;
+  /// Signed author-selected hero label. Role selection after native compile
+  /// would invalidate source provenance and is NOT offered by the reader.
+  final String? heroName;
+  final bool dynamicAiActionsAvailable;
   /// Canonical BookWorld provenance, not an external JSON assertion.
   final int sourceChaptersTotal, sourceChaptersIndexed;
   final int sourceChaptersWithGameplay;
@@ -56,6 +62,8 @@ final class RpgWorldIntakePreview {
     generatorReportAttached: true, producerClaimsTwoReplayedRoutes: true,
     sourceLiteralCanonVerified: sourceLiteralCanonVerified,
     sourceCausalReviewVerified: sourceCausalReviewVerified,
+    heroName: heroName,
+    dynamicAiActionsAvailable: dynamicAiActionsAvailable,
   );
 }
 
@@ -90,6 +98,11 @@ final class LocalRpgWorldIntakeApi implements RpgWorldIntakeApi {
         sourceLiteralCanonVerified: world.sourceLiteralCanonVerified,
         sourceCausalReviewVerified:
             world.npcSocialRulebook?.bookCausality != null,
+        heroName: (world.presentation['hero'] is Map<String, dynamic>)
+            ? (world.presentation['hero'] as Map<String, dynamic>)
+                ['name'] as String? : null,
+        dynamicAiActionsAvailable:
+            world.formatVersion == 5 && bp.supportsFreeform,
         sourceChaptersTotal: world.sourceChaptersTotal,
         sourceChaptersIndexed: world.sourceChaptersIndexed,
         sourceChaptersWithGameplay: world.sceneOrigins.values

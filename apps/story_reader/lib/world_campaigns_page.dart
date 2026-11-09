@@ -298,10 +298,17 @@ class _WorldCampaignsPageState extends State<WorldCampaignsPage> {
               Text('Сцен: ${_reviewedCapabilities!.sceneCount}, '
                   'NPC: ${_reviewedCapabilities!.npcActorCount}, '
                   'предметов: ${_reviewedCapabilities!.itemCount}.'),
+              if (_reviewedCapabilities!.heroName != null)
+                Text('Герой: ${_reviewedCapabilities!.heroName}. '
+                    'Роль закреплена подготовленным миром.'),
               if (_reviewedCapabilities!.sourceCausalReviewVerified)
                 const Text('Персонажи, обязательства и причинные '
                     'ограничения подтверждены исходной редакцией '
                     'и исполняются автономным движком.'),
+              if (_reviewedCapabilities!.dynamicAiActionsAvailable)
+                const Text('Свободные действия ИИ поддерживаются '
+                    'движком; каждый новый ход требует проверки '
+                    'и подтверждения пользователя.'),
             ],
             const Text('Прохождения сохраняются независимо. '
                 'Герой и правила определены установленным миром; '
