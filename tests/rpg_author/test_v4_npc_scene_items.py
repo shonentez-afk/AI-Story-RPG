@@ -185,7 +185,9 @@ class ReviewedNpcDialogueItemTests(unittest.TestCase):
         candidate["npc_scene_review"]["dialogues"] = []
         with self.assertRaises(AuthoringError) as e:
             self.expand(candidate)
-        self.assertEqual(e.exception.code, "scene_review_incomplete")
+        # Scene still contains verified signed turns: item custody cannot
+        # excuse an incomplete dialogue review.
+        self.assertEqual(e.exception.code, "scene_dialogue_missing")
         candidate = self.fixture()
         candidate["npc_scene_review"]["dialogues"][0]["turns"][1]["turn_index"] = 0
         with self.assertRaises(AuthoringError) as e:
