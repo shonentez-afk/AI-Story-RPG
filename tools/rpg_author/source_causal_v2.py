@@ -319,10 +319,12 @@ def _effect(value: dict, actor_ids: set[str], blueprint: dict):
     elif op in ("grant_item", "consume_item"):
         ok = key in blueprint["items"]
     elif op == "stat_delta":
-        ok = key in blueprint["initial_state"]["stats"] and
-            type(value["amount"]) is int and 0 < abs(value["amount"]) <= 1000
+        ok = (key in blueprint["initial_state"]["stats"] and
+              type(value["amount"]) is int and
+              0 < abs(value["amount"]) <= 1000)
     elif op == "set_flag":
-        ok = key in blueprint["initial_state"]["flags"] and type(value["value"]) is bool
+        ok = (key in blueprint["initial_state"]["flags"] and
+              type(value["value"]) is bool)
     else:
         ok = type(value["amount"]) is int and 1 <= value["amount"] <= 1000
     require(ok, "causal_invalid_effect", "Event changes unapproved game state")
