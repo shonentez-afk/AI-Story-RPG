@@ -3,9 +3,8 @@ import 'package:bookworld_format/bookworld_format.dart';
 import 'book_source_index.dart';
 import 'bookwide_act_planner.dart';
 import 'bookwide_campaign_contract.dart';
-import 'bookwide_npc_arc.dart';
 import 'bookwide_storyplan_composer.dart';
-import 'bookwide_source_encounters.dart';
+import 'multi_act_trial_plan_composer.dart';
 import 'branch_continuity_auditor.dart';
 import 'compiled_campaign_causal_gate.dart';
 import 'source_world_time_auditor.dart';
@@ -149,38 +148,20 @@ class MultiActTrialCompiler {
             'Художественные правки для старого плана нужно подтвердить заново.');
       }
     }
-    final basePlan =
-        recheckedRepair?.draft ?? continuity?.plan ?? draft.plan;
-    // Source events become optional, persisted, source-backed choices in the
-    // very SAME StoryPlan sent to gameplay proposals, audits and the writer.
-    final sourcePlan = BookwideSourceEncounters.attach(
-      index: index, book: book, bookMap: bookMap,
-      draft: draft, plan: basePlan,
-      reviewedEventIds: reviewedInteractiveEventIds,
-      userConfirmedPrivateAdaptation: fictionalTrialAcknowledged,
+    final composed = MultiActTrialPlanComposer.compose(
+      index: index, book: book, bookMap: bookMap, draft: draft,
+      continuity: continuity, recheckedRepair: recheckedRepair,
+      reviewedInteractiveEventIds: reviewedInteractiveEventIds,
+      selectedHeroRole: selectedHeroRole,
+      reviewedHeroSourceAction: reviewedHeroSourceAction,
+      npcEncounterRole: npcEncounterRole,
+      reviewedNpcEncounter: reviewedNpcEncounter,
+      npcPlayerLine: npcPlayerLine, npcReplyLine: npcReplyLine,
+      fictionalTrialAcknowledged: fictionalTrialAcknowledged,
       expanded: expanded,
     );
-    final rolePlan = selectedHeroRole == null ? sourcePlan :
-        selectedHeroRole.bindTo(sourcePlan, book, expanded: expanded);
-    final npcArc = reviewedNpcEncounter ? BookwideNpcArc.review(
-      index: index, book: book, plan: rolePlan,
-      role: npcEncounterRole!, privateFictionConfirmed: true,
-      playerLine: npcPlayerLine, npcLine: npcReplyLine,
-      expanded: expanded,
-    ) : null;
-    if (reviewedNpcEncounter && npcArc == null) {
-      throw const FormatException(
-          'В двух выбранных событиях нет проверенной встречи с NPC.');
-    }
-    final npcPlan = npcArc?.attach(rolePlan, book,
-        expanded: expanded) ?? rolePlan;
-    final plan = reviewedHeroSourceAction
-        ? ReviewedHeroSourceAction.attach(
-            index: index, book: book, plan: npcPlan,
-            role: selectedHeroRole!,
-            explicitlyConfirmedPrivateGameFiction: fictionalTrialAcknowledged,
-            expanded: expanded)
-        : npcPlan;
+    final plan = composed.plan;
+    final npcArc = composed.npcArc;
     if (continuity != null &&
         (!continuity.hasEnforcedContinuity ||
          continuity.audit.counterexamples.isNotEmpty ||

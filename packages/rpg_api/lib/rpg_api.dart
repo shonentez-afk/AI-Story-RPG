@@ -462,6 +462,25 @@ abstract interface class RpgMultiActTrialApi {
     bool expanded = false,
   });
 
+  StoryPlan composePreviewPlan({
+    required BookSourceIndex index,
+    required NarrativeBookModel book,
+    required BookwideActPlan bookMap,
+    required MultiActStoryPlanDraft draft,
+    CrossActContinuityDraft? continuity,
+    WholeStoryLiteraryRecheckApproval? recheckedRepair,
+    Set<String> reviewedInteractiveEventIds = const {},
+    ReviewedHeroRole? selectedHeroRole,
+    bool reviewedHeroSourceAction = false,
+    ReviewedHeroRole? npcEncounterRole,
+    bool reviewedNpcEncounter = false,
+    bool includeNpc = true,
+    String npcPlayerLine = '',
+    String npcReplyLine = '',
+    required bool fictionalTrialAcknowledged,
+    bool expanded = false,
+  });
+
   ReviewedGameplayApprovalPreview previewOneGameplay({
     required Uint8List currentRichBookworld,
     required BookSourceIndex index,
@@ -545,6 +564,39 @@ final class LocalRpgMultiActTrialApi implements RpgMultiActTrialApi {
       );
 
   @override
+  @override
+  StoryPlan composePreviewPlan({
+    required BookSourceIndex index,
+    required NarrativeBookModel book,
+    required BookwideActPlan bookMap,
+    required MultiActStoryPlanDraft draft,
+    CrossActContinuityDraft? continuity,
+    WholeStoryLiteraryRecheckApproval? recheckedRepair,
+    Set<String> reviewedInteractiveEventIds = const {},
+    ReviewedHeroRole? selectedHeroRole,
+    bool reviewedHeroSourceAction = false,
+    ReviewedHeroRole? npcEncounterRole,
+    bool reviewedNpcEncounter = false,
+    bool includeNpc = true,
+    String npcPlayerLine = '',
+    String npcReplyLine = '',
+    required bool fictionalTrialAcknowledged,
+    bool expanded = false,
+  }) => MultiActTrialPlanComposer.compose(
+    index: index, book: book, bookMap: bookMap, draft: draft,
+    continuity: continuity, recheckedRepair: recheckedRepair,
+    reviewedInteractiveEventIds: reviewedInteractiveEventIds,
+    selectedHeroRole: selectedHeroRole,
+    reviewedHeroSourceAction: reviewedHeroSourceAction,
+    npcEncounterRole: npcEncounterRole,
+    reviewedNpcEncounter: reviewedNpcEncounter,
+    includeNpc: includeNpc,
+    npcPlayerLine: npcPlayerLine,
+    npcReplyLine: npcReplyLine,
+    fictionalTrialAcknowledged: fictionalTrialAcknowledged,
+    expanded: expanded,
+  ).plan;
+
   ReviewedGameplayApprovalPreview previewOneGameplay({
     required Uint8List currentRichBookworld,
     required BookSourceIndex index,

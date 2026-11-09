@@ -80,6 +80,7 @@ export 'src/bookwide_unified_story.dart';
 export 'src/reviewed_story_narrative.dart';
 export 'src/story_plan_trial_compiler.dart';
 export 'src/multi_act_trial_compiler.dart';
+export 'src/multi_act_trial_plan_composer.dart';
 export 'src/whole_book_npc_campaign.dart';
 export 'src/source_semantic_window.dart';
 export 'src/semantic_preview_models.dart';

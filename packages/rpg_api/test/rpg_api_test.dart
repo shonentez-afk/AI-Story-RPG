@@ -157,6 +157,7 @@ void main() {
         expectedSourceFingerprint: 'forged-foreign-book'),
         throwsFormatException);
     expect(api.compileTrial, isNotNull);
+    expect(api.composePreviewPlan, isNotNull);
     expect(api.previewOneGameplay, isNotNull);
     expect(api.previewWholeGameplay, isNotNull);
     expect(api.acceptGameplay, isNotNull);

@@ -238,33 +238,19 @@ class _MultiActTrialPageState extends State<MultiActTrialPage> {
   StoryPlan _effectivePlan({
     CrossActContinuityDraft? continuity,
     bool includeNpc = true,
-  }) {
-    final source = BookwideSourceEncounters.attach(
-      index: widget.index, book: widget.book, bookMap: widget.bookMap,
-      draft: widget.draft,
-      plan: _recheckedRepair?.draft ??
-          continuity?.plan ?? widget.draft.plan,
-      reviewedEventIds: _interactiveEvents,
-      userConfirmedPrivateAdaptation: true,
-    );
-    final rolePlan = _selectedHeroRole?.bindTo(source, widget.book) ?? source;
-    final npcArc = includeNpc && _reviewedNpcArc
-        ? BookwideNpcArc.review(
-            index: widget.index, book: widget.book, plan: rolePlan,
-            role: _selectedNpcRole!, privateFictionConfirmed: true,
-            playerLine: _npcPlayerLine, npcLine: _npcReplyLine)
-        : null;
-    if (_reviewedNpcArc && npcArc == null) {
-      throw const FormatException('NPC больше не связан с исходной цитатой.');
-    }
-    final npcPlan = npcArc?.attach(rolePlan, widget.book) ?? rolePlan;
-    return _reviewedHeroSourceAction
-        ? ReviewedHeroSourceAction.attach(
-            index: widget.index, book: widget.book,
-            plan: npcPlan, role: _selectedHeroRole!,
-            explicitlyConfirmedPrivateGameFiction: true)
-        : npcPlan;
-  }
+  }) => _trialApi.composePreviewPlan(
+    index: widget.index, book: widget.book, bookMap: widget.bookMap,
+    draft: widget.draft, continuity: continuity,
+    recheckedRepair: _recheckedRepair,
+    reviewedInteractiveEventIds: _interactiveEvents,
+    selectedHeroRole: _selectedHeroRole,
+    reviewedHeroSourceAction: _reviewedHeroSourceAction,
+    npcEncounterRole: _selectedNpcRole,
+    reviewedNpcEncounter: _reviewedNpcArc,
+    includeNpc: includeNpc,
+    npcPlayerLine: _npcPlayerLine, npcReplyLine: _npcReplyLine,
+    fictionalTrialAcknowledged: true,
+  );
 
   /// A single source/plan revision invalidates prior quotes, model digests
   /// and gameplay item/fact consent. A newly selected batch is NOT approved.
