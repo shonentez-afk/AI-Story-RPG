@@ -278,6 +278,8 @@ jobs:
           dart analyze
           dart test --reporter expanded
           dart run bin/rpg_cli.dart --help
+          dart run bin/rpg_server.dart --help
+          python3 test_python_client.py
       - name: Upload test BookWorld artifact
         uses: actions/upload-artifact@v4
         with:

@@ -67,7 +67,7 @@ void main() {
       const MaterialApp(home: LibraryPage()),
     );
     await tester.pumpAndSettle();
-    expect(find.text('Добавить книгу'), findsOneWidget);
+    expect(find.text('Добавить книгу или RPG'), findsOneWidget);
     // If platform file storage is unavailable, show retry instead of
     // leaving a spinner running forever.
     expect(find.text('Повторить загрузку'), findsOneWidget);

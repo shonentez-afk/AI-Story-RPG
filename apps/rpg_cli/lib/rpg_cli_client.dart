@@ -18,42 +18,8 @@ class RpgCliClient {
     return file.readAsBytesSync();
   }
 
-  static Map<String, Object?> _view(WorldGameView view) => {
-    'campaign_id': view.campaignId,
-    'world_title': view.worldTitle,
-    'hero_name': view.heroName,
-    'scene_id': view.sceneId,
-    'scene_text': view.sceneText,
-    'revision': view.revision,
-    'tick': view.tick,
-    'terminal': view.isTerminal,
-    'inventory': view.inventory,
-    'known_facts': view.knownFacts,
-    'npc_encountered': [
-      for (final npc in view.npcRelations) {
-        'actor_id': npc.actorId,
-        'display_name': npc.displayName,
-        'memory_count': npc.memoryCount,
-        'life_state': npc.lifeState,
-      }
-    ],
-    'journal': [
-      for (final event in view.journal) {
-        'sequence': event.sequence,
-        'scene_id': event.sceneId,
-        'choice': event.choiceLabel,
-        'changes': event.changes,
-      }
-    ],
-    'choices': [
-      for (final choice in view.choices) {
-        'id': choice.id,
-        'label': choice.label,
-        'enabled': choice.enabled,
-        'lock_reason': choice.lockReason,
-      }
-    ],
-  };
+  static Map<String, Object?> _view(WorldGameView view) =>
+      RpgClientProtocol.projectView(view);
 
   Future<Map<String, Object?>> execute(List<String> argv) async {
     if (argv.isEmpty) throw const FormatException('Command is required');

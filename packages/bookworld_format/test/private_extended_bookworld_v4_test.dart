@@ -123,6 +123,11 @@ void main() {
     );
     final v4 = reader.inspect(archive);
     expect(v4.formatVersion, 4);
+    expect(v4.sourceChaptersIndexed, v4.sourceChaptersTotal);
+    expect(v4.sceneOrigins.length, 203);
+    expect(v4.sceneOrigins['long_0000']!.isSourcePassage, false);
+    expect(v4.sceneOrigins['long_0000']!.chapterIndex, 0);
+    expect(v4.sceneOrigins['entry']!.isSourcePassage, true);
     expect(v4.blueprint.scenes.length, 203);
     expect(v4.requiresNetwork, false);
     expect(v4.canDistributePublicly, false);

@@ -5,16 +5,22 @@
 /// persist platform paths, talk to a model or invent literary canon.
 library;
 
+import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:bookworld_format/bookworld_format.dart';
 import 'package:campaign_manager/campaign_manager.dart';
 import 'package:rpg_gameplay/rpg_gameplay.dart';
 import 'package:story_authoring/story_authoring.dart';
+import 'src/world_intake.dart';
+
+export 'src/world_intake.dart';
+export 'src/bookwide_gameplay_audit.dart';
 
 export 'package:rpg_gameplay/rpg_gameplay.dart' show
     WorldLibraryItem, WorldCampaignItem, WorldSavePreview,
     WorldChoiceView, WorldEventView, NpcRelationView, WorldGameView,
+    WorldSceneSourceView,
     WorldChoiceResult, WorldLibraryGateway;
 export 'package:story_authoring/story_authoring.dart' show
     ImportedBook, BookSourceIndex, SourceLockedBook,
@@ -39,6 +45,8 @@ export 'package:story_authoring/story_authoring.dart' show
     QuickRpgMode, QuickRpgPlan, QuickRpgCompilation;
 export 'package:bookworld_format/bookworld_format.dart' show
     VerifiedRichPrivateBookworld;
+
+part 'src/client_protocol.dart';
 
 /// Contract version, not a promise that all planned game modes exist.
 abstract final class RpgApiContract {

@@ -1,3 +1,95 @@
+# СТАТУС 9 НОЯБРЯ 2026 — ПРОВЕРЕННАЯ MULTI-CLIENT RPG-ОСНОВА
+
+**Первый большой пакет принят:** [CI #1083](https://github.com/shonentez-afk/AI-Story-RPG/actions/runs/42554271712) полный SUCCESS на `31372b0b657fb0d0fa37476c1fcbc9fe614be525`, включая Python/Dart/M1.7/Flutter, Windows release bundle и Android debug APK. [M0 #1168](https://github.com/shonentez-afk/AI-Story-RPG/actions/runs/42554271699) SUCCESS. Готов отдельный Python-клиент, token-auth loopback HTTP host, единый чистый `RpgClientProtocol` v1 и настоящее SQLite/.bwsave сквозное E2E. До физического QA и продакшен Web/gRPC далеко.
+
+**Второй функциональный пакет:** read-only `inspect_world`, native `audit_world` с `playable/blocked/inconclusive`, `suggest_action` только разрешённых choiceId и E2E по v3/v4 через Python; **точную новую приёмку смотреть после кода**, не выдавать прошлый #1083 за новый проход.
+
+**Внешний автор 0.3.0a13** — stage E6k+ несмотря на старый branch E6g, [CI #414 SUCCESS](https://github.com/shonentez-afk/AI-Story-RPG/actions/runs/42554315131). Но `External RPG author tests #413` в PR #133 FAIL: pin source `contract_drift` и не найден Dart пакет `story_authoring` в старом external probe. Согласование без отключения безопасности, права на другой branch не захватывать.
+
+**Главные P0:** настоящий книжный CANON/BOOK_CHARACTER, dynamic AI GM с проверенным подписанным событием, полный source-locked whole-book pipeline, общий native/E6k+ compatibility, 2 реальные RU FB2 и физический Win/Android E2E. Только один Draft PR #133, без микро-PR и правок main.
+
+---
+
+# ТЕКУЩИЙ СТАТУС — 2026-11-09: мультиклиентный RPG-движок (приоритет)
+
+**План:** [RPG_ENGINE_FULL_AUTONOMY_MULTICLIENT_PLAN_RU_2026-11-09.md](RPG_ENGINE_FULL_AUTONOMY_MULTICLIENT_PLAN_RU_2026-11-09.md). **Передача:** [START_NEW_CHAT_RU.md](../START_NEW_CHAT_RU.md). Записи ниже исторические, старые E6g/E6d-ярлыки неактуальны.
+
+- Native Draft PR #133 на code SHA `8ba62b197d2b61f3f17a83f4da95ba80072a002a`, семь Flutter-independent Dart пакетов, локальный Dart API 0.1.0, Flutter + CLI; **нет** готового HTTP/gRPC/Web client gateway.
+- CI #1082 **FAIL**: четыре Flutter теста ожидают «Добавить книгу» вместо «Добавить книгу или RPG»; Python/Dart/M1.7 PASS; Windows/Android SKIPPED. M0 #1167 PASS. Не объявлять общий CI зелёным.
+- Генератор **E6k+ 0.3.0a12**, functional `44521f48250b804ce95eb4d79085c51e819b46f5`, docs `6c0eb8cacf1459a4ef8d3137b417f609cb25b9ad`. Историческое имя ветки всё ещё содержит E6g. Автор: ChatGPT Skill, приватные задания, Python/Dart native validator без обязательного Z.ai. External CI #409 PASS, синтетический, а native PR external parity FAIL (`contract_drift` и `story_authoring` dependency resolution).
+- Открыто: multi-client versioned API + transport adapter, CANON/BOOK_CHARACTER/AI_FREEFORM, полная книга/роли/NPC/causal, совместная native↔generator parity, 2 реальные русские FB2 и Win/Android E2E. Не дробить PR #133, main и generator-owned код не трогать.
+
+---
+
+## 2026-11-09 — доверенная книга внутри игрового API
+
+Единым функциональным блоком в PR #133:
+- Исправлена ошибка Dart `assignment_to_final_local`, блокировавшая
+  публичный импорт и множество Flutter-тестов на предыдущем HEAD.
+- `RichPrivateBookworldImporter` возвращает проверенные origin+глава
+  каждой сцены v3/v4 и количество проиндексированных глав.
+  `RpgGameplayEngine` передаёт Flutter **только происхождение текущей
+  достигнутой сцены**; нет преждевременной публикации будущих
+  персонажей, цитат или неоткрытых событий.
+- В `WorldPlayPage` появляются «По книге»/«Альтернативный сюжет»
+  и номер физической главы, а после .bwsave происхождение
+  восстанавливается из канонического ZIP.
+- `RpgWorldIntakeApi` теперь сравнивает заявленный генератором охват
+  с действительно проверенными `SOURCE_PASSAGE` по всем главам;
+  длинные маршруты до 512 ходов поддерживаются без старого лимита 24.
+- `RpgBookGameplayAuditApi` по запросу выполняет независимый
+  `StoryCampaignCausalAudit` с настоящим `StoryWorld`, памятью,
+  доверием и состоянием предметов NPC. Исходы:
+  **playable / blocked / inconclusive**, различаются строго.
+  Flutter запускает проверку в isolate; доказанный тупик блокирует
+  установку, недостаток лимита не объявляется успешной приёмкой.
+  Отчёт генератора НЕ является криптографическим доказательством
+  прохождения двух маршрутов на устройстве.
+- Добавлены тесты BookWorld v4 на 203 сцены, native SDK/SQLite
+  и Flutter-отображения; форматы .bworld/.bwsave не перепаковывались.
+
+Проверенная внешняя сборка E6: `658eac6ab4cc324cd2f22417c54936935610e68c`,
+CI #42547920109 PASS (синтетическая книга).
+**Текущий новый native PR коммит требует полного CI.**
+Остаются: реальный CANON, полная семантика BOOK_CHARACTER,
+динамический AI GM, генерация редакторских данных из всей книги
+и испытания на 2 настоящих русских FB2 + Windows/Android.
+Не трогать E6, main; не создавать микро-PR.
+
+## 2026-11-09 — приём готовых миров внешнего генератора через RPG API
+
+Внешний автор 0.3.0a11 уже использует native PR #133 и
+`LocalRpgGameApi`, но последний генераторский CI для
+`finalize-extended` сообщил `campaign_not_private`
+(входной `rights_status`, а не нарушение native runtime).
+Не менять generator-owned `tools/rpg_author` в этом чате.
+
+Добавлен отдельный **не мутирующий игру** `RpgWorldIntakeApi`:
+импорт готовой игры v1/v2/v3/v4 проходит настоящие Dart
+`BookworldImporter`/`PrivateBookworldImporter`/
+`RichPrivateBookworldImporter`, выдаёт статус сцен,
+предметов, NPC, финалов, fingerprint/SHA. Необязательный
+отчёт `*.readiness.json` генератора v4 проверяется на
+точный SHA256 игры/источника, охват сцен и глав,
+2 различные терминальные концовки и идентификаторы
+native-route отчёта; неверный отчёт отклоняется,
+**но не считается криптографическим доказательством
+действительного воспроизведения партий на устройстве**.
+Литературный канон и публикация НЕ подтверждаются.
+Flutter `LibraryPage` показывает отдельный предпросмотр,
+позволяет приложить отчёт, установить игру только по
+явному решению, повторно проверяет архив перед установкой.
+Библиотека/SQLite и прежние сохранения не очищаются.
+Предпросмотр работает в isolate, подключение .json
+остаётся действием клиента. Добавлены SDK negative tests,
+native API install/start и Flutter widget review tests.
+
+Всё в Draft PR #133; `main` и ветка внешнего генератора
+остаются нетронутыми. **Exact SHA CI нового коммита требуется**.
+Дальше — сценарный API для полноценной литературной
+автоматизации и реальный E2E на двух русских FB2, без
+дробления задач на микро-PR.
+
 ## 2026-11-09 — один проверяемый контракт создания RPG
 
 Вместо новых микроэтапов одним функциональным пакетом связываем

@@ -25,6 +25,11 @@ void main() {
       final beginning = game.load(id);
 
       expect(beginning.campaignId, id);
+      expect(beginning.sceneSource, isNotNull);
+      expect(beginning.sceneSource!.chapterNumber, greaterThanOrEqualTo(1));
+      expect(beginning.sceneSource!.chapterNumber,
+          lessThanOrEqualTo(beginning.sceneSource!.chapterCount));
+      expect(beginning.sceneSource!.sourceTitle, isNotEmpty);
       expect(beginning.revision, 0);
       expect(beginning.npcRelations, isEmpty);
       expect(beginning.npcDisplayNames, isEmpty);
@@ -115,6 +120,10 @@ void main() {
       expect(restored.journal.map((e) => e.choiceLabel).toList(),
           reopened.journal.map((e) => e.choiceLabel).toList());
       expect(restored.sceneId, reopened.sceneId);
+      expect(restored.sceneSource?.chapterIndex,
+          reopened.sceneSource?.chapterIndex);
+      expect(restored.sceneSource?.isSourcePassage,
+          reopened.sceneSource?.isSourcePassage);
     } finally {
       store?.close();
       dir.deleteSync(recursive: true);

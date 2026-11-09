@@ -9,6 +9,7 @@ import 'package:rpg_api/rpg_api.dart';
 export 'package:rpg_api/rpg_api.dart' show
     WorldLibraryItem, WorldCampaignItem, WorldSavePreview,
     WorldChoiceView, WorldEventView, NpcRelationView, WorldGameView,
+    WorldSceneSourceView,
     WorldChoiceResult, WorldLibraryGateway;
 
 /// Platform transport only. It owns application storage path and isolate

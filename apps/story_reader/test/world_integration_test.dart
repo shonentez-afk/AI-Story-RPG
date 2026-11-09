@@ -375,7 +375,7 @@ void main() {
     ));
     await settleWorker(tester);
     expect(find.byKey(const ValueKey('library-import')), findsOneWidget);
-    expect(find.text('Добавить книгу'), findsOneWidget);
+    expect(find.text('Добавить книгу или RPG'), findsOneWidget);
     expect(find.textContaining('TXT, FB2'), findsOneWidget);
     await tester.scrollUntilVisible(
       find.byKey(ValueKey('library-world-' + world.archiveHash)),
@@ -623,7 +623,7 @@ void main() {
     expect(find.text('Открыть библиотеку'), findsOneWidget);
     await tester.tap(find.text('Открыть библиотеку'));
     await settleWorker(tester);
-    expect(find.text('Добавить книгу'), findsOneWidget);
+    expect(find.text('Добавить книгу или RPG'), findsOneWidget);
     expect(find.text('Демо RPG • начать новое прохождение'), findsNothing);
   });
 

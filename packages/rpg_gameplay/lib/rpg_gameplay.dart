@@ -7,6 +7,7 @@ import 'package:story_core/story_core.dart';
 
 import 'src/free_text_action_gate.dart';
 export 'src/free_text_action_gate.dart';
+export 'src/bookwide_gameplay_audit.dart';
 export 'src/legacy_pilot_progress.dart';
 export 'src/legacy_pilot_save_record.dart';
 export 'src/legacy_pilot_save_codec.dart';
@@ -142,6 +143,19 @@ class NpcRelationView {
   final String? lifeState;
 }
 
+/// Only the currently reached scene's trusted book provenance.
+final class WorldSceneSourceView {
+  const WorldSceneSourceView({
+    required this.chapterIndex, required this.chapterCount,
+    required this.isSourcePassage, required this.sourceTitle,
+  });
+  final int chapterIndex, chapterCount;
+  final bool isSourcePassage;
+  final String sourceTitle;
+  int get chapterNumber => chapterIndex + 1;
+  bool get isExplicitAdaptation => !isSourcePassage;
+}
+
 class WorldGameView {
   const WorldGameView({
     required this.campaignId, required this.worldTitle,
@@ -150,7 +164,7 @@ class WorldGameView {
     required this.stats, required this.inventory,
     required this.flags, required this.knownFacts,
     required this.choices, required this.journal,
-    this.heroName, this.heroDescription,
+    this.heroName, this.heroDescription, this.sceneSource,
     this.itemNames = const {}, this.itemDescriptions = const {},
     this.statNames = const {}, this.factNames = const {},
     this.sceneNames = const {},
@@ -178,6 +192,7 @@ class WorldGameView {
   final List<WorldEventView> journal;
   final String? heroName;
   final String? heroDescription;
+  final WorldSceneSourceView? sceneSource;
   final Map<String, String> itemNames;
   final Map<String, String> itemDescriptions;
   final Map<String, String> statNames;
@@ -276,6 +291,9 @@ class RpgGameplayEngine {
   static ({
     Map<String, dynamic> presentation,
     NpcSocialRulebook? social,
+    Map<String, VerifiedBookSceneOrigin> origins,
+    String sourceTitle,
+    int sourceChapterCount,
   }) _verifiedRichContent(
       BookworldCampaignStore store, String worldHash) {
     // The store first verifies exact saved ZIP/SQLite. Only the new v3
@@ -283,7 +301,13 @@ class RpgGameplayEngine {
     final bytes = store.exportBookworld(worldHash);
     try {
       final rich = const RichPrivateBookworldImporter().inspect(bytes);
-      return (presentation: rich.presentation, social: rich.npcSocialRulebook);
+      return (
+        presentation: rich.presentation,
+        social: rich.npcSocialRulebook,
+        origins: rich.sceneOrigins,
+        sourceTitle: rich.sourceTitle,
+        sourceChapterCount: rich.sourceChaptersTotal,
+      );
     } on FormatException {
       // An invalid v3 NPC review must NEVER be downgraded to raw scene
       // text; that would bypass actor/fact gates and leak sealed dialogue.
@@ -291,21 +315,33 @@ class RpgGameplayEngine {
       // without a signed rich presentation.
       try {
         const PrivateBookworldImporter().inspect(bytes);
-        return (presentation: const <String, dynamic>{}, social: null);
+        return (
+          presentation: const <String, dynamic>{}, social: null,
+          origins: const <String, VerifiedBookSceneOrigin>{},
+          sourceTitle: '', sourceChapterCount: 0,
+        );
       } on FormatException {
         const BookworldImporter().inspect(bytes);
-        return (presentation: const <String, dynamic>{}, social: null);
+        return (
+          presentation: const <String, dynamic>{}, social: null,
+          origins: const <String, VerifiedBookSceneOrigin>{},
+          sourceTitle: '', sourceChapterCount: 0,
+        );
       }
     }
   }
 
   static WorldGameView _view(CampaignRecord record,
       {Map<String, dynamic> presentation = const {},
-       NpcSocialRulebook? socialRules}) {
+       NpcSocialRulebook? socialRules,
+       Map<String, VerifiedBookSceneOrigin> origins = const {},
+       String sourceTitle = '',
+       int sourceChapterCount = 0}) {
     final coordinator = record.coordinator;
     final blueprint = coordinator.blueprint;
     final state = coordinator.state;
     final current = blueprint.scenes[coordinator.sceneId]!;
+    final currentOrigin = origins[current.id];
     // The SQLite store already checked all events. Independently recompute
     // social memory from the exact replayed head, never from UI labels.
     final social = socialRules == null ? null : NpcSocialLedger.inspect(
@@ -574,6 +610,12 @@ class RpgGameplayEngine {
       journal: List.unmodifiable(journal),
       heroName: heroName,
       heroDescription: heroDescription,
+      sceneSource: currentOrigin == null ? null : WorldSceneSourceView(
+        chapterIndex: currentOrigin.chapterIndex,
+        chapterCount: sourceChapterCount,
+        isSourcePassage: currentOrigin.isSourcePassage,
+        sourceTitle: sourceTitle,
+      ),
       itemNames: items,
       itemDescriptions: itemDescriptions,
       statNames: stats,
@@ -634,7 +676,9 @@ class RpgGameplayEngine {
     final record = _store.loadCampaign(campaignId);
     final rich = _verifiedRichContent(_store, record.metadata.worldHash);
     return _view(record, presentation: rich.presentation,
-        socialRules: rich.social);
+        socialRules: rich.social, origins: rich.origins,
+        sourceTitle: rich.sourceTitle,
+        sourceChapterCount: rich.sourceChapterCount);
   }
 
   /// Atomic commit through the ONE authoritative story runtime and SQLite.

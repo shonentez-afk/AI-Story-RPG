@@ -42,6 +42,10 @@ class _RichViewGateway implements WorldLibraryGateway {
     ],
     heroName: 'Лена',
     heroDescription: 'Путешественница, помогающая мальчику у реки.',
+    sceneSource: WorldSceneSourceView(
+      chapterIndex: 1, chapterCount: 2,
+      isSourcePassage: false, sourceTitle: 'Река',
+    ),
     itemNames: {'rope': 'Верёвка'},
     itemDescriptions: {'rope': 'Прочная верёвка у дороги'},
     statNames: {'courage': 'Смелость', 'insight': 'Наблюдательность'},
@@ -132,6 +136,20 @@ void main() {
     );
     expect(locked.label, signed.label);
     expect(locked.enabled, false);
+  });
+
+  testWidgets('current scene provenance is shown without future chapters',
+      (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    await tester.pumpWidget(const MaterialApp(home: WorldPlayPage(
+      gateway: _RichViewGateway(), campaignId: 'rich_test_slot',
+    )));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('world-book-origin')), findsOneWidget);
+    expect(find.textContaining('Альтернативный сюжет · глава 2/2'),
+        findsOneWidget);
+    expect(find.textContaining('SOURCE_PASSAGE'), findsNothing);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('rich hero panel shows actual profile and stats', (tester) async {
