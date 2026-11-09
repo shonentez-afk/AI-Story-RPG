@@ -159,7 +159,10 @@ void main() {
     expect(committed, 1);
     expect(transport.sentBody, contains('gm_'));
     expect(transport.sentBody, contains('alternate_plot_continuity'));
-    expect(transport.sentBody, contains('open_promise_ids'));
+    // This no-NPC fixture must NOT fabricate promises; the payload only
+    // carries open_promise_ids inside encountered present NPC records.
+    expect(transport.sentBody, contains('npc_replay_state'));
+    expect(transport.sentBody, isNot(contains('"open_promise_ids"')));
     expect(transport.sentBody, isNot(contains('not_an_actual_key')));
     expect(tester.takeException(), isNull);
   });

@@ -11,13 +11,17 @@ import 'world_library_gateway.dart';
 import 'world_save_import_flow.dart';
 import 'world_play_page.dart';
 import 'world_import_review_worker.dart';
+import 'world_import_review_flow.dart' show WorldImportInspector;
 
 /// Detail of a verified RPG world within the ONE existing library.
 class WorldCampaignsPage extends StatefulWidget {
   const WorldCampaignsPage({
     super.key, required this.world, required this.gateway,
+    this.inspector,
   });
 
+  /// Tests use the exact native intake without a background isolate.
+  final WorldImportInspector? inspector;
   final WorldLibraryItem world;
   final WorldLibraryGateway gateway;
 
@@ -45,7 +49,8 @@ class _WorldCampaignsPageState extends State<WorldCampaignsPage> {
   Future<void> _loadCapabilities() async {
     try {
       final bytes = await widget.gateway.exportWorld(widget.world.archiveHash);
-      final checked = await reviewImportedWorldInWorker(bytes, null);
+      final checked = await (widget.inspector ??
+          reviewImportedWorldInWorker)(bytes, null);
       if (checked.archiveHash != widget.world.archiveHash ||
           checked.bookworldId != widget.world.bookworldId) {
         throw const FormatException('Подмена метаданных игрового мира');

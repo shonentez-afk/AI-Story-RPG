@@ -93,7 +93,8 @@ void main() {
     expect(find.text('Текущая цель: find safe shelter'), findsOneWidget);
     expect(find.text('Открытые обещания:'), findsOneWidget);
     expect(find.text('Самостоятельные решения:'), findsOneWidget);
-    expect(find.text('• protect bridge'), findsOneWidget);
+    // The same obligation is visible in the game scene behind the sheet.
+    expect(find.text('• protect bridge'), findsWidgets);
     expect(find.text('• anna seeks help'), findsOneWidget);
     expect(find.text('Исполненное обещание: 1'), findsOneWidget);
     expect(find.text('Самостоятельное решение: 1'), findsOneWidget);

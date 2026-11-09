@@ -148,6 +148,9 @@ void main() {
     await tester.pumpWidget(MaterialApp(home: BookRpgStartPage(
       book: book, gateway: gateway,
       indexer: (selected) async => BookSourceIndexer.index(selected),
+      reviewedWorldInspector: (bytes, report) async =>
+          const LocalRpgWorldIntakeApi().inspect(
+              bytes, readinessJson: report),
     )));
     await tester.pumpAndSettle();
     final action = find.byKey(const Key('rpg-start-import-reviewed-causal'));

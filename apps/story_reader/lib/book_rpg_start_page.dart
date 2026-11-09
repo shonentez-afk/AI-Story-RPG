@@ -38,10 +38,16 @@ class BookRpgStartPage extends StatefulWidget {
     this.analysis,
     this.manualCheckpointRepository,
     this.manualCheckpointDecoder,
+    this.reviewedWorldInspector,
   });
 
   final ImportedBook book;
   final WorldLibraryGateway gateway;
+
+  /// Optional read-only intake port. Production verifies through the worker
+  /// isolate; deterministic widget tests use the SAME native inspector inline.
+  /// Never let this port write or bypass the second pre-install verification.
+  final WorldImportInspector? reviewedWorldInspector;
 
   /// Test seam; production indexes in a worker isolate.
   final Future<BookSourceIndex> Function(ImportedBook)? indexer;
@@ -294,7 +300,9 @@ class _BookRpgStartPageState extends State<BookRpgStartPage> {
         throw const FormatException('Не удалось прочитать игровой архив.');
       }
       final immutable = Uint8List.fromList(bytes);
-      final preflight = await reviewImportedWorldInWorker(immutable, null);
+      final inspect = widget.reviewedWorldInspector ??
+          reviewImportedWorldInWorker;
+      final preflight = await inspect(immutable, null);
       if (preflight.formatVersion != 5 ||
           !preflight.sourceLiteralCanonVerified ||
           !preflight.sourceCausalReviewVerified || !preflight.isPrivate) {
@@ -309,11 +317,13 @@ class _BookRpgStartPageState extends State<BookRpgStartPage> {
       }
       if (!mounted) return;
       final installed = await WorldImportReviewFlow.confirmAndInstall(
-        context: context, archive: immutable, gateway: widget.gateway);
+        context: context, archive: immutable, gateway: widget.gateway,
+        inspector: inspect);
       if (!mounted || installed == null) return;
       await Navigator.of(context).push<void>(MaterialPageRoute(
         builder: (_) => WorldCampaignsPage(
           world: installed, gateway: widget.gateway,
+          inspector: widget.reviewedWorldInspector,
         ),
       ));
     } on FormatException catch (error) {

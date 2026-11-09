@@ -819,11 +819,11 @@ class _WorldInfoSheet extends StatelessWidget {
             'выбор либо проверенное свободное действие.',
       ],
       GamePanel.journal => [
+        if (view.journal.isEmpty) 'Решений пока нет',
         if (view.activePlotMode == 'ALTER_FATE') ...[
           'Альтернативная ветка (вымысел, не текст книги):',
           ...WorldUiPresenter.alternatePlot(view),
         ],
-        if (view.journal.isEmpty) 'Решений пока нет',
         for (final entry in view.journal)
           entry.sequence.toString() + '. ' +
               (entry.sceneTitle == null ? '' : entry.sceneTitle! + ': ') +
