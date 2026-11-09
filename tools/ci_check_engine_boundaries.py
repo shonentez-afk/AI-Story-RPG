@@ -33,7 +33,7 @@ RUNTIME_DEPS = {
     },
     "rpg_api": {
         "rpg_gameplay", "story_authoring", "campaign_manager",
-        "bookworld_format",
+        "bookworld_format", "crypto",
     },
 }
 IMPORT = re.compile(r"^\s*(?:import|export|part)\s+['\"]([^'\"]+)['\"]")
