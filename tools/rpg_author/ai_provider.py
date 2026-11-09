@@ -1,24 +1,20 @@
-"""Private AI authoring transport: consented GLM or private offline JSON inbox.
+"""Local request/response queue for the ChatGPT AI Story RPG Skill.
 
-Never write API credentials, raw prompts or user's book to public GitHub.
-All model responses are untrusted and verified by the source-locked compiler.
+NO external model, network, API key, provider selection or telemetry.
+ChatGPT reads each private request, authors the response itself, and the
+existing Python/Dart validators reject any fabricated citations or choices.
+The historical file name is retained so existing imports keep working.
 """
 from __future__ import annotations
 
-import json
-import os
 from pathlib import Path
-import time
-from urllib.error import HTTPError, URLError
-from urllib.request import Request, urlopen
 
-from .common import (AuthoringError, outside_repository, parse_json,
-                     read_bytes, require)
+from .common import (
+    AuthoringError, atomic_write, canonical, outside_repository, parse_json,
+    read_bytes, require,
+)
 
-ENDPOINT = "https://api.z.ai/api/paas/v4/chat/completions"
-DEFAULT_MODEL = "glm-4.7-flash"
 MAX_BODY = 512 * 1024
-MAX_PROMPT = 140000
 STAGES = frozenset(("analysis", "story", "enrichment", "extension",
                     "literary_review"))
 SYSTEM = {
@@ -77,110 +73,90 @@ SYSTEM = {
 }
 
 
+
 def strict_json_response(text: str) -> dict:
     require(type(text) is str and 0 < len(text.encode("utf-8")) <= MAX_BODY,
-            "model_invalid_response", "Model returned an invalid-sized reply")
-    source = text.strip()
+            "skill_invalid_response", "ChatGPT answer must be bounded JSON")
+    cleaned = text.strip()
     fence = chr(96) * 3
-    if source.startswith(fence + "json") and source.endswith(fence):
-        source = source[len(fence + "json"):-len(fence)].strip()
-    elif source.startswith(fence) and source.endswith(fence):
-        source = source[len(fence):-len(fence)].strip()
-    require(source.startswith("{") and source.endswith("}"),
-            "model_invalid_response", "Model must return exactly one JSON object")
-    answer = parse_json(source.encode("utf-8"))
-    require(type(answer) is dict, "model_invalid_response",
-            "Model must return a JSON object")
-    return answer
-
-
-class ZaiProvider:
-    """Official OpenAI-compatible endpoint; no keys or source in exceptions."""
-
-    def __init__(self, *, allow_cloud_book: bool, model: str = DEFAULT_MODEL,
-                 retries: int = 6, timeout: int = 90, sleep=time.sleep):
-        require(allow_cloud_book is True, "cloud_consent_required",
-                "Use --allow-cloud-book to approve private text transfer to Z.ai")
-        require(model == DEFAULT_MODEL, "unapproved_model",
-                "This authoring workflow is tested for glm-4.7-flash only")
-        secret = os.environ.get("ZAI_API_KEY", "").strip()
-        require(bool(secret), "missing_api_key",
-                "Set ZAI_API_KEY privately; never enter it as a CLI argument")
-        require(type(retries) is int and 1 <= retries <= 10 and
-                type(timeout) is int and 10 <= timeout <= 300,
-                "invalid_model_config", "Bad bounded request/retry settings")
-        self._secret, self.model = secret, model
-        self.retries, self.timeout, self._sleep = retries, timeout, sleep
-        self.calls = 0
-
-    def ask(self, stage: str, payload: dict, feedback: str = "") -> dict:
-        require(stage in STAGES, "invalid_authoring_stage", "Invalid AI stage")
-        task = json.dumps({"stage": stage, "request": payload,
-                           "validation_feedback": feedback[:1000]},
-                          ensure_ascii=False, separators=(",", ":"))
-        require(len(task) <= MAX_PROMPT, "model_context_budget",
-                "Too much source context for one safe request; divide into acts")
-        encoded = json.dumps({
-            "model": self.model,
-            "messages": [{"role": "system", "content": SYSTEM[stage]},
-                         {"role": "user", "content": task}],
-            "stream": False, "temperature": 0.3,
-        }, ensure_ascii=False).encode("utf-8")
-        request = Request(ENDPOINT, data=encoded, method="POST",
-                          headers={"Content-Type": "application/json",
-                                   "Authorization": "Bearer " + self._secret})
-        for attempt in range(self.retries):
-            try:
-                with urlopen(request, timeout=self.timeout) as response:
-                    raw = response.read(MAX_BODY + 1)
-                require(len(raw) <= MAX_BODY, "model_invalid_response",
-                        "Provider response exceeds safe size")
-                response = parse_json(raw)
-                choices = response.get("choices", [])
-                require(type(choices) is list and bool(choices),
-                        "model_invalid_response", "AI returned no choice")
-                message = choices[0].get("message", {}).get("content")
-                result = strict_json_response(message)
-                self.calls += 1
-                return result
-            except HTTPError as exc:
-                if exc.code not in (408, 429, 500, 502, 503, 504):
-                    raise AuthoringError("model_http_rejected",
-                                         "AI rejected request (HTTP " +
-                                         str(exc.code) + ")") from None
-            except (URLError, TimeoutError, OSError):
-                pass
-            if attempt + 1 < self.retries:
-                self._sleep(min(2 ** attempt, 20))
-        raise AuthoringError("model_retry_exhausted",
-                             "AI unavailable after automatic bounded retries")
+    if cleaned.startswith(fence + "json") and cleaned.endswith(fence):
+        cleaned = cleaned[len(fence + "json"):-len(fence)].strip()
+    elif cleaned.startswith(fence) and cleaned.endswith(fence):
+        cleaned = cleaned[len(fence):-len(fence)].strip()
+    require(cleaned.startswith("{") and cleaned.endswith("}"),
+            "skill_invalid_response", "Return exactly one JSON object")
+    data = parse_json(cleaned.encode("utf-8"))
+    require(type(data) is dict, "skill_invalid_response",
+            "ChatGPT answer must be a JSON object")
+    return data
 
 
 class PrivateResponseInbox:
-    """Offline responses: analysis_<chunk_id>.json, story.json, and so on."""
+    """Bridge: ChatGPT skill processes request, writes matching private JSON.
+
+    The first call emits requests/<stage>.request.json and stops with an
+    explicit "needs_skill_response", never pretending an AI has been called.
+    Revisions emit updated private feedback; no invented autoapproval.
+    """
 
     def __init__(self, directory: Path):
+        require(not directory.is_symlink(), "unsafe_inbox_path",
+                "Private skill response folder cannot be a symlink")
         self.directory = outside_repository(directory)
+        self.directory.mkdir(mode=0o700, parents=True, exist_ok=True)
         require(self.directory.is_dir(), "missing_response_inbox",
-                "Private JSON inbox is missing")
+                "Private skill response folder is missing")
         self.calls = 0
 
     def ask(self, stage: str, payload: dict, feedback: str = "") -> dict:
-        require(stage in STAGES, "invalid_authoring_stage", "Invalid AI stage")
+        require(stage in STAGES, "invalid_authoring_stage",
+                "Only fixed ChatGPT skill authoring stages are allowed")
         if stage == "analysis":
             chunk = payload["chunk"]["id"]
-            require(bool(chunk) and all(c.isalnum() or c == "_" for c in chunk),
-                    "invalid_chunk", "Unsafe analysis chunk ID")
+            require(type(chunk) is str and bool(chunk) and
+                    all(c.isascii() and (c.isalnum() or c == "_")
+                        for c in chunk),
+                    "invalid_chunk", "Unsafe indexed chunk ID")
             name = "analysis_" + chunk + ".json"
         else:
             name = stage + ".json"
-        path = (self.directory / name).resolve()
-        require(self.directory in path.parents and not path.is_symlink(),
-                "unsafe_inbox_path", "Source replies must be private JSON files")
-        require(path.is_file(), "missing_model_response",
-                "Private AI JSON answer not found: " + name)
-        result = parse_json(read_bytes(path, MAX_BODY))
-        require(type(result) is dict, "model_invalid_response",
-                "Provider answer must be one JSON object")
+        answer = self.directory / name
+        require(not answer.is_symlink(), "unsafe_inbox_path",
+                "Never follow symbolic links to private answers")
+        request_dir = self.directory / "requests"
+        require(not request_dir.is_symlink(), "unsafe_inbox_path",
+                "Private request directory cannot be a symlink")
+        request_dir.mkdir(mode=0o700, exist_ok=True)
+        task_file = request_dir / (name[:-5] + ".request.json")
+        require(not task_file.is_symlink(), "unsafe_inbox_path",
+                "Private request file cannot be a symlink")
+        task = {
+            "format": "rpg_author_chatgpt_skill_request_v1",
+            "stage": stage, "instructions": SYSTEM[stage],
+            "payload": payload,
+            "validation_feedback": feedback[:1000],
+            "answer_filename": name,
+            "external_model_required": False,
+            "send_book_to_external_api": False,
+        }
+        encoded = canonical(task)
+        require(len(encoded) <= MAX_BODY, "skill_context_budget",
+                "Private skill request exceeds tested size; replan source acts")
+        if not task_file.is_file() or read_bytes(task_file, MAX_BODY) != encoded:
+            atomic_write(task_file, encoded)
+        if feedback:
+            # A previous answer did not pass deterministic source/rule
+            # validation. The skill must revise the JSON rather than send
+            # the same invalid response through three automatic loops.
+            raise AuthoringError("skill_revision_required",
+                                 "ChatGPT must revise private answer " + name +
+                                 " using the review feedback in requests/")
+        if not answer.is_file():
+            raise AuthoringError("skill_response_needed",
+                                 "ChatGPT skill must author " + name +
+                                 " from the private request in requests/")
+        result = parse_json(read_bytes(answer, MAX_BODY))
+        require(type(result) is dict, "skill_invalid_response",
+                "Private ChatGPT skill answer must be one JSON object")
         self.calls += 1
         return result

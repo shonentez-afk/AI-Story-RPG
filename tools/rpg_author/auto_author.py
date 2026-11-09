@@ -1,4 +1,4 @@
-"""One resumable book -> AI authoring -> source-locked native-v4 RPG workflow.
+"""One resumable book -> ChatGPT Skill authoring -> native-v4 RPG workflow.
 
 Strict separation:
  * The model proposes Russian summaries, plot, enrichment, acts and criticism.
@@ -18,7 +18,7 @@ import subprocess
 import tempfile
 import zipfile
 
-from .ai_provider import PrivateResponseInbox, ZaiProvider
+from .ai_provider import PrivateResponseInbox
 from .common import (AuthoringError, ROOT, atomic_write, canonical, digest,
                      fields, outside_repository, parse_json, read_bytes,
                      read_json, require, utf16_len)
@@ -374,7 +374,7 @@ def author_complete_book(*, project_root: Path, workdir: Path,
                 "book_chapters_analyzed": idx["chapter_count"],
                 "source_chunks_analyzed": len(idx["chunks"]),
                 "game_created": False, "user_ready": False,
-                "model_calls_this_run": provider.calls}
+                "skill_responses_this_run": provider.calls}
 
     audited = audited_extension(
         root, overlay, extension, npc_review=native_npc_review)
@@ -398,7 +398,7 @@ def author_complete_book(*, project_root: Path, workdir: Path,
                 "two_native_ending_routes_discovered": True,
                 "book_chapters_analyzed": idx["chapter_count"],
                 "game_created": False, "user_ready": False,
-                "model_calls_this_run": provider.calls}
+                "skill_responses_this_run": provider.calls}
     else:
         def checked_review(response):
             value = _independent_review(
@@ -426,7 +426,7 @@ def author_complete_book(*, project_root: Path, workdir: Path,
         return {"status": "needs_independent_editorial_review",
                 "review_template": str(review_path),
                 "game_created": False, "user_ready": False,
-                "model_calls_this_run": provider.calls}
+                "skill_responses_this_run": provider.calls}
     result = finalize_extended_campaign(
         root, enrich_path, ext_path, review_path, output,
         npc_review=npc_review_path, no_interactive_questions=True)
@@ -436,10 +436,17 @@ def author_complete_book(*, project_root: Path, workdir: Path,
     # authorship metadata. It is NOT evidence that ChatGPT generated a
     # session actually served by Z.ai. Add an explicit truthful private
     # receipt without changing the accepted native schema.
-    provider_name = ("zai" if isinstance(provider, ZaiProvider) else
-                     "private_json_unknown_model")
-    declared_model = (provider.model if isinstance(provider, ZaiProvider)
-                      else None)
+    # The production CLI ONLY constructs PrivateResponseInbox. The
+    # integration suite injects a synthetic local answer object to exercise
+    # the entire real Dart path; never describe that fake as ChatGPT.
+    if type(provider) is PrivateResponseInbox:
+        provider_name = "chatgpt_skill"
+    else:
+        require(type(provider).__module__.startswith("tests.rpg_author."),
+                "skill_bridge_required",
+                "Production authoring must be driven by ChatGPT Skill")
+        provider_name = "synthetic_test_provider"
+    declared_model = None
     receipt_path = private / "authoring_provenance.json"
     receipt = {
         "format": "rpg_author_ai_authorship_receipt_v1",
@@ -447,12 +454,12 @@ def author_complete_book(*, project_root: Path, workdir: Path,
         "bookworld_sha256": result["archive_sha256"],
         "authoring_provider": provider_name,
         "authoring_model_id": declared_model,
-        "model_id_status": "declared_not_cryptographically_attested",
-        "private_offline_answers_may_have_unknown_origin": True,
+        "model_id_status": "not_attested",
+        "private_skill_answer_origin_requires_human_attestation": True,
         "workflow": REVISION,
         "review_mode": ("explicitly_delegated_independent_ai_pass" if
                         delegate_review else "owner_confirmed_private_review"),
-        "model_calls_in_final_invocation": provider.calls,
+        "skill_responses_consumed_in_final_invocation": provider.calls,
         "book_content_in_receipt": False,
         "api_key_in_receipt": False,
         "native_package_model_label_is_not_author_proof": True,
@@ -462,7 +469,7 @@ def author_complete_book(*, project_root: Path, workdir: Path,
     _fresh_or_existing(private, receipt_path.name, receipt)
     result["authoring_workflow"] = REVISION
     result["authoring_provenance_receipt"] = str(receipt_path)
-    result["model_calls_this_run"] = provider.calls
+    result["skill_responses_this_run"] = provider.calls
     result["autonomous_review_requested"] = delegate_review
     result["user_ready"] = False
     return result

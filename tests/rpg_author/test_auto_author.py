@@ -1,6 +1,6 @@
 """AI-book authoring QA: original three-chapter FB2, no real user book.
 
-Test resumability, exact-source quotes, private model consent, rejections
+Test resumability, exact-source quotes, private ChatGPT skill queue, rejections
 and real multi-act v3 preflight. Dart itself is tested in run_dart_parity.py.
 """
 from __future__ import annotations
@@ -11,12 +11,13 @@ from pathlib import Path
 import tempfile
 import unittest
 from unittest.mock import patch
-from urllib.error import HTTPError
+import contextlib
+import io
 
 from tests.rpg_author import fixtures_acts as book
 from tools.rpg_author import project
 from tools.rpg_author.ai_provider import (
-    PrivateResponseInbox, ZaiProvider, strict_json_response,
+    PrivateResponseInbox, strict_json_response,
 )
 from tools.rpg_author.auto_author import (
     _source_analysis, author_complete_book,
@@ -166,47 +167,81 @@ class BookAutopilotTests(unittest.TestCase):
                 **good["assertions"][0], "quote": "Несуществующая цитата"}]},
                 chunk, idx["source_fingerprint"], 0)
 
-    def test_parser_requires_one_private_workflow_and_cloud_optin(self):
+    def test_parser_has_skill_only_no_model_selection_or_cloud_upload(self):
         args = parser().parse_args([
             "author-book", "--book", "/private/novel.fb2",
             "--project", "/private/project", "--workdir", "/private/work",
             "--output", "/private/game.bworld",
-            "--provider", "private-json",
             "--response-dir", "/private/responses",
         ])
         self.assertEqual(args.command, "author-book")
-        self.assertFalse(args.allow_cloud_book)
         self.assertFalse(args.delegate_review)
-        with patch.dict("os.environ", {"ZAI_API_KEY": "test-private-token"}):
-            with self.assertRaises(AuthoringError) as cm:
-                ZaiProvider(allow_cloud_book=False, sleep=lambda _: None)
-        self.assertEqual(cm.exception.code, "cloud_consent_required")
+        for forbidden in (["--provider", "zai"], ["--allow-cloud-book"],
+                          ["--model", "glm-4.7-flash"]):
+            with self.subTest(forbidden=forbidden):
+                with contextlib.redirect_stderr(io.StringIO()):
+                    with self.assertRaises(SystemExit):
+                        parser().parse_args([
+                            "author-book", "--project", "/private/p",
+                            "--workdir", "/private/w",
+                            "--output", "/private/game.bworld", *forbidden,
+                        ])
+        from tools.rpg_author import ai_provider
+        self.assertFalse(hasattr(ai_provider, "ZaiProvider"))
+        self.assertFalse(hasattr(ai_provider, "urlopen"))
+        self.assertFalse(hasattr(ai_provider, "ENDPOINT"))
 
-    def test_strict_model_json_and_transient_429_auto_retry(self):
+    def test_strict_skill_json_and_feedback_request_instead_of_http(self):
         self.assertEqual(strict_json_response('{"a":1}'), {"a": 1})
         with self.assertRaises(AuthoringError):
             strict_json_response("not json")
-        class Reply:
-            def __enter__(self):
-                return self
-            def __exit__(self, *_):
-                return None
-            def read(self, n):
-                return json.dumps({
-                    "choices": [{"message": {"content": '{"summary":"ok"}'}}]
-                }).encode()
-        attempt = []
-        def transport(*args, **kwargs):
-            attempt.append(1)
-            if len(attempt) == 1:
-                raise HTTPError("https://api.z.ai/", 429, "retry", {}, None)
-            return Reply()
-        with patch.dict("os.environ", {"ZAI_API_KEY": "test-private-token"}), \
-                patch("tools.rpg_author.ai_provider.urlopen", side_effect=transport):
-            client = ZaiProvider(allow_cloud_book=True, sleep=lambda _: None)
-            self.assertEqual(client.ask("analysis", {"chunk": {}}),
-                             {"summary": "ok"})
-        self.assertEqual(len(attempt), 2)
+        private = self.dir / "chatgpt_skill_answers"
+        bridge = PrivateResponseInbox(private)
+        with self.assertRaises(AuthoringError) as cm:
+            bridge.ask("story", {"title": "Три берега"})
+        self.assertEqual(cm.exception.code, "skill_response_needed")
+        request_file = private / "requests" / "story.request.json"
+        self.assertTrue(request_file.exists())
+        task = json.loads(request_file.read_text(encoding="utf-8"))
+        self.assertEqual(task["format"], "rpg_author_chatgpt_skill_request_v1")
+        self.assertFalse(task["external_model_required"])
+        self.assertFalse(task["send_book_to_external_api"])
+        self.assertEqual(task["payload"]["title"], "Три берега")
+        answer_file = private / "story.json"
+        answer_file.write_text('{"title":"Принятая версия"}', encoding="utf-8")
+        self.assertEqual(bridge.ask("story", {"title": "Три берега"}),
+                         {"title": "Принятая версия"})
+        with self.assertRaises(AuthoringError) as cm:
+            bridge.ask("story", {"title": "Три берега"},
+                       feedback="previous response lacks citations")
+        self.assertEqual(cm.exception.code, "skill_revision_required")
+        revised = json.loads(request_file.read_text(encoding="utf-8"))
+        self.assertIn("lacks citations", revised["validation_feedback"])
+
+    def test_one_skill_first_cli_creates_private_request_without_network(self):
+        from tools.rpg_author.cli import main
+        import contextlib
+        import io
+        response = io.StringIO()
+        with contextlib.redirect_stdout(response):
+            status = main([
+                "author-book", "--book", str(self.source),
+                "--project", str(self.project),
+                "--workdir", str(self.private),
+                "--output", str(self.output),
+            ])
+        self.assertEqual(status, 3)
+        result = json.loads(response.getvalue())
+        self.assertEqual(result["status"], "needs_skill_response")
+        self.assertFalse(result["external_model_required"])
+        self.assertFalse(result["game_created"])
+        self.assertFalse(self.output.exists())
+        request = self.private / "skill-responses" / "requests" / (
+            "analysis_c0_b0_p0.request.json")
+        task = json.loads(request.read_text(encoding="utf-8"))
+        self.assertEqual(task["stage"], "analysis")
+        self.assertEqual(task["payload"]["chunk"]["chapter_index"], 0)
+        self.assertEqual(project.status(self.project)["chunks_with_analysis"], 0)
 
     def test_offline_inbox_rejects_missing_responses_and_symlink_escapes(self):
         inbox = self.dir / "private_responses"
@@ -214,7 +249,7 @@ class BookAutopilotTests(unittest.TestCase):
         provider = PrivateResponseInbox(inbox)
         with self.assertRaises(AuthoringError) as cm:
             provider.ask("story", {})
-        self.assertEqual(cm.exception.code, "missing_model_response")
+        self.assertEqual(cm.exception.code, "skill_response_needed")
         (inbox / "story.json").write_text('{"title":"test"}', encoding="utf-8")
         self.assertEqual(provider.ask("story", {})["title"], "test")
         (inbox / "story.json").unlink()

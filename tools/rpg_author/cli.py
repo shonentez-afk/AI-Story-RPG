@@ -107,22 +107,17 @@ def parser():
                           help="Explicit declaration, not independently verified absence")
     autopilot = commands.add_parser(
         "author-book",
-        help="One private, resumable whole-book AI authoring -> native v4 completion")
+        help="ChatGPT Skill -> private whole-book source review -> native v4 RPG")
     autopilot.add_argument("--book", type=Path,
-                           help="FB2/TXT input on first invocation (never uploaded without consent)")
+                           help="Private FB2/TXT read and analyzed by the ChatGPT Skill")
     autopilot.add_argument("--project", type=Path, required=True)
     autopilot.add_argument("--workdir", type=Path, required=True,
                            help="Private authoring JSON; never inside public checkout")
     autopilot.add_argument("--output", type=Path, required=True)
     autopilot.add_argument("--npc-review", type=Path,
                            help="Optional already source-reviewed NPC Social v5 dossier")
-    autopilot.add_argument("--provider", choices=("zai", "private-json"),
-                           default="private-json")
     autopilot.add_argument("--response-dir", type=Path,
-                           help="External prepared JSON answers, not repository fixtures")
-    autopilot.add_argument("--model", default="glm-4.7-flash")
-    autopilot.add_argument("--allow-cloud-book", action="store_true",
-                           help="Explicitly allow private book text to leave this computer")
+                           help="Private ChatGPT Skill responses (default: WORKDIR/skill-responses)")
     autopilot.add_argument("--delegate-review", action="store_true",
                            help="Owner permits separate AI literary review; NOT proof of canon")
     ext_audit = commands.add_parser("audit-extended",
@@ -231,19 +226,9 @@ def main(argv=None) -> int:
                 no_interactive_questions=args.no_interactive_questions)
         elif name == "author-book":
             from .auto_author import author_complete_book
-            from .ai_provider import PrivateResponseInbox, ZaiProvider
-            from .common import require
-            if args.provider == "zai":
-                require(args.response_dir is None, "invalid_args",
-                        "Cloud provider must not use the private JSON inbox")
-                provider = ZaiProvider(
-                    allow_cloud_book=args.allow_cloud_book, model=args.model)
-            else:
-                require(args.response_dir is not None and
-                        not args.allow_cloud_book and
-                        args.model == "glm-4.7-flash", "invalid_args",
-                        "Private JSON provider needs --response-dir, no cloud upload")
-                provider = PrivateResponseInbox(args.response_dir)
+            from .ai_provider import PrivateResponseInbox
+            provider = PrivateResponseInbox(
+                args.response_dir or args.workdir / "skill-responses")
             result = author_complete_book(
                 project_root=args.project, workdir=args.workdir,
                 output=args.output, provider=provider, book=args.book,
@@ -281,6 +266,15 @@ def main(argv=None) -> int:
             return 3
         return 0
     except AuthoringError as exc:
+        if exc.code in ("skill_response_needed", "skill_revision_required"):
+            # A ChatGPT Skill must read the emitted *private* request and
+            # author a JSON response. Not an error, network call, or fake PASS.
+            print(json.dumps({
+                "status": "needs_skill_response", "code": exc.code,
+                "message": str(exc),
+                "external_model_required": False, "game_created": False,
+            }, ensure_ascii=False, indent=2))
+            return 3
         print(json.dumps({"status": "error", "code": exc.code, "message": str(exc)},
                          ensure_ascii=False), file=sys.stderr)
         return 2
