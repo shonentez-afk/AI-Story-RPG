@@ -170,6 +170,12 @@ class FakeLongSourceLockedAuthor:
                     for row in payload["chapters"]
                 ],
             }
+        if stage == "npc_cast":
+            return {
+                "characters": [],
+                "absence_reason": "Синтетические исходные главы содержат "
+                                  "только путницу, без других персонажей.",
+            }
         if stage == "story":
             assert payload["story_mode"] == (
                 "source_locked_sparse_v3_backbone_for_v4_acts")
