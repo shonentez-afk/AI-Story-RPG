@@ -5,6 +5,7 @@ from copy import deepcopy
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import patch
 
 from tests.rpg_author import long_book_fixture as novel
 from tools.rpg_author.auto_author import (
@@ -150,6 +151,46 @@ class LargeBookPlanningTests(unittest.TestCase):
                 self.idx, self.analyses, reviews, {
                     "scene_origins": scenes[:-1]})
         self.assertEqual(err.exception.code, "long_book_featured_event_missing")
+
+    def test_dense_chapter_windows_shrink_without_dropping_any_source(self):
+        first = self.windows[0]
+        one = {**first, "window_id": "w0000_0000",
+               "chapter_end": 0, "chapters": first["chapters"][:1]}
+        two = {**first, "window_id": "w0000_0001",
+               "chapter_end": 1, "chapters": first["chapters"][:2]}
+        ceiling = (len(canonical(one)) + len(canonical(two))) // 2
+        self.assertLess(len(canonical(one)), ceiling)
+        self.assertLess(ceiling, len(canonical(two)))
+        with patch("tools.rpg_author.long_book.MAX_WINDOW_BYTES", ceiling):
+            slices = chapter_windows(self.idx, self.analyses)
+        self.assertEqual(slices[0]["chapter_end"], 0)
+        self.assertEqual(len(slices), novel.COUNT)
+        self.assertEqual(slices[-1]["chapter_end"], novel.COUNT - 1)
+        with patch("tools.rpg_author.long_book.MAX_WINDOW_BYTES", 1):
+            with self.assertRaises(AuthoringError) as error:
+                chapter_windows(self.idx, self.analyses)
+        self.assertEqual(error.exception.code,
+                         "long_book_single_chapter_over_budget")
+
+    def test_unsupported_book_refuses_before_any_skill_response(self):
+        chapters = "".join(
+            "<section><p>Добавочная глава номер %03d.</p></section>" % i
+            for i in range(201, MAX_LONG_CHAPTERS + 1))
+        long_source = novel.SOURCE.replace(
+            "</body>", chapters + "</body>")
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            source_path = root / "above_bound.fb2"
+            source_path.write_text(long_source, encoding="utf-8")
+            fake = novel.FakeLongSourceLockedAuthor()
+            with self.assertRaises(AuthoringError) as error:
+                author_complete_book(
+                    book=source_path, project_root=root / "project",
+                    workdir=root / "work", output=root / "game.bworld",
+                    provider=fake, delegate_review=False)
+            self.assertEqual(error.exception.code,
+                             "long_book_requires_volumes")
+            self.assertEqual(fake.calls, 0)
 
     def test_beyond_native_book_limit_is_refused_without_truncation(self):
         idx = dict(self.idx, chapter_count=MAX_LONG_CHAPTERS + 1)
