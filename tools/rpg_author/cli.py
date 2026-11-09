@@ -120,6 +120,16 @@ def parser():
                            help="Private ChatGPT Skill responses (default: WORKDIR/skill-responses)")
     autopilot.add_argument("--delegate-review", action="store_true",
                            help="Owner permits separate AI literary review; NOT proof of canon")
+    causal = commands.add_parser(
+        "author-causal-v5",
+        help="ChatGPT Skill -> all exact-source CANON scenes -> native v2 review JSON")
+    causal.add_argument("--project", required=True, type=Path)
+    causal.add_argument("--base-world", required=True, type=Path)
+    causal.add_argument("--workdir", required=True, type=Path)
+    causal.add_argument("--output", required=True, type=Path)
+    causal.add_argument("--response-dir", type=Path)
+    causal.add_argument("--user-confirmed", action="store_true",
+                        help="Explicit owner approval, never inferred from AI output")
     # One portable private ZIP contains immutable source checkpoints, all
     # ChatGPT Skill requests/answers and optionally the compiled game.
     session = commands.add_parser(
@@ -251,6 +261,15 @@ def main(argv=None) -> int:
                 output=args.output, provider=provider, book=args.book,
                 delegate_review=args.delegate_review,
                 npc_review_path=args.npc_review)
+        elif name == "author-causal-v5":
+            from .source_causal_v2 import author_causal_v5
+            from .ai_provider import PrivateResponseInbox
+            provider = PrivateResponseInbox(
+                args.response_dir or args.workdir / "skill-responses")
+            result = author_causal_v5(
+                project_root=args.project, base_world=args.base_world,
+                workdir=args.workdir, output=args.output, provider=provider,
+                user_confirmed=args.user_confirmed)
         elif name == "snapshot-private":
             from .private_snapshot import snapshot_private
             result = snapshot_private(args.project, args.workdir, args.output,
