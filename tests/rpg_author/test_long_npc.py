@@ -224,9 +224,13 @@ class FirstMentionCastTests(unittest.TestCase):
                 broken_overlay["choices"]["go_100_160"]["effects"]
                 if effect["id"] != late.FACT_LATER
             ]
+            broken_signed = prepare_npc_review(
+                fake.ask("npc_review", {}), dossier, self.index,
+                story, self.analyses, broken_overlay, bp, origin,
+                user_confirmed=True)
             with self.assertRaises(AuthoringError) as unreachable:
                 compile_rich_from_project(
-                    checkpoint, broken_overlay, npc_review=signed)
+                    checkpoint, broken_overlay, npc_review=broken_signed)
             self.assertEqual(unreachable.exception.code, "rich_compile_rejected")
             self.assertIn("Unreachable item/fact catalog",
                           str(unreachable.exception))
