@@ -177,6 +177,50 @@ class FirstMentionCastTests(unittest.TestCase):
             check_native_long_npc_continuity(
                 self.cast, bound, bp, broken)
 
+    def test_approved_late_npc_compiles_real_base_v3_source_review(self):
+        # Native Python writer/importer preflight; on failure this test
+        # exposes the EXACT source/social validation, rather than hiding
+        # it behind a generic AI retry code in the full Dart parity job.
+        from tools.rpg_author import project
+        from tools.rpg_author.validate import candidate_blueprint
+        from tools.rpg_author.legacy_package import _provenance
+        from tools.rpg_author.npc_skill import prepare_npc_review
+        from tools.rpg_author.rich_package import compile_rich_from_project
+
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            source = root / late.SOURCE_FILENAME
+            source.write_text(late.SOURCE, encoding="utf-8")
+            checkpoint = root / "project"
+            project.init_project(checkpoint, source)
+            for analysis in self.analyses:
+                project.submit_analysis(checkpoint, analysis)
+            story = late.late_story()
+            story["source_fingerprint"] = self.index["source_fingerprint"]
+            project.submit_story(checkpoint, story)
+            dossier, binding = bind_long_npc_cast(
+                self.cast, story, self.index, self.analyses)
+            fake = late.FakeLateNpcAuthor()
+            overlay = {
+                "format": "rpg_author_rich_enrichment_v1",
+                "source_fingerprint": self.index["source_fingerprint"],
+                "story_sha256": digest(canonical(story)),
+                **fake.ask("enrichment", {
+                    "story": story, "npc_dossiers": dossier,
+                }),
+            }
+            bp = candidate_blueprint(story, self.index)
+            origin = _provenance(story, self.index, self.analyses, bp)
+            signed = prepare_npc_review(
+                fake.ask("npc_review", {}), dossier, self.index,
+                story, self.analyses, overlay, bp, origin,
+                user_confirmed=True)
+            raw, attribution = compile_rich_from_project(
+                checkpoint, overlay, npc_review=signed)
+            self.assertTrue(raw.startswith(b"PK"))
+            self.assertTrue(attribution)
+            self.assertEqual(len(signed["actors"]), 1)
+
     def test_reproducible_201_chapter_full_skill_queue_to_review_gate(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)
