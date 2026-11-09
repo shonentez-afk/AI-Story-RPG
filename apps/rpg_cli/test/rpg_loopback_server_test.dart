@@ -61,7 +61,9 @@ void main() {
       expect(caps.$1, HttpStatus.ok);
       expect(caps.$2, await invokeLocal('capabilities', {}));
       expect((caps.$2['result'] as Map)['arbitrary_book_canon'], false);
-      expect((caps.$2['result'] as Map)['dynamic_ai_game_master'], false);
+      expect((caps.$2['result'] as Map)['dynamic_ai_game_master'], true);
+      expect((caps.$2['result'] as Map)['source_literal_canon'], true);
+      expect((caps.$2['result'] as Map)['new_typed_freeform_event'], true);
 
       final world = base64Encode(fixture.readAsBytesSync());
       final preview = await send('inspect_world',

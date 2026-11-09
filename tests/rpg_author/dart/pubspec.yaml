@@ -13,3 +13,5 @@ dependencies:
     path: ../../../packages/bookworld_format
   story_core:
     path: ../../../packages/story_core
+  story_authoring:
+    path: ../../../packages/story_authoring
