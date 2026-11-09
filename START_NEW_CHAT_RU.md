@@ -1,3 +1,13 @@
+# СРОЧНАЯ ПОПРАВКА ПРИОРИТЕТА — 09.11.2026: UI parity ПЕРЕД ЛИТЕРАТУРНЫМ QA
+
+**СЛЕДУЮЩИЙ КРУПНЫЙ ПАКЕТ — ОБЯЗАТЕЛЬНОЕ СОГЛАСОВАНИЕ ВСЕГО FLUTTER-ИНТЕРФЕЙСА С АВТОНОМНЫМ RPG-ДВИЖКОМ.** В предыдущих передаточных документах его ошибочно поставили после тестирования реальных книг. Это неверно: **сперва реализовать и принять полный UI parity** по [аудиту + единому техническому плану](docs/FLUTTER_ENGINE_UI_PARITY_P0_RU_2026-11-09.md), и только потом две реальные FB2, GLM, Windows/Android E2E и релиз.
+
+Подтверждённые пробелы: карточки NPC не выводят `currentGoal/openPromiseIds/autonomousDecisionIds`; Журнал не представляет `alternatePlotContinuity`; подтверждение свободного AI-хода не раскрывает весь typed NPC/plotBeat/proof результат; экран создания предлагает быстрый режим, Z.ai и буквальный CANON, но ещё не даёт единый путь установки/запуска reviewed E6q.1 causal v5. Внешний Skill не превращать скрытно во встроенную модель. Дополнительно проверить Герой, Предметы, диалоги с портретами, выборы, сохранения и адаптивность Flutter. **Это НЕ готово/НЕ принято**, зелёный CI #1120/#478 подтвердил прежнюю функциональность, а не новую полную UI parity.
+
+Реализовать ОДНИМ большим пакетом в PR #133 с общей UI/API/widget/visual приёмкой, без микро-PR; автономный Dart core и исходные сохранения не переписывать. Текущий code baseline `92ef5d701637957e31e3e6e090f63d1e0bdb4173`, PR Draft; main не изменять. Эта docs-only запись [skip ci] не меняет кодовый baseline.
+
+---
+
 # ПРИЁМКА ТРЁХ БОЛЬШИХ ПАКЕТОВ — 09.11.2026 — АКТУАЛЬНЫЙ ФИНАЛЬНЫЙ СТАТУС
 
 **Проверенный КОД:** `92ef5d701637957e31e3e6e090f63d1e0bdb4173` в Draft PR #133. [Полный Native CI #1120](https://github.com/shonentez-afk/AI-Story-RPG/actions/runs/42597681279) **COMPLETED SUCCESS на этом SHA**: Python reference, Dart runtime, BookWorld+SQLite+M1.7+API, Flutter analyze/widget, Windows portable и Android debug APK — все SUCCESS. Артефакты Windows portable (15.4 MB) и Android debug (89 MB) доступны внутри #1120; отдельный job Publish test release был SKIPPED, поэтому НЕ утверждать, что опубликован отдельный GitHub Release. [M0 #1205](https://github.com/shonentez-afk/AI-Story-RPG/actions/runs/42597681258) SUCCESS; [Native External author #476](https://github.com/shonentez-afk/AI-Story-RPG/actions/runs/42597681193) SUCCESS.
