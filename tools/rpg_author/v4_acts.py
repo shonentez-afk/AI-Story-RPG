@@ -32,7 +32,8 @@ EFFECTS = {
 }
 
 
-def _check_rule(raw: dict, blueprint: dict, *, effect: bool) -> None:
+def _check_rule(raw: dict, blueprint: dict, *, effect: bool,
+                approved_npc_grant: bool = False) -> None:
     """Enforce the native JSON DSL shape, not a duplicate gameplay engine."""
     valid = EFFECTS if effect else CONDITIONS
     require(type(raw) is dict and type(raw.get("op")) is str
@@ -59,7 +60,8 @@ def _check_rule(raw: dict, blueprint: dict, *, effect: bool) -> None:
         require(raw["actor"] in blueprint["actors"], "unknown_act_actor",
                 "Act references a missing actor")
         if effect:
-            require(raw["actor"] == "player", "unreviewed_act_npc_grant",
+            require(raw["actor"] == "player" or approved_npc_grant,
+                    "unreviewed_act_npc_grant",
                     "NPC learn_fact requires an independent witness and social review")
     if "value" in raw:
         require(type(raw["value"]) is bool, "invalid_act_rule",
@@ -135,7 +137,8 @@ def _check_graph(scenes: dict, entry: str, exit_chapter: int) -> int:
 
 def extend_reviewed_acts(blueprint: dict, provenance: dict, story: dict,
                          enrichment: dict, index: dict, analyses: list[dict],
-                         proposal: dict) -> tuple[dict, dict, dict]:
+                         proposal: dict, *, approved_npc_grants: frozenset = frozenset()
+                         ) -> tuple[dict, dict, dict]:
     """Validate a private multi-act proposal; return native input and honest QA."""
     fields(proposal, {
         "format", "source_fingerprint", "story_sha256", "enrichment_sha256",
@@ -266,7 +269,11 @@ def extend_reviewed_acts(blueprint: dict, provenance: dict, story: dict,
                 for condition in conditions:
                     _check_rule(condition, blueprint, effect=False)
                 for effect_rule in effects:
-                    _check_rule(effect_rule, blueprint, effect=True)
+                    npc_tuple = (
+                        sid, cid, effect_rule.get("actor"), effect_rule.get("id"))
+                    _check_rule(
+                        effect_rule, blueprint, effect=True,
+                        approved_npc_grant=npc_tuple in approved_npc_grants)
                 proof = choice["effect_assertion_ids"]
                 require(type(proof) is list and len(proof) == len(effects),
                         "act_unwitnessed_effect", "Every effect needs one matching quote ID")
@@ -374,6 +381,10 @@ def extend_checked_world(blueprint, provenance, story, enrichment, index,
     if extension.get("format") == FORMAT:
         return extend_reviewed_acts(blueprint, provenance, story, enrichment,
                                     index, analyses, extension)
+    from .v4_npc_acts import FORMAT as NPC_ACTS, extend_reviewed_npc_acts
+    if extension.get("format") == NPC_ACTS:
+        return extend_reviewed_npc_acts(
+            blueprint, provenance, story, enrichment, index, analyses, extension)
     from .v4_expansion import FORMAT as BRIDGE, extend_reviewed_world
     require(extension.get("format") == BRIDGE, "invalid_extension",
             "Explicit v4 extension format must be recognized and versioned")

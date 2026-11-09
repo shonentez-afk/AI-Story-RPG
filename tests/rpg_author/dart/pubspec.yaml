@@ -15,3 +15,5 @@ dependencies:
     path: ../../../packages/bookworld_format
   story_core:
     path: ../../../packages/story_core
+  rpg_api:
+    path: ../../../packages/rpg_api

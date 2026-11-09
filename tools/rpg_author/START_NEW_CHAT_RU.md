@@ -1,3 +1,27 @@
+## E6j 0.3.0a9: actor-scoped NPC continuity across reviewed v4 acts
+
+9 ноября 2026: внешний генератор, не основной движок.
+Новый опциональный контракт rpg_author_v4_acts_v2 +
+rpg_author_v4_npc_act_review_v1 связывает знания NPC, доказанные
+встречи, воспоминания, доверие, выборы другого акта и уход персонажа
+с точной редакцией FB2, текущими scene/choice IDs и цитатами.
+Невозможно выдать NPC факт, создать память или доверие без
+отдельной user-confirmed source-bound проверки. Нельзя менять
+actor_id, симулировать социальный движок на Python или приписывать
+подтверждённый литературный канон.
+
+Доказательная CI-фикстура: оригинальная синтетическая FB2 на 3 главы,
+2 акта, NPC с постоянным character_id, 3 маршрута. Проверки через
+настоящий native Dart v4 и публичный rpg_api, включая закрытый выбор
+без ранее заработанного доверия, NPC memory/life и SQLite .bwsave.
+Это ещё не приёмка до получения обоих SUCCESS на exact-code SHA.
+Не изменять main, PR #133, packages, apps или основной CI.
+Проверенная предыдущая база E6i: 96d4cfa; синхронизация native
+pin 081fc365. Установленный skill ChatGPT по-прежнему E6d.
+
+Раздел E6j: E6J_SOURCE_LOCKED_NPC_ACT_CONTINUITY_RU_2026-11-09.md.
+
+---
 ## E6i accepted native-head integration (exact code)
 
 2026-11-09. External author generator version 0.3.0a8.

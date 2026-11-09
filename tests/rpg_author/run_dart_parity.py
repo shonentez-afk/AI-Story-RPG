@@ -430,6 +430,89 @@ def main():
         game_path.write_bytes(act_world)
         attribution_path.write_bytes(act_sidecar_data)
         assert verify_extended_bundle(game_path, attribution_path)["native_dart_verified"]
+        # E6j: SAME original 3-chapter FB2 with a persistent NPC actor.
+        # Exact chapter-1 knowledge + witnessed trust affects act two.
+        # Verify both the native v4 author and the public Flutter/CLI RPG API.
+        from tests.rpg_author import fixtures_npc_acts as npc_case
+        npc_overlay, npc_base_review = npc_case.reviewed_base()
+        base_npc_world, _ = compile_rich_from_project(
+            act_project, npc_overlay, npc_review=npc_base_review)
+        with zipfile.ZipFile(io.BytesIO(base_npc_world)) as npc_base_zip:
+            npc_bp = json.loads(npc_base_zip.read("scenario/blueprint.json"))
+            npc_prov = json.loads(npc_base_zip.read("source/provenance.json"))
+        npc_act_review = npc_case.reviewed_npc_acts(
+            npc_bp, npc_prov, npc_overlay)
+        npc_preflight = audited_extension(
+            act_project, npc_overlay, npc_act_review,
+            npc_review=npc_base_review)
+        assert npc_preflight["npc_known_grants_added"] == 1, npc_preflight
+        assert npc_preflight["npc_memories_added"] == 2, npc_preflight
+        assert npc_preflight["npc_cross_act_gates_added"] == 1, npc_preflight
+        assert npc_preflight["npc_life_transitions_added"] == 1, npc_preflight
+        assert not npc_preflight["npc_social_v5_validated_by_native"]
+        extended_npc, npc_act_sidecar = compile_extended_from_project(
+            act_project, npc_overlay, npc_review=npc_base_review,
+            extension=npc_act_review)
+        with zipfile.ZipFile(io.BytesIO(extended_npc)) as bundle:
+            npc_act_bp = json.loads(bundle.read("scenario/blueprint.json"))
+            npc_act_source = json.loads(bundle.read("source/provenance.json"))
+        assert len(npc_act_bp["scenes"]) == 8
+        assert len(npc_act_source["npc_knowledge"]["grants"]) == 2
+        assert len(npc_act_source["npc_social"]["rules"]) == 3
+        assert len(npc_act_source["npc_social"]["choice_gates"]) == 1
+        assert npc_act_source["npc_social"]["format"] == (
+            "ai_story_npc_social_witness_v5")
+        npc_careful = dart({
+            "operation": "npc_public_api",
+            "data": base64.b64encode(extended_npc).decode("ascii"),
+            "path": careful_path,
+        })
+        assert npc_careful["terminal"] and npc_careful["portable_save_verified"], npc_careful
+        assert npc_case.NPC_FACT in (
+            npc_careful["npc_knowledge"][npc_case.ACTOR]), npc_careful
+        assert npc_careful["npc_life_states"][npc_case.ACTOR] == "absent", npc_careful
+        npc_preview_earned = dart({
+            "operation": "npc_public_api",
+            "data": base64.b64encode(extended_npc).decode("ascii"),
+            "path": careful_path[:4],
+        })
+        npc_preview_missed = dart({
+            "operation": "npc_public_api",
+            "data": base64.b64encode(extended_npc).decode("ascii"),
+            "path": hurried_path[:3],
+        })
+        available_earned = {
+            c["id"]: c["enabled"] for c in npc_preview_earned["choices"]}
+        available_missed = {
+            c["id"]: c["enabled"] for c in npc_preview_missed["choices"]}
+        assert available_earned["careful_route"] is True, npc_preview_earned
+        assert available_missed["careful_route"] is False, npc_preview_missed
+        earned_relation = [x for x in npc_preview_earned["npc_relations"]
+                           if x["actor_id"] == npc_case.ACTOR]
+        assert len(earned_relation) == 1, npc_preview_earned
+        assert earned_relation[0]["directed_score"] >= 2, npc_preview_earned
+        assert earned_relation[0]["memory_count"] >= 1, npc_preview_earned
+        early = dart({
+            "operation": "npc_public_api",
+            "data": base64.b64encode(extended_npc).decode("ascii"),
+            "path": help_path,
+        })
+        assert early["terminal"] and early["portable_save_verified"], early
+        assert early["npc_life_states"][npc_case.ACTOR] == "absent", early
+        npc_result = dart({
+            "operation": "rich_private",
+            "data": base64.b64encode(extended_npc).decode("ascii"),
+            "paths": [careful_path, hurried_path, help_path],
+        })
+        assert npc_result["format_version"] == 4
+        assert all(j["terminal"] and j["replay_ok"]
+                   for j in npc_result["journeys"]), npc_result
+        e6j_world_path = root / "reviewed_npc_acts_v4.bworld"
+        e6j_sidecar_path = root / "reviewed_npc_acts_v4.attribution.json"
+        e6j_world_path.write_bytes(extended_npc)
+        e6j_sidecar_path.write_bytes(npc_act_sidecar)
+        assert verify_extended_bundle(e6j_world_path,
+                                      e6j_sidecar_path)["native_dart_verified"]
     print(json.dumps({"source_comparisons": checked, "candidate_accepted_by_dart_blueprint": True,
                       "known_lossy_source_forms_refused": 1,
                       "application_modified": False,
@@ -451,7 +534,10 @@ def main():
                        "native_v4_203_source_locked_scenes_replayed": True,
                        "native_v4_initial_item_and_tick_review_verified": True,
                        "native_v4_three_chapter_two_act_branching_verified": True,
-                       "native_v4_stateful_knowledge_gate_and_save_replayed": True}))
+                       "native_v4_stateful_knowledge_gate_and_save_replayed": True,
+                       "native_v4_npc_actor_scoped_cross_act_grants_verified": True,
+                       "native_v4_npc_social_memory_trust_and_life_replayed": True,
+                       "native_v4_npc_public_api_choice_gates_and_saves": True}))
 
 
 if __name__ == "__main__":
