@@ -73,3 +73,50 @@ Next: either full source-locked whole-book literary trials and
 multi-character source scrutiny, or a separately scoped E6l
 for native-reviewed reply options/complex item returns, after
 accepting this E6k on exact SHA.
+
+## Принятая E6k интеграционная проверка (9 ноября 2026)
+
+**Рабочий точный SHA:** `0e9875beb983f3ac467be27e97c2142ef776b6d4`.
+**GitHub Actions #42545930490:** https://github.com/shonentez-afk/AI-Story-RPG/actions/runs/42545930490
+**COMPLETED SUCCESS**, `author-tests` = SUCCESS, `dart-parity` = SUCCESS.
+Python: **147 основных тестов + 37 дополнительных — PASS**.
+Нативный Dart-лог подтвердил
+`native_v4_npc_signed_dialogue_redaction_and_portraits=true`,
+`native_v4_npc_item_custody_public_api_save_verified=true`.
+Другие прогоны E6g, E6h, E6i, E6j также остались PASS.
+
+Игра из 3-главного оригинального синтетического FB2 создаётся настоящим
+Dart v4-компилятором, импортируется штатным RichPrivateBookworldImporter;
+публичный `LocalRpgGameApi` на одних и тех же данных показывает скрытую
+реплику и отсутствие actor-портрета без ранее заработанного знания,
+после обучения — разрешённую реплику и правильный `character_id`.
+В акте 1 герой получает верёвку; в акте 2 передаёт её NPC по подписанному
+действию, и после импорта .bwsave владелец остаётся правильным.
+Повторно выполнен `rich-v3`/NPC social v5/SQLite, Python и Dart.
+
+**Безопасная граница**: весь E6k diff расположен строго в
+`tools/rpg_author/` и `tests/rpg_author/`. `main`, `apps`, `packages`,
+основной PR #133 и родной CI не редактировались.
+Native pin E6k по-прежнему зафиксирован как
+`081fc365efac030be25d8b75aca0ba305a6bcc6c`.
+В новом head PR #133 добавлены/экспортированы `RpgMultiActTrialApi`,
+`MultiActTrialPlanComposer`, изменения `story_authoring.dart` и другие
+средства. Обновление native-пина НЕ выполнено: требуется отдельный
+контрактный diff-аудит и новый Python/Dart exact-code CI.
+
+## Что ещё полезно перенести из независимого движка
+
+1. `RpgMultiActTrialApi` + `MultiActTrialPlanComposer`: единый просмотр
+   предварительного сюжетного плана, героя и NPC-встреч, без копии причинности.
+2. `CrossActSourceEvidencePacket`: две полные подтверждённые ветви с
+   цитатами и честным разделением «слова книги» / «причинность» / «канон».
+3. `RpgProposalReviewApi`: проверка JSON-ответов ИИ отдельным native
+   верификатором, включая диалоги и литературную критику, а не Python-эвристикой.
+4. `RpgCampaignProseApi`: литературное оформление всех игровых сцен после
+   принятия `.bworld` с сохранением неизменных событий и состояния.
+
+**Не завершено**: реальные FB2, проза и диалоги от выбранной модели,
+литературная независимая проверка, создание NPC из исходной книги с
+проверкой dossier/persona, авторство интерактивных реплик на всех актах,
+сгенерированные портреты и физический Windows/Android E2E.
+Установленный ChatGPT skill остаётся на E6d, не синхронизирован с E6k.
