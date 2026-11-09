@@ -1,6 +1,71 @@
 import 'blueprint.dart';
 import 'codec.dart';
 import 'engine.dart';
+import 'freeform_action.dart';
+import 'world_state.dart';
+
+/// A signed alternate ending needs a real typed consequence, not just AI
+/// narration claiming an obligation was fulfilled. Proof grants NO effects.
+final class AlternateResolutionProof {
+  const AlternateResolutionProof._(
+      this.obligationId, this.effectOp, this.resourceId);
+  final String obligationId, effectOp, resourceId;
+  static final _gm = RegExp(r'^gm_[a-z0-9_]{1,59}$');
+
+  factory AlternateResolutionProof.fromJson(Object? raw) {
+    final data = jsonObject(raw, 'alternate_resolution_proof');
+    assertFields(data, 'alternate_resolution_proof',
+        {'obligation_id', 'effect_op', 'resource_id'},
+        {'obligation_id', 'effect_op', 'resource_id'});
+    final id = data['obligation_id'];
+    final op = data['effect_op'];
+    final resource = data['resource_id'];
+    if (id is! String || !_gm.hasMatch(id) ||
+        resource is! String || !_gm.hasMatch(resource) ||
+        !{'set_flag', 'grant_item', 'consume_item',
+          'learn_fact', 'promise_fulfilled'}.contains(op)) {
+      throw const FormatException('Unreviewed alternative obligation proof');
+    }
+    return AlternateResolutionProof._(id, op as String, resource);
+  }
+
+  Map<String, String> toJson() => {
+    'obligation_id': obligationId,
+    'effect_op': effectOp,
+    'resource_id': resourceId,
+  };
+
+  bool verifiedBy(FreeformActionDraft action, WorldState before) {
+    if (effectOp == 'promise_fulfilled') {
+      return action.npcInteraction?.kind == 'promise_fulfilled' &&
+          action.npcInteraction?.promiseId == resourceId;
+    }
+    final hasTypedEffect = action.effects.any((effect) =>
+        effect.op == effectOp &&
+        effect.id == resourceId &&
+        (effectOp != 'set_flag' || effect.value == true));
+    if (!hasTypedEffect) return false;
+    return switch (effectOp) {
+      'set_flag' => before.flags[resourceId] != true,
+      'grant_item' => !before.inventory.contains(resourceId),
+      'consume_item' => before.inventory.contains(resourceId),
+      'learn_fact' =>
+          !(before.knowledge['player']?.contains(resourceId) ?? false),
+      _ => false,
+    };
+  }
+
+  bool evidenceExistsIn(FreeformActionDraft action) {
+    if (effectOp == 'promise_fulfilled') {
+      return action.npcInteraction?.kind == 'promise_fulfilled' &&
+          action.npcInteraction?.promiseId == resourceId;
+    }
+    return action.effects.any((effect) =>
+        effect.op == effectOp &&
+        effect.id == resourceId &&
+        (effectOp != 'set_flag' || effect.value == true));
+  }
+}
 
 /// One executable noncanonical beat proposed by a client/model. The words
 /// remain fiction, while objective, participants and outstanding obligations
@@ -11,6 +76,7 @@ final class AlternateStoryBeat {
     required this.leadActorId, required this.objectiveId,
     required this.participantActorIds, required this.openedObligationIds,
     required this.resolvedObligationIds, required this.route,
+    required this.resolutionProofs,
   });
 
   static const format = 'ai_story_alternate_beat_v1';
@@ -20,6 +86,9 @@ final class AlternateStoryBeat {
   final List<String> participantActorIds;
   final List<String> openedObligationIds;
   final List<String> resolvedObligationIds;
+  /// Optional only for reading old portable saves. New resolutions must
+  /// supply one proof for every closed obligation.
+  final List<AlternateResolutionProof> resolutionProofs;
 
   factory AlternateStoryBeat.fromJson(Object? raw) {
     final data = jsonObject(raw, 'alternate_beat');
@@ -28,7 +97,8 @@ final class AlternateStoryBeat {
       'lead_actor_id', 'objective_id', 'participant_actor_ids',
       'opened_obligation_ids', 'resolved_obligation_ids', 'route',
     };
-    assertFields(data, 'alternate_beat', fields, fields);
+    assertFields(data, 'alternate_beat',
+        fields, {...fields, 'resolution_proofs'});
     if (data['format'] != format) {
       throw const FormatException('Unrecognized alternative scene plan');
     }
@@ -57,6 +127,15 @@ final class AlternateStoryBeat {
     final people = ids('participant_actor_ids', 8);
     final opened = ids('opened_obligation_ids', 4);
     final resolved = ids('resolved_obligation_ids', 4);
+    final rawProofs = data['resolution_proofs'];
+    final proofs = rawProofs == null ? <AlternateResolutionProof>[] :
+        jsonArray(rawProofs, 'resolution_proofs')
+            .map(AlternateResolutionProof.fromJson).toList();
+    if (proofs.length > 4 ||
+        proofs.map((p) => p.obligationId).toSet().length != proofs.length ||
+        !resolved.toSet().containsAll(proofs.map((p) => p.obligationId))) {
+      throw const FormatException('Incorrect alternative obligation evidence');
+    }
     if (!people.contains(lead) ||
         opened.any((id) => !_gm.hasMatch(id)) ||
         resolved.any((id) => !_gm.hasMatch(id)) ||
@@ -72,6 +151,7 @@ final class AlternateStoryBeat {
       participantActorIds: people,
       openedObligationIds: opened, resolvedObligationIds: resolved,
       route: data['route'] as String,
+      resolutionProofs: List.unmodifiable(proofs),
     );
   }
 
@@ -86,6 +166,9 @@ final class AlternateStoryBeat {
     'opened_obligation_ids': openedObligationIds,
     'resolved_obligation_ids': resolvedObligationIds,
     'route': route,
+    if (resolutionProofs.isNotEmpty)
+      'resolution_proofs':
+          resolutionProofs.map((proof) => proof.toJson()).toList(),
   };
 }
 
@@ -151,6 +234,12 @@ abstract final class AlternatePlotLedger {
           !open.containsAll(beat.resolvedObligationIds)) {
         throw const FormatException('Repeated or imaginary plot obligation');
       }
+      // Older signed saves without proof fields remain replayable; new
+      // proposals must supply proofs in checkProposal before being committed.
+      if (beat.resolutionProofs.any((proof) =>
+          !proof.evidenceExistsIn(draft))) {
+        throw const FormatException('False alternative scene consequence');
+      }
       open.removeAll(beat.resolvedObligationIds);
       open.addAll(beat.openedObligationIds);
       created.addAll(beat.openedObligationIds);
@@ -182,11 +271,19 @@ abstract final class AlternatePlotLedger {
     required Set<String> encounteredActorIds,
     required String? currentLeadGoal,
     required String? offeredLeadGoal,
+    required FreeformActionDraft draft,
+    required WorldState beforeState,
   }) {
     if (beat == null) {
       return previous.active ? 'alternate_plot_plan_required' : null;
     }
     if (!diverged) return 'alternate_plan_requires_alter_fate';
+    if (beat.resolvedObligationIds.length !=
+            beat.resolutionProofs.length ||
+        beat.resolutionProofs.any((proof) =>
+            !proof.verifiedBy(draft, beforeState))) {
+      return 'alternate_obligation_requires_committed_effect';
+    }
     if (previous.beatCount >= 512) return 'alternate_plot_budget_exceeded';
     if ((previous.active &&
             (previous.threadId != beat.threadId ||

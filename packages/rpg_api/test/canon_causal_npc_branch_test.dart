@@ -666,19 +666,21 @@ void main() {
       final world = game.install(fixture.reviewed);
       final id = game.start(world.archiveHash);
       FreeformActionDraft proposal(String action, String narrative,
-          {String intent = 'continue', Map<String, dynamic>? beat}) =>
+          {String intent = 'continue', Map<String, dynamic>? beat,
+           List<Map<String, Object?>> effects = const []}) =>
           FreeformActionDraft.fromJson({
         'format': FreeformActionDraft.format,
         'scope': FreeformActionDraft.fictionScope,
         'player_text': action,
         'narration': narrative,
-        'effects': <Object>[],
+        'effects': effects,
         'plot_intent': intent,
         if (beat != null) 'plot_beat': beat,
       });
       Map<String, dynamic> step(String beat, String? predecessor,
           {List<String> opened = const [],
            List<String> resolved = const [],
+           List<Map<String, String>> proofs = const [],
            String lead = 'player', String objective = 'gm_save_anna'}) => {
         'format': AlternateStoryBeat.format,
         'beat_id': beat, 'thread_id': 'gm_anna_rescue_thread',
@@ -688,6 +690,7 @@ void main() {
         'participant_actor_ids': ['player', if (lead != 'player') lead],
         'opened_obligation_ids': opened,
         'resolved_obligation_ids': resolved,
+        'resolution_proofs': proofs,
         'route': 'protect',
       };
       final opening = proposal('Остановить книжный путь',
@@ -734,11 +737,28 @@ void main() {
           expectedRevision: 2), throwsFormatException);
       expect(game.load(id).revision, 2);
 
+      final madeUpEnding = proposal('Заявить об исполнении без действия',
+          'Без доказательств герой утверждает, что слово сдержано.',
+          intent: 'end',
+          beat: step('gm_unproven_end', 'gm_rescue_start',
+              resolved: ['gm_keep_promise']));
+      expect(() => game.previewFreeform(id, madeUpEnding,
+          expectedRevision: 2), throwsFormatException);
       final fulfilled = proposal('Сдержать обещание',
           'Герой сдержал данное обещание и завершил свой путь.',
           intent: 'end',
           beat: step('gm_rescue_end', 'gm_rescue_start',
-              resolved: ['gm_keep_promise']));
+              resolved: ['gm_keep_promise'],
+              proofs: [{
+                'obligation_id': 'gm_keep_promise',
+                'effect_op': 'set_flag',
+                'resource_id': 'gm_shelter_delivered',
+              }]),
+          effects: [{
+            'op': 'set_flag',
+            'id': 'gm_shelter_delivered',
+            'value': true,
+          }]);
       final p2 = game.previewFreeform(id, fulfilled, expectedRevision: 2);
       final ending = game.commitFreeform(id, actionId: 'beat_2',
           draft: fulfilled, expectedRevision: 2,

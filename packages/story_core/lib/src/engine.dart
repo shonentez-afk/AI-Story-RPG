@@ -703,6 +703,7 @@ class StoryWorld {
       currentLeadGoal: currentLeadGoal,
       offeredLeadGoal: contact?.actorId == beat?.leadActorId
           ? (autoGoal ?? contact?.goalId) : null,
+      draft: draft, beforeState: _state,
     );
     if (beatReason != null) return _denied(beatReason);
     final alt = diverged
