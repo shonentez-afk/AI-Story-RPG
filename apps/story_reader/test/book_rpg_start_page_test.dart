@@ -112,6 +112,10 @@ void main() {
     expect(tester.widget<ChoiceChip>(
       find.byKey(const Key('rpg-start-quick-follow'))).selected, isTrue);
     await tester.ensureVisible(find.byKey(const Key('rpg-start-offline')));
+    // The unified primary journey is above the legacy direct entry.
+    // Scroll the actual screen, never tap an offscreen button.
+    await tester.ensureVisible(find.byKey(const Key('rpg-start-offline')));
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('rpg-start-offline')));
     await tester.pumpAndSettle();
     expect(find.byType(QuickRpgPage), findsOneWidget);
