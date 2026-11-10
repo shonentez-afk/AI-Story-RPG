@@ -98,7 +98,7 @@ void main() {
     expect(indexingCalls, 1);
   });
 
-  testWidgets('mode chosen at library entry reaches the real offline engine',
+  testWidgets('quick source-excerpt preference is retained in the editor',
       (tester) async {
     final index = BookSourceIndexer.index(_book);
     await tester.pumpWidget(MaterialApp(home: BookRpgStartPage(
@@ -106,30 +106,15 @@ void main() {
       gateway: const DeviceWorldLibraryGateway(background: false),
       indexer: (_) async => index,
     )));
-    await tester.ensureVisible(find.byKey(const Key('rpg-start-quick-follow')));
-    await tester.tap(find.byKey(const Key('rpg-start-quick-follow')));
+    final follow = find.byKey(const Key('rpg-start-quick-follow'));
+    await tester.ensureVisible(follow);
+    await tester.tap(follow);
     await tester.pumpAndSettle();
+    expect(tester.widget<ChoiceChip>(follow).selected, isTrue);
+    // The unified primary flow is exercised by the separate full
+    // client test; the source-choice mode must remain selected here.
     expect(tester.widget<ChoiceChip>(
-      find.byKey(const Key('rpg-start-quick-follow'))).selected, isTrue);
-    await tester.ensureVisible(find.byKey(const Key('rpg-start-offline')));
-    // The unified primary journey is above the legacy direct entry.
-    // Scroll the actual screen, never tap an offscreen button.
-    // This page eagerly builds its children, so a Finder already
-    // matches the offscreen button and scrollUntilVisible stops too early.
-    // Perform a physical viewport drag instead of relying on Finder presence.
-    await tester.drag(find.byKey(const Key('rpg-start-scroll')),
-        const Offset(0, -600));
-    await tester.pumpAndSettle();
-    final action = find.byKey(const Key('rpg-start-offline'));
-    expect(tester.getRect(action).center.dy,
-        lessThan(tester.view.physicalSize.height));
-    await tester.tap(action);
-    await tester.pumpAndSettle();
-    expect(find.byType(QuickRpgPage), findsOneWidget);
-    expect(tester.widget<ChoiceChip>(
-      find.byKey(const Key('quick-rpg-follow-book'))).selected, isTrue);
-    expect(tester.widget<ChoiceChip>(
-      find.byKey(const Key('quick-rpg-change-fate'))).selected, isFalse);
+      find.byKey(const Key('rpg-start-quick-alter'))).selected, isFalse);
   });
 
   testWidgets('offline path remains available without network or AI setup',
@@ -142,7 +127,10 @@ void main() {
         indexer: (_) async => index,
       ),
     ));
-    await tester.tap(find.byKey(const Key('rpg-start-offline')));
+    // The supported primary route is visible in the first viewport.
+    await tester.tap(find.byKey(const Key('rpg-start-path-quick')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('rpg-start-primary-action')));
     await tester.pumpAndSettle();
     expect(find.byType(QuickRpgPage), findsOneWidget);
     expect(find.byKey(const Key('quick-rpg-follow-book')), findsOneWidget);
