@@ -81,6 +81,11 @@ class _BookRpgStartPageState extends State<BookRpgStartPage> {
       const RpgCreationIntent.quickAlterFate();
   static const RpgCreationApi _creationApi = LocalRpgCreationApi();
   bool _opening = false;
+  // A confirmation dialog is awaiting the user's decision. Keep navigation
+  // locked, but don't animate the underlying route's progress indicator:
+  // otherwise Flutter's pumpAndSettle (and reduced-motion accessibility)
+  // never settles even though the dialog is already ready for review.
+  bool _awaitingReviewedWorldApproval = false;
   String? _error;
 
   @override
@@ -316,10 +321,12 @@ class _BookRpgStartPageState extends State<BookRpgStartPage> {
             'редакции или главы. Выберите точную исходную книгу.');
       }
       if (!mounted) return;
+      setState(() => _awaitingReviewedWorldApproval = true);
       final installed = await WorldImportReviewFlow.confirmAndInstall(
         context: context, archive: immutable, gateway: widget.gateway,
         inspector: inspect);
       if (!mounted || installed == null) return;
+      setState(() => _awaitingReviewedWorldApproval = false);
       await Navigator.of(context).push<void>(MaterialPageRoute(
         builder: (_) => WorldCampaignsPage(
           world: installed, gateway: widget.gateway,
@@ -335,7 +342,10 @@ class _BookRpgStartPageState extends State<BookRpgStartPage> {
           'Импорт подготовленной RPG не выполнен: $error. '
           'Сохранённые книги и игры не изменены.');
     } finally {
-      if (mounted) setState(() => _opening = false);
+      if (mounted) setState(() {
+        _opening = false;
+        _awaitingReviewedWorldApproval = false;
+      });
     }
   }
 
@@ -390,7 +400,7 @@ class _BookRpgStartPageState extends State<BookRpgStartPage> {
                   style: TextStyle(
                       color: Theme.of(context).colorScheme.error)),
             ],
-            if (_opening) ...[
+            if (_opening && !_awaitingReviewedWorldApproval) ...[
               const SizedBox(height: 8),
               const LinearProgressIndicator(
                   key: Key('rpg-start-opening-progress')),

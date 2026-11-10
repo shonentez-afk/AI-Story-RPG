@@ -919,6 +919,8 @@ class _WorldInfoSheet extends StatelessWidget {
                       ],
                     )
                   : ListView.builder(
+                      key: Key(panel == GamePanel.journal
+                          ? 'world-journal-scroll' : 'world-info-scroll'),
                       shrinkWrap: true,
                       itemCount: entries.length +
                           (panel == GamePanel.character &&

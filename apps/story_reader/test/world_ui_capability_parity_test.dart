@@ -106,7 +106,17 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.textContaining('Альтернативная ветка'), findsWidgets);
     expect(find.textContaining('Исполнить: protect bridge'), findsWidgets);
-    expect(find.textContaining('Получено: Верёвка'), findsWidgets);
+    // The authenticated journal has a real, lazy scrolling list. Scroll to
+    // the saved event rather than asserting that an offscreen child is built.
+    await tester.scrollUntilVisible(
+      find.textContaining('Получено: Верёвка'), 150,
+      scrollable: find.descendant(
+        of: find.byKey(const Key('world-journal-scroll')),
+        matching: find.byType(Scrollable),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Получено: Верёвка'), findsOneWidget);
     await tester.tap(find.byTooltip('Закрыть'));
     await tester.pumpAndSettle();
 
