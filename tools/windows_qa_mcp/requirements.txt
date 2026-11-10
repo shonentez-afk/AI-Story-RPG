@@ -1,0 +1,5 @@
+# Explicitly use the MCP SDK 1.x FastMCP interface. Do not upgrade to 2.x implicitly.
+mcp>=1.28,<2
+pywinauto>=0.6.9,<0.7
+psutil>=6,<8
+Pillow>=10,<13

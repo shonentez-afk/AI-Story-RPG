@@ -32,6 +32,8 @@ jobs:
         working-directory: experiments/m0_engine_comparison
       - name: Android host security regression
         run: python3 -m unittest discover -s tools/tests -v
+      - name: GigaCode Desktop Windows QA MCP contract regression (headless)
+        run: python3 -m unittest discover -s tools/windows_qa_mcp/tests -v
       - name: Independent source-bound NPC dialogue regression
         run: python3 -m unittest discover -s tests -p 'test_rich_scene_dialogue_projection.py' -v
 

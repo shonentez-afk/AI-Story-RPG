@@ -1,0 +1,1 @@
+"""Opt-in, local-only Windows UI QA for AI Story RPG (MCP over stdio)."""

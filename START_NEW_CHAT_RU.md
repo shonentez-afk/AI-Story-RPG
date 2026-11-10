@@ -1,3 +1,10 @@
+## 10.11.2026 — GigaCode Desktop Windows QA MCP: реализован контур, приёмка на ПК ожидается
+
+- Под GigaCode Desktop (без Cline) добавлен `tools/windows_qa_mcp/`: локальный MCP STDIO на Python FastMCP 1.x, UI Automation только указанного `ai_story_reader.exe`, ограниченный запуск/закрытие, клики, ввод, скриншоты, QA assertions и отчёты PASS/FAIL/BLOCKED/INCONCLUSIVE.
+- Подключение: `tools/windows_qa_mcp/setup_gigacode_desktop.ps1` и `README_RU.md`; инструкция агенту: `GIGACODE_QA_PROMPT_RU.md`. Нужен Windows 10/11 с интерактивным сеансом и полностью распакованным portable bundle.
+- Локально в Linux успешно пройдены 18 автономных unit tests. Эти тесты добавлены в Python CI как независимая проверка безопасности и контракта MCP. Реальный запуск MCP внутри GigaCode Desktop и Windows GUI **ещё не проверен**. До фактических отчётов/скриншотов не считать полную продуктовую приёмку и Merge PR #133 подтверждёнными.
+- Тестирование не меняет архитектуру: Dart RPG Engine автономен, Flutter остаётся отдельным клиентом. MCP не исполняет произвольных команд, не обслуживает сетевые порты и не видит личные файлы за пределами графического интерфейса игры; изображения окна могут захватить перекрывающие уведомления.
+
 # 10.11.2026 — P0 ОСТАТКИ UI ↔ АВТОНОМНЫЙ RPG ENGINE: ПОЛНЫЙ CI #1137 SUCCESS
 
 **Последний ПРОВЕРЕННЫЙ КОД:** `c364e1fed50575e2b5af6846267c7ba200ad7925` в [Draft PR #133](https://github.com/shonentez-afk/AI-Story-RPG/pull/133), ветка `feature/p0-bookwide-gameplay-readiness-20261107`. [Полный CI #1137](https://github.com/shonentez-afk/AI-Story-RPG/actions/runs/42748480401) — **COMPLETED SUCCESS на ТОЧНОМ SHA**: Flutter static analyze + все widget-тесты, Dart engine, Python reference, M1.7 автономные BookWorld/SQLite/API/второй клиент, Windows portable и Android debug APK — каждый job SUCCESS. Отдельные [M0 #1222](https://github.com/shonentez-afk/AI-Story-RPG/actions/runs/42748480427) и [External RPG Author #498](https://github.com/shonentez-afk/AI-Story-RPG/actions/runs/42748480363) также COMPLETED SUCCESS на том же SHA.
