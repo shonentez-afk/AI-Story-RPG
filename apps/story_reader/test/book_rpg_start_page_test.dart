@@ -114,9 +114,18 @@ void main() {
     await tester.ensureVisible(find.byKey(const Key('rpg-start-offline')));
     // The unified primary journey is above the legacy direct entry.
     // Scroll the actual screen, never tap an offscreen button.
-    await tester.ensureVisible(find.byKey(const Key('rpg-start-offline')));
+    await tester.scrollUntilVisible(
+      find.byKey(const Key('rpg-start-offline')), 160,
+      scrollable: find.descendant(
+        of: find.byKey(const Key('rpg-start-scroll')),
+        matching: find.byType(Scrollable),
+      ),
+    );
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('rpg-start-offline')));
+    final action = find.byKey(const Key('rpg-start-offline'));
+    expect(tester.getRect(action).center.dy,
+        lessThan(tester.view.physicalSize.height));
+    await tester.tap(action);
     await tester.pumpAndSettle();
     expect(find.byType(QuickRpgPage), findsOneWidget);
     expect(tester.widget<ChoiceChip>(
