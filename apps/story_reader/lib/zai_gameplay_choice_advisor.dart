@@ -114,6 +114,29 @@ class ZaiGameplayChoiceAdvisor {
     return Duration(seconds: standard);
   }
 
+  /// Up to 32 labels leave the device; large scenes are ranked using the
+  /// player's words without restricting native choices or sending secrets.
+  static List<Map<String, String>> _shortlist(
+      List<Map<String, String>> enabled, String text) {
+    if (enabled.length <= 32) return enabled;
+    final words = RegExp(r'[A-Za-zА-Яа-яЁё0-9]{2,}')
+        .allMatches(text.toLowerCase())
+        .map((match) => match.group(0)!)
+        .toSet();
+    final ranked = [
+      for (var i = 0; i < enabled.length; i++)
+        (index: i, score: words.where((word) =>
+            enabled[i]['label']!.toLowerCase().contains(word)).length),
+    ]..sort((a, b) {
+        final score = b.score.compareTo(a.score);
+        return score != 0 ? score : a.index.compareTo(b.index);
+      });
+    if (ranked.first.score == 0) return const [];
+    final positions = ranked.take(32).map((entry) => entry.index).toList()
+      ..sort();
+    return [for (final index in positions) enabled[index]];
+  }
+
   /// Exactly one visible user action + local choice labels per consent.
   /// The response is untrusted and can only suggest an existing enabled ID.
   Future<FreeTextPreview> suggest({
@@ -138,14 +161,22 @@ class ZaiGameplayChoiceAdvisor {
         _invalidText.hasMatch(playerText)) {
       throw const AiSetupException('Недопустимый текст действия.');
     }
-    final choices = [
+    final enabled = <Map<String, String>>[
       for (final choice in head.choices)
         if (choice.enabled && choice.label.trim().isNotEmpty)
           {'id': choice.id, 'label': choice.label},
     ];
-    if (choices.isEmpty || choices.length > 32 ||
-        choices.any((c) => !_id.hasMatch(c['id']!))) {
+    if (enabled.isEmpty || enabled.length > 100 ||
+        enabled.any((c) => !_id.hasMatch(c['id']!))) {
       throw const AiSetupException('Нет доступных действий для подсказки.');
+    }
+    final choices = _shortlist(enabled, playerText);
+    if (choices.isEmpty) {
+      return FreeTextPreview(
+        error: 'Слишком много вариантов. Уточните предмет или цель ' +
+            'действия; все варианты доступны вручную.',
+        offers: const [],
+      );
     }
     // Validate a potential AI suggestion mechanism before sending anything:
     // the text must not be blank/filler/control data, even when no keyword
@@ -231,6 +262,13 @@ class ZaiGameplayChoiceAdvisor {
           if (id == null) {
             return FreeTextPreview(
               error: 'ИИ не нашёл подходящего разрешённого действия. '
+                  'Выберите действие вручную.',
+              offers: const [],
+            );
+          }
+          if (!choices.any((choice) => choice['id'] == id)) {
+            return FreeTextPreview(
+              error: 'ИИ указал непереданный или закрытый вариант. ' +
                   'Выберите действие вручную.',
               offers: const [],
             );

@@ -165,6 +165,8 @@ final class RpgClientProtocol {
         'current_private_goal': npc.currentGoal,
         'open_promise_ids': npc.openPromiseIds,
         'autonomous_decision_ids': npc.autonomousDecisionIds,
+        'first_encounter_scene': npc.firstEncounterSceneTitle,
+        'last_encounter_scene': npc.lastEncounterSceneTitle,
       }
     ],
     'npc_item_owners': view.npcItemOwners,
@@ -188,6 +190,7 @@ final class RpgClientProtocol {
         'label': choice.label,
         'enabled': choice.enabled,
         'lock_reason': choice.lockReason,
+        'required_item_ids': choice.requiredItemIds,
       }
     ],
   };
@@ -196,6 +199,7 @@ final class RpgClientProtocol {
     'sequence': event.sequence,
     'scene_id': event.sceneId,
     'scene_title': event.sceneTitle,
+    'source_chapter_number': event.sourceChapterNumber,
     'choice': event.choiceLabel,
     'changes': event.changes,
   };

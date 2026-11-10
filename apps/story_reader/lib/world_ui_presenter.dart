@@ -104,16 +104,51 @@ abstract final class WorldUiPresenter {
     return List.unmodifiable(recent);
   }
 
+  /// Actions are item-dependent ONLY when native rules signed has_item.
   static List<String> availableItemActions(WorldGameView view) {
-    if (view.inventory.isEmpty) return const [];
-    final names = [
-      for (final id in view.inventory)
-        view.itemNames[id] ?? record(id),
-    ];
+    final owned = view.inventory.toSet();
     return List.unmodifiable(view.choices.where((choice) =>
-        choice.enabled && names.any((item) =>
-            item.length >= 3 && choice.label.contains(item)))
+        choice.enabled && choice.requiredItemIds.isNotEmpty &&
+        choice.requiredItemIds.every(owned.contains))
         .map((choice) => choice.label));
+  }
+
+  /// Past changes are taken from committed SQLite journal; name matching
+  /// is only a presentation hint and NEVER grants an ability.
+  static List<String> itemHistory(WorldGameView view) {
+    final ids = {...view.inventory, ...view.npcItemOwners.keys};
+    final names = ids.map((id) => view.itemNames[id] ?? record(id)).toSet();
+    final lines = <String>[];
+    for (final event in view.journal.reversed) {
+      for (final change in event.changes) {
+        if (!names.any((name) => change.contains(name))) continue;
+        lines.add('Ход ' + event.sequence.toString() + ': ' + change);
+        if (lines.length == 6) return List.unmodifiable(lines);
+      }
+    }
+    return List.unmodifiable(lines);
+  }
+
+  /// Groups only visited source origins. Alternative scenes have no
+  /// manufactured chapter attribution or future spoilers.
+  static List<String> journalNarrative(WorldGameView view) {
+    final rows = <String>[];
+    String? previousSection;
+    for (final event in view.journal) {
+      final section = event.sourceChapterNumber == null
+          ? 'Игровые события без подтверждённой главы'
+          : 'Глава ' + event.sourceChapterNumber.toString();
+      if (section != previousSection) {
+        rows.add(section);
+        previousSection = section;
+      }
+      rows.add(event.sequence.toString() + '. ' +
+          (event.sceneTitle == null ? '' : event.sceneTitle! + ': ') +
+          event.choiceLabel +
+          (event.changes.isEmpty ? '' :
+              '\n' + event.changes.map((change) => '• ' + change).join('\n')));
+    }
+    return List.unmodifiable(rows);
   }
 
   /// All consequences are PROPOSALS until successful native commit.

@@ -68,6 +68,8 @@ class BookRpgStartPage extends StatefulWidget {
   State<BookRpgStartPage> createState() => _BookRpgStartPageState();
 }
 
+enum _RpgCreationRoute { quick, reviewedAuthoring, literalCanon, importedV5 }
+
 class _BookRpgStartPageState extends State<BookRpgStartPage> {
   // One service and one source index for both start and resume. The service
   // only reads local validated checkpoints until the downstream consent UI.
@@ -77,6 +79,7 @@ class _BookRpgStartPageState extends State<BookRpgStartPage> {
       widget.manualCheckpointRepository ??
           const FileSourceAnalysisCheckpointRepository();
   int? _selectedChapter;
+  _RpgCreationRoute _creationRoute = _RpgCreationRoute.importedV5;
   RpgCreationIntent _quickIntent =
       const RpgCreationIntent.quickAlterFate();
   static const RpgCreationApi _creationApi = LocalRpgCreationApi();
@@ -104,6 +107,20 @@ class _BookRpgStartPageState extends State<BookRpgStartPage> {
     if (!identical(oldWidget.book, widget.book)) {
       _selectedChapter = BookSourceSelection.defaultChapter(widget.book);
       _error = null;
+    }
+  }
+
+  /// One primary action; legacy direct controls invoke identical handlers.
+  Future<void> _openSelectedRoute() async {
+    switch (_creationRoute) {
+      case _RpgCreationRoute.quick:
+        await _openOffline();
+      case _RpgCreationRoute.reviewedAuthoring:
+        await _openWholeBook();
+      case _RpgCreationRoute.literalCanon:
+        await _openLiteralCanon();
+      case _RpgCreationRoute.importedV5:
+        await _importReviewedCausal();
     }
   }
 
@@ -394,6 +411,78 @@ class _BookRpgStartPageState extends State<BookRpgStartPage> {
                 ),
               ),
             ),
+            Card(
+              key: const Key('rpg-start-unified-journey'),
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text('Создание RPG — единый маршрут',
+                        style: Theme.of(context).textTheme.titleMedium),
+                    Text('1. Источник: ' +
+                        (_selectedChapter == null ? 'вся книга'
+                            : BookSourceSelection.chapterLabel(
+                                widget.book, _selectedChapter!)) +
+                        '. Выбор отдельной сказки расположен ниже.'),
+                    const SizedBox(height: 8),
+                    const Text('2. Выберите способ подготовки:'),
+                    Wrap(spacing: 5, runSpacing: 2, children: [
+                      ChoiceChip(
+                        key: const Key('rpg-start-path-reviewed'),
+                        label: const Text('Полная проверенная RPG'),
+                        selected: _creationRoute == _RpgCreationRoute.importedV5,
+                        onSelected: _opening ? null : (_) => setState(() =>
+                            _creationRoute = _RpgCreationRoute.importedV5)),
+                      ChoiceChip(
+                        key: const Key('rpg-start-path-author'),
+                        label: const Text('Подготовить с ИИ'),
+                        selected: _creationRoute ==
+                            _RpgCreationRoute.reviewedAuthoring,
+                        onSelected: _opening ? null : (_) => setState(() =>
+                            _creationRoute = _RpgCreationRoute.reviewedAuthoring)),
+                      ChoiceChip(
+                        key: const Key('rpg-start-path-literal'),
+                        label: const Text('Буквальный CANON'),
+                        selected: _creationRoute == _RpgCreationRoute.literalCanon,
+                        onSelected: _opening ? null : (_) => setState(() =>
+                            _creationRoute = _RpgCreationRoute.literalCanon)),
+                      ChoiceChip(
+                        key: const Key('rpg-start-path-quick'),
+                        label: const Text('Офлайн-проба'),
+                        selected: _creationRoute == _RpgCreationRoute.quick,
+                        onSelected: _opening ? null : (_) => setState(() =>
+                            _creationRoute = _RpgCreationRoute.quick)),
+                    ]),
+                    const SizedBox(height: 8),
+                    Text(switch (_creationRoute) {
+                      _RpgCreationRoute.quick =>
+                          'Короткая проба без сети: не полный сюжет книги.',
+                      _RpgCreationRoute.reviewedAuthoring =>
+                          'Поактовый редактор и Z.ai после отдельного согласия.',
+                      _RpgCreationRoute.literalCanon =>
+                          'Весь исходный текст без проверки причин событий.',
+                      _RpgCreationRoute.importedV5 =>
+                          'Полная причинная RPG: сначала подготовьте .bworld ' +
+                          'в ChatGPT Skill E6q.1; здесь проверим редакцию ' +
+                          'и запросим согласие на импорт.',
+                    }),
+                    const SizedBox(height: 8),
+                    const Text('3. Проверка источника и допустимых ' +
+                        'возможностей → согласие → автономная игра.'),
+                    FilledButton.icon(
+                      key: const Key('rpg-start-primary-action'),
+                      onPressed: _opening ? null : _openSelectedRoute,
+                      icon: const Icon(Icons.play_arrow),
+                      label: const Text('Продолжить выбранный путь'),
+                    ),
+                    const Text('Ниже доступны прямые входы в те же ' +
+                        'режимы и дополнительные настройки.'),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 6),
             if (_error != null) ...[
               const SizedBox(height: 8),
               Text(_error!, key: const Key('rpg-start-error'),

@@ -814,6 +814,9 @@ class _WorldInfoSheet extends StatelessWidget {
         if (WorldUiPresenter.availableItemActions(view).isNotEmpty)
           'Сейчас доступны действия с имеющимися предметами:',
         ...WorldUiPresenter.availableItemActions(view),
+        if (WorldUiPresenter.itemHistory(view).isNotEmpty)
+          'Подтверждённые изменения предметов:',
+        ...WorldUiPresenter.itemHistory(view),
         'Предметы и владельцы — только из подтверждённых ходов. '
             'Передача или применение выполняются через разрешённый '
             'выбор либо проверенное свободное действие.',
@@ -824,12 +827,7 @@ class _WorldInfoSheet extends StatelessWidget {
           'Альтернативная ветка (вымысел, не текст книги):',
           ...WorldUiPresenter.alternatePlot(view),
         ],
-        for (final entry in view.journal)
-          entry.sequence.toString() + '. ' +
-              (entry.sceneTitle == null ? '' : entry.sceneTitle! + ': ') +
-              entry.choiceLabel +
-              (entry.changes.isEmpty ? '' :
-                  '\n' + entry.changes.map((change) => '• ' + change).join('\n')),
+        ...WorldUiPresenter.journalNarrative(view),
         'Журнал содержит только подтверждённые решения и последствия '
             'из SQLite. Свободная фраза не заменяет сохранённый выбор.',
       ],
@@ -884,6 +882,14 @@ class _WorldInfoSheet extends StatelessWidget {
                                       npc.directedScore.toString()),
                                   Text('Запомненных событий: ' +
                                       npc.memoryCount.toString()),
+                                  if (npc.firstEncounterSceneTitle != null)
+                                    Text('Первая подтверждённая встреча: ' +
+                                        npc.firstEncounterSceneTitle!),
+                                  if (npc.lastEncounterSceneTitle != null &&
+                                      npc.lastEncounterSceneTitle !=
+                                          npc.firstEncounterSceneTitle)
+                                    Text('Последнее подтверждённое событие: ' +
+                                        npc.lastEncounterSceneTitle!),
                                   if (npc.lifeState != null)
                                     Text('Состояние: ' +
                                         switch (npc.lifeState) {
@@ -908,6 +914,9 @@ class _WorldInfoSheet extends StatelessWidget {
                                   for (final kind in npc.memoryKinds.entries)
                                     Text(_memoryKindName(kind.key) + ': ' +
                                         kind.value.toString()),
+                                  const Text('Биография и мотивы из ' +
+                                      'редакторского черновика не раскрываются ' +
+                                      'без отдельной проверки для игрока.'),
                                   for (final item in visibleNpcItems.where(
                                       (entry) => entry.value == npc.actorId))
                                     Text('Предмет у персонажа: ' +

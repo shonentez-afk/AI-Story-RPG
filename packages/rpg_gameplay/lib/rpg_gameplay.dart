@@ -70,11 +70,14 @@ class WorldSavePreview {
 class WorldChoiceView {
   const WorldChoiceView({
     required this.id, required this.label, this.lockReason,
+    this.requiredItemIds = const [],
   });
 
   final String id;
   final String label;
   final String? lockReason;
+  /// Only signed has_item conditions; never infer from a button label.
+  final List<String> requiredItemIds;
   bool get enabled => lockReason == null;
 
   /// Game mechanics own the lock. The view must never reveal an unreached
@@ -108,6 +111,9 @@ class WorldChoiceView {
               ? 'Реплика скрыта до выполнения условий'
               : signedChoice.label),
       lockReason: lockReason,
+      requiredItemIds: List.unmodifiable(signedChoice.conditions
+          .where((rule) => rule.op == 'has_item' && rule.id != null)
+          .map((rule) => rule.id!).toList()),
     );
   }
 }
@@ -115,13 +121,16 @@ class WorldChoiceView {
 class WorldEventView {
   const WorldEventView({
     required this.sequence, required this.sceneId,
-    required this.choiceLabel, this.sceneTitle, this.changes = const [],
+    required this.choiceLabel, this.sceneTitle,
+    this.sourceChapterNumber, this.changes = const [],
   });
 
   final int sequence;
   final String sceneId;
   final String choiceLabel;
   final String? sceneTitle;
+  /// Visited source scene only; never guessed from future book chapters.
+  final int? sourceChapterNumber;
   /// Only state differences confirmed by replay, never model-invented actions.
   final List<String> changes;
 }
@@ -136,6 +145,7 @@ class NpcRelationView {
     this.currentGoal,
     this.openPromiseIds = const [],
     this.autonomousDecisionIds = const [],
+    this.firstEncounterSceneTitle, this.lastEncounterSceneTitle,
   });
 
   final String actorId;
@@ -152,6 +162,8 @@ class NpcRelationView {
   /// Model-independent future decisions from the signed rulebook,
   /// each computed from hash-chained committed turns.
   final List<String> autonomousDecisionIds;
+  /// Signed titles of committed encounters, not editor-only character lore.
+  final String? firstEncounterSceneTitle, lastEncounterSceneTitle;
 }
 
 /// Only the currently reached scene's trusted book provenance.
@@ -504,6 +516,14 @@ class RpgGameplayEngine {
           autonomousDecisionIds: List.unmodifiable(memories
               .where((m) => m.kind == NpcMemoryKind.autonomousDecision)
               .map((m) => m.memoryId).toList()),
+          firstEncounterSceneTitle: memories.isNotEmpty
+              ? scenes[memories.first.event.sceneId]
+              : ((visibleSpeakers.contains(actor) || witnessedHere)
+                  ? scenes[current.id] : null),
+          lastEncounterSceneTitle: memories.isNotEmpty
+              ? scenes[memories.last.event.sceneId]
+              : ((visibleSpeakers.contains(actor) || witnessedHere)
+                  ? scenes[current.id] : null),
         ));
       }
     }
@@ -638,6 +658,9 @@ class RpgGameplayEngine {
                     RichNpcDialogueResponses.replyFor(
                         presentation, event.sceneId, event.choiceId)! + '»',
         sceneTitle: scenes[event.sceneId],
+        sourceChapterNumber: event.freeform == null &&
+                origins[event.sceneId] != null
+            ? origins[event.sceneId]!.chapterIndex + 1 : null,
         changes: List.unmodifiable(changes),
       ));
     }

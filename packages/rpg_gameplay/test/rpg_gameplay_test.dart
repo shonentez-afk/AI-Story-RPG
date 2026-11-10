@@ -68,6 +68,9 @@ void main() {
       expect(met.revision, 1);
       expect(met.inventory, contains('map'),
           reason: 'Only committed source-bound wait grants the map');
+      expect(met.choices.firstWhere((choice) => choice.id == 'give_map')
+          .requiredItemIds, contains('map'),
+          reason: 'Only signed has_item may expose item-dependent actions');
       expect(met.npcRelations, isNotEmpty);
       expect(met.journal, hasLength(1));
 

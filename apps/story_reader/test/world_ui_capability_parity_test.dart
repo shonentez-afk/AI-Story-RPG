@@ -36,6 +36,8 @@ WorldGameView _view() => const WorldGameView(
     WorldEventView(
       sequence: 3, sceneId: 'canon_00000',
       choiceLabel: 'Предупредить Анну',
+      sourceChapterNumber: 1,
+      sceneTitle: 'Встреча у моста',
       changes: ['Узнано: Сигнал', 'Новое обещание: спасти мост'],
     ),
     WorldEventView(
@@ -50,6 +52,8 @@ WorldGameView _view() => const WorldGameView(
       memoryKinds: {'promiseReceived': 1, 'autonomousDecision': 1,
         'promiseFulfilled': 1, 'warned': 1},
       lifeState: 'present', currentGoal: 'gm_find_safe_shelter',
+      firstEncounterSceneTitle: 'Встреча у моста',
+      lastEncounterSceneTitle: 'Возвращение к мосту',
       openPromiseIds: ['gm_protect_bridge'],
       autonomousDecisionIds: ['gm_anna_seeks_help'],
     ),
@@ -91,6 +95,10 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Анна'), findsWidgets);
     expect(find.text('Текущая цель: find safe shelter'), findsOneWidget);
+    expect(find.text('Первая подтверждённая встреча: Встреча у моста'),
+        findsOneWidget);
+    expect(find.text('Последнее подтверждённое событие: Возвращение к мосту'),
+        findsOneWidget);
     expect(find.text('Открытые обещания:'), findsOneWidget);
     expect(find.text('Самостоятельные решения:'), findsOneWidget);
     // The same obligation is visible in the game scene behind the sheet.
@@ -105,6 +113,7 @@ void main() {
     await tester.tap(find.text('Журнал'));
     await tester.pumpAndSettle();
     expect(find.textContaining('Альтернативная ветка'), findsWidgets);
+    expect(find.text('Глава 1'), findsOneWidget);
     expect(find.textContaining('Исполнить: protect bridge'), findsWidgets);
     // The authenticated journal has a real, lazy scrolling list. Scroll to
     // the saved event rather than asserting that an offscreen child is built.
@@ -206,4 +215,49 @@ void main() {
     expect(lines.last, contains('не изменены'));
     expect(lines.join(' '), isNot(contains('Недоступный будущий персонаж')));
   });
+  test('typed items cannot be inferred from similar choice labels', () {
+    final view = WorldGameView(
+      campaignId: 'typed', worldTitle: 'Тест', sceneId: 's',
+      sceneText: 'Тест', revision: 0, tick: 0, isTerminal: false,
+      stats: const {}, inventory: const ['gm_rope'],
+      flags: const {}, knownFacts: const [], journal: const [],
+      choices: const [
+        WorldChoiceView(id: 'real', label: 'Укрепить мост',
+            requiredItemIds: ['gm_rope']),
+        WorldChoiceView(id: 'word', label: 'Упомянуть верёвку'),
+        WorldChoiceView(id: 'locked', label: 'Использовать верёвку',
+            requiredItemIds: ['gm_rope'], lockReason: 'npc_trust'),
+        WorldChoiceView(id: 'other', label: 'Использовать карту',
+            requiredItemIds: ['gm_map']),
+      ],
+      itemNames: const {'gm_rope': 'Верёвка', 'gm_map': 'Карта'},
+    );
+    expect(WorldUiPresenter.availableItemActions(view), ['Укрепить мост']);
+  });
+
+  test('journal shows visited chapters and separates alternate events', () {
+    final view = WorldGameView(
+      campaignId: 'typed', worldTitle: 'Тест', sceneId: 's',
+      sceneText: 'Тест', revision: 3, tick: 3, isTerminal: false,
+      stats: const {}, inventory: const [], flags: const {},
+      knownFacts: const [], choices: const [],
+      journal: const [
+        WorldEventView(sequence: 1, sceneId: 'one',
+            sourceChapterNumber: 1, sceneTitle: 'Встреча',
+            choiceLabel: 'Узнать дорогу', changes: ['Открыта тропа']),
+        WorldEventView(sequence: 2, sceneId: 'two',
+            sourceChapterNumber: 2, sceneTitle: 'Лес',
+            choiceLabel: 'Идти дальше'),
+        WorldEventView(sequence: 3, sceneId: 'gm',
+            choiceLabel: 'Свободный поступок'),
+      ],
+    );
+    final output = WorldUiPresenter.journalNarrative(view).join(' | ');
+    expect(output, contains('Глава 1'));
+    expect(output, contains('Глава 2'));
+    expect(output, contains('Игровые события без подтверждённой главы'));
+    expect(output, isNot(contains('Глава 3')));
+    expect(output, contains('Открыта тропа'));
+  });
+
 }

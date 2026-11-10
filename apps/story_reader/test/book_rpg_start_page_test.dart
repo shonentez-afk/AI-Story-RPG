@@ -70,6 +70,10 @@ void main() {
       ),
     ));
 
+    expect(find.byKey(const Key('rpg-start-unified-journey')),
+        findsOneWidget);
+    expect(find.byKey(const Key('rpg-start-primary-action')),
+        findsOneWidget);
     expect(find.byKey(const Key('rpg-start-offline')), findsOneWidget);
     expect(find.byKey(const Key('rpg-start-ai')), findsOneWidget);
     expect(find.byKey(const Key('rpg-start-resume')), findsOneWidget);
@@ -460,6 +464,24 @@ void main() {
     expect(find.byKey(const Key('rpg-start-literal-canon')),
         findsOneWidget);
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('one primary entry reuses the existing offline client',
+      (tester) async {
+    await tester.pumpWidget(MaterialApp(home: BookRpgStartPage(
+      book: _book,
+      gateway: const DeviceWorldLibraryGateway(background: false),
+      indexer: (book) async => BookSourceIndexer.index(book),
+    )));
+    final chip = find.byKey(const Key('rpg-start-path-quick'));
+    await tester.ensureVisible(chip);
+    await tester.tap(chip);
+    await tester.pumpAndSettle();
+    final primary = find.byKey(const Key('rpg-start-primary-action'));
+    await tester.ensureVisible(primary);
+    await tester.tap(primary);
+    await tester.pumpAndSettle();
+    expect(find.byType(QuickRpgFromBookPage), findsOneWidget);
   });
 
 }
