@@ -114,13 +114,11 @@ void main() {
     await tester.ensureVisible(find.byKey(const Key('rpg-start-offline')));
     // The unified primary journey is above the legacy direct entry.
     // Scroll the actual screen, never tap an offscreen button.
-    await tester.scrollUntilVisible(
-      find.byKey(const Key('rpg-start-offline')), 160,
-      scrollable: find.descendant(
-        of: find.byKey(const Key('rpg-start-scroll')),
-        matching: find.byType(Scrollable),
-      ),
-    );
+    // This page eagerly builds its children, so a Finder already
+    // matches the offscreen button and scrollUntilVisible stops too early.
+    // Perform a physical viewport drag instead of relying on Finder presence.
+    await tester.drag(find.byKey(const Key('rpg-start-scroll')),
+        const Offset(0, -600));
     await tester.pumpAndSettle();
     final action = find.byKey(const Key('rpg-start-offline'));
     expect(tester.getRect(action).center.dy,
