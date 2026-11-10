@@ -113,6 +113,14 @@ void main() {
     await tester.tap(find.text('Журнал'));
     await tester.pumpAndSettle();
     expect(find.textContaining('Альтернативная ветка'), findsWidgets);
+    await tester.scrollUntilVisible(
+      find.text('Глава 1'), 100,
+      scrollable: find.descendant(
+        of: find.byKey(const Key('world-journal-scroll')),
+        matching: find.byType(Scrollable),
+      ),
+    );
+    await tester.pumpAndSettle();
     expect(find.text('Глава 1'), findsOneWidget);
     expect(find.textContaining('Исполнить: protect bridge'), findsWidgets);
     // The authenticated journal has a real, lazy scrolling list. Scroll to
