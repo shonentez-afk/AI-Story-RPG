@@ -2,7 +2,7 @@
 """CI architectural gate for reusable, UI-independent Dart RPG packages.
 
 This does not claim a new engine exists. It checks source dependency direction
-for the four EXISTING engine packages and their pubspec runtime dependencies.
+for the independent engine packages and their pubspec runtime dependencies.
 The application can import packages; these packages cannot import the app.
 """
 from __future__ import annotations
@@ -19,9 +19,21 @@ RUNTIME_DEPS = {
     "story_core": {"crypto"},
     "story_runtime_adapter": {"story_core", "story_engine"},
     "bookworld_format": {"story_core", "crypto", "sqlite3"},
+    "story_authoring": {"archive", "xml", "crypto", "story_core", "bookworld_format"},
     "campaign_manager": {
         "story_core", "story_runtime_adapter", "bookworld_format",
         "crypto", "sqlite3",
+    },
+    # All view models, NPC evidence, replayed journal, inventory ownership,
+    # choice authorization and save gates belong to this headless service.
+    # No Flutter, path_provider, cloud provider or app may cross this edge.
+    "rpg_gameplay": {
+        "story_core", "bookworld_format", "campaign_manager",
+        "story_engine", "crypto",
+    },
+    "rpg_api": {
+        "rpg_gameplay", "story_authoring", "campaign_manager",
+        "bookworld_format", "crypto",
     },
 }
 IMPORT = re.compile(r"^\s*(?:import|export|part)\s+['\"]([^'\"]+)['\"]")
@@ -66,7 +78,7 @@ def validate() -> list[str]:
             issues.append(f"{package}: forbidden runtime dependency {forbidden}")
 
         library = folder / "lib"
-        for source in (*library.rglob("*.dart"), *(folder / "example").rglob("*.dart")):
+        for source in (*library.rglob("*.dart"), *(folder / "example").rglob("*.dart"), *(folder / "bin").rglob("*.dart")):
             for line_no, line in enumerate(
                     source.read_text(encoding="utf-8").splitlines(), 1):
                 match = IMPORT.match(line)
@@ -76,7 +88,7 @@ def validate() -> list[str]:
                 where = str(source.relative_to(ROOT)) + ":" + str(line_no)
                 if target.startswith("dart:"):
                     if target == "dart:ui" or (
-                            package == "story_core" and
+                            package in {"story_core", "rpg_api"} and
                             target not in DART_CORE_ALLOWED):
                         issues.append(f"{where}: forbidden SDK dependency {target}")
                 elif target.startswith("package:"):
@@ -103,6 +115,229 @@ def validate() -> list[str]:
                     issues.append(
                         f"story_core: core cannot declare service {forbidden}"
                     )
+    # No other client may silently reintroduce the four extracted rules.
+    # An alias file must remain an export-only compatibility shim.
+    pure_authoring = {
+        "npc_continuity_audit",
+        "draft_scene_graph_overview",
+        "cross_act_source_evidence_packet",
+        "preparation_readiness_report",
+    }
+    for name in sorted(pure_authoring):
+        shim = ROOT / "apps" / "story_reader" / "lib" / (name + ".dart")
+        text = shim.read_text(encoding="utf-8") if shim.is_file() else ""
+        active = [line.strip() for line in text.splitlines()
+                  if line.strip() and not line.lstrip().startswith("//")]
+        if len(active) < 1 or not active[0].startswith(
+                "export 'package:story_authoring/story_authoring.dart' show") or (
+                any(line.startswith(("class ", "enum ", "import ", "typedef "))
+                    for line in active)):
+            issues.append(f"{shim}: Flutter must re-export pure authoring rules")
+        if len(text) > 800:
+            issues.append(f"{shim}: compatibility shim contains too much code")
+
+    llm_adapters = (
+        "zai_npc_dialogue_draft.dart",
+        "zai_source_locked_prose_preview.dart",
+        "zai_source_locked_gameplay_candidates.dart",
+        "zai_source_locked_prose_audit.dart",
+    )
+    for filename in llm_adapters:
+        adapter = ROOT / "apps" / "story_reader" / "lib" / filename
+        content = adapter.read_text(encoding="utf-8") if adapter.is_file() else ""
+        if ("LocalRpgProposalReviewApi" not in content or
+                "package:rpg_api/rpg_api.dart" not in content):
+            issues.append(f"{adapter}: AI proposals must use pure API")
+        if ("RichNpcDialogueKnowledge.validate" in content or
+                "RichSceneDialogue.verify" in content):
+            issues.append(f"{adapter}: source rules still in Flutter")
+
+    # A real second application must use the public RPG API, not the engine.
+    cli = ROOT / "apps" / "rpg_cli"
+    allowed_cli = {"rpg_api", "campaign_manager"}
+    pubspec = cli / "pubspec.yaml"
+    if not pubspec.is_file():
+        issues.append("Standalone RPG CLI is missing")
+    elif pubspec_runtime_dependencies(pubspec.read_text(encoding="utf-8")) != allowed_cli:
+        issues.append("rpg_cli must depend only on public API and SQLite client port")
+    for source in (*(cli / "lib").rglob("*.dart"), *(cli / "bin").rglob("*.dart")):
+        for line_no, line in enumerate(
+                source.read_text(encoding="utf-8").splitlines(), 1):
+            match = IMPORT.match(line)
+            if match is None:
+                continue
+            target = match.group(1)
+            if target.startswith("package:"):
+                pkg = target[8:].split("/", 1)[0]
+                if pkg not in allowed_cli | {"ai_story_rpg_cli"}:
+                    issues.append(
+                        f"{source.relative_to(ROOT)}:{line_no}: "
+                        f"CLI must use public RPG API instead of {target}")
+            elif not target.startswith("dart:"):
+                resolved = (source.parent / target).resolve()
+                if not resolved.is_relative_to(cli.resolve()):
+                    issues.append(
+                        f"{source.relative_to(ROOT)}:{line_no}: "
+                        "CLI import escapes its client package")
+
+    prose_adapter = ROOT / "apps" / "story_reader" / "lib" / "campaign_prose_authoring.dart"
+    prose_code = prose_adapter.read_text(encoding="utf-8") if prose_adapter.is_file() else ""
+    if ("package:rpg_api/rpg_api.dart" not in prose_code or
+            "LocalRpgCampaignProseApi" not in prose_code):
+        issues.append(f"{prose_adapter}: whole-campaign prose must use RPG API")
+    if ("StoryInventoryRouteAudit.inspect" in prose_code or
+            "ReviewedCampaignProseWriter().build(" in prose_code or
+            "CampaignProseManifest._(" in prose_code):
+        issues.append(f"{prose_adapter}: campaign prose rules returned to Flutter")
+
+    campaign_flow = ROOT / "packages" / "story_authoring" / "lib" / "src" / "reviewed_campaign_workflow.dart"
+    flow_code = campaign_flow.read_text(encoding="utf-8") if campaign_flow.is_file() else ""
+    if ("ReviewedCampaignWorkflow" not in flow_code or
+            "StoryCampaignCausalAudit.inspect" not in flow_code or
+            "BookwideNpcCampaignAuthoring.compile" not in flow_code or
+            "CampaignProseFinalizer.compile" not in flow_code):
+        issues.append(f"{campaign_flow}: workflow must call canonical compilers and audits")
+    if ("package:flutter/" in flow_code or "ai_connection.dart" in flow_code or
+            "ZaiModel." in flow_code):
+        issues.append(f"{campaign_flow}: workflow must remain standalone")
+
+    npc_wizard = ROOT / "apps" / "story_reader" / "lib" / "whole_book_npc_campaign_page.dart"
+    wizard_code = npc_wizard.read_text(encoding="utf-8") if npc_wizard.is_file() else ""
+    for api_method in (
+        "_workflow.compileBase(", "_workflow.acceptEffects(",
+        "_workflow.acceptNpc(", "_workflow.prepareNarration(",
+        "_workflow.completeWithNarration(", "_workflow.completeWithoutNarration(",
+    ):
+        if api_method not in wizard_code:
+            issues.append(f"{npc_wizard}: missing RPG API call {api_method}")
+    for direct_call in (
+        "source.compileBase(", "NpcCampaignConsequences.accept(",
+        "BookwideNpcCampaignAuthoring.compile(", "CampaignProseManifest.prepare(",
+    ):
+        if direct_call in wizard_code:
+            issues.append(f"{npc_wizard}: a compiler rule returned to Flutter: {direct_call}")
+
+    legacy_editor = ROOT / "apps" / "story_reader" / "lib" / "multi_act_trial_editor.dart"
+    legacy_code = legacy_editor.read_text(encoding="utf-8") if legacy_editor.is_file() else ""
+    for delegated in (
+        "_trialApi.compileTrial(", "_trialApi.composePreviewPlan(",
+        "_trialApi.previewOneGameplay(",
+        "_trialApi.previewWholeGameplay(", "_trialApi.acceptGameplay(",
+        "_trialApi.verifyPrivateWorld(",
+    ):
+        if delegated not in legacy_code:
+            issues.append(f"{legacy_editor}: multi-act editor must call public RPG API {delegated}")
+    for direct in (
+        "MultiActTrialCompiler.compile(",
+        "BookwideSourceEncounters.attach(",
+        "ReviewedGameplayCompiler.preview(",
+        "ReviewedGameplayCompiler.previewAcrossBatches(",
+        "ReviewedGameplayCompiler.compileAfterUserConfirmation(",
+        "RichPrivateBookworldImporter().inspect(",
+    ):
+        if direct in legacy_code:
+            issues.append(f"{legacy_editor}: engine rule returned to Flutter: {direct}")
+
+    creation_policy = ROOT / "packages" / "story_authoring" / "lib" / "src" / "rpg_creation_contract.dart"
+    policy_code = creation_policy.read_text(encoding="utf-8") if creation_policy.is_file() else ""
+    if ("RpgCreationPolicy" not in policy_code or
+            "RpgCreationPlot.canon" not in policy_code or
+            "RpgCreationInteraction.fixedChoices" not in policy_code):
+        issues.append(f"{creation_policy}: creation modes must be explicitly verified")
+    if "package:flutter/" in policy_code or "Zai" in policy_code:
+        issues.append(f"{creation_policy}: creation policy must not use a Flutter or cloud dependency")
+    short_screen = ROOT / "apps" / "story_reader" / "lib" / "quick_rpg_page.dart"
+    short_code = short_screen.read_text(encoding="utf-8") if short_screen.is_file() else ""
+    for direct in ("QuickRpgBuilder.propose(", "QuickRpgBuilder.proposeFromEventOutline(", "QuickRpgBuilder.compile("):
+        if direct in short_code:
+            issues.append(f"{short_screen}: short game must use public RpgCreationApi, not {direct}")
+    if "_api.compileShort(" not in short_code or "_api.previewShort(" not in short_code:
+        issues.append(f"{short_screen}: short game must call the creation API")
+    world_intake = ROOT / "packages" / "rpg_api" / "lib" / "src" / "world_intake.dart"
+    intake_code = world_intake.read_text(encoding="utf-8") if world_intake.is_file() else ""
+    if ("RichPrivateBookworldImporter().inspect(" not in intake_code or
+            "archive_sha256" not in intake_code or
+            "rpg_author_complete_native_campaign_acceptance_v1" not in intake_code):
+        issues.append(f"{world_intake}: generated v4 acceptance must reuse native importer")
+    if "package:flutter/" in intake_code or "FilePicker" in intake_code:
+        issues.append(f"{world_intake}: generated-world intake is a pure SDK contract")
+    library_screen = ROOT / "apps" / "story_reader" / "lib" / "home_page.dart"
+    library_code = library_screen.read_text(encoding="utf-8") if library_screen.is_file() else ""
+    if ("WorldImportReviewFlow.confirmAndInstall(" not in library_code or
+            "gateway.install(bytes)" in library_code):
+        issues.append(f"{library_screen}: externally authored world needs explicit intake review")
+
+    gateway = ROOT / "apps" / "story_reader" / "lib" / "world_library_gateway.dart"
+    workers = ROOT / "apps" / "story_reader" / "lib" / "book_isolate_workers.dart"
+    for path in (gateway, workers):
+        if not path.is_file() or "package:rpg_api/rpg_api.dart" not in path.read_text(
+                encoding="utf-8"):
+            issues.append(f"{path}: Flutter must use the public RPG API")
+    # A third-party client must use an authenticated transport over the SAME
+    # public API. It must never create a second engine or leak cloud secrets.
+    protocol = ROOT / "packages" / "rpg_api" / "lib" / "src" / "client_protocol.dart"
+    wire = protocol.read_text(encoding="utf-8") if protocol.is_file() else ""
+    if ("class RpgClientProtocol" not in wire or
+            "RpgGameApi" not in wire or "dart:io" in wire or
+            "package:flutter/" in wire):
+        issues.append("rpg_api: missing Flutter-free versioned client protocol")
+    host = ROOT / "apps" / "rpg_cli" / "lib" / "rpg_loopback_server.dart"
+    transport = host.read_text(encoding="utf-8") if host.is_file() else ""
+    if ("RpgClientProtocol(LocalRpgGameApi(" not in transport or
+            "InternetAddress.loopbackIPv4" not in transport or
+            "x-rpg-token" not in transport or
+            "package:story_core/" in transport):
+        issues.append("rpg_cli: HTTP transport must delegate without RPG rules")
+    # Portability is pure SDK behavior: the HTTP host and Python client
+    # must not acquire book/game rules or leak private traffic to proxies.
+    transfer = ROOT / "packages" / "rpg_api" / "lib" / "src" / "campaign_transfer.dart"
+    transfer_code = transfer.read_text(encoding="utf-8") if transfer.is_file() else ""
+    if ("class RpgCampaignTransfer" not in transfer_code or
+            "RpgGameApi" not in transfer_code or
+            "LocalRpgWorldIntakeApi" not in transfer_code or
+            "dart:io" in transfer_code or
+            "package:flutter/" in transfer_code):
+        issues.append("rpg_api: bundled save/world transfer must remain a pure API")
+    wire = ROOT / "packages" / "rpg_api" / "lib" / "src" / "client_protocol.dart"
+    wire_code = wire.read_text(encoding="utf-8") if wire.is_file() else ""
+    for name in ("confirm_suggestion", "journal_page",
+                 "export_bundle", "inspect_bundle", "import_bundle"):
+        if "case '" + name + "'" not in wire_code:
+            issues.append(f"rpg_api: missing client-neutral operation {name}")
+    pyclient = ROOT / "apps" / "rpg_cli" / "python_client.py"
+    pycode = pyclient.read_text(encoding="utf-8") if pyclient.is_file() else ""
+    if ("ProxyHandler({})" not in pycode or
+            "127.0.0.1" not in pycode or
+            "x-rpg-token" not in pycode or
+            "sqlite3" in pycode or
+            "story_core" in pycode):
+        issues.append("Python adapter must connect DIRECTLY to local RPG API")
+    # Book-character starting facts/items remain a private, native v4
+    # authoring extension, never a second Flutter/Python rule executor.
+    role_writer = ROOT / "packages" / "bookworld_format" / "lib" / "reviewed_book_character_start_writer.dart"
+    role_code = role_writer.read_text(encoding="utf-8") if role_writer.is_file() else ""
+    if ("class ReviewedBookCharacterStartWriter" not in role_code or
+            "RichPrivateBookworldWriter().build" not in role_code or
+            "initial_state_review" not in role_code or
+            "literary_canon_verified" not in role_code or
+            "package:flutter/" in role_code or "dart:io" in role_code):
+        issues.append("bookworld_format: reviewed starting state must reuse native verified v4")
+    character_api = ROOT / "packages" / "rpg_api" / "lib" / "src" / "book_character_start.dart"
+    character_code = character_api.read_text(encoding="utf-8") if character_api.is_file() else ""
+    if ("class LocalRpgBookCharacterStartApi" not in character_code or
+            "compileWithReviewedRole" not in character_code or
+            "source_reviewed_start" not in character_code or
+            "package:flutter/" in character_code):
+        issues.append("rpg_api: missing source-bound BOOK_CHARACTER entrypoint")
+    wire = ROOT / "packages" / "rpg_api" / "lib" / "src" / "client_protocol.dart"
+    wire_text = wire.read_text(encoding="utf-8") if wire.is_file() else ""
+    for op in ("inspect_character_start", "compile_character_start"):
+        if "case '" + op + "'" not in wire_text:
+            issues.append(f"rpg_api: no cross-client reviewed character {op}")
+    flutter_npc = ROOT / "apps" / "story_reader" / "lib" / "whole_book_npc_campaign_page.dart"
+    npc_code = flutter_npc.read_text(encoding="utf-8") if flutter_npc.is_file() else ""
+    if "RichPrivateBookworldImporter().inspect(" in npc_code:
+        issues.append("Flutter NPC editor bypasses public RpgAuthoringApi")
     return issues
 
 
@@ -113,7 +348,7 @@ def main() -> int:
     if issues:
         return 1
     print(
-        "Architecture boundary PASS: 4 versioned pure-Dart packages; "
+        "Architecture boundary PASS: 7 versioned pure-Dart packages; "
         "story_core is service-independent; no engine -> app imports"
     )
     return 0

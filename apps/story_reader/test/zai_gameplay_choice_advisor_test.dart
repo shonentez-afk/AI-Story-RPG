@@ -245,4 +245,41 @@ void main() {
     );
     expect(advisorHttp.calls, 0);
   });
+  test('100 available choices remain supported with a private 32-item shortlist',
+      () async {
+    final head = FreeTextCampaignHead(
+      campaignId: 'private_campaign', sceneId: 'large_hall',
+      revision: 3, isTerminal: false,
+      choices: [
+        for (var i = 0; i < 100; i++)
+          FreeTextChoice(
+            id: 'task_' + i.toString(),
+            label: i == 95 ? 'Установить маяк' :
+                'Осмотреть постройку номер ' + i.toString(),
+            lockReason: i == 99 ? 'npc_secret' : null),
+      ],
+    );
+    final http = _Http([_reply('task_95')]);
+    final advisor = await _service(http);
+    final result = await advisor.suggest(
+      head: head, playerText: 'Хочу установить маяк',
+      consentForThisAction: true);
+    expect(result.offers.single.choiceId, 'task_95');
+    final body = jsonDecode(http.bodies.single) as Map;
+    final messages = body['messages'] as List;
+    final payload = jsonDecode((messages.last as Map)['content'] as String) as Map;
+    final labels = payload['allowed_choices'] as List;
+    expect(labels.length, lessThanOrEqualTo(32));
+    expect(labels.any((choice) => choice['id'] == 'task_95'), isTrue);
+    expect(labels.any((choice) => choice['id'] == 'task_99'), isFalse);
+    expect(http.calls, 1);
+
+    final forged = _Http([_reply('task_94')]);
+    final second = await _service(forged);
+    final denied = await second.suggest(
+      head: head, playerText: 'Хочу установить маяк',
+      consentForThisAction: true);
+    expect(denied.canChoose, isFalse);
+  });
+
 }

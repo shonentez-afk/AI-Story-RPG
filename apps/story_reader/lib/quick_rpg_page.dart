@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:rpg_api/rpg_api.dart' show
+    RpgCreationApi, LocalRpgCreationApi, RpgCreationIntent;
 
 import 'book_source_index.dart';
 import 'book_import.dart';
@@ -11,10 +13,13 @@ import 'world_play_page.dart';
 /// Opens the short private RPG wizard directly from the library.
 class QuickRpgFromBookPage extends StatefulWidget {
   const QuickRpgFromBookPage({super.key, required this.book,
-    required this.gateway, this.indexer});
+    required this.gateway, this.indexer, this.initialIntent,
+    this.creationApi});
   final ImportedBook book;
   final WorldLibraryGateway gateway;
   final Future<BookSourceIndex> Function(ImportedBook)? indexer;
+  final RpgCreationIntent? initialIntent;
+  final RpgCreationApi? creationApi;
   @override
   State<QuickRpgFromBookPage> createState() => _QuickRpgFromBookPageState();
 }
@@ -32,7 +37,9 @@ class _QuickRpgFromBookPageState extends State<QuickRpgFromBookPage> {
     future: _index,
     builder: (context, snapshot) {
       if (snapshot.hasData) {
-        return QuickRpgPage(index: snapshot.data!, gateway: widget.gateway);
+        return QuickRpgPage(
+          index: snapshot.data!, gateway: widget.gateway,
+          initialIntent: widget.initialIntent, creationApi: widget.creationApi);
       }
       return Scaffold(
         appBar: AppBar(title: const Text('Создать RPG по книге')),
@@ -72,18 +79,25 @@ class QuickRpgPage extends StatefulWidget {
     required this.index,
     required this.gateway,
     this.eventOutline,
+    this.initialIntent,
+    this.creationApi,
   });
 
   final BookSourceIndex index;
   final WorldLibraryGateway gateway;
   final ZaiWholeBookEventOutline? eventOutline;
+  final RpgCreationIntent? initialIntent;
+  final RpgCreationApi? creationApi;
 
   @override
   State<QuickRpgPage> createState() => _QuickRpgPageState();
 }
 
 class _QuickRpgPageState extends State<QuickRpgPage> {
-  QuickRpgMode _mode = QuickRpgMode.changeFate;
+  late RpgCreationIntent _intent;
+  RpgCreationApi get _api =>
+      widget.creationApi ?? const LocalRpgCreationApi();
+  QuickRpgMode get _mode => _intent.quickMode;
   QuickRpgPlan? _plan;
   bool _reviewedQuotes = false;
   bool _privateUse = false;
@@ -93,15 +107,16 @@ class _QuickRpgPageState extends State<QuickRpgPage> {
   @override
   void initState() {
     super.initState();
+    _intent = widget.initialIntent ??
+        const RpgCreationIntent.quickAlterFate();
     _prepare();
   }
 
   void _prepare() {
     try {
-      final plan = widget.eventOutline == null
-          ? QuickRpgBuilder.propose(widget.index, mode: _mode)
-          : QuickRpgBuilder.proposeFromEventOutline(
-              widget.index, widget.eventOutline!, mode: _mode);
+      final plan = _api.previewShort(
+        index: widget.index, intent: _intent,
+        eventOutline: widget.eventOutline);
       _plan = plan;
       _error = null;
     } on FormatException catch (error) {
@@ -116,7 +131,9 @@ class _QuickRpgPageState extends State<QuickRpgPage> {
   void _selectMode(QuickRpgMode value) {
     if (_working || _mode == value) return;
     setState(() {
-      _mode = value;
+      _intent = value == QuickRpgMode.followBook
+          ? const RpgCreationIntent.quickFollow()
+          : const RpgCreationIntent.quickAlterFate();
       _reviewedQuotes = false;
       _prepare();
     });
@@ -127,11 +144,10 @@ class _QuickRpgPageState extends State<QuickRpgPage> {
     if (_working || plan == null || !_reviewedQuotes || !_privateUse) return;
     setState(() { _working = true; _error = null; });
     try {
-      final compiled = await QuickRpgBuilder.compile(
-        plan: plan,
+      final compiled = await _api.compileShort(
+        plan: plan, intent: _intent,
         allQuotesReviewedByUser: _reviewedQuotes,
-        privateUseConfirmed: _privateUse,
-      );
+        privateUseConfirmed: _privateUse);
       if (!mounted || compiled.sourceFingerprint !=
           widget.index.sourceFingerprint) return;
       // install() does not modify any existing save or reading position.

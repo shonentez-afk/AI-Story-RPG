@@ -13,6 +13,7 @@ import 'scene_dialogue_stage.dart';
 import 'reading_preferences.dart';
 import 'reading_settings_sheet.dart';
 import 'world_library_gateway.dart';
+import 'world_ui_presenter.dart';
 
 /// Real RPG screen for a verified BookWorld; never mutates local game state
 /// before the SQLite transaction has committed on a worker isolate.
@@ -67,27 +68,47 @@ class _WorldPlayPageState extends State<WorldPlayPage> {
     unawaited(_saveReading(settings));
   }
 
+  // The view carries the importer-verified, replay-gated actor mapping.
+  // Never infer a portrait owner from the name in a reviewed NPC scene.
+  String? _portraitAddress(WorldGameView view, String speaker) =>
+      view.portraitStorageKeyFor(speaker);
+
   Future<void> _loadPortraits(WorldGameView view) async {
     final script = view.sceneDialogueTurns == null
         ? SceneDialogueScript.fromSceneText(view.sceneText)
         : SceneDialogueScript.fromSignedTurns(view.sceneDialogueTurns!);
-    if (script == null) return;
-    final speakers = script.turns.map((t) => t.speaker)
-        .whereType<String>().toSet();
+    final speakers = script?.turns.map((turn) => turn.speaker)
+        .whereType<String>().toSet() ?? <String>{};
+    final loaded = <String, Uint8List>{};
     for (final speaker in speakers) {
-      final bytes = await _portraitStore.read(
-          campaignId: widget.campaignId, speaker: speaker);
-      if (!mounted || _view?.sceneId != view.sceneId ||
-          _view?.revision != view.revision) return;
-      if (bytes != null) {
-        setState(() => _portraitBytes[speaker] = bytes);
+      final address = _portraitAddress(view, speaker);
+      if (address == null) continue;
+      var bytes = await _portraitStore.read(
+          campaignId: widget.campaignId, speaker: address);
+      if (bytes == null && address != speaker &&
+          !view.sceneSpeakerIdentityReviewed) {
+        // Only old v1/v2 scenes may read portrait PNGs by a display name.
+        // Rich reviewed NPC IDs must never fall back to another actor's PNG.
+        bytes = await _portraitStore.read(
+            campaignId: widget.campaignId, speaker: speaker);
       }
+      if (bytes != null) loaded[speaker] = bytes;
     }
+    if (!mounted || _view?.sceneId != view.sceneId ||
+        _view?.revision != view.revision) return;
+    setState(() { _portraitBytes..clear()..addAll(loaded); });
   }
 
   Future<void> _pickPortrait(String speaker) async {
     final current = _view;
     if (current == null || speaker.trim().isEmpty) return;
+    final address = _portraitAddress(current, speaker);
+    if (address == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Портрет недоступен: реплика ещё не открыта, '
+            'личность не подтверждена или имена совпадают.')));
+      return;
+    }
     try {
       final selected = await FilePicker.platform.pickFiles(
         type: FileType.image, allowMultiple: false, withData: true,
@@ -99,7 +120,7 @@ class _WorldPlayPageState extends State<WorldPlayPage> {
             'Не удалось прочитать изображение. Выберите локальный PNG.');
       }
       await _portraitStore.save(
-        campaignId: widget.campaignId, speaker: speaker, png: bytes);
+        campaignId: widget.campaignId, speaker: address, png: bytes);
       if (!mounted) return;
       setState(() => _portraitBytes[speaker] = bytes);
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
@@ -213,6 +234,12 @@ class _WorldPlayPageState extends State<WorldPlayPage> {
         'knows_fact' => 'Сначала требуется узнать новые сведения',
         'stat_at_least' => 'Не хватает характеристики персонажа',
         'tick_at_least' => 'Ещё не наступило время события',
+        'npc_unavailable' => 'Собеседник сейчас недоступен',
+        'npc_memory' => 'Сначала требуется подтверждённая встреча',
+        'npc_trust' => 'Пока недостаточно доверия для этого разговора',
+        'npc_item_owner' => 'Предмет должен быть у нужного персонажа',
+        'npc_item_custody' => 'Сначала требуется подтверждённая передача предмета',
+        'npc_life_transition' => 'Состояние персонажа не позволяет этот выбор',
         _ => 'Пока не выполнены сюжетные условия',
       };
     }
@@ -348,7 +375,10 @@ class _WorldPlayPageState extends State<WorldPlayPage> {
             ? null
             : ColoredBox(
                 color: prefs.background,
-                child: GameQuickBar(onOpen: _openPanel, color: ink),
+                child: GameQuickBar(
+                  onOpen: _openPanel, color: ink,
+                  showNpc: view.npcRelations.isNotEmpty,
+                ),
               ),
         body: ColoredBox(
           color: prefs.background,
@@ -397,9 +427,29 @@ class _WorldPlayPageState extends State<WorldPlayPage> {
                                       )),
                                   const SizedBox(height: 12),
                                 ],
+                                // Show only the currently reached,
+                                // source-reviewed scene name. The rest of
+                                // sceneNames may describe future chapters.
+                                if (view.sceneNames[view.sceneId] != null &&
+                                    view.sceneNames[view.sceneId]!
+                                        .trim().isNotEmpty) ...[
+                                  Text(view.sceneNames[view.sceneId]!,
+                                      key: const ValueKey(
+                                          'world-current-scene-title'),
+                                      style: readerText.copyWith(
+                                        fontWeight: FontWeight.w600,
+                                        fontSize: prefs.fontSize + 3,
+                                      )),
+                                  const SizedBox(height: 10),
+                                ],
                                 Wrap(spacing: 8, runSpacing: 6, children: [
                                   Chip(
-                                    label: Text(dialogue == null ? 'Классический режим' : 'Диалог',
+                                    label: Text(view.activePlotMode == 'ALTER_FATE' &&
+                                            view.sourceLiteralCanon
+                                        ? 'ALTER_FATE · альтернативная история'
+                                        : view.sourceLiteralCanon
+                                            ? 'CANON · текст книги + свободный ИИ'
+                                        : dialogue == null ? 'Классический режим' : 'Диалог',
                                         style: TextStyle(color: ink)),
                                     backgroundColor: prefs.background,
                                     side: BorderSide(
@@ -412,8 +462,60 @@ class _WorldPlayPageState extends State<WorldPlayPage> {
                                     side: BorderSide(
                                         color: ink.withValues(alpha: 0.25)),
                                   ),
+                                  if (view.sceneSource != null)
+                                    Chip(
+                                      key: const ValueKey('world-book-origin'),
+                                      label: Text(
+                                        (view.sourceLiteralCanon &&
+                                                view.activePlotMode == 'ALTER_FATE'
+                                            ? 'Альтернативный сюжет · от главы '
+                                            : view.sourceLiteralCanon
+                                                ? 'CANON · глава '
+                                            : view.sceneSource!.isSourcePassage
+                                                ? 'По книге · глава '
+                                                : 'Альтернативный сюжет · глава ') +
+                                            '${view.sceneSource!.chapterNumber}/'
+                                            '${view.sceneSource!.chapterCount}',
+                                        style: TextStyle(color: ink),
+                                      ),
+                                      backgroundColor: prefs.background,
+                                      side: BorderSide(
+                                          color: ink.withValues(alpha: 0.25)),
+                                    ),
                                 ]),
                                 const SizedBox(height: 18),
+                                if (view.sourceLiteralCanon &&
+                                    view.activePlotMode == 'ALTER_FATE') ...[
+                                  Card(
+                                    key: const ValueKey('world-alternate-continuity'),
+                                    child: Padding(
+                                      padding: const EdgeInsets.all(12),
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Text('Альтернативная история',
+                                              style: Theme.of(context)
+                                                  .textTheme.titleMedium),
+                                          const SizedBox(height: 4),
+                                          for (final line in
+                                              WorldUiPresenter.alternatePlot(view))
+                                            Padding(
+                                              padding: const EdgeInsets.only(
+                                                  bottom: 3),
+                                              child: Text(line),
+                                            ),
+                                          TextButton(
+                                            onPressed: () =>
+                                                _openPanel(GamePanel.journal),
+                                            child: const Text('Открыть журнал'),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 10),
+                                ],
                                 if (dialogue == null)
                                   Text(view.sceneText, style: readerText)
                                 else
@@ -436,6 +538,8 @@ class _WorldPlayPageState extends State<WorldPlayPage> {
                                     },
                                     onAddPortrait: (speaker) =>
                                         unawaited(_pickPortrait(speaker)),
+                                    canAddPortrait: (speaker) =>
+                                        _portraitAddress(view, speaker) != null,
                                     onFinished: (finished) {
                                       if (!mounted || _view?.sceneId != view.sceneId ||
                                           _view?.revision != view.revision ||
@@ -443,6 +547,34 @@ class _WorldPlayPageState extends State<WorldPlayPage> {
                                       setState(() => _dialogueFinished = finished);
                                     },
                                   ),
+                                // Only a COMMITTED and replay-verified latest
+                                // free action is displayed beside the book.
+                                // It is explicitly separated from the
+                                // immutable literal CANON scene text.
+                                if (view.sourceLiteralCanon &&
+                                    view.activePlotMode == 'CANON' &&
+                                    view.journal.isNotEmpty &&
+                                    view.journal.last.sequence == view.revision &&
+                                    view.journal.last.choiceLabel.startsWith(
+                                        'Свободное действие (не текст книги): ')) ...[
+                                  const SizedBox(height: 14),
+                                  Card(
+                                    key: const ValueKey('world-last-dynamic-event'),
+                                    child: Padding(
+                                      padding: const EdgeInsets.all(12),
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Text('Игровая вставка ИИ · не канон книги',
+                                              style: Theme.of(context).textTheme.titleSmall),
+                                          const SizedBox(height: 6),
+                                          Text(view.journal.last.choiceLabel,
+                                              style: Theme.of(context).textTheme.bodyMedium),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ],
                                 const SizedBox(height: 24),
                                 if (dialogue != null && !_dialogueFinished) ...[
                                   Text('Прочитайте диалог или выберите «Пропустить разговор», '
@@ -535,12 +667,14 @@ class _WorldPlayPageState extends State<WorldPlayPage> {
                                           view.revision.toString()),
                                       title: const Text(
                                           'Свободное действие'),
-                                      subtitle: const Text(
-                                          'Офлайн или с помощью ИИ — с подтверждением'),
+                                      subtitle: Text(view.freeformAvailable
+                                          ? 'Новые действия ИИ с настоящими последствиями'
+                                          : 'Офлайн или ИИ: только доступные ходы'),
                                       initiallyExpanded: false,
                                       children: [
                                         FreeTextActionPanel(
                                           campaignId: widget.campaignId,
+                                          dynamicAvailable: view.freeformAvailable,
                                           gateway: widget.gateway,
                                           onBusyChanged: (busy) {
                                             if (mounted) {
@@ -596,17 +730,50 @@ class _WorldInfoSheet extends StatelessWidget {
   final GamePanel panel;
   final WorldGameView view;
 
+  // The v3 runtime still uses the actor key 'player'. Only a user-reviewed
+  // source-linked NPC role may set a permanent player_is_npc_<id> flag.
+  // Never invent one from the display name, dialogue or knownFacts.
+  static String _memoryKindName(String kind) => switch (kind) {
+    'witnessed' => 'Наблюдал',
+    'promiseReceived' => 'Принял обещание',
+    'promiseBroken' => 'Нарушенное обещание',
+    'promiseFulfilled' => 'Исполненное обещание',
+    'autonomousDecision' => 'Самостоятельное решение',
+    'warned' => 'Получил предупреждение',
+    'helped' => 'Получил помощь',
+    'betrayed' => 'Пережил предательство',
+    'rumorHeard' => 'Услышал сведения',
+    _ => 'Подтверждённые события',
+  };
+
+
   @override
   Widget build(BuildContext context) {
+    // The ledger may contain source-reviewed custodians not yet met in
+    // this branch. Only replay-proven NPC encounters may disclose names
+    // or their owned items to the player.
+    final encounteredNames = <String, String>{
+      for (final npc in view.npcRelations) npc.actorId: npc.displayName,
+    };
+    final visibleNpcItems = view.npcItemOwners.entries
+        .where((item) => encounteredNames.containsKey(item.value)).toList();
     final heading = switch (panel) {
       GamePanel.character => 'Герой',
       GamePanel.inventory => 'Предметы',
       GamePanel.journal => 'Журнал',
+      GamePanel.npc => 'Персонажи',
     };
     final entries = switch (panel) {
       GamePanel.character => [
         if (view.heroName != null) 'Герой: ' + view.heroName!,
         if (view.heroDescription != null) view.heroDescription!,
+        if (view.heroSourceCharacterId != null)
+          'Роль: проверенный книжный персонаж',
+        if (view.sourceReviewedHeroStart)
+          'Стартовые предметы и сведения подтверждены цитатами первой главы.',
+        if (view.heroSourceCharacterId != null &&
+            !view.sourceReviewedHeroStart)
+          'Знания и секреты NPC не присваиваются автоматически.',
         if (view.stats.isEmpty) 'Характеристики не заданы',
         for (final stat in view.stats.entries)
           (view.statNames[stat.key] ?? _statLabel(stat.key)) +
@@ -617,48 +784,54 @@ class _WorldInfoSheet extends StatelessWidget {
               view.knownFacts
                   .map((id) => view.factNames[id] ?? id).join(', '),
         if (view.knownFacts.isEmpty) 'Открыто сведений: 0',
-        if (view.npcLifeStates.isNotEmpty)
-          'Персонажи (подтверждённые событиями):',
-        for (final entry in view.npcLifeStates.entries)
-          (view.npcDisplayNames[entry.key] ?? entry.key) + ': ' +
-              switch (entry.value) {
+        if (view.journal.isNotEmpty) 'Последние изменения героя и мира:',
+        ...WorldUiPresenter.heroRecentChanges(view),
+        if (view.npcRelations.isNotEmpty)
+          'Только встреченные персонажи:',
+        for (final npc in view.npcRelations)
+          npc.displayName + ': ' +
+              switch (npc.lifeState) {
                 'present' => 'доступен',
                 'absent' => 'отсутствует',
                 'dead' => 'погиб',
-                _ => 'состояние неизвестно',
+                _ => 'состояние не подтверждено',
               },
       ],
       GamePanel.inventory => [
         if (view.inventory.isEmpty)
-          view.npcItemOwners.isEmpty
+          visibleNpcItems.isEmpty
               ? 'Предметов пока нет' : 'У героя сейчас нет предметов',
         if (view.inventory.isNotEmpty) 'У героя:',
         for (final id in view.inventory)
           (view.itemNames[id] ?? id) +
               (view.itemDescriptions[id] == null
                   ? '' : ' — ' + view.itemDescriptions[id]!),
-        if (view.npcItemOwners.isNotEmpty)
-          'У других персонажей (подтверждено событиями):',
-        for (final entry in view.npcItemOwners.entries)
+        if (visibleNpcItems.isNotEmpty)
+          'У встреченных персонажей (подтверждено событиями):',
+        for (final entry in visibleNpcItems)
           (view.itemNames[entry.key] ?? entry.key) + ' — у ' +
-              (view.npcDisplayNames[entry.value] ??
-                  ('NPC ' + (entry.value.length > 12
-                    ? entry.value.substring(4, 12) : entry.value))),
+              encounteredNames[entry.value]!,
+        if (WorldUiPresenter.availableItemActions(view).isNotEmpty)
+          'Сейчас доступны действия с имеющимися предметами:',
+        ...WorldUiPresenter.availableItemActions(view),
+        if (WorldUiPresenter.itemHistory(view).isNotEmpty)
+          'Подтверждённые изменения предметов:',
+        ...WorldUiPresenter.itemHistory(view),
+        'Предметы и владельцы — только из подтверждённых ходов. '
+            'Передача или применение выполняются через разрешённый '
+            'выбор либо проверенное свободное действие.',
       ],
-      GamePanel.journal => view.journal.isEmpty
-          ? <String>['Решений пока нет']
-          : [
-              for (final entry in view.journal)
-                entry.sequence.toString() + '. ' +
-                    (entry.sceneTitle == null
-                        ? ''
-                        : entry.sceneTitle! + ': ') +
-                    entry.choiceLabel +
-                    (entry.changes.isEmpty
-                        ? ''
-                        : '\n' + entry.changes
-                            .map((change) => '• ' + change).join('\n')),
-            ],
+      GamePanel.journal => [
+        if (view.journal.isEmpty) 'Решений пока нет',
+        if (view.activePlotMode == 'ALTER_FATE') ...[
+          'Альтернативная ветка (вымысел, не текст книги):',
+          ...WorldUiPresenter.alternatePlot(view),
+        ],
+        ...WorldUiPresenter.journalNarrative(view),
+        'Журнал содержит только подтверждённые решения и последствия '
+            'из SQLite. Свободная фраза не заменяет сохранённый выбор.',
+      ],
+      GamePanel.npc => const <String>[],
     };
     return SafeArea(
       child: ConstrainedBox(
@@ -681,14 +854,106 @@ class _WorldInfoSheet extends StatelessWidget {
                 ),
               ]),
               const SizedBox(height: 8),
-              Flexible(child: ListView.builder(
-                shrinkWrap: true,
-                itemCount: entries.length,
-                itemBuilder: (_, index) => Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 7),
-                  child: Text(entries[index]),
-                ),
-              )),
+              // Everything below the title scrolls. An expanded role ID
+              // or 200% text may never push the last journal row off-screen.
+              Flexible(child: panel == GamePanel.npc
+                  ? ListView(
+                      key: const Key('world-npc-relation-list'),
+                      shrinkWrap: true,
+                      children: [
+                        const Text('Только встреченные персонажи. '
+                            'Память и отношение вычислены из сохранённых '
+                            'решений, а не из реплик ИИ или текста книги.'),
+                        const SizedBox(height: 8),
+                        for (final npc in view.npcRelations)
+                          Card(
+                            key: Key('world-npc-' + npc.actorId),
+                            child: Padding(
+                              padding: const EdgeInsets.all(12),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(npc.displayName,
+                                      style: Theme.of(context)
+                                          .textTheme.titleMedium),
+                                  const SizedBox(height: 4),
+                                  Text('Отношение NPC к герою: ' +
+                                      (npc.directedScore > 0 ? '+' : '') +
+                                      npc.directedScore.toString()),
+                                  Text('Запомненных событий: ' +
+                                      npc.memoryCount.toString()),
+                                  if (npc.firstEncounterSceneTitle != null)
+                                    Text('Первая подтверждённая встреча: ' +
+                                        npc.firstEncounterSceneTitle!),
+                                  if (npc.lastEncounterSceneTitle != null &&
+                                      npc.lastEncounterSceneTitle !=
+                                          npc.firstEncounterSceneTitle)
+                                    Text('Последнее подтверждённое событие: ' +
+                                        npc.lastEncounterSceneTitle!),
+                                  if (npc.lifeState != null)
+                                    Text('Состояние: ' +
+                                        switch (npc.lifeState) {
+                                          'present' => 'доступен',
+                                          'absent' => 'отсутствует',
+                                          'dead' => 'погиб',
+                                          _ => 'неизвестно',
+                                        }),
+                                  if (npc.currentGoal != null)
+                                    Text('Текущая цель: ' +
+                                        WorldUiPresenter.record(npc.currentGoal!)),
+                                  if (npc.openPromiseIds.isNotEmpty) ...[
+                                    const Text('Открытые обещания:'),
+                                    for (final id in npc.openPromiseIds)
+                                      Text('• ' + WorldUiPresenter.record(id)),
+                                  ],
+                                  if (npc.autonomousDecisionIds.isNotEmpty) ...[
+                                    const Text('Самостоятельные решения:'),
+                                    for (final id in npc.autonomousDecisionIds)
+                                      Text('• ' + WorldUiPresenter.record(id)),
+                                  ],
+                                  for (final kind in npc.memoryKinds.entries)
+                                    Text(_memoryKindName(kind.key) + ': ' +
+                                        kind.value.toString()),
+                                  const Text('Биография и мотивы из ' +
+                                      'редакторского черновика не раскрываются ' +
+                                      'без отдельной проверки для игрока.'),
+                                  for (final item in visibleNpcItems.where(
+                                      (entry) => entry.value == npc.actorId))
+                                    Text('Предмет у персонажа: ' +
+                                        (view.itemNames[item.key] ?? item.key)),
+                                ],
+                              ),
+                            ),
+                          ),
+                      ],
+                    )
+                  : ListView.builder(
+                      key: Key(panel == GamePanel.journal
+                          ? 'world-journal-scroll' : 'world-info-scroll'),
+                      shrinkWrap: true,
+                      itemCount: entries.length +
+                          (panel == GamePanel.character &&
+                                  view.heroSourceCharacterId != null ? 1 : 0),
+                      itemBuilder: (_, index) {
+                        final diagnosis = panel == GamePanel.character &&
+                            view.heroSourceCharacterId != null;
+                        if (diagnosis && index == 1) {
+                          return ExpansionTile(
+                            key: const Key('world-hero-diagnostics'),
+                            title: const Text('Техническая диагностика роли'),
+                            children: [
+                              SelectableText('Постоянный ID: '
+                                  '${view.heroSourceCharacterId!}'),
+                            ],
+                          );
+                        }
+                        final row = diagnosis && index > 1 ? index - 1 : index;
+                        return Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 7),
+                          child: Text(entries[row]),
+                        );
+                      },
+                    )),
             ],
           ),
         ),

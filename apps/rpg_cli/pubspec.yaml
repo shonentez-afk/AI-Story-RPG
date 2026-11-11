@@ -1,0 +1,16 @@
+name: ai_story_rpg_cli
+description: Standalone offline client of the public AI Story RPG API
+publish_to: none
+version: 0.1.0
+
+environment:
+  sdk: '>=3.11.0 <4.0.0'
+
+dependencies:
+  rpg_api:
+    path: ../../packages/rpg_api
+  campaign_manager:
+    path: ../../packages/campaign_manager
+
+dev_dependencies:
+  test: ^1.25.15

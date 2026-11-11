@@ -1,0 +1,11 @@
+{
+  "request": "2026-11-08-finish-owner-requested-test-tag-cleanup",
+  "repository": "shonentez-afk/AI-Story-RPG",
+  "scope": "verified_historical_test_tags",
+  "expected_tags": {
+    "test-build-258": "7532667f8497b001a65ee01c108d1e6811b2b158",
+    "test-build-260": "180e32995e71e609fe303cad6db927f0420ed239"
+  },
+  "require_no_release_and_commit_ancestor_of_main": true,
+  "schedule": null
+}

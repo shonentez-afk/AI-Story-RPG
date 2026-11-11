@@ -1,17 +1,23 @@
-# Final second pass after test-build-516 was published during the first cleanup.
-# Runs are serialized by concurrency; always preserve the newest release.
-name: One-time cleanup of obsolete RPG releases and Actions history
+name: User-requested safe RPG storage cleanup
 
+# No schedule or main push trigger. Only a newly changed, owner-approved
+# request marker may initiate cleanup; ordinary development never does.
 on:
   push:
-    branches: [main]
-    paths:
-      - '.github/workflows/storage-prune-once.yml'
+    branches: [feature/p0-bookwide-gameplay-readiness-20261107]
+    paths: ['tools/maintenance/cleanup-request.json']
   workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Execute the exact cleanup scope recorded in cleanup-request.json'
+        type: boolean
+        default: false
+        required: true
 
 permissions:
-  actions: write
   contents: write
+  actions: write
+  pull-requests: read
 
 concurrency:
   group: storage-prune-once-rpg
@@ -19,145 +25,28 @@ concurrency:
 
 jobs:
   prune:
-    name: Keep latest test build and recent CI evidence
-    if: github.repository == 'shonentez-afk/AI-Story-RPG'
+    if: >-
+      github.repository == 'shonentez-afk/AI-Story-RPG' &&
+      ((github.event_name == 'push' && contains(github.event.head_commit.message, '[repo-cleanup-20261108]')) ||
+       (github.event_name == 'workflow_dispatch' && inputs.confirm))
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    env:
-      GH_TOKEN: ${{ github.token }}
-      GH_REPO: ${{ github.repository }}
     steps:
-      - name: Remove obsolete test releases and matching tags
-        shell: bash
-        run: |
-          set -euo pipefail
-          mapfile -t tags < <(gh release list --limit 100 --json tagName --jq '.[].tagName' | grep -E '^test-build-[0-9]+$' | sort -t- -k3,3nr)
-          if (( ${#tags[@]} == 0 )); then
-            echo "No test-build releases found" >> "$GITHUB_STEP_SUMMARY"
-            exit 0
-          fi
-          KEEP_TAG="${tags[0]}"
-          echo "Preserving latest verified release: $KEEP_TAG"
-          gh release view "$KEEP_TAG" >/dev/null
-          deleted=0
-          for tag in "${tags[@]:1}"; do
-            echo "Deleting obsolete test release and tag: $tag"
-            gh release delete "$tag" --cleanup-tag --yes
-            deleted=$((deleted+1))
-          done
-          echo "Kept $KEEP_TAG, deleted $deleted old test-build releases and tags." >> "$GITHUB_STEP_SUMMARY"
-
-      - name: Delete obsolete completed workflow runs (retain recent and green baselines)
-        shell: bash
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Test retention rules before any deletion
+        run: python3 -m unittest discover -s tools/maintenance -p 'test_*.py' -v
+      - name: Apply exact owner-requested cleanup scope
         env:
+          GH_TOKEN: ${{ github.token }}
           PYTHONUNBUFFERED: '1'
-        run: |
-          python3 - <<'PY'
-          import json, os, time, urllib.request, urllib.error
-          base = "https://api.github.com/repos/" + os.environ["GH_REPO"]
-          headers = {
-              "Authorization": "Bearer " + os.environ["GH_TOKEN"],
-              "Accept": "application/vnd.github+json",
-              "X-GitHub-Api-Version": "2022-11-28",
-              "User-Agent": "AI-Story-RPG-safe-storage-pruner",
-          }
-          def api(path, method="GET"):
-              for attempt in range(5):
-                  req = urllib.request.Request(
-                      base + path, headers=headers, method=method)
-                  try:
-                      with urllib.request.urlopen(req, timeout=45) as response:
-                          value = response.read()
-                          return json.loads(value) if value else None
-                  except urllib.error.HTTPError as err:
-                      if err.code in (403, 429, 502, 503, 504) and attempt < 4:
-                          delay = min(90, max(10, int(err.headers.get("Retry-After", "15"))))
-                          print("API throttled or unavailable", err.code, "pause", delay)
-                          time.sleep(delay)
-                          continue
-                      raise
-          runs = []
-          page = 1
-          while True:
-              data = api("/actions/runs?per_page=100&page=" + str(page))
-              batch = data.get("workflow_runs", [])
-              runs.extend(batch)
-              if len(batch) < 100:
-                  break
-              page += 1
-              if page > 100:
-                  raise RuntimeError("Unexpected Actions pagination")
-          runs.sort(key=lambda x: (x.get("created_at") or "", x["id"]), reverse=True)
-          keep = {x["id"] for x in runs[:25]}
-          # Preserve the last successful baselines of both main and the active M2g2 feature,
-          # for each workflow. Never delete in-progress, queued, or this cleanup run.
-          buckets = {}
-          for x in runs:
-              if x["status"] != "completed":
-                  keep.add(x["id"])
-              if x.get("conclusion") == "success":
-                  key = (x.get("head_branch"), x.get("name"))
-                  if key[0] in ("main", "feature/m2g2-whole-book-ai-event-pass-20261105", "feature/m2g3a-source-locked-book-model-20261105"):
-                      n = buckets.get(key, 0)
-                      if n < 4:
-                          keep.add(x["id"])
-                          buckets[key] = n + 1
-          keep.add(int(os.environ["GITHUB_RUN_ID"]))
-          removed = 0
-          failures = []
-          for x in runs:
-              if x["id"] in keep or x["status"] != "completed":
-                  continue
-              if removed >= 1150:
-                  break
-              try:
-                  api("/actions/runs/" + str(x["id"]), "DELETE")
-                  removed += 1
-                  if removed % 25 == 0:
-                      print("Deleted", removed, "old runs; latest kept:", len(keep), flush=True)
-                  time.sleep(1.05)
-              except Exception as error:
-                  failures.append(str(x["id"]) + ": " + str(error)[:120])
-                  if len(failures) >= 5:
-                      print("Too many API failures; stop safely")
-                      break
-          summary = ("Old workflow runs removed: " + str(removed) +
-                     "; original total: " + str(len(runs)) +
-                     "; important runs kept: " + str(len(keep)) +
-                     "; errors: " + str(len(failures)))
-          print(summary)
-          with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as f:
-              f.write(summary + "\n")
-              for error in failures:
-                  f.write(error + "\n")
-          if failures:
-              raise RuntimeError("Partial Actions cleanup; see job summary")
-          PY
-
-      - name: Prune outdated duplicated build artifacts (keep last two of each type)
-        shell: bash
-        run: |
-          set -euo pipefail
-          gh api --paginate "repos/${GH_REPO}/actions/artifacts?per_page=100" \
-            --jq '.artifacts[] | select(.expired == false) | [.created_at, .name, (.id|tostring)] | @tsv' |
-            sort -r > "${RUNNER_TEMP}/rpg-artifacts.tsv"
-          declare -A seen=()
-          deleted=0
-          while IFS=$'\t' read -r created name id; do
-            case "$name" in
-              AI-Story-RPG-Android-debug|AI-Story-RPG-Windows-portable|AI-Story-RPG-BookWorld-demo|AI-Story-RPG-Grimm-Frog-Prince-FB2) ;;
-              *) continue ;;
-            esac
-            n=${seen["$name"]:-0}
-            seen["$name"]=$((n+1))
-            if (( n < 2 )); then
-              continue
-            fi
-            if (( deleted >= 250 )); then
-              echo "Artifact cleanup cap reached; safe to repeat manually."
-              break
-            fi
-            gh api --method DELETE "repos/${GH_REPO}/actions/artifacts/${id}" >/dev/null
-            deleted=$((deleted+1))
-          done < "${RUNNER_TEMP}/rpg-artifacts.tsv"
-          echo "Duplicated older artifacts removed: $deleted" >> "$GITHUB_STEP_SUMMARY"
+        run: python3 tools/maintenance/execute_request.py
+      - name: Preserve exact deletion audit, including partial failures
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: AI-Story-RPG-maintenance-audit-${{ github.run_id }}
+          path: artifacts/maintenance/cleanup-report.json
+          retention-days: 7
+          if-no-files-found: warn

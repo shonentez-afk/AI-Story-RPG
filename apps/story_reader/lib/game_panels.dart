@@ -3,7 +3,7 @@ import 'game_progress.dart';
 
 /// M1.4 shell. These panels do not invent character attributes or loot:
 /// they describe only capabilities actually present in the pilot runtime.
-enum GamePanel { character, inventory, journal }
+enum GamePanel { character, inventory, journal, npc }
 
 class GameInfoSheet extends StatelessWidget {
   const GameInfoSheet({
@@ -25,11 +25,13 @@ class GameInfoSheet extends StatelessWidget {
       GamePanel.character => 'Персонаж',
       GamePanel.inventory => 'Инвентарь',
       GamePanel.journal => 'Журнал',
+      GamePanel.npc => 'Персонажи',
     };
     final icon = switch (panel) {
       GamePanel.character => Icons.person_outline,
       GamePanel.inventory => Icons.backpack_outlined,
       GamePanel.journal => Icons.auto_stories_outlined,
+      GamePanel.npc => Icons.people_outline,
     };
     final message = switch (panel) {
       GamePanel.character =>
@@ -40,6 +42,7 @@ class GameInfoSheet extends StatelessWidget {
       GamePanel.journal => journalEntries.isEmpty
         ? 'Текущая сцена: $currentScene. Решений в этом сеансе пока нет.'
         : 'Текущая сцена: $currentScene.',
+      GamePanel.npc => 'Для этой пробной истории карточки NPC не заданы.',
     };
     final rows = panel == GamePanel.inventory
         ? progress.items.map((item) =>
@@ -91,25 +94,48 @@ class GameInfoSheet extends StatelessWidget {
 }
 
 class GameQuickBar extends StatelessWidget {
-  const GameQuickBar({super.key, required this.onOpen, this.color});
+  const GameQuickBar({
+    super.key, required this.onOpen, this.color, this.showNpc = false,
+  });
   final ValueChanged<GamePanel> onOpen;
   final Color? color;
+  /// Only source-verified WorldPlay exposes replayed NPC relations.
+  /// The original pilot retains its familiar three-button bar.
+  final bool showNpc;
 
   @override
   Widget build(BuildContext context) => SafeArea(
         top: false,
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 3),
-          child: Row(
-            children: [
-              Expanded(child: _item(context,
-                  Icons.person_outline, 'Герой', GamePanel.character)),
-              Expanded(child: _item(context,
-                  Icons.backpack_outlined, 'Предметы', GamePanel.inventory)),
-              Expanded(child: _item(context,
-                  Icons.menu_book_outlined, 'Журнал', GamePanel.journal)),
-            ],
-          ),
+          child: LayoutBuilder(builder: (context, constraints) {
+            final actions = <({IconData icon, String name, GamePanel panel})>[
+              (icon: Icons.person_outline, name: 'Герой', panel: GamePanel.character),
+              (icon: Icons.backpack_outlined, name: 'Предметы', panel: GamePanel.inventory),
+              (icon: Icons.menu_book_outlined, name: 'Журнал', panel: GamePanel.journal),
+              if (showNpc)
+                (icon: Icons.people_outline, name: 'NPC', panel: GamePanel.npc),
+            ];
+            // Four 72dp minimum buttons must not overflow on narrow devices.
+            if (constraints.maxWidth < (showNpc ? 336 : 260) ||
+                MediaQuery.textScalerOf(context).scale(12) > 18) {
+              final width = (constraints.maxWidth - 4) / 2;
+              return Wrap(
+                alignment: WrapAlignment.center,
+                spacing: 4, runSpacing: 2,
+                children: [
+                  for (final action in actions)
+                    SizedBox(width: width, child: _item(context,
+                        action.icon, action.name, action.panel)),
+                ],
+              );
+            }
+            return Row(children: [
+              for (final action in actions)
+                Expanded(child: _item(context,
+                    action.icon, action.name, action.panel)),
+            ]);
+          }),
         ),
       );
 

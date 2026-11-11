@@ -25,6 +25,12 @@ abstract class StoryRuntimeAdapter {
     int? expectedRevision,
   });
 
+  DecisionResult freeform({
+    required String actionId,
+    required FreeformActionDraft draft,
+    int? expectedRevision,
+  });
+
   /// Private social preview derived from current committed events and an
   /// exact-blueprint rulebook. Not a new world mutation or save format.
   NpcSocialSnapshot inspectNpcSocial(NpcSocialRulebook rulebook);
@@ -110,14 +116,16 @@ class StoryEngineCoordinator implements StoryRuntimeAdapter {
   }
 
   @override
-  String get sceneId => state.sceneId;
+  String get sceneId => state.activeSceneId;
 
   @override
-  String get sceneText => blueprint.scenes[sceneId]!.text;
+  String get sceneText => state.alternateScene?.text ??
+      blueprint.scenes[state.sceneId]!.text;
 
   @override
   List<RuntimeChoice> get choices {
     _ensureSynchronized();
+    if (state.plotDiverged) return const <RuntimeChoice>[];
     return List.unmodifiable(
       blueprint.scenes[sceneId]!.choices.map((choice) => RuntimeChoice(
         id: choice.id,
@@ -167,6 +175,27 @@ class StoryEngineCoordinator implements StoryRuntimeAdapter {
     _verifyPair(tentativeEngine, tentativeWorld);
     _engine = tentativeEngine;
     _world = tentativeWorld;
+    return result;
+  }
+
+  /// Free actions preserve the signed canonical scene/navigation. The
+  /// story_engine instance cannot be advanced without a compiled choice.
+  /// New replayable consequences instead belong to the same story_core.
+  @override
+  DecisionResult freeform({
+    required String actionId,
+    required FreeformActionDraft draft,
+    int? expectedRevision,
+  }) {
+    _ensureSynchronized();
+    final candidate = _world.fork();
+    final result = candidate.applyFreeform(
+      actionId: actionId, draft: draft, expectedRevision: expectedRevision);
+    if (!result.applied) return result;
+    // Validate the unchanged navigation runtime against the new core state
+    // before swapping either reference.
+    _verifyPair(_engine, candidate);
+    _world = candidate;
     return result;
   }
 
@@ -232,13 +261,19 @@ class StoryEngineCoordinator implements StoryRuntimeAdapter {
     final coordinator =
         StoryEngineCoordinator.start(blueprint, socialRulebook: socialRulebook);
     for (final event in checked.events) {
-      final result = coordinator.choose(
-        actionId: event.actionId,
-        choiceId: event.choiceId,
-        expectedRevision: coordinator.state.revision,
-      );
+      final result = event.freeform != null
+          ? coordinator.freeform(
+              actionId: event.actionId,
+              draft: event.freeform!,
+              expectedRevision: coordinator.state.revision,
+            )
+          : coordinator.choose(
+              actionId: event.actionId,
+              choiceId: event.choiceId,
+              expectedRevision: coordinator.state.revision,
+            );
       if (!result.applied || result.event!.hash != event.hash ||
-          coordinator.sceneId != event.nextSceneId) {
+          coordinator.state.sceneId != event.nextSceneId) {
         throw const FormatException('Scenario/world replay disagreement');
       }
     }

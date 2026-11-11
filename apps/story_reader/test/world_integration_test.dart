@@ -2,6 +2,12 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
+import 'package:rpg_api/rpg_api.dart' show
+    BookImporter, BookSourceIndexer, LocalRpgLiteralCanonApi,
+    LocalRpgWorldIntakeApi, FreeformActionDraft;
+import 'package:bookworld_format/bookworld_format.dart' show
+    RichPrivateBookworldImporter, ReviewedCanonCausalBookworldWriter;
+import 'package:story_core/story_core.dart' show canonicalJson;
 
 import 'package:ai_story_reader/home_page.dart';
 import 'package:ai_story_reader/campaign_store.dart';
@@ -129,6 +135,116 @@ void main() {
     expect(tester.takeException(), isNull);
   }
 
+
+  testWidgets('native source-causal v5 drives the same Flutter NPC '
+      'and CANON/ALTER_FATE view through real SQLite', (tester) async {
+    const actor = 'npc_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+    final bytes = Uint8List.fromList(utf8.encode(
+      List.generate(900, (i) => 'Анна стоит рядом с мостом. '
+          'Событие в главе номер $i описано очевидцем.')
+          .join('\n')));
+    final index = BookSourceIndexer.index(
+        BookImporter.parse('source_book.txt', bytes));
+    const api = LocalRpgLiteralCanonApi();
+    final prepared = api.prepareIndex(index);
+    final literal = api.compileIndex(index,
+        approvedDigest: prepared.approvalDigest, userConfirmed: true);
+    final original = const RichPrivateBookworldImporter().inspect(literal);
+    final sceneIds = original.blueprint.scenes.keys.toList();
+    expect(sceneIds.length, greaterThan(1));
+    final first = original.sceneOrigins[sceneIds.first]!;
+    final second = original.sceneOrigins[sceneIds[1]]!;
+    final review = canonicalJson({
+      'format': ReviewedCanonCausalBookworldWriter.graphReviewFormat,
+      'review_scope': 'human_reviewed_private_story_causality',
+      'source_fingerprint': original.sourceFingerprint,
+      'base_archive_sha256': original.archiveSha256,
+      'user_confirmed': true,
+      'semantic_canon_automatically_verified': false,
+      'witnesses': [{
+        'scene_id': sceneIds.first, 'actor_id': actor,
+        'display_name': 'Анна', 'source_quote_sha256': first.sourceQuoteSha256,
+        'mode': 'present',
+      }],
+      'invariants': [{
+        'scene_id': sceneIds[1], 'actor_id': actor,
+        'forbidden_memory_id': 'gm_anna_warning',
+        'minimum_trust': null, 'maximum_trust': null,
+        'source_quote_sha256': second.sourceQuoteSha256,
+      }],
+      'event_graph': [
+        for (var i = 0; i < sceneIds.length; i++) {
+          'scene_id': sceneIds[i],
+          'source_quote_sha256':
+              original.sceneOrigins[sceneIds[i]]!.sourceQuoteSha256,
+          'depends_on': i == 0 ? <String>[] : [sceneIds[i - 1]],
+          'preconditions': <Object>[], 'effects': <Object>[],
+        },
+      ],
+    });
+    final reviewed = api.compileReviewedCausality(
+      verifiedBaseArchive: literal,
+      sourceIndex: Map<String, dynamic>.from(index.toJson()),
+      reviewJson: review,
+      approvedDigest: ReviewedCanonCausalBookworldWriter.digest(review),
+      userConfirmed: true,
+    );
+    const native = LocalRpgWorldIntakeApi();
+    expect(native.inspect(literal).sourceLiteralCanonVerified, true);
+    expect(native.inspect(literal).sourceCausalReviewVerified, false);
+    expect(native.inspect(reviewed).sourceCausalReviewVerified, true);
+    final installed = await gateway.install(reviewed);
+    final id = await gateway.start(installed.archiveHash);
+    final before = await gateway.load(id);
+    expect(before.sourceLiteralCanon, true);
+    expect(before.activePlotMode, 'CANON');
+    expect(before.npcRelations.single.displayName, 'Анна');
+    await tester.pumpWidget(MaterialApp(home: WorldPlayPage(
+      gateway: gateway, campaignId: id,
+    )));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('NPC'));
+    await tester.pumpAndSettle();
+    expect(find.text('Анна'), findsOneWidget);
+    await tester.tap(find.byTooltip('Закрыть'));
+    await tester.pumpAndSettle();
+
+    final action = FreeformActionDraft.fromJson({
+      'format': FreeformActionDraft.format,
+      'scope': FreeformActionDraft.fictionScope,
+      'player_text': 'Предупредить Анну о ловушке',
+      'narration': 'Анна услышала предупреждение и решила сменить цель.',
+      'effects': <Object>[],
+      'npc_interaction': {
+        'actor_id': actor, 'memory_id': 'gm_anna_warning',
+        'kind': 'warned', 'trust_delta': 3,
+        'goal_id': 'gm_find_shelter',
+      },
+    });
+    final preview = await gateway.previewDynamic(id, action,
+        expectedRevision: before.revision);
+    final accepted = await gateway.commitDynamic(id,
+        actionId: 'ui_parity_real_v5_action', draft: action,
+        expectedRevision: before.revision,
+        approvalDigest: preview.approvalDigest,
+        userConfirmed: true);
+    expect(accepted.applied, true);
+    expect(accepted.view.activePlotMode, 'ALTER_FATE');
+    expect(accepted.view.npcRelations.single.currentGoal,
+        'gm_find_shelter');
+    await tester.pumpWidget(MaterialApp(home: WorldPlayPage(
+      key: const Key('world-v5-after-action'),
+      gateway: gateway, campaignId: id,
+    )));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('world-alternate-continuity')),
+        findsOneWidget);
+    await tester.tap(find.text('NPC'));
+    await tester.pumpAndSettle();
+    expect(find.text('Текущая цель: find shelter'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   test('default worker isolate reads and writes exact BookWorld', () async {
     const worker = DeviceWorldLibraryGateway();
     final bytes = Uint8List.fromList(File(fixture).readAsBytesSync());
@@ -163,6 +279,7 @@ void main() {
     final initial = await gateway.load(id);
     expect(initial.heroName, 'Лена');
     expect(initial.heroDescription, contains('Путешественница'));
+    expect(initial.sceneNames[initial.sceneId], isNotEmpty);
     expect(initial.stats['courage'], 1);
     expect(initial.inventory, isEmpty);
 
@@ -256,6 +373,116 @@ void main() {
     expect((await gateway.load(other)).journal.length, 2);
   });
 
+
+  testWidgets('one and two signed NPCs keep identity, item custody, '
+      'journal and portraits after real SQLite save/import', (tester) async {
+    // Both worlds are built by the existing Python rich-v3 compiler in CI.
+    // Every operation below uses DeviceWorldLibraryGateway and real SQLite,
+    // not an invented Flutter model, mock engine or network request.
+    for (final expectedCount in [1, 2]) {
+      final file = expectedCount == 1
+          ? '../../artifacts/bookworld/rich_v3/NPC_One_Rich_Items_v3.bworld'
+          : '../../artifacts/bookworld/rich_v3/NPC_Two_Rich_Items_v3.bworld';
+      final bytes = Uint8List.fromList(File(file).readAsBytesSync());
+      final installed = await gateway.install(bytes);
+      final id = await gateway.start(installed.archiveHash);
+      final before = await gateway.load(id);
+      expect(before.revision, 0);
+      expect(before.npcRelations, isEmpty);
+      expect(before.npcDisplayNames, isEmpty,
+          reason: 'No future NPC identity in the public world view');
+      expect(before.npcItemOwners, isEmpty,
+          reason: 'No future custodians in the public world view');
+      expect(before.npcLifeStates, isEmpty,
+          reason: 'No future life events in the public world view');
+      expect(before.sceneSpeakerIdentityReviewed, isTrue);
+      expect(before.sceneDialogueTurns, isNotNull);
+      expect(before.sceneDialogueTurns![1].speaker, isNull,
+          reason: 'A gated future NPC must not reveal their identity');
+      expect(before.visibleSpeakerActorIds, isEmpty);
+      final forbidden = await gateway.choose(id,
+        actionId: 'blocked_help_$expectedCount', choiceId: 'help',
+        expectedRevision: 0);
+      expect(forbidden.applied, isFalse);
+      expect((await gateway.load(id)).journal, isEmpty);
+
+      final promise = await gateway.choose(id,
+        actionId: 'promise_$expectedCount', choiceId: 'wait',
+        expectedRevision: 0);
+      expect(promise.applied, isTrue);
+      final met = await gateway.load(id);
+      expect(met.revision, 1);
+      expect(met.npcRelations, hasLength(expectedCount));
+      expect(met.npcDisplayNames.keys.toSet(),
+          met.npcRelations.map((npc) => npc.actorId).toSet());
+      expect(met.visibleSpeakerActorIds['Мария'], 'npc_' + List.filled(32, 'c').join());
+      expect(met.sceneDialogueTurns![1].speaker, 'Мария');
+      if (expectedCount == 2) {
+        expect(met.visibleSpeakerActorIds['Иван'], 'npc_' + List.filled(32, 'd').join());
+        expect(met.sceneDialogueTurns![2].speaker, 'Иван');
+      } else {
+        expect(met.visibleSpeakerActorIds.containsKey('Иван'), isFalse);
+      }
+      expect(met.inventory, contains('map'));
+      expect(met.journal, hasLength(1));
+
+      final given = await gateway.choose(id,
+        actionId: 'give_map_$expectedCount', choiceId: 'give_map',
+        expectedRevision: 1);
+      expect(given.applied, isTrue);
+      final committed = await gateway.load(id);
+      expect(committed.revision, 2);
+      expect(committed.inventory, isNot(contains('map')));
+      expect(committed.npcItemOwners['map'], 'npc_' + List.filled(32, 'c').join());
+      expect(committed.journal.last.changes,
+          contains('Передано персонажу: Карта'));
+
+      final saved = await gateway.exportSave(id);
+      final restoreId = await gateway.importSave(saved,
+          expectedWorldHash: installed.archiveHash);
+      final reopened = await gateway.load(restoreId);
+      expect(reopened.revision, committed.revision);
+      expect(reopened.journal.map((e) => e.changes).toList(),
+          committed.journal.map((e) => e.changes).toList());
+      expect(reopened.npcItemOwners, committed.npcItemOwners);
+      expect(reopened.npcRelations.map((e) => e.actorId).toSet(),
+          committed.npcRelations.map((e) => e.actorId).toSet());
+      expect(reopened.visibleSpeakerActorIds,
+          committed.visibleSpeakerActorIds);
+      expect(reopened.npcDisplayNames, committed.npcDisplayNames);
+      expect(reopened.npcLifeStates, committed.npcLifeStates);
+
+      await tester.pumpWidget(MaterialApp(
+        home: WorldPlayPage(gateway: gateway, campaignId: restoreId),
+      ));
+      await settleWorker(tester);
+      await tester.tap(find.text('NPC'));
+      await settleWorker(tester);
+      expect(find.text('Мария'), findsOneWidget);
+      if (expectedCount == 2) {
+        expect(find.text('Иван'), findsOneWidget);
+      }
+      expect(find.text('Предмет у персонажа: Карта'), findsOneWidget);
+      await tester.tap(find.byTooltip('Закрыть'));
+      await settleWorker(tester);
+
+      await tester.tap(find.text('Предметы'));
+      await settleWorker(tester);
+      expect(find.text('Карта — у Мария'), findsOneWidget);
+      await tester.tap(find.byTooltip('Закрыть'));
+      await settleWorker(tester);
+      await tester.tap(find.text('Журнал'));
+      await settleWorker(tester);
+      expect(find.textContaining('Передано персонажу: Карта'),
+          findsOneWidget);
+      await tester.tap(find.byTooltip('Закрыть'));
+      await settleWorker(tester);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    }
+  }, timeout: const Timeout(Duration(seconds: 90)));
+
   testWidgets('one library imports and displays verified worlds separately '
       'from legacy books and reading', (tester) async {
     final world = await install();
@@ -264,7 +491,7 @@ void main() {
     ));
     await settleWorker(tester);
     expect(find.byKey(const ValueKey('library-import')), findsOneWidget);
-    expect(find.text('Добавить книгу'), findsOneWidget);
+    expect(find.text('Добавить книгу или RPG'), findsOneWidget);
     expect(find.textContaining('TXT, FB2'), findsOneWidget);
     await tester.scrollUntilVisible(
       find.byKey(ValueKey('library-world-' + world.archiveHash)),
@@ -323,7 +550,14 @@ void main() {
     );
     await tester.tap(tile);
     await settleWorker(tester);
-    await tester.enterText(find.byKey(const Key('free-text-input')), label);
+    // The form grows below the current viewport after ExpansionTile opens.
+    // Move the physical scene scroll before typing, as a player must do.
+    await tester.drag(find.byKey(const ValueKey('world-scene-scroll')),
+        const Offset(0, -210));
+    await settleWorker(tester);
+    final input = find.byKey(const Key('free-text-input'));
+    await tester.ensureVisible(input);
+    await tester.enterText(input, label);
     final scroll = find.descendant(
       of: find.byKey(const ValueKey('world-scene-scroll')),
       matching: find.byType(Scrollable),
@@ -380,6 +614,9 @@ void main() {
       ).first,
     );
     await tester.tap(tile);
+    await settleWorker(tester);
+    await tester.drag(find.byKey(const ValueKey('world-scene-scroll')),
+        const Offset(0, -210));
     await settleWorker(tester);
     final input = find.byKey(const Key('free-text-input'));
     await tester.ensureVisible(input);
@@ -502,7 +739,7 @@ void main() {
     expect(find.text('Открыть библиотеку'), findsOneWidget);
     await tester.tap(find.text('Открыть библиотеку'));
     await settleWorker(tester);
-    expect(find.text('Добавить книгу'), findsOneWidget);
+    expect(find.text('Добавить книгу или RPG'), findsOneWidget);
     expect(find.text('Демо RPG • начать новое прохождение'), findsNothing);
   });
 

@@ -5,6 +5,8 @@ import 'free_text_world_gateway_port.dart';
 import 'ai_connection.dart';
 import 'zai_gameplay_choice_advisor.dart';
 import 'world_library_gateway.dart';
+import 'world_ui_presenter.dart';
+import 'package:story_core/story_core.dart' show FreeformActionDraft;
 
 /// Optional, collapsed in WorldPlayPage. No automatic action execution.
 /// Uses precisely the same gateway and SQLite campaign as classic buttons.
@@ -12,12 +14,14 @@ class FreeTextActionPanel extends StatefulWidget {
   const FreeTextActionPanel({
     super.key, required this.campaignId, required this.gateway,
     this.onCommitted, this.onBusyChanged, this.aiAdvisor,
+    this.dynamicAvailable = false,
   });
   final String campaignId;
   final WorldLibraryGateway gateway;
   final ValueChanged<WorldChoiceResult>? onCommitted;
   final ValueChanged<bool>? onBusyChanged;
   final ZaiGameplayChoiceAdvisor? aiAdvisor;
+  final bool dynamicAvailable;
 
   @override
   State<FreeTextActionPanel> createState() => _FreeTextActionPanelState();
@@ -27,6 +31,9 @@ class _FreeTextActionPanelState extends State<FreeTextActionPanel> {
   final _input = TextEditingController();
   FreeTextPreview? _preview;
   FreeTextProposal? _selected;
+  FreeformActionDraft? _dynamicDraft;
+  FreeformActionPreview? _dynamicPreview;
+  WorldGameView? _draftSource;
   String? _error;
   String? _notice;
   bool _busy = false;
@@ -53,6 +60,9 @@ class _FreeTextActionPanelState extends State<FreeTextActionPanel> {
     _aiCancellation?.cancel();
     _preview = null;
     _selected = null;
+    _dynamicDraft = null;
+    _dynamicPreview = null;
+    _draftSource = null;
     _error = null;
     _notice = null;
   }
@@ -202,6 +212,165 @@ class _FreeTextActionPanelState extends State<FreeTextActionPanel> {
     }
   }
 
+  /// A true new event. The model gets exactly the CURRENT displayed text,
+  /// player request and limited fictional resource slots, with separate
+  /// network consent. It cannot call the game's commit or edit book canon.
+  Future<void> _askDynamic() async {
+    if (_busy || !widget.dynamicAvailable ||
+        widget.gateway is! WorldDynamicActionGateway) return;
+    final text = _input.text.trim();
+    if (text.isEmpty || text != _input.text) {
+      setState(() => _error = 'Опишите свободное действие без пустых строк.');
+      return;
+    }
+    final campaignId = widget.campaignId;
+    late WorldGameView before;
+    try {
+      before = await widget.gateway.load(campaignId);
+    } catch (_) {
+      if (mounted) setState(() => _error = 'Не удалось открыть игру.');
+      return;
+    }
+    if (!mounted || before.isTerminal || !before.freeformAvailable ||
+        !before.sourceLiteralCanon) return;
+    final approved = await showDialog<bool>(
+      context: context,
+      builder: (dialog) => AlertDialog(
+        scrollable: true,
+        title: const Text('Создать новое игровое действие с Z.ai?'),
+        content: const Text(
+            'В модель отправятся ваша фраза, начало ТЕКУЩЕГО '
+            'фрагмента книги (до 550 символов), до 5 последних '
+            'уже выполненных вымышленных ИИ-ходов, игровые '
+            'ресурсы gm_* и сведения о присутствующих проверенных NPC: '
+            'их имена, доверие, число игровых воспоминаний и текущие '
+            'вымышленные цели, открытые обещания и уже совершённые '
+            'самостоятельные решения. Если история отклонилась от '
+            'книги, отправляются только текущие игровые обязательства '
+            'и направление альтернативной ветки. '
+            'НЕ отправляются вся книга, будущие '
+            'главы, NPC-секреты, файлы сохранений или API-ключ. '
+            'Предложение не изменит настоящий сюжет книги. '
+            'Результат будет показан для отдельного подтверждения. '
+            'При перегрузке возможны два повторных запроса.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialog, false),
+              child: const Text('Отмена')),
+          FilledButton(
+            key: const Key('free-text-dynamic-consent'),
+            onPressed: () => Navigator.pop(dialog, true),
+            child: const Text('Передать текущий фрагмент'),
+          ),
+        ],
+      ),
+    );
+    if (approved != true || !mounted || _busy ||
+        _input.text != text || widget.campaignId != campaignId) return;
+    final cancel = ZaiGameplayCancellation();
+    setState(() {
+      _reset();
+      _busy = true;
+      _aiCancellation = cancel;
+      _notice = 'ИИ создаёт новое неканоническое действие…';
+    });
+    try {
+      final advisor = widget.aiAdvisor ?? ZaiGameplayChoiceAdvisor();
+      final draft = await advisor.suggestDynamic(
+        view: before, playerText: text,
+        consentForThisAction: true,
+        cancellation: cancel,
+        onProgress: (attempt, total, status) {
+          if (mounted && !cancel.isCancelled) {
+            setState(() => _notice = status +
+                ' (' + attempt.toString() + '/' + total.toString() + ')');
+          }
+        },
+      );
+      if (!mounted || cancel.isCancelled ||
+          _input.text != text || widget.campaignId != campaignId) return;
+      // This performs ONLY a speculative preview on a replayed world.
+      final preview = await (widget.gateway as WorldDynamicActionGateway)
+          .previewDynamic(campaignId, draft,
+              expectedRevision: before.revision);
+      if (!mounted || cancel.isCancelled ||
+          _input.text != text || widget.campaignId != campaignId) return;
+      if (preview.stateHash != before.stateHash) {
+        throw const FormatException('Сцена изменилась во время ИИ.');
+      }
+      setState(() {
+        _dynamicDraft = draft;
+        _dynamicPreview = preview;
+        _draftSource = before;
+        _notice = 'Новое игровое событие ещё НЕ записано. '
+            'Проверьте последствия ниже и подтвердите.';
+        _error = null;
+      });
+    } on AiSetupException catch (error) {
+      if (mounted && !cancel.isCancelled) {
+        setState(() { _error = error.message; _notice = null; });
+      }
+    } on FormatException catch (error) {
+      if (mounted && !cancel.isCancelled) {
+        setState(() { _error = error.message; _notice = null; });
+      }
+    } catch (_) {
+      if (mounted && !cancel.isCancelled) {
+        setState(() {
+          _error = 'ИИ не смог предложить проверяемое действие. '
+              'Игра не изменена.';
+          _notice = null;
+        });
+      }
+    } finally {
+      if (mounted) setState(() {
+        _busy = false;
+        if (identical(_aiCancellation, cancel)) _aiCancellation = null;
+      });
+    }
+  }
+
+  Future<void> _commitDynamic() async {
+    final draft = _dynamicDraft, preview = _dynamicPreview;
+    if (_busy || draft == null || preview == null ||
+        widget.gateway is! WorldDynamicActionGateway) return;
+    setState(() { _busy = true; _error = null; });
+    widget.onBusyChanged?.call(true);
+    try {
+      final result = await (widget.gateway as WorldDynamicActionGateway)
+          .commitDynamic(widget.campaignId,
+              actionId: _actionId(),
+              draft: draft,
+              expectedRevision: preview.expectedRevision,
+              approvalDigest: preview.approvalDigest,
+              userConfirmed: true);
+      if (!mounted) return;
+      setState(() {
+        _reset();
+        _notice = result.applied
+            ? 'Новое свободное действие записано в журнал и состояние игры.'
+            : 'Свободное действие отклонено. Проверьте состояние.';
+      });
+      if (result.applied) {
+        _input.clear();
+        widget.onCommitted?.call(result);
+      }
+    } on FormatException catch (error) {
+      if (mounted) setState(() {
+        _reset();
+        _error = error.message;
+      });
+    } catch (_) {
+      if (mounted) setState(() {
+        _reset();
+        _error = 'Результат записи неизвестен. Проверьте журнал '
+            'перед повторным подтверждением.';
+      });
+    } finally {
+      if (mounted) setState(() => _busy = false);
+      if (mounted) widget.onBusyChanged?.call(false);
+    }
+  }
+
   static String _actionId() {
     final epoch = DateTime.now().toUtc().microsecondsSinceEpoch.toRadixString(36);
     final secure = Random.secure().nextInt(1 << 31).toRadixString(36);
@@ -261,10 +430,14 @@ class _FreeTextActionPanelState extends State<FreeTextActionPanel> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Text('Опишите действие своим текстом. '
-              'Можно подобрать доступный ход офлайн или запросить подсказку '
-              'ИИ после отдельного согласия. ИИ не создаёт события '
-              'и не получает доступ к будущему сюжету.'),
+          Text(widget.dynamicAvailable
+              ? 'В книжном CANON доступен также новый ход ИИ: '
+                  'отдельная вымышленная вставка с реальными '
+                  'игровыми последствиями и записью в журнал. '
+                  'Оригинальный текст книги остаётся неизменным.'
+              : 'Опишите действие. Офлайн и ИИ подбирают только '
+                  'разрешённые ходы, не создавая новых событий. '
+                  'Отправка в Z.ai и сам ход требуют отдельных подтверждений.'),
           const SizedBox(height: 8),
           TextField(
             key: const Key('free-text-input'), controller: _input,
@@ -290,11 +463,68 @@ class _FreeTextActionPanelState extends State<FreeTextActionPanel> {
             icon: const Icon(Icons.auto_awesome),
             label: const Text('Подобрать с помощью ИИ'),
           ),
+          if (widget.dynamicAvailable &&
+              widget.gateway is WorldDynamicActionGateway)
+            OutlinedButton.icon(
+              key: const Key('free-text-ai-dynamic'),
+              onPressed: _busy ? null : _askDynamic,
+              icon: const Icon(Icons.auto_awesome),
+              label: const Text('Создать НОВОЕ действие ИИ'),
+            ),
           if (_busy) const LinearProgressIndicator(),
+          if (_busy && _aiCancellation != null)
+            TextButton.icon(
+              key: const Key('free-text-stop-ai'),
+              onPressed: () {
+                _aiCancellation?.cancel();
+                setState(() => _notice =
+                    'Остановлены новые попытки ИИ. Уже отправленный запрос '
+                    'нельзя отозвать; игровой ход не совершён.');
+              },
+              icon: const Icon(Icons.stop_circle_outlined),
+              label: const Text('Остановить запрос к ИИ'),
+            ),
           if (_error != null)
             Text(_error!, key: const Key('free-text-error'),
                 style: TextStyle(color: Theme.of(context).colorScheme.error)),
           if (_notice != null) Text(_notice!),
+          if (_dynamicDraft != null && _dynamicPreview != null) ...[
+            const SizedBox(height: 10),
+            const Text('Проверенное предложение. НЕ канон книги:',
+                style: TextStyle(fontWeight: FontWeight.bold)),
+            Text(_dynamicDraft!.narration,
+                key: const Key('free-text-dynamic-narration')),
+            const SizedBox(height: 6),
+            const Text('Движок проверил предложение, но это ещё '
+                'не сохранённое событие. Последствия и режим после '
+                'записи будут показаны из нового состояния игры.'),
+            const SizedBox(height: 6),
+            if (_draftSource != null)
+              Column(
+                key: const Key('free-text-dynamic-impact'),
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  for (final line in WorldUiPresenter.dynamicImpact(
+                    _dynamicDraft!, _draftSource!,
+                  ))
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 4),
+                      child: Text(line),
+                    ),
+                ],
+              ),
+            FilledButton.icon(
+              key: const Key('free-text-dynamic-confirm'),
+              onPressed: _busy ? null : _commitDynamic,
+              icon: const Icon(Icons.check_circle),
+              label: const Text('Подтвердить НОВЫЙ ход и сохранить'),
+            ),
+            TextButton(
+              key: const Key('free-text-dynamic-cancel'),
+              onPressed: _busy ? null : () => setState(_reset),
+              child: const Text('Отклонить предложение'),
+            ),
+          ],
           if (preview?.canChoose == true) ...[
             const SizedBox(height: 8),
             const Text('Варианты (ничего ещё не выполнено):'),

@@ -88,7 +88,7 @@ void main() {
       home: LibraryPage(bookStorage: _Books()),
     ));
     await tester.pumpAndSettle();
-    await tester.scrollUntilVisible(find.text('Подготовить к RPG'), 180,
+    await tester.scrollUntilVisible(find.text('Расширенный редактор'), 180,
         scrollable: find.byType(Scrollable).first,
         maxScrolls: 20);
     expect(find.text('Читать'), findsOneWidget);

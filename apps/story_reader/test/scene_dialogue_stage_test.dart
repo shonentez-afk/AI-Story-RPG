@@ -264,4 +264,47 @@ void main() {
         scrollable: find.byType(Scrollable).first);
     expect(tester.widget<FilledButton>(choice).onPressed, isNotNull);
   });
+  testWidgets('reviewed NPC portraits require the visible permanent actor ID',
+      (tester) async {
+    final gateway = _DialogueGateway();
+    final actor = 'npc_' + List.filled(32, 'c').join();
+    gateway.current = WorldGameView(
+      campaignId: 'verified_portrait_only', worldTitle: 'Тайна ворот',
+      sceneId: 'gate', sceneText: 'Только проверенные реплики',
+      sceneDialogueTurns: const [
+        RichDialogueTurn(speaker: 'Лена', text: 'Ты меня слышишь?'),
+        RichDialogueTurn(text: RichNpcDialogueKnowledge.unavailableLine),
+      ],
+      sceneSpeakerIdentityReviewed: true,
+      visibleSpeakerActorIds: {'Лена': actor},
+      revision: 0, tick: 0, isTerminal: false,
+      stats: const {}, inventory: const [], flags: const {},
+      knownFacts: const [], choices: const [
+        WorldChoiceView(id: 'ask_guard', label: 'Ответить стражу'),
+      ], journal: const [],
+    );
+    await tester.pumpWidget(MaterialApp(
+      home: WorldPlayPage(gateway: gateway,
+        campaignId: 'verified_portrait_only'),
+    ));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 250));
+    await tester.pump();
+    expect(find.text('Лена'), findsOneWidget);
+    expect(find.byKey(const ValueKey('dialogue-set-portrait')),
+        findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('dialogue-next')));
+    await tester.pumpAndSettle();
+    expect(find.text('Страж'), findsNothing);
+    expect(find.text('Скрытая реплика'), findsOneWidget);
+    expect(find.text(RichNpcDialogueKnowledge.unavailableLine),
+        findsOneWidget);
+    expect(find.byKey(const ValueKey('dialogue-set-portrait')), findsNothing);
+    await tester.tap(find.byKey(const ValueKey('dialogue-history-toggle')));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Страж'), findsNothing);
+    expect(gateway.commits, 0);
+    expect(tester.takeException(), isNull);
+  });
+
 }

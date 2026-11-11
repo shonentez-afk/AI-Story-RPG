@@ -108,6 +108,56 @@ def item_social_sample():
     ]
     return bp, prov, index
 
+def two_npc_item_social_sample():
+    """A signed two-NPC private fixture using the SAME world/schema/SQLite.
+
+    Both witnesses and their memories arise from one executable player
+    decision. Future NPC dialogue is gated until that event is committed.
+    Literary CANON is intentionally not claimed by this synthetic sample.
+    """
+    bp, prov, index = item_social_sample()
+    second = "npc_" + "d" * 32
+    bp["actors"].append(second)
+    bp["initial_state"]["knowledge"][second] = []
+    entry = bp["scenes"][0]
+    entry["text"] = chr(10).join([
+        "Встреча у ворот.",
+        "Мария: «Я услышала обещание!»",
+        "Иван: «Я тоже видел обещание».",
+        "Игрок: «Обещаю».",
+    ])
+    signed = rich._exact_scene_dialogue(entry["text"])
+    if signed is None or len(signed["turns"]) != 4:
+        raise AssertionError("Two-NPC source dialogue did not tokenize exactly")
+    prov["presentation"]["scene_dialogues"] = {"entry": signed}
+    former = prov["presentation"]["scene_dialogue_knowledge"]["entry"]
+    player = dict(former[1])
+    player["turn_index"] = 3
+    prov["presentation"]["scene_dialogue_knowledge"]["entry"] = [
+        former[0],
+        {
+            "turn_index": 2, "speaker": "Иван", "actor_id": second,
+            "required_fact_ids": [],
+            "required_social_memory_id": "ivan_observed_promise",
+        },
+        player,
+    ]
+    social = prov["npc_social"]
+    quote = prov["scene_origins"][0]["source_refs"][0]["quote_sha256"]
+    social["witnesses"].append({
+        "scene_id": "entry", "actor_id": second, "mode": "present",
+        "source_quote_sha256": quote,
+    })
+    social["rules"].append({
+        "memory_id": "ivan_observed_promise",
+        "scene_id": "entry", "choice_id": "wait",
+        "observer_id": second, "kind": "promiseReceived",
+        "related_actor_id": "player", "relationship_delta": 3,
+        "max_triggers": 1, "source_quote_sha256": quote,
+    })
+    return bp, prov, index
+
+
 def authored_item_social_sample():
     bp, prov, index = item_social_sample()
     origin = prov["scene_origins"][0]
@@ -121,6 +171,18 @@ def authored_item_social_sample():
 
 
 class RichNpcSocialTests(unittest.TestCase):
+    def test_source_reviewed_two_npc_runtime_fixture(self):
+        bp, source, index = two_npc_item_social_sample()
+        archive = rich.build(bp, source, index)
+        inspected = rich.verify(archive)
+        self.assertEqual(inspected["format_version"], 3)
+        self.assertEqual(set(bp["actors"]),
+                         {"player", "npc_" + "c" * 32, "npc_" + "d" * 32})
+        self.assertEqual(len(source["npc_social"]["rules"]), 2)
+        self.assertEqual(len(source["presentation"]
+                             ["scene_dialogue_knowledge"]["entry"]), 3)
+        self.assertEqual(archive, rich.build(bp, source, index))
+
     def test_v5_source_approved_life_events_and_negative_contracts(self):
         bp, prov, source = social_sample()
         social = prov["npc_social"]

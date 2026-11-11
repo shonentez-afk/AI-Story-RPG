@@ -1,16 +1,16 @@
 {
   "format": "rpg_author_compatibility_v1",
-  "application_baseline": "5d908681289f9699dc4394400b17b6d5424cc5d1",
+  "application_baseline": "6481794ed424d7e222a12b8544b9ecc98455dfc2",
   "files": {
     "tools/bookworld/bookworld.py": "68c5ebaac9b4c19176a476081f538fff639ef585020dfdea02b8bf861aec550f",
     "tools/bookworld/private_bookworld.py": "b558193bbab223eeaaba4c0c343b44e76bf5b09d1c55a2e9bde52f6aba92f95c",
-    "apps/story_reader/lib/book_import.dart": "eefa829a3df3ba65e8b4e98fe5d5e24b670c8542f790af3389ee07661aa16dca",
-    "apps/story_reader/lib/book_text_decoder.dart": "cb97376fb007f019704830f66343e8a0ebf0fe78f0ca211f4d5ce737eac126b6",
-    "apps/story_reader/lib/book_source_index.dart": "f918386e306f608d1887e209a867430522f18dfddcf6c53596c0e744ad8f6251",
+    "apps/story_reader/lib/book_import.dart": "f8fa0ec8c05c71248a7533c493f95f21bce114b937ab5c9f3a41dd4ca9534743",
+    "apps/story_reader/lib/book_text_decoder.dart": "33b14c81e9540a61bbcf00cf8c993a3bc736bb4d60422047b3b01e7f20621464",
+    "apps/story_reader/lib/book_source_index.dart": "aa2da44dcaf3cd1688da066c9e4a51cb8997c23c2105c51a8eb7a708e73d3933",
     "packages/bookworld_format/lib/private_bookworld.dart": "d2b7880360d3af2255abf2577b5d8fd117a3b045532fd0ce8c5b0047d6d901b5",
-    "packages/story_core/lib/src/blueprint.dart": "d90ccbcb07ee6ef57ead57c9918068b39ab551060cd97b2153fdbeebd9449cbb",
-    "tools/bookworld/private_rich_bookworld.py": "bdab418bd022d0082144692d8c37bc521df72d063ab640cf4cf3af7ce1e2bcec",
-    "packages/bookworld_format/lib/private_rich_bookworld.dart": "26b80c65e2191483d43bcccb48eaa7509d1b8d4a1f29fb3759a7591e30b30ae3",
-    "packages/bookworld_format/lib/private_bookworld_writer.dart": "87b01725cbb3178a943a91eaedc505d597fc71abea71e8e5614e5deb28ecf278"
+    "packages/story_core/lib/src/blueprint.dart": "0a49915d255aaad509695b48a9e7ae92d91125a3e7f4cd164337ef77dd1f0689",
+    "tools/bookworld/private_rich_bookworld.py": "a07521acbafb043c548063557a095ab8ee20167c0c1c510349681495b9654a15",
+    "packages/bookworld_format/lib/private_rich_bookworld.dart": "08172f515838d7f42bc154c890c7c41e5d5f930949ca456fd325a13a077aac3b",
+    "packages/bookworld_format/lib/private_bookworld_writer.dart": "931bf3cc194a0b247c74aaf92d2c06fef057d7a21955b211571a4ac1319079ae"
   }
 }

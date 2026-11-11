@@ -5,43 +5,11 @@ import 'package:crypto/crypto.dart';
 import 'package:bookworld_format/bookworld_format.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:rpg_gameplay/rpg_gameplay.dart'
+    show SceneDialogueTurn, SceneDialogueScript;
 
-/// The FIRST dialogue UI contract is intentionally presentation-only.
-///
-/// A line is dialogue only when the authored scene explicitly names the
-/// speaker and quotes their words. Bare em dashes, unattributed quotations
-/// and prose must NEVER be assigned to an invented character.
-class SceneDialogueTurn {
-  const SceneDialogueTurn({required this.text, this.speaker});
-  final String text;
-  final String? speaker;
-  bool get isNarration => speaker == null;
-}
-
-class SceneDialogueScript {
-  SceneDialogueScript._(List<SceneDialogueTurn> turns)
-      : turns = List.unmodifiable(turns);
-
-  final List<SceneDialogueTurn> turns;
-
-  // One shared deterministic algorithm (and exact same speaker rules)
-  // powers the v3 writer, independent importer and this legacy Flutter UI.
-  // Older v1/v2 worlds still get the existing dialogue presentation.
-  static SceneDialogueScript? fromSceneText(String text) {
-    final turns = RichSceneDialogue.parse(text);
-    return turns == null ? null : fromSignedTurns(turns);
-  }
-
-  static SceneDialogueScript fromSignedTurns(List<RichDialogueTurn> turns) {
-    if (turns.isEmpty) {
-      throw const FormatException('Пустой подписанный диалог .bworld');
-    }
-    return SceneDialogueScript._([
-      for (final turn in turns)
-        SceneDialogueTurn(text: turn.text, speaker: turn.speaker),
-    ]);
-  }
-}
+export 'package:rpg_gameplay/rpg_gameplay.dart'
+    show SceneDialogueTurn, SceneDialogueScript;
 
 /// Device-local reading position; not part of story_core, BookWorld, SQLite
 /// journal or the portable game save. Key includes scene AND committed turn
@@ -118,6 +86,7 @@ class DialogueStage extends StatefulWidget {
     required this.onFinished,
     this.portraitFor,
     this.onAddPortrait,
+    this.canAddPortrait,
     this.store = const DialoguePositionStore(),
   });
 
@@ -129,6 +98,9 @@ class DialogueStage extends StatefulWidget {
   final ValueChanged<bool> onFinished;
   final ImageProvider? Function(String speaker)? portraitFor;
   final ValueChanged<String>? onAddPortrait;
+  /// Hide upload controls for source-gated/ambiguous NPC identities.
+  /// Older standalone dialogue stages remain compatible when unset.
+  final bool Function(String speaker)? canAddPortrait;
   final DialoguePositionStore store;
 
   @override
@@ -179,14 +151,18 @@ class _DialogueStageState extends State<DialogueStage> {
   }
 
   Widget _avatar(SceneDialogueTurn turn, Color accent) {
+    final hidden = turn.speaker == null &&
+        turn.text == RichNpcDialogueKnowledge.unavailableLine;
     final portrait = turn.speaker == null
         ? null : widget.portraitFor?.call(turn.speaker!);
     final placeholder = Center(
-      child: Icon(turn.isNarration ? Icons.menu_book_outlined
+      child: Icon(hidden ? Icons.lock_outline
+          : turn.isNarration ? Icons.menu_book_outlined
           : Icons.person_outline_rounded, size: 42, color: accent),
     );
     return Semantics(
-      label: turn.isNarration
+      label: hidden ? 'Скрытая реплика'
+          : turn.isNarration
           ? 'Повествование'
           : (portrait == null
               ? 'Портрет не предоставлен: ' + turn.speaker!
@@ -222,7 +198,9 @@ class _DialogueStageState extends State<DialogueStage> {
       widget.textColor.withValues(alpha: 0.055),
       widget.pageColor,
     );
-    final name = current.speaker ?? 'Повествование';
+    final name = current.speaker ??
+        (current.text == RichNpcDialogueKnowledge.unavailableLine
+            ? 'Скрытая реплика' : 'Повествование');
     return Semantics(
       container: true,
       label: 'Диалог, реплика ' + (index + 1).toString() +
@@ -246,7 +224,9 @@ class _DialogueStageState extends State<DialogueStage> {
               child: Column(
                 children: [
                   _avatar(current, accent),
-                  if (current.speaker != null && widget.onAddPortrait != null)
+                  if (current.speaker != null &&
+                      widget.onAddPortrait != null &&
+                      (widget.canAddPortrait?.call(current.speaker!) ?? true))
                     TextButton.icon(
                       key: const ValueKey('dialogue-set-portrait'),
                       onPressed: () => widget.onAddPortrait!(current.speaker!),
@@ -293,7 +273,10 @@ class _DialogueStageState extends State<DialogueStage> {
                     Padding(
                       padding: const EdgeInsets.symmetric(vertical: 5),
                       child: Text(
-                        (turns[i].speaker ?? 'Повествование') +
+                        (turns[i].speaker ??
+                            (turns[i].text ==
+                                    RichNpcDialogueKnowledge.unavailableLine
+                                ? 'Скрытая реплика' : 'Повествование')) +
                           ': ' + turns[i].text,
                         style: TextStyle(color: accent,
                             fontSize: widget.fontSize * 0.84),

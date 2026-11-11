@@ -32,6 +32,10 @@ jobs:
         working-directory: experiments/m0_engine_comparison
       - name: Android host security regression
         run: python3 -m unittest discover -s tools/tests -v
+      - name: GigaCode Desktop Windows QA MCP contract regression (headless)
+        run: python3 -m unittest discover -s tools/windows_qa_mcp/tests -v
+      - name: Independent source-bound NPC dialogue regression
+        run: python3 -m unittest discover -s tests -p 'test_rich_scene_dialogue_projection.py' -v
 
   dart-sdk:
     name: Dart engine and scenario tests
@@ -65,10 +69,24 @@ jobs:
           (cd story_engine_smoke && dart run bin/stress.dart ../pilot/stress_1000.json)
         working-directory: experiments/m0_engine_comparison
       - name: Download Ink compiler 1.2.1
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          curl --fail --location --retry 3 -o /tmp/inklecate_linux.zip https://github.com/inkle/ink/releases/download/v1.2.1/inklecate_linux.zip
+          # Fixed upstream 1.2.1 release asset. A CDN 504 must not block
+          # unrelated engine CI when the official GitHub API can serve it.
+          set -euo pipefail
+          asset=/tmp/inklecate_linux.zip
+          primary=https://github.com/inkle/ink/releases/download/v1.2.1/inklecate_linux.zip
+          fallback=https://api.github.com/repos/inkle/ink/releases/assets/412615602
+          if ! curl --fail --location --retry 3 --retry-all-errors --retry-delay 2 -o "$asset" "$primary"; then
+            curl --fail --location --retry 4 --retry-all-errors --retry-delay 3 \
+              -H 'Accept: application/octet-stream' \
+              -H "Authorization: Bearer ${GH_TOKEN}" \
+              -o "$asset" "$fallback"
+          fi
+          echo "1997ff5bca618c90003ecd5fecb286e7468abb955005a2a185042949642f8fb5  $asset" | sha256sum --check -
           mkdir -p /tmp/inklecate-dist
-          unzip -q /tmp/inklecate_linux.zip -d /tmp/inklecate-dist
+          unzip -q "$asset" -d /tmp/inklecate-dist
           find /tmp/inklecate-dist -type f -name 'inklecate*' -exec chmod +x {} \;
       - name: Test ink_dart
         run: |
@@ -94,7 +112,7 @@ jobs:
           sdk: stable
       - name: Prepare verified native SQLite source for Linux test workspaces
         run: |
-          python3 tools/ci_prepare_verified_sqlite.py --project packages/bookworld_format --project packages/campaign_manager
+          python3 tools/ci_prepare_verified_sqlite.py --project packages/bookworld_format --project packages/campaign_manager --project packages/story_authoring --project packages/rpg_gameplay --project packages/rpg_api --project apps/rpg_cli
       - name: Verify reusable Dart engine dependency direction
         run: python3 tools/ci_check_engine_boundaries.py
       - name: Analyze pure Dart story_core
@@ -153,6 +171,26 @@ jobs:
           dart pub get
           dart analyze
           dart test --reporter expanded
+      - name: Verify standalone book authoring without Flutter or network
+        run: |
+          dart pub get
+          dart analyze
+          dart test --reporter expanded
+          dart run bin/author_book.dart verify-world ../../artifacts/bookworld/story_authoring_sourcebound_fixture.bworld
+        working-directory: packages/story_authoring
+      - name: Independent Python check of Dart source-locked authoring output
+        run: |
+          python3 -c "from pathlib import Path; from tools.bookworld.private_rich_bookworld import verify; p = Path('artifacts/bookworld/story_authoring_sourcebound_fixture.bworld'); assert verify(p.read_bytes())['format_version'] == 3"
+      - name: Independent Python check of standalone reviewed-editor compiler
+        run: |
+          test -s artifacts/bookworld/story_authoring_review_bundle_fixture.bworld
+          python3 -c "from pathlib import Path; from tools.bookworld.private_rich_bookworld import verify; p = Path('artifacts/bookworld/story_authoring_review_bundle_fixture.bworld'); assert verify(p.read_bytes())['format_version'] == 3"
+      - name: Independent Python structural check of extended rich-v4 archive
+        run: |
+          test -s artifacts/bookworld/book_private_extended_dart.bworld
+          python3 tools/ci_verify_private_extended.py artifacts/bookworld/book_private_extended_dart.bworld
+          test -s artifacts/bookworld/story_authoring_extended_review_fixture.bworld
+          python3 tools/ci_verify_private_extended.py artifacts/bookworld/story_authoring_extended_review_fixture.bworld
       - name: Independently verify native Dart-created private BookWorld with Python
         run: |
           test -s artifacts/bookworld/book_private_sample_dart.bworld
@@ -171,6 +209,22 @@ jobs:
           test -s artifacts/bookworld/book_private_rich_dialogue_dart.bworld
           python3 -c "from pathlib import Path; from tools.bookworld.private_rich_bookworld import verify; p=Path('artifacts/bookworld/book_private_rich_dialogue_dart.bworld'); assert verify(p.read_bytes())['format_version'] == 3"
           (cd artifacts/bookworld && sha256sum book_private_rich_dialogue_dart.bworld >> SHA256SUMS.txt)
+          # Causal dialogue: preserve both verified event conditions and
+          # exact source quote across the independently parsed Dart ZIP.
+          test -s artifacts/bookworld/book_private_rich_dialogue_causal_dart.bworld
+          python3 -c "from pathlib import Path; from tools.bookworld.private_rich_bookworld import verify; p=Path('artifacts/bookworld/book_private_rich_dialogue_causal_dart.bworld'); assert verify(p.read_bytes())['format_version'] == 3"
+          (cd artifacts/bookworld && sha256sum book_private_rich_dialogue_causal_dart.bworld >> SHA256SUMS.txt)
+          # P0 authoring: the new source-reviewed NPC conversation planner
+          # emits an actual signed rich-v3 ZIP; verify exactly those Dart bytes
+          # with the independent Python importer before accepting portability.
+          test -s artifacts/bookworld/book_private_rich_dialogue_plan_dart.bworld
+          python3 -c "from pathlib import Path; from tools.bookworld.private_rich_bookworld import verify; p=Path('artifacts/bookworld/book_private_rich_dialogue_plan_dart.bworld'); assert verify(p.read_bytes())['format_version'] == 3"
+          (cd artifacts/bookworld && sha256sum book_private_rich_dialogue_plan_dart.bworld >> SHA256SUMS.txt)
+          # Branching spoken answers: the exact signed Dart-generated ZIP
+          # must pass the INDEPENDENT Python source+consequence validator.
+          test -s artifacts/bookworld/book_private_rich_npc_responses_dart.bworld
+          python3 -c "from pathlib import Path; from tools.bookworld.private_rich_bookworld import verify; p=Path('artifacts/bookworld/book_private_rich_npc_responses_dart.bworld'); assert verify(p.read_bytes())['format_version'] == 3"
+          (cd artifacts/bookworld && sha256sum book_private_rich_npc_responses_dart.bworld >> SHA256SUMS.txt)
           # NPC v3.1 source-reviewed private extension: exact Dart ZIP
           # MUST pass the independent Python per-actor/quote/reachability gate.
           test -s artifacts/bookworld/book_private_rich_npc_dart.bworld
@@ -206,6 +260,28 @@ jobs:
       - name: Standalone RPG engine smoke without Flutter or AI
         working-directory: packages/campaign_manager
         run: dart run example/standalone_rpg.dart ../../artifacts/bookworld/manor_m17_original_demo.bworld
+      - name: Verify COMPLETE headless RPG gameplay and authoring, without Flutter
+        working-directory: packages/rpg_gameplay
+        run: |
+          dart pub get
+          dart analyze
+          dart test --reporter expanded
+          dart run example/standalone_gameplay.dart ../../artifacts/bookworld/book_private_rich_items_python.bworld
+      - name: Verify public RPG API and a non-Flutter client
+        working-directory: packages/rpg_api
+        run: |
+          dart pub get
+          dart analyze
+          dart test --reporter expanded
+      - name: Verify runnable second RPG client through public API
+        working-directory: apps/rpg_cli
+        run: |
+          dart pub get
+          dart analyze
+          dart test --reporter expanded
+          dart run bin/rpg_cli.dart --help
+          dart run bin/rpg_server.dart --help
+          python3 test_python_client.py
       - name: Upload test BookWorld artifact
         uses: actions/upload-artifact@v4
         with:
@@ -245,6 +321,25 @@ jobs:
           mkdir -p artifacts/bookworld/rich_v3
           cp "$RUNNER_TEMP/rich-v3-fixture/River_Rich_Hero_v3.bworld" artifacts/bookworld/rich_v3/River_Rich_Hero_v3.bworld
           python3 -c "from pathlib import Path; from tools.bookworld.private_rich_bookworld import verify; p=Path('artifacts/bookworld/rich_v3/River_Rich_Hero_v3.bworld'); assert verify(p.read_bytes())['format_version'] == 3"
+      - name: Build source-verified one/two-NPC custody worlds for SQLite UI
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          from tools.bookworld.private_rich_bookworld import build, verify
+          from tools.bookworld.tests.test_rich_npc_social import (
+              item_social_sample, two_npc_item_social_sample,
+          )
+          root = Path('artifacts/bookworld/rich_v3')
+          root.mkdir(parents=True, exist_ok=True)
+          for filename, fixture in (
+              ('NPC_One_Rich_Items_v3.bworld', item_social_sample),
+              ('NPC_Two_Rich_Items_v3.bworld', two_npc_item_social_sample),
+          ):
+              blueprint, provenance, source_index = fixture()
+              data = build(blueprint, provenance, source_index)
+              assert verify(data)['format_version'] == 3
+              (root / filename).write_bytes(data)
+          PY
       - name: Build real COMPLETE public-domain Grimm FB2 (62 tales)
         # Full original text is fetched only by CI and stays in the runner.
         # Never silently SKIP or replace a failed download with fake text.
@@ -254,6 +349,27 @@ jobs:
             --manifest apps/story_reader/test/fixtures/grimm_ci.json \
             --single-output apps/story_reader/test/fixtures/frog_prince_ci.fb2 \
             --single-manifest apps/story_reader/test/fixtures/frog_prince_ci.json
+      - name: Fetch and verify TWO original Russian Afanasyev FB2 books
+        # Historical public-domain texts downloaded from Wikisource by CI,
+        # never from private user files or AI-written stand-ins.
+        run: |
+          python3 tools/build_russian_public_domain_fb2.py \
+            --output-dir apps/story_reader/test/fixtures/ru_afanasyev
+      - name: Upload two authentic Russian public-domain FB2 benchmarks
+        uses: actions/upload-artifact@v4
+        with:
+          name: AI-Story-RPG-Russian-Afanasyev-Two-FB2
+          path: |
+            apps/story_reader/test/fixtures/ru_afanasyev/morozko.fb2
+            apps/story_reader/test/fixtures/ru_afanasyev/morozko.json
+            apps/story_reader/test/fixtures/ru_afanasyev/morozko_story.fb2
+            apps/story_reader/test/fixtures/ru_afanasyev/morozko_story.json
+            apps/story_reader/test/fixtures/ru_afanasyev/frog_princess.fb2
+            apps/story_reader/test/fixtures/ru_afanasyev/frog_princess.json
+            apps/story_reader/test/fixtures/ru_afanasyev/frog_princess_story.fb2
+            apps/story_reader/test/fixtures/ru_afanasyev/frog_princess_story.json
+          if-no-files-found: error
+          retention-days: 2
       - name: Upload standalone public-domain Frog-Prince benchmark
         uses: actions/upload-artifact@v4
         with:
@@ -269,6 +385,14 @@ jobs:
           AI_RPG_GRIMM_PUBLIC_MANIFEST_PATH: test/fixtures/grimm_ci.json
           AI_RPG_FROG_PRINCE_FB2_PATH: test/fixtures/frog_prince_ci.fb2
           AI_RPG_FROG_PRINCE_MANIFEST_PATH: test/fixtures/frog_prince_ci.json
+          AI_RPG_RU_MOROZKO_FB2_PATH: test/fixtures/ru_afanasyev/morozko.fb2
+          AI_RPG_RU_MOROZKO_MANIFEST_PATH: test/fixtures/ru_afanasyev/morozko.json
+          AI_RPG_RU_FROG_PRINCESS_FB2_PATH: test/fixtures/ru_afanasyev/frog_princess.fb2
+          AI_RPG_RU_FROG_PRINCESS_MANIFEST_PATH: test/fixtures/ru_afanasyev/frog_princess.json
+          AI_RPG_RU_MOROZKO_STORY_FB2_PATH: test/fixtures/ru_afanasyev/morozko_story.fb2
+          AI_RPG_RU_MOROZKO_STORY_MANIFEST_PATH: test/fixtures/ru_afanasyev/morozko_story.json
+          AI_RPG_RU_FROG_PRINCESS_STORY_FB2_PATH: test/fixtures/ru_afanasyev/frog_princess_story.fb2
+          AI_RPG_RU_FROG_PRINCESS_STORY_MANIFEST_PATH: test/fixtures/ru_afanasyev/frog_princess_story.json
         timeout-minutes: 12
         # Building a SHA3-verified SQLite amalgamation adds native compile
         # time to the full widget suite. Keep a finite external watchdog
@@ -328,6 +452,24 @@ jobs:
           path: artifacts/android/
           if-no-files-found: error
           retention-days: 2
+  windows-mcp-stdio:
+    name: GigaCode Desktop Windows MCP real STDIO smoke
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Install MCP SDK v1 and Windows automation dependencies
+        run: python -m pip install -r tools/windows_qa_mcp/requirements.txt
+      - name: Build MCP server and verify all 17 tools
+        run: python tools/windows_qa_mcp/launch_gigacode.py --self-check
+      - name: Real STDIO initialize, tools/list, qa_status and QA report from foreign cwd
+        run: python tools/windows_qa_mcp/protocol_smoke.py
+      - name: Check safe QA dispatcher, absolute launcher and diagnostics
+        run: python -m unittest discover -s tools/windows_qa_mcp/tests -v
+
   windows-exe:
     name: Windows portable bundle (release)
     runs-on: windows-latest

@@ -8,12 +8,17 @@ import 'src/sqlite_v1.dart';
 import 'src/zip_v1.dart';
 
 export 'private_bookworld.dart' show PrivateBookworldImporter, VerifiedPrivateBookworld;
-export 'private_rich_bookworld.dart' show RichPrivateBookworldImporter, VerifiedRichPrivateBookworld;
+export 'private_rich_bookworld.dart' show RichPrivateBookworldImporter, VerifiedRichPrivateBookworld, VerifiedBookSceneOrigin;
 export 'rich_scene_dialogue.dart' show RichSceneDialogue, RichDialogueTurn;
 export 'npc_dialogue_knowledge.dart' show RichNpcDialogueKnowledge;
+export 'npc_dialogue_authoring.dart' show RichNpcDialogueAuthoring, ReviewedNpcDialoguePlan;
+export 'npc_dialogue_responses.dart' show RichNpcDialogueResponses, ReviewedNpcResponsePlan;
 export 'npc_social_contract.dart' show RichNpcSocialContract;
 export 'private_bookworld_writer.dart' show PrivateBookworldWriter, RichPrivateBookworldWriter;
 export 'reviewed_gameplay_bookworld_writer.dart' show ReviewedGameplayBookworldWriter;
+export 'reviewed_book_character_start_writer.dart' show ReviewedBookCharacterStartWriter;
+export 'reviewed_literal_canon_bookworld_writer.dart' show ReviewedLiteralCanonBookworldWriter;
+export 'reviewed_canon_causal_writer.dart' show ReviewedCanonCausalBookworldWriter;
 
 /// Validated compiled game rules (legacy demo or explicit private source v2),
 /// not a game save, a reader book, or distribution permission.

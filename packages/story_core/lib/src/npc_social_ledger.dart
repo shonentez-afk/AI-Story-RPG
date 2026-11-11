@@ -6,6 +6,8 @@ import 'blueprint.dart';
 import 'character_id.dart';
 import 'codec.dart';
 import 'engine.dart';
+import 'freeform_action.dart';
+import 'book_causality.dart';
 
 /// A reviewed *classification* of one committed game action, not a claim
 /// inferred from prose or from an actor's displayed name.
@@ -13,6 +15,8 @@ enum NpcMemoryKind {
   witnessed,
   promiseReceived,
   promiseBroken,
+  promiseFulfilled,
+  autonomousDecision,
   helped,
   betrayed,
   rumorHeard,
@@ -153,6 +157,88 @@ class NpcSocialRule {
   };
 }
 
+/// Reviewed source expectation for one future canonical book scene.
+/// It cannot be inferred from a model's narrative proposal.
+final class NpcCanonInvariant {
+  const NpcCanonInvariant({
+    required this.sceneId, required this.actorId,
+    required this.forbiddenMemoryId,
+    this.minimumTrust, this.maximumTrust,
+  });
+  final String sceneId, actorId, forbiddenMemoryId;
+  final int? minimumTrust, maximumTrust;
+  Map<String, Object?> toJson() => {
+    'scene_id': sceneId, 'actor_id': actorId,
+    'forbidden_memory_id': forbiddenMemoryId,
+    'minimum_trust': minimumTrust,
+    'maximum_trust': maximumTrust,
+  };
+}
+
+/// A deterministic NPC response to source-reviewed contact, not model prose.
+final class NpcAutomaticReaction {
+  const NpcAutomaticReaction({
+    required this.sceneId,
+    required this.actorId,
+    required this.triggerMemoryId,
+    required this.minimumTrust,
+    required this.responseMemoryId,
+    required this.nextGoalId,
+    this.relayFactId,
+    this.relayToActorId,
+  });
+
+  final String sceneId, actorId, triggerMemoryId, responseMemoryId;
+  final int minimumTrust;
+  final String nextGoalId;
+  final String? relayFactId, relayToActorId;
+
+  Map<String, Object?> toJson() => {
+    'scene_id': sceneId,
+    'actor_id': actorId,
+    'trigger_memory_id': triggerMemoryId,
+    'minimum_trust': minimumTrust,
+    'response_memory_id': responseMemoryId,
+    'next_goal_id': nextGoalId,
+    'relay_fact_id': relayFactId,
+    'relay_to_actor_id': relayToActorId,
+  };
+
+  bool activated(FreeformNpcInteraction contact, int trust) =>
+      contact.actorId == actorId &&
+      contact.memoryId == triggerMemoryId &&
+      trust >= minimumTrust &&
+      (relayFactId == null || contact.learnFactId == relayFactId);
+}
+
+/// A SOURCE-REVIEWED off-screen NPC decision after committed future turns.
+/// The trigger must be a real memory, not an AI sentence or model timestamp.
+/// The event which reaches the delay permanently records the derived decision
+/// through the SAME deterministic social ledger and portable event chain.
+final class NpcDelayedDecision {
+  const NpcDelayedDecision({
+    required this.sceneId,
+    required this.actorId,
+    required this.triggerMemoryId,
+    required this.turnsAfterTrigger,
+    required this.minimumTrust,
+    required this.responseMemoryId,
+    required this.nextGoalId,
+  });
+
+  final String sceneId, actorId, triggerMemoryId, responseMemoryId, nextGoalId;
+  final int turnsAfterTrigger, minimumTrust;
+
+  Map<String, Object?> toJson() => {
+    'scene_id': sceneId, 'actor_id': actorId,
+    'trigger_memory_id': triggerMemoryId,
+    'turns_after_trigger': turnsAfterTrigger,
+    'minimum_trust': minimumTrust,
+    'response_memory_id': responseMemoryId,
+    'next_goal_id': nextGoalId,
+  };
+}
+
 /// Bound to one exact, validated blueprint. A caller must separately
 /// establish source provenance and editorial approval before using rules
 /// to present a literary adaptation. Rules are not embedded in .bworld yet.
@@ -165,7 +251,15 @@ class NpcSocialRulebook {
     List<NpcItemTransfer> itemTransfers = const [],
     List<NpcLifeTransition> lifeTransitions = const [],
     this.requireReviewedWitnesses = false,
-  }) : rules = List.unmodifiable(rules),
+    this.dynamicInteractionsEnabled = false,
+    List<NpcCanonInvariant> canonInvariants = const [],
+    this.bookCausality,
+    List<NpcAutomaticReaction> automaticReactions = const [],
+    List<NpcDelayedDecision> delayedDecisions = const [],
+  }) : delayedDecisions = List.unmodifiable(delayedDecisions),
+       automaticReactions = List.unmodifiable(automaticReactions),
+       canonInvariants = List.unmodifiable(canonInvariants),
+       rules = List.unmodifiable(rules),
        witnesses = List.unmodifiable(witnesses),
        choiceGates = List.unmodifiable(choiceGates),
        itemTransfers = List.unmodifiable(itemTransfers),
@@ -177,14 +271,28 @@ class NpcSocialRulebook {
   final List<NpcSocialChoiceGate> choiceGates;
   final List<NpcItemTransfer> itemTransfers;
   final List<NpcLifeTransition> lifeTransitions;
+  final List<NpcCanonInvariant> canonInvariants;
+  final BookCausalGraph? bookCausality;
+  final List<NpcAutomaticReaction> automaticReactions;
+  final List<NpcDelayedDecision> delayedDecisions;
+  final bool dynamicInteractionsEnabled;
   /// Strict portable social rules must prove how each observer learned
   /// about the event. Old local preview rulebooks keep legacy semantics.
   final bool requireReviewedWitnesses;
 
   void validate(StoryBlueprint blueprint) {
+    if (bookCausality != null &&
+        (!blueprint.isReviewedCanon || !dynamicInteractionsEnabled)) {
+      throw const FormatException('Causal graph requires source-reviewed CANON');
+    }
     if (blueprintHash != blueprint.blueprintHash ||
         !RegExp(r'^[0-9a-f]{64}$').hasMatch(blueprintHash) ||
-        rules.length > 512) {
+        rules.length > 512 || canonInvariants.length > 256 ||
+        (canonInvariants.isNotEmpty && !dynamicInteractionsEnabled) ||
+        (dynamicInteractionsEnabled && !requireReviewedWitnesses) ||
+        automaticReactions.length > 256 || delayedDecisions.length > 256 ||
+        ((automaticReactions.isNotEmpty || delayedDecisions.isNotEmpty) &&
+         !dynamicInteractionsEnabled)) {
       throw const FormatException('NPC social rules not bound to blueprint');
     }
     if (witnesses.length > 512 || choiceGates.length > 128 ||
@@ -207,6 +315,83 @@ class NpcSocialRulebook {
         throw const FormatException('Invalid or duplicate NPC scene witness');
       }
       presence['${witness.sceneId}|${witness.actorId}'] = witness.mode;
+    }
+    final reactionKeys = <String>{};
+    final gmId = RegExp(r'^gm_[a-z0-9_]{1,59}$');
+    for (final reaction in automaticReactions) {
+      if (!blueprint.scenes.containsKey(reaction.sceneId) ||
+          !blueprint.actors.contains(reaction.actorId) ||
+          reaction.actorId == 'player' ||
+          !CharacterId.isValidNpc(reaction.actorId) ||
+          !gmId.hasMatch(reaction.triggerMemoryId) ||
+          !gmId.hasMatch(reaction.responseMemoryId) ||
+          reaction.triggerMemoryId == reaction.responseMemoryId ||
+          !gmId.hasMatch(reaction.nextGoalId) ||
+          reaction.minimumTrust < -100 || reaction.minimumTrust > 100 ||
+          presence['${reaction.sceneId}|${reaction.actorId}'] !=
+              NpcWitnessMode.present ||
+          !reactionKeys.add(
+              '${reaction.actorId}|${reaction.triggerMemoryId}')) {
+        throw const FormatException('Unreviewed or ambiguous NPC reaction');
+      }
+      final relay = reaction.relayToActorId, fact = reaction.relayFactId;
+      if ((relay == null) != (fact == null) ||
+          (relay != null && (!blueprint.actors.contains(relay) ||
+              relay == 'player' || relay == reaction.actorId ||
+              presence['${reaction.sceneId}|$relay'] !=
+                  NpcWitnessMode.present)) ||
+          (fact != null &&
+              !(blueprint.facts.contains(fact) || gmId.hasMatch(fact)))) {
+        throw const FormatException('NPC rumor lacks source-reviewed witness');
+      }
+    }
+    final delayedKeys = <String>{};
+    final producedMemoryKeys = <String>{
+      for (final reaction in automaticReactions)
+        '${reaction.actorId}|${reaction.responseMemoryId}',
+    };
+    for (final decision in delayedDecisions) {
+      if (!blueprint.scenes.containsKey(decision.sceneId) ||
+          !blueprint.actors.contains(decision.actorId) ||
+          decision.actorId == 'player' ||
+          !CharacterId.isValidNpc(decision.actorId) ||
+          !gmId.hasMatch(decision.triggerMemoryId) ||
+          !gmId.hasMatch(decision.responseMemoryId) ||
+          !gmId.hasMatch(decision.nextGoalId) ||
+          decision.triggerMemoryId == decision.responseMemoryId ||
+          decision.turnsAfterTrigger < 1 ||
+          decision.turnsAfterTrigger > 32 ||
+          decision.minimumTrust < -100 || decision.minimumTrust > 100 ||
+          presence['${decision.sceneId}|${decision.actorId}'] !=
+              NpcWitnessMode.present ||
+          !delayedKeys.add(
+              '${decision.actorId}|${decision.triggerMemoryId}') ||
+          !producedMemoryKeys.add(
+              '${decision.actorId}|${decision.responseMemoryId}')) {
+        throw const FormatException('Unreviewed or duplicated delayed NPC decision');
+      }
+    }
+    final invariantKeys = <String>{};
+    for (final invariant in canonInvariants) {
+      jsonId(invariant.sceneId, 'canon.invariant.scene_id');
+      jsonId(invariant.actorId, 'canon.invariant.actor_id');
+      jsonId(invariant.forbiddenMemoryId, 'canon.invariant.memory_id');
+      final low = invariant.minimumTrust, high = invariant.maximumTrust;
+      if (!blueprint.isReviewedCanon ||
+          !blueprint.scenes.containsKey(invariant.sceneId) ||
+          invariant.sceneId == blueprint.entrySceneId ||
+          !blueprint.actors.contains(invariant.actorId) ||
+          invariant.actorId == 'player' ||
+          !CharacterId.isValidNpc(invariant.actorId) ||
+          !RegExp(r'^gm_[a-z0-9_]{1,59}$')
+              .hasMatch(invariant.forbiddenMemoryId) ||
+          (low != null && (low < -100 || low > 100)) ||
+          (high != null && (high < -100 || high > 100)) ||
+          (low != null && high != null && low > high) ||
+          !invariantKeys.add(invariant.sceneId + '|' +
+              invariant.actorId + '|' + invariant.forbiddenMemoryId)) {
+        throw const FormatException('Invalid reviewed canonical prerequisite');
+      }
     }
     final seen = <String>{};
     final usedWitnesses = <String>{};
@@ -319,7 +504,7 @@ class NpcSocialRulebook {
             'NPC item custody does not match typed world effect');
       }
     }
-    if (requireReviewedWitnesses &&
+    if (requireReviewedWitnesses && !dynamicInteractionsEnabled &&
         (presence.length != usedWitnesses.length ||
          !usedWitnesses.containsAll(presence.keys))) {
       throw const FormatException('Orphaned NPC witness evidence');
@@ -399,6 +584,19 @@ class NpcSocialRulebook {
 
   /// Digest is stable under rule order changes. The authoring client must
   /// persist and check it when this projection becomes a portable contract.
+  bool breaksCanon(String nextSceneId, NpcSocialSnapshot snapshot) {
+    for (final rule in canonInvariants) {
+      if (rule.sceneId != nextSceneId) continue;
+      if (snapshot.hasMemory(rule.actorId, rule.forbiddenMemoryId)) return true;
+      final trust = snapshot.directedScore(rule.actorId, 'player');
+      if ((rule.minimumTrust != null && trust < rule.minimumTrust!) ||
+          (rule.maximumTrust != null && trust > rule.maximumTrust!)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   String get digest {
     final entries = rules.map((rule) => rule.toJson()).toList()
       ..sort((a, b) =>
@@ -430,6 +628,34 @@ class NpcSocialRulebook {
                 .compareTo('${b['scene_id']}|${b['choice_id']}|${b['item_id']}'));
       signed['item_transfers'] = transfers;
     }
+    if (dynamicInteractionsEnabled) {
+      signed['dynamic_interactions'] = true;
+      signed['canon_invariants'] = (canonInvariants
+          .map((gate) => gate.toJson()).toList()
+          ..sort((a, b) => (a['scene_id'].toString() +
+              a['actor_id'].toString())
+              .compareTo(b['scene_id'].toString() +
+                  b['actor_id'].toString())));
+    }
+    if (bookCausality != null) {
+      signed['book_causal_graph'] = bookCausality!.toJson();
+    }
+    if (automaticReactions.isNotEmpty) {
+      signed['automatic_npc_reactions'] = (
+          automaticReactions.map((reaction) => reaction.toJson()).toList()
+            ..sort((a, b) =>
+                (a['actor_id'].toString() + a['trigger_memory_id'].toString())
+                    .compareTo(b['actor_id'].toString() +
+                        b['trigger_memory_id'].toString())));
+    }
+    if (delayedDecisions.isNotEmpty) {
+      signed['delayed_npc_decisions'] = (
+          delayedDecisions.map((decision) => decision.toJson()).toList()
+            ..sort((a, b) =>
+                ('${a['actor_id']}|${a['trigger_memory_id']}')
+                    .compareTo(
+                        '${b['actor_id']}|${b['trigger_memory_id']}')));
+    }
     if (lifeTransitions.isNotEmpty) {
       final changes = lifeTransitions.map((change) => change.toJson()).toList()
         ..sort((a, b) =>
@@ -450,6 +676,8 @@ class NpcEventMemory {
     required this.relatedActorId,
     required this.relationshipDelta,
     this.witnessMode,
+    this.goalId,
+    this.promiseId,
   });
 
   final String observerId;
@@ -462,6 +690,8 @@ class NpcEventMemory {
   /// Null for the player (whose action is already committed), present or
   /// reported for separately verified NPC observers.
   final NpcWitnessMode? witnessMode;
+  final String? goalId;
+  final String? promiseId;
 }
 
 /// Safe read-only projection of *actual* committed events onto authored
@@ -515,6 +745,34 @@ class NpcSocialSnapshot {
     }
     return _memoryByActor[actorId] ?? List<NpcEventMemory>.unmodifiable([]);
   }
+
+  /// Last committed private goal, not a source-book personality assertion.
+  String? currentGoal(String actorId) {
+    final memories = memoriesFor(actorId);
+    for (var i = memories.length - 1; i >= 0; i--) {
+      if (memories[i].goalId != null) return memories[i].goalId;
+    }
+    return null;
+  }
+
+  /// An exact, replayed outstanding promise; a forgotten voice line cannot
+  /// fulfill an obligation, and a repeated promise ID cannot be recycled.
+  List<String> openPromisesFor(String actorId) {
+    final open = <String>{};
+    for (final memory in memoriesFor(actorId)) {
+      if (memory.promiseId == null) continue;
+      if (memory.kind == NpcMemoryKind.promiseReceived) {
+        open.add(memory.promiseId!);
+      } else if (memory.kind == NpcMemoryKind.promiseFulfilled ||
+                 memory.kind == NpcMemoryKind.promiseBroken) {
+        open.remove(memory.promiseId);
+      }
+    }
+    return List.unmodifiable(open.toList()..sort());
+  }
+
+  bool hasOpenPromise(String actorId, String promiseId) =>
+      openPromisesFor(actorId).contains(promiseId);
 
   bool hasMemory(String actorId, String memoryId) {
     jsonId(memoryId, 'memory_id');
@@ -577,6 +835,8 @@ class NpcSocialLedger {
           () => <NpcSocialRule>[]).add(rule);
     }
     final memory = <String, List<NpcEventMemory>>{};
+    final pendingPromises = <String, Set<String>>{};
+    final usedPromises = <String, Set<String>>{};
     final witnessModes = {
       for (final witness in rulebook.witnesses)
         '${witness.sceneId}|${witness.actorId}': witness.mode,
@@ -618,6 +878,102 @@ class NpcSocialLedger {
           life[change.actorId] = change.nextState;
         }
       }
+      final intervention = event.freeform?.npcInteraction;
+      if (intervention != null) {
+        if (!rulebook.dynamicInteractionsEnabled ||
+            !blueprint.actors.contains(intervention.actorId) ||
+            life[intervention.actorId] != NpcLifeState.present) {
+          throw const FormatException('Unreviewed or absent NPC');
+        }
+        final key = event.sceneId + '|' + intervention.actorId;
+        final witness = witnessModes[key];
+        final previousContact =
+            memory[intervention.actorId]?.isNotEmpty ?? false;
+        if (witness != NpcWitnessMode.present &&
+            !(previousContact && world.state.plotDiverged)) {
+          throw const FormatException('NPC is not present and source-reviewed');
+        }
+        final actorMemories =
+            memory.putIfAbsent(intervention.actorId, () => <NpcEventMemory>[]);
+        if (actorMemories.any((v) => v.memoryId == intervention.memoryId) ||
+            actorMemories.length >= 64) {
+          throw const FormatException('Repeated NPC memory or overflow');
+        }
+        final kind = switch (intervention.kind) {
+          'helped' => NpcMemoryKind.helped,
+          'betrayed' => NpcMemoryKind.betrayed,
+          'promise_received' => NpcMemoryKind.promiseReceived,
+          'promise_broken' => NpcMemoryKind.promiseBroken,
+          'promise_fulfilled' => NpcMemoryKind.promiseFulfilled,
+          'rumor_heard' => NpcMemoryKind.rumorHeard,
+          _ => NpcMemoryKind.witnessed,
+        };
+        if (intervention.promiseId != null) {
+          final promise = intervention.promiseId!;
+          final pending = pendingPromises.putIfAbsent(
+              intervention.actorId, () => <String>{});
+          final used = usedPromises.putIfAbsent(
+              intervention.actorId, () => <String>{});
+          if (kind == NpcMemoryKind.promiseReceived) {
+            if (!used.add(promise) || !pending.add(promise)) {
+              throw const FormatException('Promise already exists in this story');
+            }
+          } else if (!pending.remove(promise)) {
+            throw const FormatException('Unmade or already closed NPC promise');
+          }
+        }
+        final relation = relations.putIfAbsent(
+            intervention.actorId, () => <String, int>{});
+        final trust = (relation['player'] ?? 0) + intervention.trustDelta;
+        if (trust < -100 || trust > 100) {
+          throw const FormatException('NPC trust outside approved bounds');
+        }
+        relation['player'] = trust;
+        actorMemories.add(NpcEventMemory(
+          observerId: intervention.actorId,
+          memoryId: intervention.memoryId,
+          kind: kind, event: event,
+          relatedActorId: 'player',
+          relationshipDelta: intervention.trustDelta,
+          witnessMode: witness, goalId: intervention.goalId,
+          promiseId: intervention.promiseId,
+        ));
+        for (final reaction in rulebook.automaticReactions) {
+          if (reaction.sceneId != event.sceneId ||
+              !reaction.activated(intervention, trust)) continue;
+          if (actorMemories.any((m) => m.memoryId == reaction.responseMemoryId) ||
+              actorMemories.length >= 64) {
+            throw const FormatException('NPC automatic memory repeats');
+          }
+          actorMemories.add(NpcEventMemory(
+            observerId: intervention.actorId,
+            memoryId: reaction.responseMemoryId,
+            kind: NpcMemoryKind.witnessed, event: event,
+            relatedActorId: 'player', relationshipDelta: 0,
+            witnessMode: NpcWitnessMode.present,
+            goalId: reaction.nextGoalId,
+          ));
+          if (reaction.relayToActorId != null) {
+            if (life[reaction.relayToActorId] != NpcLifeState.present) {
+              throw const FormatException('Absent NPC cannot receive rumor');
+            }
+            final recipient = memory.putIfAbsent(
+                reaction.relayToActorId!, () => <NpcEventMemory>[]);
+            if (recipient.any((m) => m.memoryId == reaction.responseMemoryId) ||
+                recipient.length >= 64) {
+              throw const FormatException('NPC rumor already received');
+            }
+            recipient.add(NpcEventMemory(
+              observerId: reaction.relayToActorId!,
+              memoryId: reaction.responseMemoryId,
+              kind: NpcMemoryKind.rumorHeard, event: event,
+              relatedActorId: intervention.actorId,
+              relationshipDelta: 0,
+              witnessMode: NpcWitnessMode.present,
+            ));
+          }
+        }
+      }
       for (final rule in byChoice[
               '${event.sceneId}|${event.choiceId}'] ??
           <NpcSocialRule>[]) {
@@ -649,6 +1005,44 @@ class NpcSocialLedger {
           targets[rule.relatedActorId!] = next;
         }
       }
+      // Independently deliberate AFTER the original contact, without an
+      // additional player conversation or a model callback. The effective
+      // moment is the next COMMITTED event at/after the signed delay.
+      // Priorities and results are deterministic under event replay.
+      for (final decision in rulebook.delayedDecisions) {
+        if (life[decision.actorId] != NpcLifeState.present) continue;
+        final actorMemories = memory[decision.actorId];
+        if (actorMemories == null ||
+            actorMemories.any((m) =>
+                m.memoryId == decision.responseMemoryId)) continue;
+        NpcEventMemory? trigger;
+        for (final previous in actorMemories) {
+          if (previous.memoryId == decision.triggerMemoryId &&
+              previous.event.sceneId == decision.sceneId) {
+            trigger = previous;
+            break;
+          }
+        }
+        if (trigger == null ||
+            event.sequence < trigger.event.sequence +
+                decision.turnsAfterTrigger ||
+            (relations[decision.actorId]?['player'] ?? 0) <
+                decision.minimumTrust) {
+          continue;
+        }
+        if (actorMemories.length >= 64) {
+          throw const FormatException('NPC delayed decision overflow');
+        }
+        actorMemories.add(NpcEventMemory(
+          observerId: decision.actorId,
+          memoryId: decision.responseMemoryId,
+          kind: NpcMemoryKind.autonomousDecision,
+          event: event,
+          relatedActorId: null,
+          relationshipDelta: 0,
+          goalId: decision.nextGoalId,
+        ));
+      }
     }
     final events = world.events;
 
@@ -664,9 +1058,13 @@ class NpcSocialLedger {
             transfer,
     };
     for (final event in events) {
-      final choice = blueprint.scenes[event.sceneId]!.choices
-          .singleWhere((candidate) => candidate.id == event.choiceId);
-      for (final effect in choice.effects) {
+      final effects = event.freeform?.effects ?? [
+          ...blueprint.scenes[event.sceneId]!.choices
+              .singleWhere((candidate) => candidate.id == event.choiceId)
+              .effects,
+          ...world.sourceEffectsFor(event.sceneId),
+      ];
+      for (final effect in effects) {
         if (effect.op != 'grant_item' && effect.op != 'consume_item') continue;
         final itemId = effect.id!;
         final transfer = transferByAction[
@@ -696,8 +1094,28 @@ class NpcSocialLedger {
           owners[itemId] = 'player';
         }
       }
+      final interaction = event.freeform?.npcInteraction;
+      if (interaction != null) {
+        final give = interaction.giveItemId;
+        final take = interaction.takeItemId;
+        if (give != null) {
+          if (owners[give] != 'player') {
+            throw const FormatException('Unowned gift to NPC');
+          }
+          owners[give] = interaction.actorId;
+        }
+        if (take != null) {
+          if (owners[take] != interaction.actorId) {
+            throw const FormatException('NPC gave an unowned item');
+          }
+          owners[take] = 'player';
+        }
+      }
     }
-    for (final item in blueprint.items) {
+    for (final item in {
+      ...blueprint.items,
+      ...world.state.inventory.where((id) => id.startsWith('gm_')),
+    }) {
       if ((owners[item] == 'player') != world.state.inventory.contains(item)) {
         throw const FormatException('NPC custody conflicts with world inventory');
       }
@@ -708,7 +1126,8 @@ class NpcSocialLedger {
       worldStateHash: world.state.stateHash,
       eventHeadHash: events.isEmpty ? null : events.last.hash,
       actorIds: blueprint.actors,
-      itemIds: blueprint.items,
+      itemIds: {...blueprint.items,
+          ...world.state.inventory.where((id) => id.startsWith('gm_'))},
       itemOwners: owners,
       lifeByActor: life,
       memoryByActor: memory,
