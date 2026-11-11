@@ -1,3 +1,9 @@
+## 11.11.2026 — КОРНЕВАЯ ПРИЧИНА MCP: InvalidSignature при регистрации qa_screenshot
+
+- Реальный Windows job `GigaCode Desktop Windows MCP real STDIO smoke` в CI #1141 поймал ошибку: `mcp==1.30.0` -> `InvalidSignature("Unable to evaluate type annotations for callable 'qa_screenshot'")`. Это объясняет, почему все инструменты MCP отсутствовали в GigaCode Desktop несмотря на корректный Python и конфигурацию.
+- Исправлено: убрана несопоставимая локальная аннотация `-> list[TextContent | ImageContent]` из `qa_screenshot`, сохранено фактическое возвращаемое содержимое TextContent + ImageContent; добавлен регрессионный тест против повторения. Перепроверить целиком новый Windows CI с реальным STDIO handshake. До его успеха не писать «MCP подключён».
+- Старый `-m tools.windows_qa_mcp.server` также заменён на `python.exe -u <абсолютный launch_gigacode.py>`; после green CI пользователь выполняет `git pull --ff-only`, повторно запускает `setup_gigacode_desktop.ps1` и вручную обновляет Arguments в MCP UI GigaCode Desktop.
+
 ## 11.11.2026 — GigaCode Desktop Windows QA MCP: исправление запуска + реальная проверка STDIO
 
 - По результатам пользовательского Windows подключения (MCP в Desktop серый, `qa_status` недоступен) найден и устранён риск запуска `python -m tools.windows_qa_mcp.server` вне `cwd` репозитория. Новый `tools/windows_qa_mcp/launch_gigacode.py` запускается **абсолютным путём**, из любого рабочего каталога и без `PYTHONPATH`; ошибки старта сохраняются в `%LOCALAPPDATA%\\AIStoryRPG-QA\\mcp-startup-errors.log`.

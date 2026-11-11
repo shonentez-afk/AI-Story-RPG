@@ -41,6 +41,12 @@ class DesktopBootstrapTests(unittest.TestCase):
         self.assertNotIn("args    = @('-m', 'tools.windows_qa_mcp.server')", script)
         self.assertIn("sys.version_info >= (3, 12)", script)
 
+    def test_mcp_tool_signature_does_not_reference_locally_imported_types(self):
+        # Windows CI caught MCP 1.30 InvalidSignature on this exact annotation.
+        server = (ROOT / "server.py").read_text(encoding="utf-8")
+        self.assertIn('def qa_screenshot(label: str = "screen"):', server)
+        self.assertNotIn('-> list[TextContent | ImageContent]', server)
+
     def test_protocol_smoke_tests_real_handshake_and_not_just_sdk_import(self):
         smoke = (ROOT / "protocol_smoke.py").read_text(encoding="utf-8")
         for snippet in ("session.initialize()", "session.list_tools()",

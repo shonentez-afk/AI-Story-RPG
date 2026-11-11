@@ -56,8 +56,10 @@ def _build():
         """Inspect ONLY the game window's UI Automation tree. May be sparse in Flutter release builds."""
         return result("qa_tree", max_nodes=max_nodes, max_depth=max_depth)
 
+    # Do not annotate with locally imported TextContent/ImageContent: MCP v1.30
+    # resolves annotations at module scope and aborts tool registration.
     @mcp.tool()
-    def qa_screenshot(label: str = "screen") -> list[TextContent | ImageContent]:
+    def qa_screenshot(label: str = "screen"):
         """Capture only the game window and save a PNG in the active QA run. Returns real image content."""
         value, png = service.call("qa_screenshot", {"label": label})
         if png is None:
