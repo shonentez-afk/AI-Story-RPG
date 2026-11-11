@@ -70,6 +70,13 @@ async def probe() -> dict:
                     raise AssertionError("Configured game executable was not forwarded to MCP")
                 if status.get("input_enabled") is not False:
                     raise AssertionError("Protocol smoke must use safe read-only mode")
+                # A tool with a name keyword must be denied safely, not crash.
+                denied = await session.call_tool("qa_click", {"name": "Library"})
+                if not getattr(denied, "isError", False):
+                    raise AssertionError("qa_click must reject input in read-only smoke")
+                details = " ".join(getattr(part, "text", "") for part in denied.content)
+                if "disabled" not in details.lower():
+                    raise AssertionError("qa_click name forwarding failed: " + details[:500])
                 begin = _text_result(await session.call_tool("qa_begin", {"name": "stdio-smoke"}))
                 print('MCP smoke: qa_begin OK', file=sys.stderr, flush=True)
                 report = _text_result(await session.call_tool("qa_report", {}))

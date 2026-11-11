@@ -22,8 +22,9 @@ def _build():
     service = QAService(config, WindowsBackend(config))
     mcp = FastMCP("AI Story RPG Windows QA (GigaCode Desktop)")
 
-    def result(name: str, **kwargs) -> str:
-        value, _ = service.call(name, kwargs)
+    def result(tool_name: str, **kwargs) -> str:
+        # Avoid collision with real tool arguments called 'name'.
+        value, _ = service.call(tool_name, kwargs)
         return json.dumps(value, ensure_ascii=False)
 
     @mcp.tool()

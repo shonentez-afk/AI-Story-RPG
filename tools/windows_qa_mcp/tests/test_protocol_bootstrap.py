@@ -41,6 +41,12 @@ class DesktopBootstrapTests(unittest.TestCase):
         self.assertNotIn("args    = @('-m', 'tools.windows_qa_mcp.server')", script)
         self.assertIn("sys.version_info >= (3, 12)", script)
 
+    def test_mcp_dispatch_helper_does_not_collide_with_tool_name_argument(self):
+        # A helper named result(name, **kwargs) crashed qa_begin(name=...).
+        server = (ROOT / "server.py").read_text(encoding="utf-8")
+        self.assertIn('def result(tool_name: str, **kwargs)', server)
+        self.assertNotIn('def result(name: str, **kwargs)', server)
+
     def test_mcp_tool_signature_does_not_reference_locally_imported_types(self):
         # Windows CI caught MCP 1.30 InvalidSignature on this exact annotation.
         server = (ROOT / "server.py").read_text(encoding="utf-8")
