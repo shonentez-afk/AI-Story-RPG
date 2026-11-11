@@ -1,3 +1,11 @@
+## 11.11.2026 — GigaCode Desktop MCP: НАСТОЯЩИЙ WINDOWS STDIO ПРОВЕРЕН, CI #1144 job SUCCESS
+
+- Проверенный функциональный код: `a1ffda55769482ef56ad2b7f78f67cf174ae5524`. Windows job `GigaCode Desktop Windows MCP real STDIO smoke` из [CI #1144](https://github.com/shonentez-afk/AI-Story-RPG/actions/runs/42961616589) — **SUCCESS** на Python 3.13 и MCP SDK 1.30.0. Подтверждены: регистрация 17 инструментов; STDIO `initialize` → `tools/list` → `qa_status` → `qa_begin` → `qa_report`; проверка `qa_click(name=...)` в read-only режиме; запуск из чужого cwd без PYTHONPATH; **25 Python unit tests PASS** на Windows.
+- Две реальные причины отказов обнаружены логами CI и исправлены: `InvalidSignature` на локальном типе `qa_screenshot` и `TypeError: result() got multiple values for argument 'name'` в nested helper. Обычная проверка `import mcp` эти ошибки НЕ обнаруживала.
+- Пользовательский ПК: Python 3.15.1, путь к игре из диагностики GigaCode `C:\\Games\\AI-Story-RPG-Windows\\ai_story_reader.exe`. Для исправления обновить git и **повторно** запустить установщик MCP; в UI GigaCode Desktop **заменить старые args `-m tools.windows_qa_mcp.server` на новые `-u <абсолютный путь к launch_gigacode.py>` из сгенерированного JSON**. Простой `git pull` не обновляет GUI конфигурацию GigaCode. Не трогать действующий x64dbg.
+- Реальное подключение к GigaCode Desktop на пользовательском ПК и управление живым Flutter UI **ещё не подтверждены** (нет qa_status/qa_screenshot с его машины); Python 3.15 совместимость проверится локальным installer self-check + real protocol_smoke. PR #133 не объединять до настоящей E2E приёмки. Остальные работы CI #1144 могли продолжаться, их SUCCESS нельзя предполагать по одному Windows MCP job.
+- `START_NEW_CHAT_RU.md` обновлён отдельно документацией `[skip ci]`, не меняющей проверенный функциональный SHA.
+
 ## 11.11.2026 — КОРНЕВАЯ ПРИЧИНА MCP: InvalidSignature при регистрации qa_screenshot
 
 - Реальный Windows job `GigaCode Desktop Windows MCP real STDIO smoke` в CI #1141 поймал ошибку: `mcp==1.30.0` -> `InvalidSignature("Unable to evaluate type annotations for callable 'qa_screenshot'")`. Это объясняет, почему все инструменты MCP отсутствовали в GigaCode Desktop несмотря на корректный Python и конфигурацию.
