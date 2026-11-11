@@ -128,17 +128,29 @@ def _build():
 
 def main() -> int:
     if sys.argv[1:] == ["--self-check"]:
+        # Do not report "MCP OK" solely because `import mcp` succeeds.
+        # Fully register all FastMCP tools and validate their exported names.
+        import asyncio
+        from .protocol_smoke import EXPECTED_TOOLS
         config = Config.from_env()
         details = {"python": sys.executable, "platform": os.name,
                    "app_exe": str(config.exe) if config.exe else None,
                    "output": str(config.output), "input_enabled": config.allow_input}
         try:
-            import mcp  # noqa: F401
-            details["mcp_sdk_import"] = "ok"
-        except ImportError:
-            details["mcp_sdk_import"] = "MISSING"
+            from importlib.metadata import version
+            details["mcp_sdk_version"] = version("mcp")
+            registered_mcp, _ = _build()
+            exported = {t.name for t in asyncio.run(registered_mcp.list_tools())}
+            details["registered_tool_count"] = len(exported)
+            details["registered_tools"] = sorted(exported)
+            if exported != EXPECTED_TOOLS:
+                raise RuntimeError("MCP tool registration mismatch")
+            details["status"] = "OK"
+        except Exception as exc:
+            details["status"] = "ERROR"
+            details["error"] = repr(exc)
         print(json.dumps(details, ensure_ascii=False, indent=2))
-        return 0 if details["mcp_sdk_import"] == "ok" else 1
+        return 0 if details["status"] == "OK" else 1
     if sys.argv[1:]:
         print("Usage: python -m tools.windows_qa_mcp.server [--self-check]", file=sys.stderr)
         return 2

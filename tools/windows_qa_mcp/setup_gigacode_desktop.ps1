@@ -1,5 +1,5 @@
-# AI Story RPG Windows QA MCP - native GigaCode Desktop (NO Cline).
-# Example: .\tools\windows_qa_mcp\setup_gigacode_desktop.ps1 -AppExe 'D:\Games\AI-Story-RPG-Windows\ai_story_reader.exe'
+# AI Story RPG Windows QA MCP - GigaCode Desktop, not Cline.
+# A local MCP STDIO server MUST be spawned by GigaCode with the generated command/args.
 [CmdletBinding()]
 param(
     [Parameter(Mandatory = $true)][string]$AppExe,
@@ -12,42 +12,52 @@ if ([System.IO.Path]::GetFileName($exe).ToLowerInvariant() -ne 'ai_story_reader.
 $dir = Split-Path -Parent $exe
 if (!(Test-Path -LiteralPath (Join-Path $dir 'data') -PathType Container)) { throw 'Missing portable data directory' }
 if (!(Test-Path -LiteralPath (Join-Path $dir 'flutter_windows.dll') -PathType Leaf)) { throw 'Missing flutter_windows.dll' }
+
 $qaRoot = Join-Path $env:LOCALAPPDATA 'AIStoryRPG-QA'
 $venv = Join-Path $qaRoot 'python'
 New-Item -Path $qaRoot -ItemType Directory -Force | Out-Null
 if (!(Test-Path -LiteralPath (Join-Path $venv 'Scripts\python.exe'))) {
-    # Check Python itself, not a parsed PowerShell version string.
-    # The previous "[version]([string]$reported).Trim()" could silently throw
-    # even with Python 3.15 installed, hiding the real interpreter.
     $launcher = $null
     foreach ($candidate in @('py', 'python')) {
         if (-not (Get-Command $candidate -ErrorAction SilentlyContinue)) { continue }
         try {
+            # Python itself compares its version; PowerShell version parsing
+            # previously rejected Python 3.15 due to a .Trim() type error.
             & $candidate -c 'import sys; sys.exit(0 if sys.version_info >= (3, 12) else 1)' 2>$null
             if ($LASTEXITCODE -eq 0) {
                 $launcher = $candidate
                 Write-Host "Using installed Python via $candidate"
                 break
             }
-        } catch {
-            # Try the next available launcher if this candidate cannot execute Python.
-        }
+        } catch { }
     }
-    if (-not $launcher) { throw 'Python 3.12+ not found through py or python. Check: py --version; python --version; py -0p' }
+    if (-not $launcher) { throw 'Python 3.12+ not available via py or python. Check py --version' }
     & $launcher -m venv $venv
-    if ($LASTEXITCODE -ne 0) { throw 'Failed to create MCP virtual environment using installed Python' }
+    if ($LASTEXITCODE -ne 0) { throw 'Failed to create Python virtual environment' }
 }
 $python = Join-Path $venv 'Scripts\python.exe'
-# Do not silently reuse a stale virtual environment created by Python 3.11.
 & $python -c 'import sys; sys.exit(0 if sys.version_info >= (3, 12) else 1)'
-if ($LASTEXITCODE -ne 0) { throw 'QA virtual environment requires Python 3.12+. Remove only %LOCALAPPDATA%\AIStoryRPG-QA\python if it contains an old Python and rerun setup' }
+if ($LASTEXITCODE -ne 0) { throw 'MCP virtual environment must use Python 3.12 or newer' }
+
 & $python -m pip install -r (Join-Path $PSScriptRoot 'requirements.txt')
-if ($LASTEXITCODE -ne 0) { throw 'Could not install Python MCP dependencies' }
+if ($LASTEXITCODE -ne 0) { throw 'Failed to install MCP dependencies; read the pip error above' }
+
+# An ABSOLUTE Python script path is robust even if GigaCode Desktop ignores cwd.
+# The old -m tools.windows_qa_mcp.server depended on starting in repository root.
+$bootstrap = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot 'launch_gigacode.py')).Path
+$smoke = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot 'protocol_smoke.py')).Path
+Write-Host 'Checking FastMCP tool registration...'
+& $python -u $bootstrap --self-check
+if ($LASTEXITCODE -ne 0) { throw 'FastMCP tool registration failed; inspect JSON error above' }
+Write-Host 'Testing real MCP STDIO handshake from an unrelated working directory...'
+& $python -u $smoke
+if ($LASTEXITCODE -ne 0) { throw 'MCP STDIO handshake failed; do not configure GigaCode yet' }
+
 $entry = @{
     mcpServers = @{
         'ai-story-rpg-windows-qa' = @{
             command = $python
-            args    = @('-m', 'tools.windows_qa_mcp.server')
+            args    = @('-u', $bootstrap)
             cwd     = $repo
             env     = @{
                 AI_STORY_QA_EXE = $exe
@@ -61,8 +71,9 @@ $path = Join-Path $qaRoot 'gigacode-desktop-mcp.json'
 $json = ConvertTo-Json -InputObject $entry -Depth 8
 [System.IO.File]::WriteAllText($path, $json, [System.Text.UTF8Encoding]::new($false))
 Write-Host "MCP entry created: $path"
-Write-Host 'GigaCode Desktop -> Settings -> MCP -> Add -> Local (STDIO); copy the generated command/args/cwd/env.'
-Write-Host 'This script deliberately does not overwrite your GigaCode settings.'
-if (!$EnableInput) { Write-Host 'Read-only mode: restart with -EnableInput to allow clicking and typing.' }
-& $python -m tools.windows_qa_mcp.server --self-check
-if ($LASTEXITCODE -ne 0) { throw 'MCP preflight failed' }
+Write-Host 'IMPORTANT: Update the existing MCP server entry in GigaCode Desktop!'
+Write-Host "Command: $python"
+Write-Host "Arguments: -u `"$bootstrap`""
+Write-Host 'Transport: STDIO; use the generated cwd/env values from the JSON file.'
+Write-Host 'The script does not overwrite GigaCode Desktop settings.'
+if (!$EnableInput) { Write-Host 'Read-only mode: rerun with -EnableInput to allow mouse/keyboard controls.' }

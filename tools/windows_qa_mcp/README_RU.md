@@ -7,17 +7,17 @@
 ## 1. Что нужно на Windows
 
 - Windows 10/11 x64, GigaCode **Desktop** с поддержкой локальных MCP-подключений.
-- Python **3.12 или новее** (например, 3.13/3.14), доступный через `py` либо `python`; отдельная установка 3.12 не требуется. Для некоторых очень новых версий доступность сторонних Windows-библиотек зависит от опубликованных пакетов.
+- Python **3.12 или новее** (включая 3.15 с совместимыми библиотеками) через `py` или `python` (для установки зависимостей; Windows QA не запускается на Linux-хосте).
 - Рабочая копия репозитория ветки PR #133 и **полностью распакованный** Windows portable bundle, включая `data` и `flutter_windows.dll`, а не только EXE.
 - Права интерактивного пользователя Windows. В заблокированном сеансе и в Session 0 графическая автоматизация не работает.
 
 ```powershell
 git clone -b feature/p0-bookwide-gameplay-readiness-20261107 https://github.com/shonentez-afk/AI-Story-RPG.git
 cd AI-Story-RPG
-.\tools\windows_qa_mcp\setup_gigacode_desktop.ps1 -AppExe 'D:\Games\AI-Story-RPG-Windows\ai_story_reader.exe' -EnableInput
+.\tools\windows_qa_mcp\setup_gigacode_desktop.ps1 -AppExe 'C:\Games\AI-Story-RPG-Windows\ai_story_reader.exe' -EnableInput
 ```
 
-Если PowerShell блокирует запуск локального `.ps1`, можно подготовить Python-окружение вручную (не меняя политику выполнения системы):
+Если PowerShell блокирует запуск `.ps1`, можно выполнить эти команды вручную (не меняя политику выполнения системы):
 
 ```powershell
 py -m venv "$env:LOCALAPPDATA\AIStoryRPG-QA\python"
@@ -26,7 +26,34 @@ py -m venv "$env:LOCALAPPDATA\AIStoryRPG-QA\python"
 
 По умолчанию `setup_gigacode_desktop.ps1` создаёт `%LOCALAPPDATA%\AIStoryRPG-QA\gigacode-desktop-mcp.json` **и не меняет конфигурацию самого GigaCode Desktop**. Ключ `-EnableInput` включает управление мышью/клавиатурой: без него доступны только чтение и подключение, а запуск, клики и ввод заблокированы. Никогда не включайте ввод на рабочем ПК без осознания действий агента.
 
-**Если установлен Python 3.15:** новая версия скрипта проверяет интерпретатор непосредственным запуском `python -c` и принимает любую версию от 3.12, без ошибочного приведения строки в PowerShell. Обновите репозиторий командой `git pull --ff-only` перед повторным запуском установщика. Альтернативно создайте виртуальное окружение вручную: `py -m venv "$env:LOCALAPPDATA\\AIStoryRPG-QA\\python"` и запустите установщик ещё раз. Если для Python 3.15 какая-либо зависимость не установится, причина будет видна в выводе `pip`; при необходимости Python 3.14 можно установить рядом, не удаляя существующий Python 3.15.
+## Исправление MCP STDIO для GigaCode Desktop (11.11.2026)
+
+**Ранее GigaCode не видел инструменты:** старый запуск `-m tools.windows_qa_mcp.server` зависел от рабочего каталога `cwd`, а `--self-check` проверял только импорт библиотеки. Настройки GigaCode Desktop могут не передать `cwd` серверу.
+
+Новый установщик создаёт конфигурацию с **абсолютным путём к загрузчику** `launch_gigacode.py`. Загрузчик импортирует проект независимо от текущей рабочей папки, запускает MCP без лишних строк в STDOUT и сохраняет ошибки запуска в `%LOCALAPPDATA%\AIStoryRPG-QA\mcp-startup-errors.log`.
+
+После `git pull --ff-only` обязательно **повторно запустите установщик** с правильным путём к EXE, чтобы получить новые `args`:
+
+```powershell
+.\tools\windows_qa_mcp\setup_gigacode_desktop.ps1 -AppExe 'C:\Games\AI-Story-RPG-Windows\ai_story_reader.exe' -EnableInput
+```
+
+Установщик теперь выполняет две проверки до создания JSON:
+
+1. `launch_gigacode.py --self-check`: построить FastMCP и зарегистрировать **ровно 17 инструментов**;
+2. `protocol_smoke.py`: настоящий MCP STDIO `initialize` → `tools/list` → `qa_status` → `qa_begin` → `qa_report` с запуском Python **из другой рабочей папки** и без `PYTHONPATH`.
+
+Если в GigaCode уже есть старый сервер, **вручную замените его команду и аргументы** новыми значениями из JSON. Наличие JSON на диске не меняет настройки GigaCode автоматически. В интерфейсе GigaCode `Команда` — только полный путь к `python.exe`; `Аргументы` — **`-u` и абсолютный путь к `launch_gigacode.py`** (не `-m tools...`). `cwd` и три `AI_STORY_QA_*` переменные из JSON сохранить. При необходимости отключите старую запись и добавьте новую; настройки x64dbg не менять.
+
+**Диагностика без GigaCode:**
+
+```powershell
+$cfg = (Get-Content "$env:LOCALAPPDATA\AIStoryRPG-QA\gigacode-desktop-mcp.json" -Raw | ConvertFrom-Json).mcpServers.'ai-story-rpg-windows-qa'
+& $cfg.command $cfg.args[0] $cfg.args[1] --self-check
+& $cfg.command -u (Join-Path $cfg.cwd 'tools\windows_qa_mcp\protocol_smoke.py')
+```
+
+Если эта проверка проходит, но GigaCode не видит инструменты, причина вероятнее в настройках/состоянии подключения GigaCode Desktop. Снимите фактический статус сервера в MCP-панели, а не объявляйте PASS по процессам Python. Если проверка падает, сохраните текст ошибки и `mcp-startup-errors.log`. Без настоящего `qa_status` из GigaCode приёмка Windows GUI не выполнена.
 
 ## 2. Подключение в GigaCode Desktop (не в Cline)
 
@@ -37,10 +64,10 @@ py -m venv "$env:LOCALAPPDATA\AIStoryRPG-QA\python"
   "mcpServers": {
     "ai-story-rpg-windows-qa": {
       "command": "C:\\Users\\YOU\\AppData\\Local\\AIStoryRPG-QA\\python\\Scripts\\python.exe",
-      "args": ["-m", "tools.windows_qa_mcp.server"],
-      "cwd": "D:\\projects\\AI-Story-RPG",
+      "args": ["-u", "C:\\path\\AI-Story-RPG\\tools\\windows_qa_mcp\\launch_gigacode.py"],
+      "cwd": "C:\\path\\AI-Story-RPG",
       "env": {
-        "AI_STORY_QA_EXE": "D:\\Games\\AI-Story-RPG-Windows\\ai_story_reader.exe",
+        "AI_STORY_QA_EXE": "C:\\Games\\AI-Story-RPG-Windows\\ai_story_reader.exe",
         "AI_STORY_QA_OUTPUT": "C:\\Users\\YOU\\AppData\\Local\\AIStoryRPG-QA\\evidence",
         "AI_STORY_QA_ALLOW_INPUT": "1"
       }
@@ -49,12 +76,12 @@ py -m venv "$env:LOCALAPPDATA\AIStoryRPG-QA\python"
 }
 ```
 
-**Важно:** это JSON-**фрагмент**, а не файл, который нужно целиком перезаписать поверх существующих MCP-настроек. В GUI `command` = полный путь к Python из виртуального окружения, `args` = `-m`, `tools.windows_qa_mcp.server`, рабочий каталог = корень `AI-Story-RPG`. Если Desktop предоставляет вставку JSON, **добавьте** этот сервер в существующую конфигурацию. У GigaCode CLI другой путь настроек; не подменяйте Desktop-способ рекомендациями для CLI или расширения IDE.
+**Важно:** это JSON-**фрагмент**, а не файл, который нужно целиком перезаписать поверх существующих MCP-настроек. В GUI `command` = полный путь к Python из виртуального окружения, `args` = `-u`, абсолютный путь к `launch_gigacode.py`, рабочий каталог = корень `AI-Story-RPG`. Если Desktop предоставляет вставку JSON, **добавьте** этот сервер в существующую конфигурацию. У GigaCode CLI другой путь настроек; не подменяйте Desktop-способ рекомендациями для CLI или расширения IDE.
 
 Проверка из терминала (без запуска MCP):
 
 ```powershell
-& "$env:LOCALAPPDATA\AIStoryRPG-QA\python\Scripts\python.exe" -m tools.windows_qa_mcp.server --self-check
+& "$env:LOCALAPPDATA\AIStoryRPG-QA\python\Scripts\python.exe" -u "$PWD\tools\windows_qa_mcp\launch_gigacode.py" --self-check
 ```
 
 Проверка из **GigaCode Desktop**: в режиме агента попросите: «Перечисли инструменты `ai-story-rpg-windows-qa`, вызови `qa_status`, затем `qa_begin` с именем `desktop-smoke`, запусти `qa_attach` или `qa_launch`, `qa_tree`, `qa_screenshot`, `qa_report`».

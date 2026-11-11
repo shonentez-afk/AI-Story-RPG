@@ -452,6 +452,24 @@ jobs:
           path: artifacts/android/
           if-no-files-found: error
           retention-days: 2
+  windows-mcp-stdio:
+    name: GigaCode Desktop Windows MCP real STDIO smoke
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Install MCP SDK v1 and Windows automation dependencies
+        run: python -m pip install -r tools/windows_qa_mcp/requirements.txt
+      - name: Build MCP server and verify all 17 tools
+        run: python tools/windows_qa_mcp/launch_gigacode.py --self-check
+      - name: Real STDIO initialize, tools/list, qa_status and QA report from foreign cwd
+        run: python tools/windows_qa_mcp/protocol_smoke.py
+      - name: Check safe QA dispatcher, absolute launcher and diagnostics
+        run: python -m unittest discover -s tools/windows_qa_mcp/tests -v
+
   windows-exe:
     name: Windows portable bundle (release)
     runs-on: windows-latest

@@ -1,3 +1,11 @@
+## 11.11.2026 — GigaCode Desktop Windows QA MCP: исправление запуска + реальная проверка STDIO
+
+- По результатам пользовательского Windows подключения (MCP в Desktop серый, `qa_status` недоступен) найден и устранён риск запуска `python -m tools.windows_qa_mcp.server` вне `cwd` репозитория. Новый `tools/windows_qa_mcp/launch_gigacode.py` запускается **абсолютным путём**, из любого рабочего каталога и без `PYTHONPATH`; ошибки старта сохраняются в `%LOCALAPPDATA%\\AIStoryRPG-QA\\mcp-startup-errors.log`.
+- `--self-check` теперь действительно создаёт FastMCP и проверяет экспорт **17** инструментов (раньше был только `import mcp`). Новый `protocol_smoke.py` запускает настоящий STDIO MCP-client и проверяет `initialize`, `tools/list`, `qa_status`, `qa_begin`, `qa_report` из посторонней рабочей папки.
+- PowerShell `setup_gigacode_desktop.ps1` формирует команду: `python.exe` + args `-u <АБСОЛЮТНЫЙ ПУТЬ К launch_gigacode.py>`, проводит обе проверки **до** создания JSON. Переустановка в GigaCode Desktop происходит вручную: обновить аргументы существующего сервера, а не просто повторно запустить `server.py`.
+- Регрессия Python/загрузчика: **22 теста PASS локально** (Linux без SDK). Добавлен новый job `windows-mcp-stdio` в GitHub CI: Windows + реальный MCP SDK 1.x + STDIO handshake. Статус этого нового job и фактический GigaCode Desktop GUI **необходимо подтвердить по CI и на пользовательском ПК**, не выдавать прошлые CI за новое подтверждение.
+- Автономный Dart RPG Engine и Flutter-клиент не изменены. Не объединять PR #133 без реального агентского прохождения игры.
+
 ## 10.11.2026 — GigaCode Desktop Windows QA MCP: реализован контур, приёмка на ПК ожидается
 
 - Под GigaCode Desktop (без Cline) добавлен `tools/windows_qa_mcp/`: локальный MCP STDIO на Python FastMCP 1.x, UI Automation только указанного `ai_story_reader.exe`, ограниченный запуск/закрытие, клики, ввод, скриншоты, QA assertions и отчёты PASS/FAIL/BLOCKED/INCONCLUSIVE.
