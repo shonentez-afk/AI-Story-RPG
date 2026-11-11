@@ -12,6 +12,7 @@ import json
 import os
 import sys
 import tempfile
+import traceback
 from pathlib import Path
 
 EXPECTED_TOOLS = frozenset({
@@ -54,19 +55,25 @@ async def probe() -> dict:
         )
         async with stdio_client(params) as (read, write):
             async with ClientSession(read, write) as session:
+                print('MCP smoke: initializing', file=sys.stderr, flush=True)
                 init = await session.initialize()
+                print('MCP smoke: initialized', file=sys.stderr, flush=True)
                 names = {tool.name for tool in (await session.list_tools()).tools}
+                print(f'MCP smoke: tools/list returned {len(names)} tools', file=sys.stderr, flush=True)
                 if names != EXPECTED_TOOLS:
                     raise AssertionError(
                         "Expected exact 17 registered tools, got " + str(sorted(names))
                     )
                 status = _text_result(await session.call_tool("qa_status", {}))
+                print('MCP smoke: qa_status OK', file=sys.stderr, flush=True)
                 if Path(status["app_path"]).name != "ai_story_reader.exe":
                     raise AssertionError("Configured game executable was not forwarded to MCP")
                 if status.get("input_enabled") is not False:
                     raise AssertionError("Protocol smoke must use safe read-only mode")
                 begin = _text_result(await session.call_tool("qa_begin", {"name": "stdio-smoke"}))
+                print('MCP smoke: qa_begin OK', file=sys.stderr, flush=True)
                 report = _text_result(await session.call_tool("qa_report", {}))
+                print('MCP smoke: qa_report OK', file=sys.stderr, flush=True)
                 if report.get("status") != "NOT_TESTED":
                     raise AssertionError("Smoke run with no real UI assertions cannot be PASS")
                 if not Path(report["json"]).is_file():
@@ -88,6 +95,7 @@ def main() -> int:
     except Exception as exc:
         print(json.dumps({"status": "ERROR", "error": str(exc)}, ensure_ascii=False),
               file=sys.stderr, flush=True)
+        print("".join(traceback.format_exception(exc))[-18000:], file=sys.stderr, flush=True)
         return 1
 
 
