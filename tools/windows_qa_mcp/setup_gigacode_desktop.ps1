@@ -16,22 +16,21 @@ $qaRoot = Join-Path $env:LOCALAPPDATA 'AIStoryRPG-QA'
 $venv = Join-Path $qaRoot 'python'
 New-Item -Path $qaRoot -ItemType Directory -Force | Out-Null
 if (!(Test-Path -LiteralPath (Join-Path $venv 'Scripts\python.exe'))) {
-    # The Windows Python launcher can have Python 3.13/3.14 installed but not 3.12.
-    # Probe the actual default interpreter instead of demanding one minor version.
+    # Check Python itself, not a parsed PowerShell version string.
+    # The previous "[version]([string]$reported).Trim()" could silently throw
+    # even with Python 3.15 installed, hiding the real interpreter.
     $launcher = $null
     foreach ($candidate in @('py', 'python')) {
         if (-not (Get-Command $candidate -ErrorAction SilentlyContinue)) { continue }
         try {
-            $reported = (& $candidate -c 'import sys; print("{}.{}".format(sys.version_info.major, sys.version_info.minor))' 2>$null | Select-Object -Last 1)
-            if ($LASTEXITCODE -ne 0 -or -not $reported) { continue }
-            $detected = [version]([string]$reported).Trim()
-            if ($detected -ge [version]'3.12') {
+            & $candidate -c 'import sys; sys.exit(0 if sys.version_info >= (3, 12) else 1)' 2>$null
+            if ($LASTEXITCODE -eq 0) {
                 $launcher = $candidate
-                Write-Host "Creating QA environment using $candidate (Python $detected)"
+                Write-Host "Using installed Python via $candidate"
                 break
             }
         } catch {
-            # Try the other common Python entrypoint if this launcher is unavailable.
+            # Try the next available launcher if this candidate cannot execute Python.
         }
     }
     if (-not $launcher) { throw 'Python 3.12+ not found through py or python. Check: py --version; python --version; py -0p' }

@@ -228,6 +228,16 @@ class QATests(unittest.TestCase):
         self.assertFalse(matches_executable('C:/QA/ai_story_reader.exe.evil', None))
         self.assertFalse(matches_executable('D:/QA/ai_story_reader.exe', target))
 
+    def test_gigacode_setup_probes_runtime_without_powershell_version_cast(self):
+        # Regression: Python 3.15.1 was not found due to an invalid PS .Trim()
+        # call on an already-cast System.Version object.
+        script = (Path(__file__).resolve().parents[1] /
+                  'setup_gigacode_desktop.ps1').read_text(encoding='utf-8')
+        self.assertIn("sys.exit(0 if sys.version_info >= (3, 12) else 1)", script)
+        self.assertIn("if ($LASTEXITCODE -eq 0)", script)
+        self.assertNotIn("$detected = [version]", script)
+        self.assertNotIn("& py -3.12 -m venv", script)
+
     def test_config_only_enables_input_with_explicit_1(self):
         with patch.dict(os.environ, {'AI_STORY_QA_ALLOW_INPUT': 'true'}):
             self.assertFalse(Config.from_env().allow_input)
