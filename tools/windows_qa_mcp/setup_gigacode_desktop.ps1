@@ -16,10 +16,32 @@ $qaRoot = Join-Path $env:LOCALAPPDATA 'AIStoryRPG-QA'
 $venv = Join-Path $qaRoot 'python'
 New-Item -Path $qaRoot -ItemType Directory -Force | Out-Null
 if (!(Test-Path -LiteralPath (Join-Path $venv 'Scripts\python.exe'))) {
-    & py -3.12 -m venv $venv
-    if ($LASTEXITCODE -ne 0) { throw 'Python 3.12 is required: install it with py launcher' }
+    # The Windows Python launcher can have Python 3.13/3.14 installed but not 3.12.
+    # Probe the actual default interpreter instead of demanding one minor version.
+    $launcher = $null
+    foreach ($candidate in @('py', 'python')) {
+        if (-not (Get-Command $candidate -ErrorAction SilentlyContinue)) { continue }
+        try {
+            $reported = (& $candidate -c 'import sys; print("{}.{}".format(sys.version_info.major, sys.version_info.minor))' 2>$null | Select-Object -Last 1)
+            if ($LASTEXITCODE -ne 0 -or -not $reported) { continue }
+            $detected = [version]([string]$reported).Trim()
+            if ($detected -ge [version]'3.12') {
+                $launcher = $candidate
+                Write-Host "Creating QA environment using $candidate (Python $detected)"
+                break
+            }
+        } catch {
+            # Try the other common Python entrypoint if this launcher is unavailable.
+        }
+    }
+    if (-not $launcher) { throw 'Python 3.12+ not found through py or python. Check: py --version; python --version; py -0p' }
+    & $launcher -m venv $venv
+    if ($LASTEXITCODE -ne 0) { throw 'Failed to create MCP virtual environment using installed Python' }
 }
 $python = Join-Path $venv 'Scripts\python.exe'
+# Do not silently reuse a stale virtual environment created by Python 3.11.
+& $python -c 'import sys; sys.exit(0 if sys.version_info >= (3, 12) else 1)'
+if ($LASTEXITCODE -ne 0) { throw 'QA virtual environment requires Python 3.12+. Remove only %LOCALAPPDATA%\AIStoryRPG-QA\python if it contains an old Python and rerun setup' }
 & $python -m pip install -r (Join-Path $PSScriptRoot 'requirements.txt')
 if ($LASTEXITCODE -ne 0) { throw 'Could not install Python MCP dependencies' }
 $entry = @{

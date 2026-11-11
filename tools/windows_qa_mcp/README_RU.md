@@ -7,7 +7,7 @@
 ## 1. Что нужно на Windows
 
 - Windows 10/11 x64, GigaCode **Desktop** с поддержкой локальных MCP-подключений.
-- Python **3.12** с `py` launcher (для установки зависимостей; Windows QA не запускается на Linux-хосте).
+- Python **3.12 или новее** (например, 3.13/3.14), доступный через `py` либо `python`; отдельная установка 3.12 не требуется. Для некоторых очень новых версий доступность сторонних Windows-библиотек зависит от опубликованных пакетов.
 - Рабочая копия репозитория ветки PR #133 и **полностью распакованный** Windows portable bundle, включая `data` и `flutter_windows.dll`, а не только EXE.
 - Права интерактивного пользователя Windows. В заблокированном сеансе и в Session 0 графическая автоматизация не работает.
 
@@ -17,10 +17,10 @@ cd AI-Story-RPG
 .\tools\windows_qa_mcp\setup_gigacode_desktop.ps1 -AppExe 'D:\Games\AI-Story-RPG-Windows\ai_story_reader.exe' -EnableInput
 ```
 
-Если PowerShell блокирует **подписанный/локальный** `.ps1`, можно выполнить эти команды вручную (не меняя политику выполнения системы):
+Если PowerShell блокирует запуск локального `.ps1`, можно подготовить Python-окружение вручную (не меняя политику выполнения системы):
 
 ```powershell
-py -3.12 -m venv "$env:LOCALAPPDATA\AIStoryRPG-QA\python"
+py -m venv "$env:LOCALAPPDATA\AIStoryRPG-QA\python"
 & "$env:LOCALAPPDATA\AIStoryRPG-QA\python\Scripts\python.exe" -m pip install -r tools\windows_qa_mcp\requirements.txt
 ```
 
