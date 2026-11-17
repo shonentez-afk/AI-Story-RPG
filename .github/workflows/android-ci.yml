@@ -437,10 +437,13 @@ jobs:
       contents: write
     name: Android APK (debug)
     runs-on: ubuntu-latest
-    needs: [reference-tests, dart-sdk, story-core, flutter-reader]
+    needs: [reference-tests, dart-sdk, story-core, flutter-ui-crash-regression]
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -496,7 +499,7 @@ jobs:
           python-version: '3.13'
       - name: Install MCP SDK v1 and Windows automation dependencies
         run: python -m pip install -r tools/windows_qa_mcp/requirements.txt
-      - name: Build MCP server and verify all 17 tools
+      - name: Build MCP server and verify all 18 tools
         run: python tools/windows_qa_mcp/launch_gigacode.py --self-check
       - name: Real STDIO initialize, tools/list, qa_status and QA report from foreign cwd
         run: python tools/windows_qa_mcp/protocol_smoke.py
@@ -547,6 +550,24 @@ jobs:
           path: artifacts/windows/AI-Story-RPG-Windows/
           if-no-files-found: error
           retention-days: 2
+      - name: Attempt actual Windows EXE UI launch with crash evidence
+        shell: pwsh
+        run: |
+          python -m pip install -r tools/windows_qa_mcp/requirements.txt
+          if ($LASTEXITCODE -ne 0) { throw 'MCP Windows automation dependencies missing' }
+          $env:AI_STORY_QA_EXE = (Resolve-Path 'artifacts/windows/AI-Story-RPG-Windows/ai_story_reader.exe').Path
+          $env:AI_STORY_QA_OUTPUT = (Join-Path (Get-Location) 'artifacts/windows-ux-qa')
+          $env:AI_STORY_QA_ALLOW_INPUT = '1'
+          python -m tools.windows_qa_mcp.windows_gui_smoke
+          if ($LASTEXITCODE -ne 0) { throw 'Windows GUI smoke evidence not generated' }
+      - name: Upload real GUI attempt evidence (including BLOCKED)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: AI-Story-RPG-Windows-GUI-QA-evidence
+          path: artifacts/windows-ux-qa/
+          if-no-files-found: warn
+          retention-days: 3
 
   publish-release:
     name: Publish Windows + Android test release

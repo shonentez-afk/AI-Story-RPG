@@ -53,6 +53,16 @@ class DesktopBootstrapTests(unittest.TestCase):
         self.assertIn('def qa_screenshot(label: str = "screen"):', server)
         self.assertNotIn('-> list[TextContent | ImageContent]', server)
 
+    def test_real_windows_gui_smoke_never_claims_pass_without_evidence(self):
+        body = (ROOT / "windows_gui_smoke.py").read_text(encoding="utf-8")
+        self.assertIn("'qa_launch'", body)
+        self.assertIn("'qa_screenshot'", body)
+        self.assertIn("'qa_crash_events'", body)
+        self.assertIn("'qa_report'", body)
+        self.assertIn("'BLOCKED'", body)
+        self.assertIn("'INCONCLUSIVE'", body)
+        self.assertNotIn("force_kill", body)
+
     def test_protocol_smoke_tests_real_handshake_and_not_just_sdk_import(self):
         smoke = (ROOT / "protocol_smoke.py").read_text(encoding="utf-8")
         for snippet in ("session.initialize()", "session.list_tools()",
