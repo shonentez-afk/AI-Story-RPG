@@ -23,6 +23,10 @@ from pathlib import Path
 
 SOURCE_URL = "https://www.gutenberg.org/cache/epub/2591/pg2591.txt"
 SOURCE_FALLBACK = "https://www.gutenberg.org/ebooks/2591.txt.utf-8"
+# Same historical Gutenberg #2591 edition, mirrored by GITenberg at an
+# immutable Git commit. Still fail closed on all 62 original tales, translation,
+# minimum length and exact source SHA recorded in the manifest.
+SOURCE_MIRROR = "https://raw.githubusercontent.com/GITenberg/Grimms-Fairy-Tales_2591/9991a30953853be9b40751408c3ad0d3af314fb7/2591-0.txt"
 EXPECTED_TALES = 62
 MIN_BOOK_CHARACTERS = 280_000
 MIN_PARAGRAPHS = 500
@@ -37,7 +41,7 @@ def sha256(data: bytes) -> str:
 
 def download_source() -> tuple[bytes, str]:
     errors = []
-    for url in (SOURCE_URL, SOURCE_FALLBACK):
+    for url in (SOURCE_URL, SOURCE_FALLBACK, SOURCE_MIRROR):
         for attempt in range(2):
             try:
                 request = urllib.request.Request(

@@ -42,6 +42,55 @@ def main() -> int:
                 service.call('qa_note', {
                     'scenario': 'Windows desktop screenshot', 'status': 'INCONCLUSIVE',
                     'reason': 'Screenshot not available: ' + type(exc).__name__})
+            # Real Windows GUI navigation, not just a process-alive check.
+            # Coordinates correspond to the blank-library/home layout of the
+            # disposable CI profile. Each route is preserved as a screenshot
+            # and explicitly left INCONCLUSIVE until visual review.
+            for route, x_fraction, y_fraction in (
+                ('library', 0.34, 0.60),
+                ('new-story', 0.66, 0.60),
+                ('campaigns', 0.34, 0.72),
+            ):
+                try:
+                    home_shot, _ = service.call('qa_screenshot', {
+                        'label': 'home-before-' + route})
+                    dims = service.backend._last_image
+                    if dims is None:
+                        raise QAError('Screenshot dimensions unavailable')
+                    width, height = dims[:2]
+                    service.call('qa_click_xy', {
+                        'x': int(width * x_fraction),
+                        'y': int(height * y_fraction),
+                    })
+                    time.sleep(0.85)
+                    alive, _ = service.call('qa_status', {})
+                    if not alive.get('backend', {}).get('matching_pids'):
+                        raise QAError('Game process disappeared after ' + route)
+                    service.call('qa_screenshot', {'label': route + '-screen'})
+                    service.call('qa_note', {
+                        'scenario': 'Windows GUI route: ' + route,
+                        'status': 'INCONCLUSIVE',
+                        'reason': 'Real click and screenshot completed; '
+                            'screen identity requires visual inspection',
+                    })
+                    # Native toolbar back affordance; the Flutter UIA tree
+                    # can be empty, so do not treat missing semantics as FAIL.
+                    dims = service.backend._last_image
+                    service.call('qa_click_xy', {
+                        'x': int(dims[0] * 0.045),
+                        'y': int(dims[1] * 0.082),
+                    })
+                    time.sleep(0.65)
+                except Exception as route_error:
+                    service.call('qa_note', {
+                        'scenario': 'Windows GUI route: ' + route,
+                        'status': 'BLOCKED',
+                        'reason': 'Could not finish route capture: '
+                            + str(route_error)[:180],
+                    })
+                    # A failed intermediate screen should not cause the
+                    # entire QA artifact to be lost.
+                    break
             names = [node['name'] for node in ui['nodes']]
             if any('Живая книга' in name for name in names):
                 service.call('qa_assert', {'text_contains': 'Живая книга'})

@@ -18,6 +18,17 @@ class PublicDomainGrimmGeneratorTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "Expected all 62"):
             grimm.extract_tales(incomplete)
 
+    def test_fallback_is_pinned_unchanged_gutenberg_2591_edition(self):
+        # A network outage must not be bypassed by an invented short fixture.
+        # The mirror is a copy of the actual 62-tale Gutenberg translation.
+        self.assertEqual(grimm.EXPECTED_TALES, 62)
+        self.assertEqual(
+            grimm.SOURCE_MIRROR,
+            "https://raw.githubusercontent.com/GITenberg/Grimms-Fairy-Tales_2591/9991a30953853be9b40751408c3ad0d3af314fb7/2591-0.txt",
+        )
+        self.assertEqual(grimm.MIN_BOOK_CHARACTERS, 280_000)
+        self.assertEqual(grimm.MIN_PARAGRAPHS, 500)
+
     def test_rejects_unknown_edition_or_truncated_download(self):
         source = (
             "*** START OF THE PROJECT GUTENBERG EBOOK UNRELATED ***\n"

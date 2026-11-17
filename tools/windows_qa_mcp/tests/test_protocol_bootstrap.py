@@ -63,6 +63,14 @@ class DesktopBootstrapTests(unittest.TestCase):
         self.assertIn("'INCONCLUSIVE'", body)
         self.assertNotIn("force_kill", body)
 
+    def test_windows_gui_probes_real_home_routes_with_screenshots(self):
+        source = (ROOT / "windows_gui_smoke.py").read_text(encoding="utf-8")
+        for route in ("'library'", "'new-story'", "'campaigns'"):
+            self.assertIn(route, source)
+        self.assertIn("'qa_click_xy'", source)
+        self.assertIn("'qa_screenshot'", source)
+        self.assertIn("'INCONCLUSIVE'", source)
+
     def test_protocol_smoke_tests_real_handshake_and_not_just_sdk_import(self):
         smoke = (ROOT / "protocol_smoke.py").read_text(encoding="utf-8")
         for snippet in ("session.initialize()", "session.list_tools()",
