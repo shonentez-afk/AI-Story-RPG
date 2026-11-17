@@ -208,10 +208,19 @@ class _WorldPlayPageState extends State<WorldPlayPage> {
       });
       if (mounted) unawaited(_loadPortraits(view));
     } catch (error) {
-      if (mounted) setState(() {
-        _view = null;
-        _errorText = 'Сохранение не удалось открыть: $error';
-      });
+      if (mounted) {
+        // A transient read failure during manual refresh must not blank the
+        // last committed, replay-verified scene or hide its accessible panels.
+        // Initial loading still shows the explicit retry screen.
+        if (_view == null) {
+          setState(() => _errorText = 'Сохранение не удалось открыть: $error');
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text('Не удалось обновить сохранение: $error. '
+                'Последнее успешно загруженное состояние сохранено.'),
+          ));
+        }
+      }
     } finally {
       if (mounted) setState(() {
         _loading = false;
