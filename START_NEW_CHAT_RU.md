@@ -1,3 +1,11 @@
+## 17.11.2026 — UX/UI И АВАРИЙНЫЕ ВЫЛЕТЫ: ПРОВЕРКА WINDOWS + 777 FLUTTER PASS
+
+- Новый подробный [отчёт](docs/UX_UI_CRASH_QA_RU_2026-11-17.md): source SHA `dfcc13db6f32cd442b40a261879d213a207672a1`, [CI #1151](https://github.com/shonentez-afk/AI-Story-RPG/actions/runs/44056838580). **61/61 offline UX PASS**, **777 Flutter PASS / 2 SKIPPED**, Dart/Python/M1.7/MCP PASS, Windows portable/настоящая GUI-автоматика PASS; Android в процессе на момент фиксации.
+- Реальный EXE GitHub Actions открывает главную, библиотеку, новую историю и прохождения, делает 7 снимков; Windows Event 1000 для точного EXE: 0 в проверенном окне runner. [GUI evidence](https://github.com/shonentez-afk/AI-Story-RPG/actions/runs/44056838580/artifacts/14315584912). Автоматические UIA assertions `0/0 INCONCLUSIVE`: визуальный результат подтверждён просмотром PNG, но не полный E2E.
+- Исправлено: сбой SQLite при обновлении не стирает текущую проверенную сцену; добавлены краш/навигационные тесты; инструмент `qa_crash_events` (теперь всего 18 QA инструментов), закреплён Flutter 3.47.9, восстановлена проверка оригинального Grimm #2591 через pinned GITenberg 62 сказки без подмены.
+- **Реальные вылеты на ПК пользователя не диагностированы**: нужен его GigaCode Desktop, журнал Windows и повторение симптомов. PR #133 сейчас Open / Ready for review, не считать физически принятым и не мержить без QA. Отдельный Android CI status проверять после сборки.
+- Этот верхний handoff — документация, source SHA не меняется.
+
 ## 11.11.2026 — GigaCode Desktop MCP: НАСТОЯЩИЙ WINDOWS STDIO ПРОВЕРЕН, CI #1144 job SUCCESS
 
 - Проверенный функциональный код: `a1ffda55769482ef56ad2b7f78f67cf174ae5524`. Windows job `GigaCode Desktop Windows MCP real STDIO smoke` из [CI #1144](https://github.com/shonentez-afk/AI-Story-RPG/actions/runs/42961616589) — **SUCCESS** на Python 3.13 и MCP SDK 1.30.0. Подтверждены: регистрация 17 инструментов; STDIO `initialize` → `tools/list` → `qa_status` → `qa_begin` → `qa_report`; проверка `qa_click(name=...)` в read-only режиме; запуск из чужого cwd без PYTHONPATH; **25 Python unit tests PASS** на Windows.
