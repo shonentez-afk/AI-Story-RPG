@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:rpg_api/rpg_api.dart' show LocalRpgAuthoringApi;
 
 import 'book_import.dart';
 import 'book_source_index.dart';
@@ -22,7 +23,7 @@ import 'source_semantic_catalog.dart';
 /// platform plugin through this boundary.
 
 ImportedBook _parseImportedBook((String, Uint8List) request) =>
-    BookImporter.parse(request.$1, request.$2);
+    const LocalRpgAuthoringApi().parseBook(request.$1, request.$2);
 
 Future<ImportedBook> parseImportedBookInWorker(
         String filename, Uint8List bytes) =>
@@ -30,7 +31,7 @@ Future<ImportedBook> parseImportedBookInWorker(
         debugLabel: 'story-book-import');
 
 BookSourceIndex _indexImportedBook(ImportedBook book) =>
-    BookSourceIndexer.index(book);
+    const LocalRpgAuthoringApi().indexBook(book);
 
 Future<BookSourceIndex> indexImportedBookInWorker(ImportedBook book) =>
     compute(_indexImportedBook, book, debugLabel: 'story-book-index');

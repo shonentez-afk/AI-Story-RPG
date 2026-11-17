@@ -5,7 +5,9 @@ import 'package:crypto/crypto.dart';
 import 'blueprint.dart';
 import 'codec.dart';
 import 'world_state.dart';
+import 'freeform_action.dart';
 import 'npc_social_ledger.dart';
+import 'alternate_plot.dart';
 
 enum DecisionStatus { applied, denied, duplicate }
 
@@ -41,6 +43,7 @@ class WorldEvent {
     required this.beforeStateHash,
     required this.afterStateHash,
     required this.hash,
+    this.freeform,
   });
 
   final int sequence;
@@ -55,6 +58,7 @@ class WorldEvent {
   final String beforeStateHash;
   final String afterStateHash;
   final String hash;
+  final FreeformActionDraft? freeform;
 
   Map<String, dynamic> toJson() => {..._payload(), 'hash': hash};
 
@@ -69,6 +73,7 @@ class WorldEvent {
     'previous_hash': previousHash,
     'before_state_hash': beforeStateHash,
     'after_state_hash': afterStateHash,
+    if (freeform != null) 'freeform': freeform!.toJson(),
   };
 
   factory WorldEvent.create({
@@ -82,6 +87,7 @@ class WorldEvent {
     required String? previousHash,
     required String beforeStateHash,
     required String afterStateHash,
+    FreeformActionDraft? freeform,
   }) {
     final event = WorldEvent._(
       sequence: sequence,
@@ -94,6 +100,7 @@ class WorldEvent {
       previousHash: previousHash,
       beforeStateHash: beforeStateHash,
       afterStateHash: afterStateHash,
+      freeform: freeform,
       hash: '',
     );
     final hash = sha256.convert(
@@ -110,6 +117,7 @@ class WorldEvent {
       previousHash: previousHash,
       beforeStateHash: beforeStateHash,
       afterStateHash: afterStateHash,
+      freeform: freeform,
       hash: hash,
     );
   }
@@ -122,7 +130,13 @@ class WorldEvent {
       'before_state_hash',
       'after_state_hash', 'hash',
     };
-    assertFields(data, 'world_event', keys, keys);
+    assertFields(data, 'world_event', keys, {...keys, 'freeform'});
+    final dynamicPlan = data.containsKey('freeform')
+        ? FreeformActionDraft.fromJson(data['freeform']) : null;
+    if (dynamicPlan != null &&
+        data['choice_id'] != FreeformActionDraft.reservedChoice) {
+      throw const FormatException('Mislabelled dynamic event');
+    }
     if (data['sequence'] is! int || (data['sequence'] as int) < 1) {
       throw const FormatException('Invalid event sequence');
     }
@@ -149,6 +163,7 @@ class WorldEvent {
       previousHash: previous as String?,
       beforeStateHash: verifiedHash('before_state_hash'),
       afterStateHash: verifiedHash('after_state_hash'),
+      freeform: dynamicPlan,
       hash: verifiedHash('hash'),
     );
   }
@@ -172,7 +187,10 @@ class StoryWorld {
 
   WorldState get state => _state;
   List<WorldEvent> get events => List.unmodifiable(_events);
-  bool get isTerminal => blueprint.scenes[_state.sceneId]!.terminal;
+  AlternatePlotSnapshot get alternatePlot =>
+      AlternatePlotLedger.replay(_events);
+  bool get isTerminal => _state.alternateScene?.terminal ??
+      blueprint.scenes[_state.sceneId]!.terminal;
 
   /// Committed decisions that explicitly taught [factId] to [actorId].
   ///
@@ -189,9 +207,12 @@ class StoryWorld {
     }
     final evidence = <WorldEvent>[];
     for (final event in _events) {
-      final scene = blueprint.scenes[event.sceneId]!;
-      final choice = scene.choices.singleWhere((c) => c.id == event.choiceId);
-      if (choice.effects.any((effect) =>
+      final effects = event.freeform?.effects ?? [
+          ...blueprint.scenes[event.sceneId]!
+              .choices.singleWhere((c) => c.id == event.choiceId).effects,
+          ...sourceEffectsFor(event.sceneId),
+      ];
+      if (effects.any((effect) =>
           effect.op == 'learn_fact' &&
           effect.actor == actorId &&
           effect.id == factId)) {
@@ -241,6 +262,9 @@ class StoryWorld {
 
   /// An isolated tentative world for coordinating with the scenario runtime.
   /// No I/O occurs here; a rejected proposal never mutates the live world.
+  List<TypedRule> sourceEffectsFor(String sceneId) =>
+      socialRulebook?.bookCausality?.at(sceneId)?.effects ?? const [];
+
   StoryWorld fork() {
     final draft = StoryWorld(blueprint, socialRulebook: socialRulebook);
     draft._state = _state;
@@ -262,6 +286,15 @@ class StoryWorld {
       }
     }
     if (selected == null) return 'choice_not_in_current_scene';
+    if (_state.plotDiverged) return 'timeline_diverged_into_alter_fate';
+    if (socialRulebook?.dynamicInteractionsEnabled == true &&
+        socialRulebook!.canonInvariants.any((rule) =>
+            rule.sceneId == selected!.nextSceneId)) {
+      final social = NpcSocialLedger.inspect(this, socialRulebook!);
+      if (socialRulebook!.breaksCanon(selected.nextSceneId, social)) {
+        return 'canon_causality_broken';
+      }
+    }
     for (final condition in selected.conditions) {
       if (!_matches(condition)) {
         return 'condition_not_met:${condition.op}';
@@ -387,7 +420,7 @@ class StoryWorld {
       (actor, facts) => MapEntry(actor, Set<String>.of(facts)),
     );
     var tick = _state.tick + 1;
-    for (final effect in choice.effects) {
+    for (final effect in [...choice.effects, ...sourceEffectsFor(_state.sceneId)]) {
       switch (effect.op) {
         case 'grant_item':
           items.add(effect.id!);
@@ -432,7 +465,8 @@ class StoryWorld {
     );
     if (socialRulebook != null &&
         (socialRulebook!.itemTransfers.isNotEmpty ||
-         socialRulebook!.lifeTransitions.isNotEmpty)) {
+         socialRulebook!.lifeTransitions.isNotEmpty ||
+         socialRulebook!.bookCausality != null)) {
       // Pre-commit verification must never let a partial transfer reach the
       // durable SQLite event chain. No world state is published on failure.
       final draft = fork();
@@ -440,12 +474,281 @@ class StoryWorld {
       draft._events.add(event);
       draft._byAction[actionId] = event;
       try {
-        NpcSocialLedger.inspect(draft, socialRulebook!);
+        final social = NpcSocialLedger.inspect(draft, socialRulebook!);
+        final graph = socialRulebook!.bookCausality;
+        if (graph != null && !graph.permits(choice.nextSceneId, nextState,
+            social, {blueprint.entrySceneId,
+              ...draft._events.map((event) => event.sceneId),
+              ...draft._events.map((event) => event.nextSceneId)})) {
+          return _denied('canon_event_prerequisite_broken');
+        }
       } on FormatException {
-        return _denied('npc_item_custody_conflict');
+        return _denied('npc_or_book_causality_conflict');
       }
     }
     _state = nextState;
+    _events.add(event);
+    _byAction[actionId] = event;
+    return DecisionResult(
+      status: DecisionStatus.applied, state: _state, event: event,
+    );
+  }
+
+  /// A new scene-local narrative action, NOT one of the authored choice IDs.
+  /// Typed noncanonical effects are applied to the same world and event chain.
+  DecisionResult applyFreeform({
+    required String actionId,
+    required FreeformActionDraft draft,
+    int? expectedRevision,
+    String actor = 'player',
+  }) {
+    jsonId(actionId, 'action_id');
+    jsonId(actor, 'actor');
+    final duplicate = _byAction[actionId];
+    if (duplicate != null) {
+      if (duplicate.freeform?.digest != draft.digest ||
+          duplicate.actor != actor) {
+        throw const FormatException('Freeform action ID reused');
+      }
+      return DecisionResult(
+        status: DecisionStatus.duplicate, reason: 'already_committed',
+        state: _state, event: duplicate,
+      );
+    }
+    if (actor != 'player') return _denied('actor_not_supported');
+    if (expectedRevision != null && expectedRevision != _state.revision) {
+      return _denied('stale_revision');
+    }
+    if (isTerminal) return _denied('terminal_scene');
+    draft.validate(blueprint, _state);
+    if (draft.npcInteraction != null &&
+        (socialRulebook?.dynamicInteractionsEnabled != true)) {
+      throw const FormatException('NPC intervention needs signed source review');
+    }
+    if (draft.plotIntent == 'end' && !_state.plotDiverged) {
+      throw const FormatException('Only an existing alternate story may end');
+    }
+    final stats = Map<String, int>.of(_state.stats);
+    final inventory = Set<String>.of(_state.inventory);
+    final flags = Map<String, bool>.of(_state.flags);
+    final knowledge = _state.knowledge.map((key, val) =>
+        MapEntry(key, Set<String>.of(val)));
+    var time = _state.tick + 1;
+    final contact = draft.npcInteraction;
+    if (contact != null &&
+        (contact.giveItemId != null || contact.takeItemId != null)) {
+      final social = NpcSocialLedger.inspect(this, socialRulebook!);
+      if (contact.giveItemId != null) {
+        if (!inventory.remove(contact.giveItemId)) {
+          return _denied('npc_transfer_missing_player_item');
+        }
+      } else if (social.itemOwner(contact.takeItemId!) == contact.actorId &&
+          !inventory.contains(contact.takeItemId)) {
+        inventory.add(contact.takeItemId!);
+      } else {
+        return _denied('npc_transfer_missing_npc_item');
+      }
+    }
+    if (contact?.learnFactId != null) {
+      knowledge.putIfAbsent(contact!.actorId, () => <String>{})
+          .add(contact.learnFactId!);
+    }
+    if (contact != null && socialRulebook!.automaticReactions.isNotEmpty) {
+      final previousSocial = NpcSocialLedger.inspect(this, socialRulebook!);
+      final trust = previousSocial.directedScore(contact.actorId, 'player') +
+          contact.trustDelta;
+      for (final reaction in socialRulebook!.automaticReactions) {
+        if (reaction.sceneId != _state.sceneId ||
+            !reaction.activated(contact, trust)) continue;
+        if (reaction.relayToActorId != null) {
+          if (previousSocial.lifeState(reaction.relayToActorId!) !=
+              NpcLifeState.present) {
+            return _denied('npc_reaction_target_unavailable');
+          }
+          knowledge.putIfAbsent(reaction.relayToActorId!, () => <String>{})
+              .add(reaction.relayFactId!);
+        }
+      }
+    }
+    for (final effect in draft.effects) {
+      switch (effect.op) {
+        case 'set_flag':
+          flags[effect.id!] = effect.value!;
+        case 'stat_delta':
+          stats[effect.id!] = (stats[effect.id!] ?? 0) + effect.amount!;
+        case 'advance_time':
+          time += effect.amount!;
+        case 'grant_item':
+          inventory.add(effect.id!);
+        case 'consume_item':
+          if (!inventory.remove(effect.id)) {
+            return _denied('missing_gm_item');
+          }
+        case 'learn_fact':
+          knowledge['player']!.add(effect.id!);
+        default:
+          throw StateError('Unexpected verified GM effect');
+      }
+    }
+    // Bound only local fictional state. Canon book scene order is untouched,
+    // but an AI cannot exhaust memory by inventing unlimited durable IDs.
+    if (stats.length > 16 || flags.length > 64 ||
+        inventory.length > 96 ||
+        (knowledge['player']?.length ?? 0) > 128) {
+      return _denied('too_many_private_gm_resources');
+    }
+    if (time > 100000000) return _denied('time_out_of_range');
+    // A source-reviewed future event may become impossible when an NPC has
+    // received new information or changed trust. Never show its original
+    // chapter as if the user's intervention had not happened.
+    var diverged = _state.plotDiverged || draft.plotIntent == 'diverge';
+    if (!diverged && draft.npcInteraction != null &&
+        socialRulebook?.dynamicInteractionsEnabled == true) {
+      final npc = draft.npcInteraction!;
+      final social = NpcSocialLedger.inspect(this, socialRulebook!);
+      for (final nextChoice in blueprint.scenes[_state.sceneId]!.choices) {
+        for (final gate in socialRulebook!.canonInvariants) {
+          if (gate.sceneId != nextChoice.nextSceneId ||
+              gate.actorId != npc.actorId) continue;
+          final trust = social.directedScore(npc.actorId, 'player') +
+              npc.trustDelta;
+          if (gate.forbiddenMemoryId == npc.memoryId ||
+              (gate.minimumTrust != null && trust < gate.minimumTrust!) ||
+              (gate.maximumTrust != null && trust > gate.maximumTrust!)) {
+            diverged = true;
+          }
+        }
+      }
+    }
+    // Simulate the committed NPC outcome BEFORE choosing the next source
+    // scene. A changed knowledge, custody, goal or trust precondition makes
+    // the original book's next event impossible; never silently read on.
+    final graph = socialRulebook?.bookCausality;
+    if (!diverged && graph != null) {
+      final candidate = WorldState(
+        sceneId: _state.sceneId,
+        revision: _state.revision + 1,
+        tick: time,
+        stats: stats,
+        inventory: inventory,
+        flags: flags,
+        knowledge: knowledge,
+      );
+      final hypothetical = WorldEvent.create(
+        sequence: candidate.revision,
+        actionId: actionId,
+        actor: actor,
+        sceneId: _state.sceneId,
+        choiceId: FreeformActionDraft.reservedChoice,
+        nextSceneId: candidate.sceneId,
+        blueprintHash: blueprint.blueprintHash,
+        previousHash: _events.isEmpty ? null : _events.last.hash,
+        beforeStateHash: _state.stateHash,
+        afterStateHash: candidate.stateHash,
+        freeform: draft,
+      );
+      final trial = fork();
+      trial._state = candidate;
+      trial._events.add(hypothetical);
+      trial._byAction[actionId] = hypothetical;
+      final updated = NpcSocialLedger.inspect(trial, socialRulebook!);
+      final visited = {
+        blueprint.entrySceneId,
+        ...trial.events.map((event) => event.sceneId),
+        ...trial.events.map((event) => event.nextSceneId),
+      };
+      final sourcePaths = blueprint.scenes[_state.sceneId]!.choices;
+      if ((sourcePaths.isNotEmpty &&
+          sourcePaths.every((choice) =>
+              !graph.permits(choice.nextSceneId, candidate,
+                  updated, visited))) ||
+          graph.breaksAnUnavoidableFuture(candidate, updated, visited)) {
+        diverged = true;
+      }
+    }
+    // An alternate plot is a causal chain, not an unconnected sequence of
+    // generated paragraphs. Validate plans and participants against replayed
+    // history and reviewed NPC contact before publishing any world event.
+    final priorPlot = alternatePlot;
+    final currentSocial = socialRulebook == null ? null :
+        NpcSocialLedger.inspect(this, socialRulebook!);
+    final knownNpc = <String>{
+      if (socialRulebook != null)
+        for (final witness in socialRulebook!.witnesses)
+          if (witness.sceneId == _state.sceneId &&
+              witness.mode == NpcWitnessMode.present)
+            witness.actorId,
+      if (currentSocial != null)
+        for (final npc in blueprint.actors.difference({'player'}))
+          if (currentSocial.memoriesFor(npc).isNotEmpty) npc,
+    };
+    final beat = draft.plotBeat;
+    final currentLeadGoal = beat == null || currentSocial == null ||
+        beat.leadActorId == 'player' ? null :
+        currentSocial.currentGoal(beat.leadActorId);
+    final autoGoal = beat == null || socialRulebook == null ? null :
+        (socialRulebook!.automaticReactions
+            .where((reaction) => reaction.sceneId == _state.sceneId &&
+                reaction.actorId == beat.leadActorId &&
+                contact != null &&
+                reaction.activated(contact,
+                    (currentSocial?.directedScore(contact.actorId,
+                          'player') ?? 0) + contact.trustDelta))
+            .map((reaction) => reaction.nextGoalId)
+            .firstOrNull);
+    final beatReason = AlternatePlotLedger.checkProposal(
+      beat: beat, previous: priorPlot, blueprint: blueprint,
+      sceneId: _state.sceneId, diverged: diverged,
+      plotIntent: draft.plotIntent, encounteredActorIds: knownNpc,
+      currentLeadGoal: currentLeadGoal,
+      offeredLeadGoal: contact?.actorId == beat?.leadActorId
+          ? (autoGoal ?? contact?.goalId) : null,
+      draft: draft, beforeState: _state,
+    );
+    if (beatReason != null) return _denied(beatReason);
+    final alt = diverged
+        ? AlternateNarrativeScene(
+            id: 'gm_scene_' + (_state.revision + 1).toString(),
+            text: draft.narration,
+            terminal: draft.plotIntent == 'end',
+          )
+        : null;
+    final next = WorldState(
+      sceneId: _state.sceneId,
+      revision: _state.revision + 1,
+      tick: time,
+      stats: stats,
+      inventory: inventory,
+      flags: flags,
+      knowledge: knowledge,
+      alternateScene: alt,
+    );
+    final event = WorldEvent.create(
+      sequence: next.revision,
+      actionId: actionId,
+      actor: actor,
+      sceneId: _state.sceneId,
+      choiceId: FreeformActionDraft.reservedChoice,
+      nextSceneId: next.sceneId,
+      blueprintHash: blueprint.blueprintHash,
+      previousHash: _events.isEmpty ? null : _events.last.hash,
+      beforeStateHash: _state.stateHash,
+      afterStateHash: next.stateHash,
+      freeform: draft,
+    );
+    if (socialRulebook != null) {
+      final preview = fork();
+      preview._state = next;
+      preview._events.add(event);
+      preview._byAction[actionId] = event;
+      try {
+        NpcSocialLedger.inspect(preview, socialRulebook!);
+        AlternatePlotLedger.replay(preview.events);
+      } on FormatException {
+        return _denied('npc_social_conflict');
+      }
+    }
+    _state = next;
     _events.add(event);
     _byAction[actionId] = event;
     return DecisionResult(
@@ -484,12 +787,19 @@ class StoryWorld {
     final world = StoryWorld(blueprint, socialRulebook: socialRulebook);
     for (final raw in recordedEvents) {
       final expected = WorldEvent.fromJson(raw);
-      final result = world.apply(
-        actionId: expected.actionId,
-        choiceId: expected.choiceId,
-        actor: expected.actor,
-        expectedRevision: expected.sequence - 1,
-      );
+      final result = expected.freeform == null
+          ? world.apply(
+              actionId: expected.actionId,
+              choiceId: expected.choiceId,
+              actor: expected.actor,
+              expectedRevision: expected.sequence - 1,
+            )
+          : world.applyFreeform(
+              actionId: expected.actionId,
+              draft: expected.freeform!,
+              actor: expected.actor,
+              expectedRevision: expected.sequence - 1,
+            );
       if (!result.applied ||
           canonicalJson(result.event!.toJson()) !=
               canonicalJson(expected.toJson())) {

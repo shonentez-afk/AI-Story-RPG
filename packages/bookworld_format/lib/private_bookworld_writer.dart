@@ -1,5 +1,7 @@
 import 'dart:convert';
 import 'rich_scene_dialogue.dart';
+import 'npc_social_contract.dart';
+import 'npc_dialogue_knowledge.dart';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -364,6 +366,11 @@ CREATE TABLE templates(template_id TEXT PRIMARY KEY,
 }
 
 
+/// Shared label for the independent v5 writer/reader review contract.
+abstract final class ReviewedLiteralCanonReviewFormat {
+  static const format = 'ai_story_literal_canon_review_v1';
+}
+
 /// Native v3 writer. Shares the exact source, SQLite and ZIP implementation
 /// with the accepted v2 writer; the independent *rich* importer is the final
 /// authority. No Python, network request or human-supplied manifest is needed.
@@ -377,8 +384,18 @@ class RichPrivateBookworldWriter {
     required Map<String, dynamic> blueprint,
     required Map<String, dynamic> provenance,
     required Map<String, dynamic> sourceIndex,
+    /// v5 literal CANON uses the same signed SQLite and ZIP writer.
+    bool expanded = false,
+    bool literalCanon = false,
   }) {
-    final checked = StoryBlueprint.fromJson(blueprint);
+    if (literalCanon && !expanded) {
+      throw const FormatException('CANON v5 requires an explicit format');
+    }
+    final checked = StoryBlueprint.fromJson(
+        blueprint, allowReviewedCanon: literalCanon);
+    if (checked.isReviewedCanon != literalCanon) {
+      throw const FormatException('No silent promotion to literary CANON');
+    }
     if (checked.rightsStatus != 'private_adaptation' ||
         checked.sourceFingerprint == null) {
       throw const FormatException('Разрешена только частная RPG по книге');
@@ -402,13 +419,20 @@ class RichPrivateBookworldWriter {
     }
     final manifest = <String, dynamic>{
       'format': 'ai_story_bookworld',
-      'format_version': 3,
+      'format_version': literalCanon ? 5 : (expanded ? 4 : 3),
       if (provenance.containsKey('npc_knowledge'))
         'npc_knowledge_format':
             RichPrivateBookworldImporter.npcKnowledgeFormat,
       if (provenance.containsKey('npc_social'))
         'npc_social_format': provenance['npc_social'] is Map
             ? (provenance['npc_social'] as Map)['format'] : null,
+      if (expanded && provenance.containsKey('initial_state_review'))
+        'initial_state_review_format': RichPrivateBookworldImporter.initialStateReviewFormat,
+      if (literalCanon) 'canon_review_format':
+          ReviewedLiteralCanonReviewFormat.format,
+      if (literalCanon && provenance.containsKey('canon_causality'))
+        'canon_causality_format':
+            (provenance['canon_causality'] as Map)['format'],
       'bookworld_id': checked.bookId,
       'source_fingerprint': checked.sourceFingerprint,
       'title': checked.title,
@@ -418,10 +442,13 @@ class RichPrivateBookworldWriter {
       'scenario_format': 'ai_story_blueprint_v1',
       'scenario_format_version': 1,
       'content_capabilities': blueprint['supported_modes'],
-      'build_status': 'private_rich_structural',
+      'build_status': literalCanon ? 'private_literal_canon_reviewed'
+          : (expanded ? 'private_extended_structural' : 'private_rich_structural'),
       'rights_status': 'private_use_only',
       'build_tool': {
-        'name': 'ai_story_private_rich_bookworld', 'version': '3.0',
+        'name': literalCanon ? 'ai_story_literal_canon_bookworld'
+            : (expanded ? 'ai_story_private_extended_bookworld' : 'ai_story_private_rich_bookworld'),
+        'version': literalCanon ? '5.0' : (expanded ? '4.0' : '3.0'),
       },
       'model_provenance': provenance['model_provenance'],
       'hashes': hashes,
@@ -437,7 +464,8 @@ class RichPrivateBookworldWriter {
         verified.sourceFingerprint != checked.sourceFingerprint ||
         verified.blueprint.blueprintHash != checked.blueprintHash ||
         verified.canDistributePublicly ||
-        verified.requiresNetwork) {
+        verified.requiresNetwork ||
+        verified.formatVersion != (literalCanon ? 5 : (expanded ? 4 : 3))) {
       throw const FormatException('Нативная сборка v3 не прошла самопроверку');
     }
     return package;
@@ -453,9 +481,85 @@ class RichPrivateBookworldWriter {
     String heroDescription =
         'Участник частной игровой адаптации. Поступки сохраняются в журнале.',
     Map<String, String> sceneTitles = const {},
+    Map<String, dynamic>? reviewedNpcArc,
   }) {
     final original = const PrivateBookworldImporter()
         .inspect(verifiedPrivateV2Archive);
+    final entries = BworldZipV1.readPrivate(verifiedPrivateV2Archive);
+    final bp = Map<String, dynamic>.from(
+        jsonDecode(utf8.decode(entries['scenario/blueprint.json']!)) as Map);
+    final origin = Map<String, dynamic>.from(
+        jsonDecode(utf8.decode(entries['source/provenance.json']!)) as Map);
+    return _buildReviewedSourceMaps(
+      bp: bp,
+      origin: origin,
+      sourceIndex: sourceIndex,
+      heroName: heroName,
+      heroDescription: heroDescription,
+      sceneTitles: sceneTitles,
+      reviewedNpcArc: reviewedNpcArc,
+      originHash: original.archiveSha256,
+      sourceFingerprint: original.sourceFingerprint,
+      expanded: false,
+    );
+  }
+
+  /// Build source-reviewed extended v4 DIRECTLY from the same M2c translator
+  /// and preflight as v3. An extended draft cannot pass through v2 (192
+  /// scenes), but no literary claim, quote or causal effect is trusted.
+  ///
+  /// This is not a new scenario authoring implementation: both versioned
+  /// paths call the single private _buildReviewedSourceMaps converter below.
+  Uint8List buildReviewedExtended({
+    required Map<String, dynamic> blueprint,
+    required Map<String, dynamic> provenance,
+    required Map<String, dynamic> sourceIndex,
+    String heroName = 'Игрок',
+    String heroDescription =
+        'Участник частной игровой адаптации. Поступки сохраняются в журнале.',
+    Map<String, String> sceneTitles = const {},
+    Map<String, dynamic>? reviewedNpcArc,
+  }) {
+    final checked = StoryBlueprint.fromJson(blueprint);
+    if (checked.rightsStatus != 'private_adaptation' ||
+        checked.sourceFingerprint == null ||
+        provenance['format'] != 'ai_story_private_provenance_v1' ||
+        provenance['source_fingerprint'] != checked.sourceFingerprint ||
+        provenance['bookworld_id'] != checked.bookId) {
+      throw const FormatException('Расширенный сценарий не привязан к проверенной редакции книги');
+    }
+    final salt = sha256.convert(utf8.encode('v4|' +
+        canonicalJson(blueprint) + '|' + canonicalJson(provenance))).toString();
+    // Copy nested authoring JSON so no successful or rejected compilation
+    // mutates an upstream checkpoint.
+    return _buildReviewedSourceMaps(
+      bp: Map<String, dynamic>.from(
+          jsonDecode(jsonEncode(blueprint)) as Map),
+      origin: Map<String, dynamic>.from(
+          jsonDecode(jsonEncode(provenance)) as Map),
+      sourceIndex: sourceIndex,
+      heroName: heroName,
+      heroDescription: heroDescription,
+      sceneTitles: sceneTitles,
+      reviewedNpcArc: reviewedNpcArc,
+      originHash: salt,
+      sourceFingerprint: checked.sourceFingerprint!,
+      expanded: true,
+    );
+  }
+
+  Uint8List _buildReviewedSourceMaps({
+    required Map<String, dynamic> bp,
+    required Map<String, dynamic> origin,
+    required Map<String, dynamic> sourceIndex,
+    required String heroName,
+    required String heroDescription,
+    required Map<String, String> sceneTitles,
+    required Map<String, dynamic>? reviewedNpcArc,
+    required String originHash,
+    required String sourceFingerprint,
+    required bool expanded,
+  }) {
     if (heroName.trim().isEmpty || heroName.length > 120 ||
         heroDescription.trim().isEmpty || heroDescription.length > 1200 ||
         heroName.contains(RegExp(r'[\x00-\x1f\x7f]')) ||
@@ -463,11 +567,6 @@ class RichPrivateBookworldWriter {
       throw const FormatException('Некорректные сведения выбранного героя');
     }
 
-    final entries = BworldZipV1.readPrivate(verifiedPrivateV2Archive);
-    final bp = Map<String, dynamic>.from(
-        jsonDecode(utf8.decode(entries['scenario/blueprint.json']!)) as Map);
-    final origin = Map<String, dynamic>.from(
-        jsonDecode(utf8.decode(entries['source/provenance.json']!)) as Map);
     final state = Map<String, dynamic>.from(bp['initial_state'] as Map);
     if ((bp['items'] as List).isNotEmpty ||
         (bp['facts'] as List).isNotEmpty ||
@@ -492,9 +591,9 @@ class RichPrivateBookworldWriter {
           !proposed.contains(RegExp(r'[\x00-\x1f\x7f]'));
       names[sceneId] = safe ? proposed : 'Сцена ' + (i + 1).toString();
     }
-    final key = sha256.convert(utf8.encode(original.archiveSha256 +
+    final key = sha256.convert(utf8.encode(originHash +
         '|' + heroName.trim() + '|' + canonicalJson(names))).toString();
-    final newId = 'rich_' + original.sourceFingerprint.substring(0, 12) +
+    final newId = 'rich_' + sourceFingerprint.substring(0, 12) +
         '_' + key.substring(0, 12);
     bp['book_id'] = newId;
     origin['bookworld_id'] = newId;
@@ -531,10 +630,242 @@ class RichPrivateBookworldWriter {
       'scene_names': names,
       'scene_dialogues': dialogues,
     };
+    if (reviewedNpcArc != null) {
+      _applyReviewedBookwideNpcArc(bp, origin, reviewedNpcArc);
+    }
     return build(
       blueprint: bp,
       provenance: origin,
       sourceIndex: sourceIndex,
+      expanded: expanded,
+    );
+  }
+
+
+
+  /// Enhances the SAME independently validated v2->v3 compilation. There
+  /// is no parallel engine, remote LLM request, or guessed character ID.
+  /// An app-side reviewer has already checked a literal source mention;
+  /// both quote digests are checked AGAIN against the signed scene origins.
+  void _applyReviewedBookwideNpcArc(
+      Map<String, dynamic> blueprint,
+      Map<String, dynamic> provenance,
+      Map<String, dynamic> review) {
+    const keys = {
+      'actor_id', 'display_name', 'first_scene_id', 'first_choice_id',
+      'second_scene_id', 'second_choice_id', 'first_quote_sha256',
+      'second_quote_sha256', 'player_line', 'npc_line', 'user_confirmed',
+    };
+    if (review.keys.toSet().difference(keys).isNotEmpty ||
+        keys.difference(review.keys.toSet()).isNotEmpty ||
+        review['user_confirmed'] != true ||
+        review['actor_id'] is! String ||
+        !CharacterId.isValidNpc(review['actor_id'] as String)) {
+      throw const FormatException('Подмена подтверждённого NPC в книге.');
+    }
+    final actor = review['actor_id'] as String;
+    final name = review['display_name'];
+    final playerLine = review['player_line'];
+    final npcLine = review['npc_line'];
+    if (name is! String || playerLine is! String || npcLine is! String ||
+        !RegExp(r'^[А-ЯЁA-Z][А-Яа-яЁёA-Za-z0-9 .-]{0,49}$',
+            unicode: true).hasMatch(name) ||
+        playerLine.isEmpty || npcLine.isEmpty ||
+        playerLine.length > 250 || npcLine.length > 250 ||
+        playerLine != playerLine.trim() ||
+        npcLine != npcLine.trim() ||
+        playerLine.contains(RegExp(r'[\x00-\x1f\x7f«»]')) ||
+        npcLine.contains(RegExp(r'[\x00-\x1f\x7f«»]'))) {
+      throw const FormatException('Не подтверждены игровые реплики NPC.');
+    }
+    final scenes = {
+      for (final raw in blueprint['scenes'] as List)
+        (raw as Map<String, dynamic>)['id'] as String: raw,
+    };
+    final origins = {
+      for (final raw in provenance['scene_origins'] as List)
+        (raw as Map<String, dynamic>)['scene_id'] as String: raw,
+    };
+    Map<String, dynamic> scene(String key, String quote) {
+      final id = review[key];
+      final digest = review[quote];
+      if (id is! String || digest is! String ||
+          !RegExp(r'^[a-f0-9]{64}$').hasMatch(digest)) {
+        throw const FormatException('Некорректная ссылка на встречу NPC.');
+      }
+      final original = origins[id];
+      final refs = original?['source_refs'];
+      if (original?['origin'] != 'SOURCE_PASSAGE' || refs is! List ||
+          !refs.any((r) => r is Map &&
+              r['quote_sha256'] == digest &&
+              r['chapter_index'] == original?['chapter_index'])) {
+        throw const FormatException(
+            'Знание NPC не связано с подтверждённой цитатой.');
+      }
+      final found = scenes[id];
+      if (found is! Map<String, dynamic>) {
+        throw const FormatException('Нет исходной сцены встречи NPC.');
+      }
+      return found;
+    }
+    final first = scene('first_scene_id', 'first_quote_sha256');
+    final second = scene('second_scene_id', 'second_quote_sha256');
+    final firstId = first['id'] as String;
+    final secondId = second['id'] as String;
+    if (firstId == secondId ||
+        (origins[firstId]!['chapter_index'] as int) >
+            (origins[secondId]!['chapter_index'] as int)) {
+      throw const FormatException('Диалог NPC расположен раньше знакомства.');
+    }
+    Map<String, dynamic> choice(Map<String, dynamic> scene, String key) {
+      final id = review[key];
+      if (id is! String) {
+        throw const FormatException('Нет решения для диалога NPC.');
+      }
+      final matches = (scene['choices'] as List)
+          .where((c) => (c as Map)['id'] == id).toList();
+      if (matches.length != 1) {
+        throw const FormatException('Нет исходного действия NPC.');
+      }
+      return matches.single as Map<String, dynamic>;
+    }
+    final listen = choice(first, 'first_choice_id');
+    final reply = choice(second, 'second_choice_id');
+    if (!(listen['id'] as String).endsWith('_npc_listen') ||
+        !(reply['id'] as String).endsWith('_npc_reply') ||
+        (listen['next_scene_id'] as String) != secondId) {
+      throw const FormatException('NPC-продолжение не связано с первым ходом.');
+    }
+    const fact = 'bookwide_npc_contact_fact';
+    const memory = 'bookwide_npc_witnessed_contact';
+    (listen['effects'] as List).add({
+      'op': 'learn_fact', 'id': fact, 'actor': actor,
+    });
+    (reply['conditions'] as List).add({
+      'op': 'knows_fact', 'id': fact, 'actor': actor,
+    });
+    blueprint['actors'] = ['player', actor];
+    blueprint['facts'] = [fact];
+    final state = blueprint['initial_state'] as Map<String, dynamic>;
+    final knowledge = Map<String, dynamic>.from(state['knowledge'] as Map);
+    knowledge[actor] = <String>[];
+    state['knowledge'] = knowledge;
+
+    final firstQuote = review['first_quote_sha256'] as String;
+    final secondQuote = review['second_quote_sha256'] as String;
+    provenance['npc_knowledge'] = {
+      'format': RichPrivateBookworldImporter.npcKnowledgeFormat,
+      'review_scope': 'user_declared_private_game_fiction',
+      'source_fingerprint': blueprint['source_fingerprint'],
+      'user_confirmed': true, 'literary_canon_verified': false,
+      'grants': [
+        {
+          'scene_id': firstId, 'choice_id': listen['id'],
+          'actor_id': actor, 'fact_id': fact,
+          'source_quote_sha256': firstQuote,
+        },
+      ],
+    };
+    provenance['npc_social'] = {
+      'format': RichNpcSocialContract.choiceGateFormat,
+      'review_scope': 'user_declared_private_game_fiction',
+      'source_fingerprint': blueprint['source_fingerprint'],
+      'user_confirmed': true, 'literary_canon_verified': false,
+      'witnesses': [
+        {'scene_id': firstId, 'actor_id': actor, 'mode': 'present',
+         'source_quote_sha256': firstQuote},
+      ],
+      'rules': [
+        {
+          'memory_id': memory, 'scene_id': firstId,
+          'choice_id': listen['id'], 'observer_id': actor,
+          'kind': 'witnessed', 'related_actor_id': 'player',
+          'relationship_delta': 1, 'max_triggers': 1,
+          'source_quote_sha256': firstQuote,
+        },
+      ],
+      'choice_gates': [
+        {
+          'scene_id': secondId, 'choice_id': reply['id'],
+          'actor_id': actor, 'required_memory_id': memory,
+          'minimum_trust_to_player': 1,
+          'source_quote_sha256': secondQuote,
+        },
+      ],
+    };
+
+    // Exactly TWO user-reviewed fictional spoken lines. Other dialogue
+    // cannot be silently assigned an NPC identity from its printed name.
+    final presentation =
+        provenance['presentation'] as Map<String, dynamic>;
+    final signed = presentation['scene_dialogues'] as Map<String, dynamic>;
+    if (signed.isNotEmpty) {
+      throw const FormatException(
+          'Другие реплики книги требуют отдельной проверки авторства.');
+    }
+    second['text'] = (second['text'] as String) +
+        '\n\nЧАСТНЫЙ ИГРОВОЙ ДИАЛОГ, НЕ ДОСЛОВНЫЙ ТЕКСТ КНИГИ:\n' +
+        'Игрок: «' + playerLine + '»\n' +
+        name + ': «' + npcLine + '»';
+    final script = RichSceneDialogue.presentationFor(
+        second['text'] as String);
+    if (script == null) {
+      throw const FormatException('Диалог не соответствует формату реплик.');
+    }
+    signed[secondId] = script;
+    final turns = (script['turns'] as List)
+        .map((row) => row as Map<String, Object?>).toList();
+    final names = <int>[];
+    for (var i = 0; i < turns.length; i++) {
+      if (turns[i]['speaker'] != null) names.add(i);
+    }
+    if (names.length != 2 ||
+        turns[names[0]]['speaker'] != 'Игрок' ||
+        turns[names[1]]['speaker'] != name) {
+      throw const FormatException('Два участника диалога не подтверждены.');
+    }
+    presentation['fact_names'] = {fact: 'Факт игрового знакомства с NPC'};
+    presentation['scene_dialogue_knowledge'] = {
+      secondId: [
+        {
+          'turn_index': names[0], 'speaker': 'Игрок',
+          'actor_id': 'player', 'required_fact_ids': <String>[],
+        },
+        {
+          'turn_index': names[1], 'speaker': name,
+          'actor_id': actor, 'required_fact_ids': [fact],
+          'required_social_memory_id': memory,
+          'minimum_trust_to_player': 1,
+          'required_prior_choice_id': listen['id'],
+          'source_quote_sha256': firstQuote,
+          'private_fiction_confirmed': true,
+        },
+      ],
+    };
+
+    // A changed character/reply is a NEW private world, never a silent
+    // mutation of an installed old campaign or its event history.
+    final oldId = blueprint['book_id'] as String;
+    final digest = sha256.convert(
+        utf8.encode(oldId + '|' + canonicalJson(review))).toString();
+    final newId = oldId + '_npc_' + digest.substring(0, 12);
+    blueprint['book_id'] = newId;
+    provenance['bookworld_id'] = newId;
+    final checked = StoryBlueprint.fromJson(blueprint);
+    final social = RichNpcSocialContract.inspect(
+      provenance, {
+        'npc_social_format': RichNpcSocialContract.choiceGateFormat,
+      }, checked,
+    );
+    RichNpcDialogueKnowledge.validate(
+      presentation['scene_dialogue_knowledge'] as Map<String, dynamic>,
+      checked, signed,
+      socialRules: social,
+      sceneOrigins: Map<String, dynamic>.from(origins),
+    );
+    RichNpcDialogueKnowledge.auditExecutableRoutes(
+      presentation['scene_dialogue_knowledge'] as Map<String, dynamic>,
+      checked, socialRules: social,
     );
   }
 

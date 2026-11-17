@@ -1,17 +1,8 @@
 import 'dart:convert';
 import 'game_progress.dart';
+import 'package:rpg_gameplay/rpg_gameplay.dart' show GameSaveRecord;
+export 'package:rpg_gameplay/rpg_gameplay.dart' show GameSaveRecord;
 import 'package:shared_preferences/shared_preferences.dart';
-
-/// A snapshot and the decisions that led to it are stored atomically.
-class GameSaveRecord {
-  const GameSaveRecord(this.snapshot, this.journal,
-      [this.progress = const GameProgress(), this.rulesVersion = 0]);
-  final String snapshot;
-  final List<String> journal;
-  final GameProgress progress;
-  /// 0 = original pilot choices; 1 = inventory-gated pilot choices.
-  final int rulesVersion;
-}
 
 /// Legacy single-slot format. Read/write retained for older players.
 /// New independent campaigns share this game's envelope codec.

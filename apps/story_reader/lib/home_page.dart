@@ -8,6 +8,7 @@ import 'book_reader.dart';
 import 'source_index_preview_page.dart';
 import 'book_rpg_start_page.dart';
 import 'world_library_gateway.dart';
+import 'world_import_review_flow.dart';
 import 'world_campaigns_page.dart';
 import 'world_play_page.dart';
 import 'campaign_store.dart';
@@ -476,9 +477,11 @@ class _LibraryPageState extends State<LibraryPage> {
             'Импорт игровых миров недоступен в этом режиме',
           );
         }
-        final installed = await gateway.install(bytes);
+        final installed = await WorldImportReviewFlow.confirmAndInstall(
+            context: context, archive: bytes, gateway: gateway);
+        if (installed == null) return;
         await _refreshWorlds();
-        if (mounted) _error('Добавлен игровой мир: ' + installed.title);
+        if (mounted) _error('Добавлена RPG: ' + installed.title);
       } else {
         // TXT/FB2/FB2.ZIP may be up to 20 MiB. Parsing off the UI isolate prevents
         // long synchronous frames on both Android and Windows.
@@ -624,7 +627,7 @@ class _LibraryPageState extends State<LibraryPage> {
                     key: const ValueKey('library-import'),
                     onPressed: _working ? null : _import,
                     icon: const Icon(Icons.library_add_outlined),
-                    label: const Text('Добавить книгу'),
+                    label: const Text('Добавить книгу или RPG'),
                   ),
                 ),
                 const SizedBox(height: 6),
@@ -841,14 +844,14 @@ class _LibraryPageState extends State<LibraryPage> {
                                 onPressed: _working ? null :
                                     () => _quickRpg(entry),
                                 icon: const Icon(Icons.play_arrow),
-                                label: const Text('Играть по книге'),
+                                label: const Text('Создать RPG'),
                               ),
                               OutlinedButton.icon(
                                 key: ValueKey('library-prepare-${entry.id}'),
                                 onPressed: _working ? null :
                                     () => _prepareBook(entry),
                                 icon: const Icon(Icons.auto_awesome_outlined),
-                                label: const Text('Подготовить к RPG'),
+                                label: const Text('Расширенный редактор'),
                               ),
                             ],
                           ),

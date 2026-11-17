@@ -58,7 +58,7 @@ void main() {
     expect(button, findsOneWidget);
     expect(find.byTooltip('Удалить книгу'), findsOneWidget);
     expect(find.text('Читать'), findsOneWidget);
-    expect(find.text('Подготовить к RPG'), findsOneWidget);
+    expect(find.text('Расширенный редактор'), findsOneWidget);
     final widget = tester.widget<IconButton>(button);
     expect(widget.onPressed, isNotNull);
     expect(widget.icon, isA<Icon>());

@@ -1,0 +1,753 @@
+import 'dart:io';
+
+import 'package:ai_story_reader/book_import.dart';
+import 'package:ai_story_reader/book_source_index.dart';
+import 'package:ai_story_reader/bookwide_act_planner.dart';
+import 'package:ai_story_reader/bookwide_campaign_contract.dart';
+import 'package:ai_story_reader/cross_act_consequence_gate.dart';
+import 'package:ai_story_reader/bookwide_npc_arc.dart';
+import 'package:ai_story_reader/npc_editorial_notebook.dart';
+import 'package:ai_story_reader/reviewed_hero_role.dart';
+import 'package:ai_story_reader/source_character_dossiers.dart';
+import 'package:ai_story_reader/source_evidence_graph.dart';
+import 'package:ai_story_reader/source_relation_review.dart';
+import 'package:ai_story_reader/source_semantic_catalog.dart';
+import 'package:ai_story_reader/source_semantic_editorial_review.dart';
+import 'package:ai_story_reader/bookwide_source_encounters.dart';
+import 'package:ai_story_reader/bookwide_storyplan_composer.dart';
+import 'package:ai_story_reader/multi_act_trial_compiler.dart';
+import 'package:ai_story_reader/narrative_book_model.dart';
+import 'package:ai_story_reader/story_plan.dart';
+import 'package:ai_story_reader/source_analysis_checkpoint_repository.dart';
+import 'package:ai_story_reader/source_semantic_provider.dart';
+import 'package:ai_story_reader/story_plan_dilemma_generator.dart';
+import 'package:ai_story_reader/zai_auto_whole_book_analysis.dart';
+import 'package:ai_story_reader/zai_semantic_preview.dart';
+import 'package:ai_story_reader/zai_whole_book_event_outline.dart';
+import 'package:bookworld_format/bookworld_format.dart';
+import 'package:campaign_manager/campaign_manager.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:story_core/story_core.dart';
+
+/// Synthetic source: six acts, three distinct source windows per chapter,
+/// four independently source-verified proposals per window. No private FB2,
+/// API calls, model inference, or claims of literary truth.
+BookSourceIndex _longIndex({int chapters = 6, bool withNpc = false}) =>
+    BookSourceIndexer.index(ImportedBook(
+  title: 'Шесть актов — нагрузочная проверка причинных событий',
+  author: 'Синтетический стенд',
+  chapters: [
+    for (var chapter = 0; chapter < chapters; chapter++)
+      List.filled(350, withNpc
+          ? 'Артем нашёл ключ у ворот. '
+          : 'Путник нашёл ключ у ворот. ').join(),
+  ],
+));
+
+Future<NarrativeBookModel> _longBook(BookSourceIndex index) async {
+  final manifest = ZaiWholeBookConsentManifest.fromIndex(index);
+  expect(manifest.plannedRequests, index.chapterCount * 3);
+  final analysis = ZaiAutoWholeBookAnalysis(
+    repository: MemorySourceAnalysisCheckpointRepository(),
+    preview: (source, window, token, includeTitle) async {
+      // Four candidates in every independently reviewed window: under the
+      // real eight-per-window bound. All quote offsets point into its actual
+      // first source chunk, never into flattened concatenated window text.
+      final chunk = window.chunks.first;
+      final candidates = [
+        for (var i = 0; i < 4; i++)
+          SemanticCandidate.propose(
+            source, chunk,
+            category: SemanticCategory.event,
+            startUtf16: chunk.startUtf16 + i * 86,
+            endUtf16: chunk.startUtf16 + i * 86 + 60,
+            label: 'Предложенное событие',
+            uncertainty: 'Смысл и время внутри мира не подтверждены.',
+          ),
+      ];
+      return ZaiSemanticPreviewResult(
+        batch: SemanticCandidateBatch(
+          providerId: ZaiSemanticPreviewService.providerId,
+          providerVersion: ZaiSemanticPreviewService.providerVersion,
+          sourceFingerprint: source.sourceFingerprint,
+          chunkIds: [for (final c in window.chunks) c.id],
+          candidates: candidates,
+        ),
+        totalSuggestions: candidates.length,
+        rejectedCount: 0,
+        rejectedNonRussian: 0,
+      );
+    },
+  );
+  final review = await analysis.analyze(
+    index: index,
+    approvedManifestDigest: manifest.approvalDigest,
+    explicitWholeBookConsent: true,
+    maxWindowsPerRun: 64,
+  );
+  expect(review.complete, isTrue);
+  return NarrativeBookModel.fromExisting(
+    index: index,
+    outline: ZaiWholeBookEventOutline.build(review),
+  );
+}
+
+StoryDilemmaProposal _actProposal(NarrativeBookModel book, int chapter) {
+  final events = book.events.where(
+      (event) => event.source.chapterIndex == chapter).toList();
+  return StoryDilemmaProposal(
+    sourceFingerprint: book.sourceFingerprint,
+    setupEventId: events.first.id,
+    outcomeEventId: events.last.id,
+    kind: StoryDilemmaKind.disclosure,
+    dilemma: 'Выбрать самостоятельный путь или согласиться на условие',
+    acceptIntent: 'Принять условие добровольно',
+    refuseIntent: 'Отказаться от условия',
+    followupGoal: 'Проверить последствия принятого решения',
+    finishOriginalIntent: 'Исполнить обещание и продолжить путь',
+    originalEnding: 'Завершить исходный путь после согласия',
+    alternativeSearchGoal: 'Проверить другую дорогу',
+    searchIntent: 'Исследовать безопасную альтернативу',
+    alternativeDiscovery: 'Обнаружена иная вымышленная возможность',
+    useDiscoveryIntent: 'Использовать найденную возможность',
+    alternativeEnding: 'Завершить выбранный альтернативный путь',
+  );
+}
+
+void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
+  test('18 independently source-reviewed v4 acts retain EVERY persistent'
+      ' outcome, 216 playable source events, 17 cross-act obligations and'
+      ' SQLite save/replay across restart', () async {
+    final index = _longIndex(chapters: 18);
+    final book = await _longBook(index);
+    expect(book.events, hasLength(216));
+    final map = BookwideActPlanner.build(index: index, book: book);
+    expect(map.acts, hasLength(18));
+    final draft = BookwideStoryPlanComposer.compose(
+      index: index, book: book, bookMap: map, expanded: true,
+      actProposals: [
+        for (var i = 0; i < 18; i++) _actProposal(book, i),
+      ],
+    );
+    expect(draft.expanded, true);
+    expect(draft.parts, hasLength(18));
+    expect(draft.plan.flags.length, greaterThan(32));
+    // Formal proof counts only flags relevant to a FUTURE act. The actual
+    // 36 distinct outcome flags are not cleared from StoryWorld or saves.
+    expect(draft.formalAudit.counterexamples, isEmpty);
+    final continuation = CrossActConsequenceGate.applyReviewedActChain(
+      index: index, book: book, bookMap: map, draft: draft,
+      userConfirmedFictionalContinuity: true, expanded: true,
+    );
+    expect(continuation.hasEnforcedContinuity, true);
+    expect(continuation.impacts, hasLength(17));
+    expect(continuation.audit.counterexamples, isEmpty);
+
+    final extras = <String>{};
+    for (var act = 0; act < 18; act++) {
+      final eligible = BookwideSourceEncounters.eligibleForAct(
+        index: index, bookMap: map, draft: draft, partIndex: act,
+      );
+      expect(eligible, hasLength(10));
+      extras.addAll(eligible.map((event) => event.id));
+    }
+    expect(extras, hasLength(180));
+    final reviewed = <String>{
+      for (final part in draft.parts) ...[
+        part.setupEventId, part.outcomeEventId,
+      ],
+      ...extras,
+    };
+    expect(reviewed, hasLength(216));
+    final compiled = await MultiActTrialCompiler.compile(
+      index: index, book: book, bookMap: map, draft: draft,
+      continuity: continuation,
+      reviewedInteractiveEventIds: extras,
+      sourceEventIdsReviewedByUser: reviewed,
+      privateUseConfirmed: true,
+      fictionalTrialAcknowledged: true,
+      expanded: true,
+    );
+    expect(compiled.unrepresentedSourceEventIds, isEmpty);
+    expect(compiled.uncoveredSourceChapters, isEmpty);
+    expect(compiled.verifiedSourceChoices, 216);
+    expect(compiled.verifiedActBridges, 34);
+    expect(compiled.sourceEventsRepresented, 216);
+    final world = const RichPrivateBookworldImporter()
+        .inspect(compiled.archive);
+    expect(world.formatVersion, 4);
+    expect(world.blueprint.scenes.length, greaterThan(192));
+    expect(world.blueprint.initial.flags.length, 39);
+    expect(world.requiresNetwork, false);
+    expect(world.canDistributePublicly, false);
+
+    // The actual production SQLite coordinator does NOT use projected
+    // state. It records all 18 original outcomes, all 216 source passages,
+    // action IDs, hashes and exact event order, even after process restart.
+    final temp = await Directory.systemTemp.createTemp(
+        'ai-rpg-18-act-v4-proof-');
+    var revision = 0;
+    late String campaign;
+    late String beforeRestartHash;
+    try {
+      var store = BookworldCampaignStore.openPrivateDirectory(temp.path);
+      try {
+        final installed = store.installBookworld(compiled.archive);
+        campaign = store.createCampaign(installed.archiveHash);
+        for (var act = 1; act <= 18; act++) {
+          for (var event = 0; event < 10; event++) {
+            final suffix = event == 0 ? '' : '_${event + 1}';
+            final step = store.commitChoice(campaign,
+              actionId: 'extended_event_$revision',
+              choiceId: 'act_${act}_examine_source$suffix',
+              expectedRevision: revision);
+            expect(step.applied, isTrue,
+                reason: 'source event ${act}/${event}');
+            revision++;
+          }
+          for (final decision in [
+            'act_${act}_accept_offer',
+            'act_${act}_honor_condition',
+            if (act < 18) 'act_${act}_continue_original',
+          ]) {
+            final step = store.commitChoice(campaign,
+              actionId: 'extended_event_$revision',
+              choiceId: decision,
+              expectedRevision: revision);
+            expect(step.applied, isTrue, reason: decision);
+            revision++;
+          }
+        }
+        expect(revision, 233);
+        final saved = store.loadCampaign(campaign);
+        expect(saved.coordinator.isTerminal, true);
+        for (var act = 1; act <= 18; act++) {
+          expect(saved.coordinator.state.flags[
+            'act_${act}_original_outcome'], isTrue);
+          expect(saved.coordinator.state.flags[
+            'act_${act}_alternate_outcome'], isFalse);
+        }
+        beforeRestartHash = saved.coordinator.state.stateHash;
+        expect(saved.metadata.revision, revision);
+      } finally {
+        store.close();
+      }
+      store = BookworldCampaignStore.openPrivateDirectory(temp.path);
+      try {
+        final saved = store.loadCampaign(campaign);
+        expect(saved.coordinator.isTerminal, true);
+        expect(saved.metadata.revision, revision);
+        expect(saved.coordinator.state.stateHash, beforeRestartHash);
+        for (var act = 1; act <= 18; act++) {
+          expect(saved.coordinator.state.flags[
+            'act_${act}_original_outcome'], isTrue);
+        }
+      } finally {
+        store.close();
+      }
+    } finally {
+      await temp.delete(recursive: true);
+    }
+  });
+
+  test('60 reviewed interactive events across six acts compile, each choice '
+      'is playable, and a 77-step SQLite campaign survives reopening',
+      () async {
+    final index = _longIndex();
+    final book = await _longBook(index);
+    expect(book.events, hasLength(72));
+    final map = BookwideActPlanner.build(index: index, book: book);
+    expect(map.acts, hasLength(6));
+    for (final act in map.acts) {
+      expect(act.events, hasLength(12));
+    }
+    final draft = BookwideStoryPlanComposer.compose(
+      index: index,
+      book: book,
+      bookMap: map,
+      actProposals: [for (var i = 0; i < 6; i++) _actProposal(book, i)],
+    );
+    expect(draft.parts, hasLength(6));
+    final extras = <String>{};
+    for (var act = 0; act < 6; act++) {
+      final eligible = BookwideSourceEncounters.eligibleForAct(
+        index: index, bookMap: map, draft: draft, partIndex: act,
+      );
+      expect(eligible, hasLength(10));
+      extras.addAll(eligible.map((e) => e.id));
+    }
+    expect(extras.length, 60);
+    expect(extras.length, greaterThan(48));
+
+    final plan = BookwideSourceEncounters.attach(
+      index: index, book: book, bookMap: map, draft: draft,
+      plan: draft.plan, reviewedEventIds: extras,
+      userConfirmedPrivateAdaptation: true,
+    );
+    expect(plan.situations.length, draft.plan.situations.length + 60);
+    final coverage = BookwideActPlanner.compareWithStoryPlan(
+      bookMap: map, book: book, story: plan,
+    );
+    expect(coverage.referencedEvents, 72);
+    expect(coverage.allDetectedEventsReferenced, isTrue);
+    expect(coverage.allChaptersCovered, isTrue);
+    final requiredActions =
+        BookwideSourceEncounters.executableChoicesForReviewedEvents(
+      plan: plan, reviewedEventIds: extras,
+    );
+    expect(requiredActions.length, 60);
+    expect(requiredActions.values.toSet().length, 60);
+    final contract = BookwideCampaignContract.fromPlan(
+      book: book, draft: draft, plan: plan,
+      reviewedInteractiveEventIds: extras,
+    );
+    expect(contract.sourceDecisions.length, 72);
+    expect(contract.bridgeDecisions.length, 10);
+    expect(contract.actEntryScenes, hasLength(6));
+
+    final reviewedQuotes = <String>{
+      for (final part in draft.parts) ...[
+        part.setupEventId, part.outcomeEventId,
+      ],
+      ...extras,
+    };
+    expect(reviewedQuotes.length, 72);
+    final compiled = await MultiActTrialCompiler.compile(
+      index: index, book: book, bookMap: map, draft: draft,
+      reviewedInteractiveEventIds: extras,
+      sourceEventIdsReviewedByUser: reviewedQuotes,
+      privateUseConfirmed: true,
+      fictionalTrialAcknowledged: true,
+    );
+    expect(compiled.sourceEventsRepresented, 72);
+    expect(compiled.sourceQuoteCount, 72);
+    expect(compiled.verifiedSourceChoices, 72);
+    expect(compiled.verifiedActBridges, 10);
+    expect(compiled.isFullBookAdaptation, isFalse);
+    expect(compiled.requiresCloudToPlay, isFalse);
+    // The same source-locked 72-event campaign can be explicitly compiled
+    // as v4 without altering the legacy v3 tests, NPC gates or core engine.
+    final extendedDraft = BookwideStoryPlanComposer.compose(
+      index: index,
+      book: book,
+      bookMap: map,
+      expanded: true,
+      actProposals: [for (var i = 0; i < 6; i++) _actProposal(book, i)],
+    );
+    await expectLater(MultiActTrialCompiler.compile(
+      index: index, book: book, bookMap: map, draft: extendedDraft,
+      reviewedInteractiveEventIds: extras,
+      sourceEventIdsReviewedByUser: reviewedQuotes,
+      privateUseConfirmed: true,
+      fictionalTrialAcknowledged: true,
+    ), throwsFormatException);
+    final extended = await MultiActTrialCompiler.compile(
+      index: index, book: book, bookMap: map, draft: extendedDraft,
+      reviewedInteractiveEventIds: extras,
+      sourceEventIdsReviewedByUser: reviewedQuotes,
+      privateUseConfirmed: true,
+      fictionalTrialAcknowledged: true,
+      expanded: true,
+    );
+    final extendedWorld = const RichPrivateBookworldImporter()
+        .inspect(extended.archive);
+    expect(extendedWorld.formatVersion, 4);
+    expect(extended.sourceEventsRepresented, 72);
+    expect(extended.verifiedSourceChoices, 72);
+    expect(extendedWorld.requiresNetwork, false);
+    expect(extendedWorld.canDistributePublicly, false);
+
+    final imported = const RichPrivateBookworldImporter()
+        .inspect(compiled.archive);
+    final causal = StoryCampaignCausalAudit.inspect(
+      blueprint: imported.blueprint,
+      requiredChoiceIds: contract.requiredChoiceIds,
+    );
+    expect(causal.status, CampaignCausalStatus.playable);
+    contract.verifyWitnesses(causal);
+    expect(causal.choiceWitnesses.keys,
+        containsAll(contract.requiredChoiceIds));
+    expect(causal.cycleCount, 0);
+    expect(causal.unprovenRequiredChoiceIds, isEmpty);
+    for (final action in requiredActions.values) {
+      expect(causal.choiceWitnesses[action], isNotEmpty,
+          reason: 'No real StoryWorld.apply path for $action');
+      expect(causal.choiceWitnesses[action]!.last.choiceId, action);
+    }
+
+    final temp = await Directory.systemTemp.createTemp(
+        'ai-rpg-many-events-');
+    late String campaign;
+    var revision = 0;
+    try {
+      var store = BookworldCampaignStore.openPrivateDirectory(temp.path);
+      try {
+        final installed = store.installBookworld(compiled.archive);
+        campaign = store.createCampaign(installed.archiveHash);
+        // Visit all 60 events, then take the positive branch of each act.
+        // Every transition is committed by the same production SQLite engine.
+        for (var act = 1; act <= 6; act++) {
+          for (var i = 0; i < 10; i++) {
+            final suffix = i == 0 ? '' : '_${i + 1}';
+            final choice = 'act_${act}_examine_source$suffix';
+            final available = store.loadCampaign(campaign).coordinator
+                .choices.any((c) => c.id == choice && c.enabled);
+            expect(available, isTrue, reason: choice);
+            final result = store.commitChoice(campaign,
+              actionId: 'long_step_$revision',
+              choiceId: choice, expectedRevision: revision);
+            expect(result.applied, isTrue, reason: choice);
+            revision++;
+          }
+          final decisions = <String>[
+            'act_${act}_accept_offer',
+            'act_${act}_honor_condition',
+            if (act != 6) 'act_${act}_continue_original',
+          ];
+          for (final choice in decisions) {
+            final result = store.commitChoice(campaign,
+              actionId: 'long_step_$revision',
+              choiceId: choice, expectedRevision: revision);
+            expect(result.applied, isTrue, reason: choice);
+            revision++;
+          }
+        }
+        expect(revision, 77);
+        expect(store.loadCampaign(campaign).coordinator.isTerminal, isTrue);
+        expect(store.loadCampaign(campaign).metadata.revision, revision);
+      } finally {
+        store.close();
+      }
+      store = BookworldCampaignStore.openPrivateDirectory(temp.path);
+      try {
+        expect(store.installedWorlds(), hasLength(1));
+        expect(store.loadCampaign(campaign).coordinator.isTerminal, isTrue);
+        expect(store.loadCampaign(campaign).metadata.revision, 77);
+      } finally {
+        store.close();
+      }
+    } finally {
+      await temp.delete(recursive: true);
+    }
+  });
+
+  test('eight source-locked acts keep durable outcomes, reuse only local '
+      'flags, prove anchors and both bridges, and resume after SQLite restart',
+      () async {
+    final index = _longIndex(chapters: 8);
+    final book = await _longBook(index);
+    expect(book.events, hasLength(96));
+    final map = BookwideActPlanner.build(index: index, book: book);
+    expect(map.acts, hasLength(8));
+    final draft = BookwideStoryPlanComposer.compose(
+      index: index, book: book, bookMap: map,
+      actProposals: [for (var i = 0; i < 8; i++) _actProposal(book, i)],
+    );
+    expect(draft.parts, hasLength(8));
+    expect(draft.plan.flags, hasLength(19)); // 16 durable + 3 rolling.
+    expect(draft.plan.flags,
+        containsAll(BookwideStoryPlanComposer.rollingFlags));
+    expect(draft.plan.flags, contains('act_1_original_outcome'));
+    expect(draft.plan.flags, contains('act_8_alternate_outcome'));
+    final extras = <String>{};
+    for (var i = 0; i < 8; i++) {
+      extras.add(BookwideSourceEncounters.eligibleForAct(
+        index: index, bookMap: map, draft: draft, partIndex: i,
+      ).first.id);
+    }
+    final plan = BookwideSourceEncounters.attach(
+      index: index, book: book, bookMap: map, draft: draft,
+      plan: draft.plan, reviewedEventIds: extras,
+      userConfirmedPrivateAdaptation: true,
+    );
+    final contract = BookwideCampaignContract.fromPlan(
+      book: book, draft: draft, plan: plan,
+      reviewedInteractiveEventIds: extras,
+    );
+    expect(contract.sourceDecisions.length, 24); // 16 anchors + 8 extras.
+    expect(contract.bridgeDecisions.length, 14);
+    expect(contract.requiredChoiceIds.length, 38);
+    expect(plan.situations.length, 64);
+    for (var act = 1; act < 8; act++) {
+      for (final kind in ['original', 'alternate']) {
+        final scene = plan.situations.singleWhere(
+            (s) => s.id == 'act_${act}_${kind}_ending');
+        final bridge = scene.decisions.single;
+        expect(bridge.removes,
+            containsAll(BookwideStoryPlanComposer.rollingFlags));
+        expect(bridge.nextSituationId,
+            'act_${act + 1}_source_encounter');
+      }
+    }
+
+    // A forged source anchor or diverted act-boundary must FAIL CLOSED before
+    // any ZIP is built or the user's installed campaigns are modified.
+    StoryPlan alter(String sceneId,
+        StorySituation Function(StorySituation) change) => StoryPlan(
+      sourceFingerprint: plan.sourceFingerprint,
+      title: plan.title, entrySituationId: plan.entrySituationId,
+      flags: plan.flags, initialFlags: plan.initialFlags,
+      situations: [
+        for (final s in plan.situations)
+          if (s.id == sceneId) change(s) else s,
+      ],
+    );
+    final wrongQuote = alter('act_1_turning_point', (s) =>
+        StorySituation(
+          id: s.id, goal: s.goal, conflict: s.conflict,
+          chapterIndex: s.chapterIndex, sourceEventId: extras.first,
+          route: s.route, terminal: s.terminal, decisions: s.decisions,
+        ));
+    expect(() => BookwideCampaignContract.fromPlan(
+      book: book, draft: draft, plan: wrongQuote,
+      reviewedInteractiveEventIds: extras,
+    ), throwsFormatException);
+    final wrongBridge = alter('act_1_original_ending', (s) =>
+        StorySituation(
+          id: s.id, goal: s.goal, conflict: s.conflict,
+          chapterIndex: s.chapterIndex, sourceEventId: s.sourceEventId,
+          route: s.route, terminal: s.terminal, decisions: [
+            for (final d in s.decisions)
+              StoryDecision(
+                id: d.id, intent: d.intent,
+                nextSituationId: 'act_1_turning_point',
+                sourceEventId: d.sourceEventId, route: d.route,
+                requires: d.requires, forbids: d.forbids,
+                adds: d.adds, removes: d.removes,
+              ),
+          ],
+        ));
+    expect(() => BookwideCampaignContract.fromPlan(
+      book: book, draft: draft, plan: wrongBridge,
+      reviewedInteractiveEventIds: extras,
+    ), throwsFormatException);
+
+    final reviewedIds = <String>{
+      for (final part in draft.parts) ...[
+        part.setupEventId, part.outcomeEventId,
+      ],
+      ...extras,
+    };
+    final compiled = await MultiActTrialCompiler.compile(
+      index: index, book: book, bookMap: map, draft: draft,
+      sourceEventIdsReviewedByUser: reviewedIds,
+      reviewedInteractiveEventIds: extras,
+      privateUseConfirmed: true, fictionalTrialAcknowledged: true,
+    );
+    expect(compiled.sourceQuoteCount, 24);
+    expect(compiled.verifiedSourceChoices, 24);
+    expect(compiled.verifiedActBridges, 14);
+    expect(compiled.requiresCloudToPlay, isFalse);
+    final imported = const RichPrivateBookworldImporter()
+        .inspect(compiled.archive);
+    final report = StoryCampaignCausalAudit.inspect(
+      blueprint: imported.blueprint,
+      requiredChoiceIds: contract.requiredChoiceIds,
+    );
+    expect(report.status, CampaignCausalStatus.playable);
+    contract.verifyWitnesses(report);
+
+    final dir = await Directory.systemTemp.createTemp('rpg-eight-acts-');
+    var revision = 0;
+    late String campaign;
+    try {
+      var db = BookworldCampaignStore.openPrivateDirectory(dir.path);
+      try {
+        final installed = db.installBookworld(compiled.archive);
+        campaign = db.createCampaign(installed.archiveHash);
+        for (var act = 1; act <= 4; act++) {
+          for (final id in [
+            'act_${act}_examine_source',
+            'act_${act}_accept_offer',
+            'act_${act}_honor_condition',
+            'act_${act}_continue_original',
+          ]) {
+            expect(db.commitChoice(campaign,
+              actionId: 'eight_$revision', choiceId: id,
+              expectedRevision: revision).applied, isTrue, reason: id);
+            revision++;
+          }
+        }
+        expect(db.loadCampaign(campaign).coordinator.sceneId,
+            'act_5_source_encounter');
+        expect(db.loadCampaign(campaign).metadata.revision, 16);
+        final boundaryState = db.loadCampaign(campaign).coordinator.state;
+        expect(boundaryState.flags['act_1_original_outcome'], isTrue);
+        expect(boundaryState.flags['act_4_original_outcome'], isTrue);
+        expect(boundaryState.flags[
+            BookwideStoryPlanComposer.rollingAccepted], isFalse);
+      } finally {
+        db.close();
+      }
+      db = BookworldCampaignStore.openPrivateDirectory(dir.path);
+      try {
+        expect(db.loadCampaign(campaign).coordinator.sceneId,
+            'act_5_source_encounter');
+        expect(db.loadCampaign(campaign).coordinator.state
+            .flags['act_1_original_outcome'], isTrue);
+        for (var act = 5; act <= 8; act++) {
+          for (final id in [
+            'act_${act}_examine_source',
+            'act_${act}_accept_offer',
+            'act_${act}_honor_condition',
+            if (act < 8) 'act_${act}_continue_original',
+          ]) {
+            expect(db.commitChoice(campaign,
+              actionId: 'eight_$revision', choiceId: id,
+              expectedRevision: revision).applied, isTrue, reason: id);
+            revision++;
+          }
+        }
+        expect(revision, 31);
+        expect(db.loadCampaign(campaign).metadata.revision, 31);
+        expect(db.loadCampaign(campaign).coordinator.isTerminal, isTrue);
+      } finally {
+        db.close();
+      }
+    } finally {
+      await dir.delete(recursive: true);
+    }
+  });
+  test('reviewed NPC source -> real choice -> memory -> response -> SQLite',
+      () async {
+    final index = _longIndex(chapters: 2, withNpc: true);
+    final book = await _longBook(index);
+    final map = BookwideActPlanner.build(index: index, book: book);
+    final draft = BookwideStoryPlanComposer.compose(
+      index: index, book: book, bookMap: map,
+      actProposals: [for (var i = 0; i < 2; i++) _actProposal(book, i)],
+    );
+    final eligible = BookwideSourceEncounters.eligibleForAct(
+        index: index, bookMap: map, draft: draft, partIndex: 0);
+    expect(eligible.length, greaterThanOrEqualTo(2));
+    final extras = <String>{eligible[0].id, eligible[1].id};
+    final plan = BookwideSourceEncounters.attach(
+      index: index, book: book, bookMap: map, draft: draft,
+      plan: draft.plan, reviewedEventIds: extras,
+      userConfirmedPrivateAdaptation: true,
+    );
+    final excerpt = eligible.first.source;
+    final nameAt = excerpt.quote.indexOf('Артем');
+    expect(nameAt, greaterThanOrEqualTo(0));
+    final mention = SourceEvidence.propose(index,
+        chunkId: excerpt.chunkId, kind: EvidenceKind.character,
+        startUtf16: excerpt.startUtf16 + nameAt,
+        endUtf16: excerpt.startUtf16 + nameAt + 5);
+    expect(mention.label, 'Артем');
+    var graph = SourceEvidenceGraph.empty(index).addAll(index, [mention]);
+    graph = graph.review(index, mention.id, EvidenceStatus.confirmed);
+    final relations = SourceRelationReviewSession.create(index, graph);
+    final catalog = SourceSemanticCatalog.fromLocalEvidence(index, graph);
+    final editorial = SemanticEditorialReviewSession.create(index, catalog);
+    final dossiers = SourceCharacterDossierIndex.build(
+        index, graph, relations, catalog, editorial);
+    final dossier = dossiers.dossiers.singleWhere(
+        (d) => d.labels.contains('Артем'));
+    final notebook = NpcEditorialNotebook.empty(index)
+        .putProfile(NpcEditorialNotebook.freshProfile(dossier));
+    final role = ReviewedHeroRole.fromReviewedSources(
+      index: index, dossiers: dossiers, graph: graph,
+      catalog: catalog, editorial: editorial, notebook: notebook,
+    ).single;
+    const playerLine = 'Я хочу обсудить ключ и дорогу.';
+    const npcLine = 'Я помню твою просьбу и помогу.';
+    final arc = BookwideNpcArc.review(
+      index: index, book: book, plan: plan, role: role,
+      privateFictionConfirmed: true,
+      playerLine: playerLine, npcLine: npcLine,
+    );
+    expect(arc, isNotNull);
+    expect(arc!.attach(plan, book).flags,
+        contains(BookwideNpcArc.contactFlag));
+    expect(() => BookwideNpcArc.review(
+      index: index, book: book, plan: plan, role: role,
+      privateFictionConfirmed: false,
+      playerLine: playerLine, npcLine: npcLine,
+    ), throwsFormatException);
+    final approved = <String>{
+      ...extras,
+      for (final part in draft.parts) ...[
+        part.setupEventId, part.outcomeEventId,
+      ],
+    };
+    final compiled = await MultiActTrialCompiler.compile(
+      index: index, book: book, bookMap: map, draft: draft,
+      sourceEventIdsReviewedByUser: approved,
+      reviewedInteractiveEventIds: extras,
+      privateUseConfirmed: true, fictionalTrialAcknowledged: true,
+      npcEncounterRole: role, reviewedNpcEncounter: true,
+      npcPlayerLine: playerLine, npcReplyLine: npcLine,
+    );
+    expect(compiled.verifiedNpcActions, 2);
+    expect(compiled.requiresCloudToPlay, false);
+    final imported = const RichPrivateBookworldImporter()
+        .inspect(compiled.archive);
+    expect(imported.blueprint.actors, contains(role.characterId));
+    expect(imported.npcSocialRulebook, isNotNull);
+    expect(imported.presentation['scene_dialogues'],
+        contains(arc.secondSceneId));
+    final report = StoryCampaignCausalAudit.inspect(
+      blueprint: imported.blueprint,
+      socialRulebook: imported.npcSocialRulebook,
+      requiredChoiceIds: arc.requiredChoiceIds,
+    );
+    expect(report.status, CampaignCausalStatus.playable);
+    expect(report.unprovenRequiredChoiceIds, isEmpty);
+
+    final dir = await Directory.systemTemp.createTemp('bookwide-npc-');
+    try {
+      var db = BookworldCampaignStore.openPrivateDirectory(dir.path);
+      late String campaign;
+      try {
+        final installed = db.installBookworld(compiled.archive);
+        campaign = db.createCampaign(installed.archiveHash);
+        final skippedId = db.createCampaign(installed.archiveHash);
+        expect(db.commitChoice(skippedId, actionId: 'skip',
+          choiceId: arc.firstPassId, expectedRevision: 0).applied, true);
+        final skipped = db.loadCampaign(skippedId).coordinator;
+        expect(skipped.state.knowledge[role.characterId], isEmpty);
+        expect(skipped.choices.singleWhere(
+            (choice) => choice.id == arc.replyChoiceId).enabled, false);
+
+        expect(db.commitChoice(campaign, actionId: 'speak_1',
+          choiceId: arc.listenChoiceId, expectedRevision: 0).applied, true);
+        final listening = db.loadCampaign(campaign).coordinator;
+        expect(listening.state.knowledge[role.characterId],
+            contains(BookwideNpcArc.factId));
+        expect(listening.state.knowledge['player'], isEmpty);
+        expect(listening.choices.singleWhere(
+            (choice) => choice.id == arc.replyChoiceId).enabled, true);
+        final standAloneWorld = StoryWorld(imported.blueprint,
+            socialRulebook: imported.npcSocialRulebook);
+        expect(standAloneWorld.apply(
+            actionId: 'social_witness', choiceId: arc.listenChoiceId
+        ).applied, true);
+        final social = NpcSocialLedger.inspect(
+            standAloneWorld, imported.npcSocialRulebook!);
+        expect(social.hasMemory(role.characterId, BookwideNpcArc.memoryId),
+            true);
+        expect(social.directedScore(role.characterId, 'player'),
+            greaterThan(0));
+      } finally {
+        db.close();
+      }
+      db = BookworldCampaignStore.openPrivateDirectory(dir.path);
+      try {
+        final restored = db.loadCampaign(campaign).coordinator;
+        expect(restored.state.knowledge[role.characterId],
+            contains(BookwideNpcArc.factId));
+        expect(restored.choices.singleWhere(
+            (choice) => choice.id == arc.replyChoiceId).enabled, true);
+        expect(db.commitChoice(campaign, actionId: 'speak_2',
+          choiceId: arc.replyChoiceId, expectedRevision: 1).applied, true);
+        expect(db.loadCampaign(campaign).metadata.revision, 2);
+      } finally {
+        db.close();
+      }
+    } finally {
+      await dir.delete(recursive: true);
+    }
+  });
+}

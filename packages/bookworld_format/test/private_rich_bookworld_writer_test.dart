@@ -97,6 +97,186 @@ void main() {
   const writer = RichPrivateBookworldWriter();
   const importer = RichPrivateBookworldImporter();
 
+
+  test('source-reviewed spoken answers cause distinct NPC social replay', () {
+    final input = _npcRichSample();
+    final bp = _asObject(input['blueprint']);
+    final prov = _asObject(input['provenance']);
+    final actor = 'npc_' + List.filled(32, 'c').join();
+    final entry = (bp['scenes'] as List).first as Map<String, dynamic>;
+    entry['text'] = 'Мария: «Я услышала о твоём решении.»\n'
+        'Игрок: «Я готов объяснить свой выбор.»';
+    final origin = (prov['scene_origins'] as List).first as Map;
+    final quote = (origin['source_refs'] as List).first['quote_sha256'] as String;
+    final turns = RichSceneDialogue.presentationFor(entry['text'] as String)!;
+    final dialogues = <String, dynamic>{'entry': turns};
+    final speakers = <String, dynamic>{
+      'entry': [
+        {
+          'turn_index': 0, 'speaker': 'Мария', 'actor_id': actor,
+          'required_fact_ids': <String>[],
+        },
+        {
+          'turn_index': 1, 'speaker': 'Игрок', 'actor_id': 'player',
+          'required_fact_ids': <String>[],
+        },
+      ],
+    };
+    prov['npc_social'] = {
+      'format': RichNpcSocialContract.format,
+      'review_scope': 'user_declared_private_game_fiction',
+      'source_fingerprint': bp['source_fingerprint'],
+      'user_confirmed': true,
+      'literary_canon_verified': false,
+      'witnesses': [
+        {
+          'scene_id': 'entry', 'actor_id': actor,
+          'mode': 'present', 'source_quote_sha256': quote,
+        },
+      ],
+      'rules': [
+        for (final row in [
+          ('wait', 'npc_listened', 'promiseReceived', 10),
+          ('help', 'npc_helped', 'helped', 10),
+          ('leave', 'npc_refused', 'betrayed', -10),
+        ])
+          {
+            'memory_id': row.$2,
+            'scene_id': 'entry',
+            'choice_id': row.$1,
+            'observer_id': actor,
+            'kind': row.$3,
+            'related_actor_id': 'player',
+            'relationship_delta': row.$4,
+            'max_triggers': 1,
+            'source_quote_sha256': quote,
+          },
+      ],
+    };
+    final source = RichNpcSocialContract.inspect(
+      prov,
+      {'npc_social_format': RichNpcSocialContract.format},
+      StoryBlueprint.fromJson(bp),
+    )!;
+    final origins = <String, dynamic>{
+      for (final raw in prov['scene_origins'] as List)
+        (raw as Map)['scene_id'] as String: raw,
+    };
+    final blueprint = StoryBlueprint.fromJson(bp);
+    final options = {
+      'entry': {
+        'wait': 'Сначала расскажу тебе всю правду.',
+        'help': 'Да, я помогу тебе войти.',
+        'leave': 'Нет, я ухожу без обещаний.',
+      },
+    };
+    final proposal = RichNpcDialogueResponses.propose(
+      blueprint: blueprint, sceneOrigins: origins,
+      signedDialogues: dialogues, reviewedSpeakerTurns: speakers,
+      playerLinesByScene: options,
+      interlocutorByScene: {'entry': actor},
+      sourceQuoteByScene: {'entry': quote},
+      wholeDialogueReviewed: true, privateFictionAcknowledged: true,
+      socialRules: source,
+    );
+    expect(proposal.isLiteraryCanon, isFalse);
+    expect(proposal.canModifyCampaign, isFalse);
+    expect(proposal.needsFinalApproval, isTrue);
+    final reviewed = RichNpcDialogueResponses.accept(
+      proposal: proposal, blueprint: blueprint,
+      approvedDigest: proposal.approvalDigest,
+      userConfirmed: true, socialRules: source,
+    );
+    expect(RichNpcDialogueResponses.replyFor(
+      {'scene_dialogue_responses': reviewed}, 'entry', 'help'),
+      'Да, я помогу тебе войти.');
+    expect(() => RichNpcDialogueResponses.accept(
+      proposal: proposal, blueprint: blueprint,
+      approvedDigest: List.filled(64, '0').join(),
+      userConfirmed: true, socialRules: source), throwsFormatException);
+    expect(() => RichNpcDialogueResponses.accept(
+      proposal: proposal, blueprint: blueprint,
+      approvedDigest: proposal.approvalDigest,
+      userConfirmed: false, socialRules: source), throwsFormatException);
+    final presentation = _asObject(prov['presentation']);
+    presentation['scene_dialogues'] = dialogues;
+    presentation['scene_dialogue_knowledge'] = speakers;
+    presentation['scene_dialogue_responses'] = reviewed;
+    prov['presentation'] = presentation;
+    final archive = writer.build(
+      blueprint: bp, provenance: prov,
+      sourceIndex: _asObject(input['source_index']),
+    );
+    final verified = importer.inspect(archive);
+    expect(verified.requiresNetwork, isFalse);
+    expect(verified.presentation['scene_dialogue_responses'], isNotNull);
+    final rules = verified.npcSocialRulebook!;
+    final positive = StoryWorld(verified.blueprint, socialRulebook: rules);
+    expect(positive.apply(actionId: 'hear', choiceId: 'wait').applied, true);
+    expect(positive.apply(actionId: 'help_her', choiceId: 'help').applied,
+        true);
+    final liked = NpcSocialLedger.inspect(positive, rules);
+    expect(liked.directedScore(actor, 'player'), 20);
+    expect(liked.hasMemory(actor, 'npc_helped'), true);
+    expect(positive.state.knowledge[actor], contains('npc_secret'));
+    final negative = StoryWorld(verified.blueprint, socialRulebook: rules);
+    expect(negative.apply(actionId: 'refuse', choiceId: 'leave').applied,
+        true);
+    final refused = NpcSocialLedger.inspect(negative, rules);
+    expect(refused.directedScore(actor, 'player'), -10);
+    expect(refused.hasMemory(actor, 'npc_refused'), true);
+    expect(negative.state.knowledge[actor], isEmpty);
+    expect(negative.state.sceneId, isNot(positive.state.sceneId));
+    for (final played in [positive, negative]) {
+      final restored = StoryWorld.replay(
+        verified.blueprint, played.events.map((event) => event.toJson()),
+        expectedSequence: played.state.revision,
+        expectedStateHash: played.state.stateHash,
+        socialRulebook: rules,
+      );
+      expect(restored.state.stateHash, played.state.stateHash);
+      expect(NpcSocialLedger.inspect(restored, rules).snapshotHash,
+          NpcSocialLedger.inspect(played, rules).snapshotHash);
+    }
+
+    Map<String, dynamic> changed() =>
+        jsonDecode(jsonEncode(prov)) as Map<String, dynamic>;
+    void forged(String key, Object? value) {
+      final copy = changed();
+      (((copy['presentation'] as Map)['scene_dialogue_responses'] as Map)
+          ['entry'] as List).first[key] = value;
+      expect(() => writer.build(
+        blueprint: bp, provenance: copy,
+        sourceIndex: _asObject(input['source_index']),
+      ), throwsFormatException);
+    }
+    forged('choice_id', 'other_unreviewed_choice');
+    forged('interlocutor_id', 'player');
+    forged('source_quote_sha256', List.filled(64, '0').join());
+    forged('private_fiction_confirmed', false);
+    forged('player_line', 'Мария: «Я сама подделаю эту реплику»');
+    final missing = changed();
+    (((missing['presentation'] as Map)['scene_dialogue_responses'] as Map)
+        ['entry'] as List).removeLast();
+    expect(() => writer.build(
+      blueprint: bp, provenance: missing,
+      sourceIndex: _asObject(input['source_index']),
+    ), throwsFormatException);
+    expect(() => RichNpcDialogueResponses.propose(
+      blueprint: blueprint, sceneOrigins: origins,
+      signedDialogues: dialogues, reviewedSpeakerTurns: speakers,
+      playerLinesByScene: options, interlocutorByScene: {'entry': actor},
+      sourceQuoteByScene: {'entry': quote},
+      wholeDialogueReviewed: false, privateFictionAcknowledged: true,
+      socialRules: source,
+    ), throwsFormatException);
+
+    final out = File('../../artifacts/bookworld/'
+        'book_private_rich_npc_responses_dart.bworld');
+    out.parent.createSync(recursive: true);
+    out.writeAsBytesSync(archive, flush: true);
+  });
+
   test('source-reviewed v5 NPC lifecycle is portable and event-replayed', () {
     final data = _npcRichSample();
     final bp = _asObject(data['blueprint']);
@@ -440,6 +620,286 @@ void main() {
     }
   });
 
+
+
+  test('source-reviewed NPC dialogue plan builds playable offline branches',
+      () {
+    final data = _npcRichSample();
+    final bp = _asObject(data['blueprint']);
+    final entry = (bp['scenes'] as List).first as Map<String, dynamic>;
+    // The two routes enter the same conversation, but only an explicit
+    // source event taught the permanent NPC the selected secret.
+    (((entry['choices'] as List)[1] as Map)['conditions'] as List).clear();
+    final meeting = (bp['scenes'] as List)[1] as Map<String, dynamic>;
+    meeting['text'] = 'Мария: «Теперь я знаю тайну.»\n'
+        'Игрок: «Что произошло?»\n'
+        'Мария: «Поговорим о дороге.»';
+    final proven = _asObject(data['provenance']);
+    final origins = {
+      for (final value in proven['scene_origins'] as List)
+        (value as Map)['scene_id'] as String: value,
+    };
+    final permanent = 'npc_' + List.filled(32, 'c').join();
+    final playerAndNpc = {'Мария': permanent, 'Игрок': 'player'};
+    final boundGrants = [
+      for (final row in ((proven['npc_knowledge'] as Map)['grants'] as List))
+        Map<String, String>.from(row as Map),
+    ];
+    final world = StoryBlueprint.fromJson(bp);
+    final proposal = RichNpcDialogueAuthoring.propose(
+      blueprint: world,
+      sceneOrigins: origins,
+      reviewedSpeakerActorIds: playerAndNpc,
+      verifiedNpcFactGrants: boundGrants,
+      reviewedNpcFactByTurn: const {
+        'canon_end': {0: 'npc_secret'},
+      },
+      reviewedSafeNpcTurns: const {
+        'canon_end': {2},
+      },
+      wholeDialogueTextReviewed: true,
+      privateFictionAcknowledged: true,
+    );
+    expect(proposal.isLiteraryCanon, isFalse);
+    expect(proposal.needsFinalApproval, isTrue);
+    expect(proposal.requiresNetwork, isFalse);
+    expect(proposal.npcLineCount, 2);
+    expect(proposal.causallyGuardedLineCount, 1);
+    final gatedTurn = proposal.reviewedTurns['canon_end']!.first;
+    expect(gatedTurn['actor_id'], permanent);
+    expect(gatedTurn['required_fact_ids'], ['npc_secret']);
+    expect(gatedTurn['required_prior_choice_id'], 'wait');
+    expect(gatedTurn['source_quote_sha256'],
+        ((origins['entry'] as Map)['source_refs'] as List).first['quote_sha256']);
+    final review = RichNpcDialogueAuthoring.accept(
+      proposal: proposal,
+      blueprint: world,
+      reviewedSpeakerActorIds: playerAndNpc,
+      approvedDigest: proposal.approvalDigest,
+      userConfirmed: true,
+    );
+    // Double consent: a stable preview digest must be accepted for the
+    // exact blueprint and signed actor bindings. Nothing writes a save.
+    expect(() => RichNpcDialogueAuthoring.accept(
+        proposal: proposal, blueprint: world,
+        reviewedSpeakerActorIds: playerAndNpc,
+        approvedDigest: proposal.approvalDigest, userConfirmed: false),
+        throwsFormatException);
+    expect(() => RichNpcDialogueAuthoring.accept(
+        proposal: proposal, blueprint: world,
+        reviewedSpeakerActorIds: playerAndNpc,
+        approvedDigest: List.filled(64, '0').join(), userConfirmed: true),
+        throwsFormatException);
+    expect(() => RichNpcDialogueAuthoring.accept(
+        proposal: proposal, blueprint: world,
+        reviewedSpeakerActorIds: {'Мария': 'player', 'Игрок': 'player'},
+        approvedDigest: proposal.approvalDigest, userConfirmed: true),
+        throwsFormatException);
+    Map<String, dynamic> projection() => _asObject(proven['presentation']);
+    final presentation = projection();
+    presentation['scene_dialogues'] = {
+      'canon_end':
+          RichSceneDialogue.presentationFor(meeting['text'] as String),
+    };
+    presentation['scene_dialogue_knowledge'] = review;
+    proven['presentation'] = presentation;
+    final archive = writer.build(
+      blueprint: bp, provenance: proven,
+      sourceIndex: _asObject(data['source_index']),
+    );
+    expect(archive, writer.build(
+      blueprint: bp, provenance: proven,
+      sourceIndex: _asObject(data['source_index']),
+    ));
+    final installed = importer.inspect(archive);
+    expect(installed.requiresNetwork, isFalse);
+    final signed = RichSceneDialogue.verify(
+      (installed.presentation['scene_dialogues'] as Map)['canon_end'],
+      installed.blueprint.scenes['canon_end']!.text,
+    );
+    final signedReviews =
+        (installed.presentation['scene_dialogue_knowledge'] as Map)
+            ['canon_end'] as List;
+
+    final direct = StoryWorld(installed.blueprint);
+    expect(direct.apply(actionId: 'direct', choiceId: 'help').applied, true);
+    final before = RichNpcDialogueKnowledge.redact(
+        signed, signedReviews, direct.state.knowledge,
+        committedEvents: direct.events, sceneId: direct.state.sceneId);
+    expect(before[0].text, RichNpcDialogueKnowledge.unavailableLine);
+    expect(before[1].text, 'Что произошло?');
+    expect(before[2].text, 'Поговорим о дороге.');
+
+    final learned = StoryWorld(installed.blueprint);
+    expect(learned.apply(actionId: 'read', choiceId: 'wait').applied, true);
+    expect(learned.apply(actionId: 'talk', choiceId: 'help').applied, true);
+    final after = RichNpcDialogueKnowledge.redact(
+        signed, signedReviews, learned.state.knowledge,
+        committedEvents: learned.events, sceneId: learned.state.sceneId);
+    expect(after[0].text, 'Теперь я знаю тайну.');
+    final restored = StoryWorld.replay(installed.blueprint,
+        learned.events.map((event) => event.toJson()),
+        expectedSequence: learned.state.revision,
+        expectedStateHash: learned.state.stateHash);
+    expect(RichNpcDialogueKnowledge.redact(
+        signed, signedReviews, restored.state.knowledge,
+        committedEvents: restored.events, sceneId: restored.state.sceneId)[0]
+        .text, 'Теперь я знаю тайну.');
+
+    void wrongProposal({
+      Map<String, String>? speakers,
+      List<Map<String, String>>? grants,
+      Map<String, Map<int, String>> facts = const {
+        'canon_end': {0: 'npc_secret'},
+      },
+      Map<String, Set<int>> safe = const {
+        'canon_end': {2},
+      },
+      bool confirmed = true,
+    }) {
+      expect(() => RichNpcDialogueAuthoring.propose(
+        blueprint: world, sceneOrigins: origins,
+        reviewedSpeakerActorIds: speakers ?? playerAndNpc,
+        verifiedNpcFactGrants: grants ?? boundGrants,
+        reviewedNpcFactByTurn: facts,
+        reviewedSafeNpcTurns: safe,
+        wholeDialogueTextReviewed: true,
+        privateFictionAcknowledged: confirmed,
+      ), throwsFormatException);
+    }
+    wrongProposal(speakers: const {'Игрок': 'player'}); // no invented actor
+    wrongProposal(grants: const []); // no invented learning
+    wrongProposal(grants: [...boundGrants, ...boundGrants]); // ambiguous
+    wrongProposal(facts: const {'canon_end': {0: 'wrong_fact'}});
+    wrongProposal(safe: const {});
+    wrongProposal(safe: const {'canon_end': {1, 2}});
+    wrongProposal(confirmed: false);
+
+    // The existing importer and deterministic engine, not a new runtime,
+    // execute the accepted dialogue contract. No private source text or
+    // model-generated literary claims were added by the planner.
+    final path = File('../../artifacts/bookworld/'
+        'book_private_rich_dialogue_plan_dart.bworld');
+    path.parent.createSync(recursive: true);
+    path.writeAsBytesSync(archive, flush: true);
+  });
+
+  test('P0: causal NPC reply needs committed source action on this route', () {
+    final data = _npcRichSample();
+    final bp = _asObject(data['blueprint']);
+    final entry = (bp['scenes'] as List).first as Map<String, dynamic>;
+    // Same destination, two real routes: direct talk never teaches a secret.
+    (((entry['choices'] as List)[1] as Map)['conditions'] as List).clear();
+    final meeting = (bp['scenes'] as List)[1] as Map<String, dynamic>;
+    meeting['text'] = 'Мария: «Теперь я знаю тайну.»\n'
+        'Игрок: «Расскажи мне.»';
+    final prov = _asObject(data['provenance']);
+    final source = (prov['scene_origins'] as List).first as Map;
+    final quote = ((source['source_refs'] as List).first
+        as Map)['quote_sha256'] as String;
+    final npc = 'npc_' + List.filled(32, 'c').join();
+    final presentation = _asObject(prov['presentation']);
+    presentation['scene_dialogues'] = {
+      'canon_end': RichSceneDialogue.presentationFor(
+          meeting['text'] as String),
+    };
+    presentation['scene_dialogue_knowledge'] = {
+      'canon_end': [
+        {
+          'turn_index': 0, 'speaker': 'Мария', 'actor_id': npc,
+          'required_fact_ids': ['npc_secret'],
+          'required_prior_choice_id': 'wait',
+          'source_quote_sha256': quote,
+          'private_fiction_confirmed': true,
+        },
+        {
+          'turn_index': 1, 'speaker': 'Игрок', 'actor_id': 'player',
+          'required_fact_ids': <String>[],
+        },
+      ],
+    };
+    prov['presentation'] = presentation;
+    final sourceIndex = _asObject(data['source_index']);
+    final archive = writer.build(
+        blueprint: bp, provenance: prov, sourceIndex: sourceIndex);
+    final verified = importer.inspect(archive);
+    final turns = RichSceneDialogue.verify(
+      (verified.presentation['scene_dialogues'] as Map)['canon_end'],
+      verified.blueprint.scenes['canon_end']!.text,
+    );
+    final reviews = (verified.presentation['scene_dialogue_knowledge']
+        as Map)['canon_end'] as List;
+
+    // Route B: going directly to the dialogue cannot reveal NPC knowledge.
+    final without = StoryWorld(verified.blueprint);
+    expect(without.apply(actionId: 'go_direct', choiceId: 'help').applied,
+        isTrue);
+    final blocked = RichNpcDialogueKnowledge.redact(
+      turns, reviews, without.state.knowledge,
+      committedEvents: without.events, sceneId: without.state.sceneId);
+    expect(blocked[0].text, RichNpcDialogueKnowledge.unavailableLine);
+    expect(blocked[1].text, 'Расскажи мне.');
+
+    // Route A: the earlier source-bound action explicitly teaches the
+    // permanent NPC actor, then the scene becomes eligible.
+    final withLearning = StoryWorld(verified.blueprint);
+    expect(withLearning.apply(actionId: 'observe', choiceId: 'wait').applied,
+        isTrue);
+    expect(withLearning.apply(actionId: 'go_after', choiceId: 'help').applied,
+        isTrue);
+    final spoken = RichNpcDialogueKnowledge.redact(
+      turns, reviews, withLearning.state.knowledge,
+      committedEvents: withLearning.events, sceneId: withLearning.state.sceneId);
+    expect(spoken[0].text, 'Теперь я знаю тайну.');
+    expect(spoken[1].text, 'Расскажи мне.');
+    // Deliberately omit the event journal: a world-state fact alone is
+    // insufficient proof of the causal prerequisite.
+    expect(RichNpcDialogueKnowledge.redact(
+        turns, reviews, withLearning.state.knowledge)[0].text,
+        RichNpcDialogueKnowledge.unavailableLine);
+    final replayed = StoryWorld.replay(
+      verified.blueprint, withLearning.events.map((e) => e.toJson()),
+      expectedSequence: withLearning.state.revision,
+      expectedStateHash: withLearning.state.stateHash);
+    expect(RichNpcDialogueKnowledge.redact(
+      turns, reviews, replayed.state.knowledge,
+      committedEvents: replayed.events, sceneId: replayed.state.sceneId,
+    )[0].text, spoken[0].text);
+    expect(replayed.state.stateHash, withLearning.state.stateHash);
+
+    Map<String, dynamic> cloneSource() =>
+        jsonDecode(jsonEncode(prov)) as Map<String, dynamic>;
+    void changeLine(Map<String, dynamic> origin, String key, Object? value) {
+      final row = (((origin['presentation'] as Map)
+          ['scene_dialogue_knowledge'] as Map)
+          ['canon_end'] as List).first as Map;
+      if (value == null) {
+        row.remove(key);
+      } else {
+        row[key] = value;
+      }
+    }
+    void rejects(String key, Object? value) {
+      final tampered = cloneSource();
+      changeLine(tampered, key, value);
+      expect(() => writer.build(
+          blueprint: bp, provenance: tampered, sourceIndex: sourceIndex),
+          throwsFormatException);
+    }
+    rejects('source_quote_sha256', List.filled(64, '0').join());
+    rejects('required_prior_choice_id', 'leave'); // wrong destination
+    rejects('required_prior_choice_id', 'help'); // never teaches the NPC
+    rejects('private_fiction_confirmed', false);
+    rejects('private_fiction_confirmed', null);
+
+    // The ordinary CI independently verifies these EXACT Dart bytes in
+    // Python (not only a recreated Python fixture).
+    final output = File(
+        '../../artifacts/bookworld/book_private_rich_dialogue_causal_dart.bworld');
+    output.parent.createSync(recursive: true);
+    output.writeAsBytesSync(archive, flush: true);
+  });
+
   test('explicit private NPC v3 roundtrip uses source-reviewed fact grants', () {
     final data = _npcRichSample();
     final rawBlueprint = _asObject(data['blueprint']);
@@ -484,6 +944,8 @@ void main() {
     final blockedWords = RichNpcDialogueKnowledge.redact(
         signed, reviewed, world.state.knowledge);
     expect(blockedWords[1].text, RichNpcDialogueKnowledge.unavailableLine);
+    expect(blockedWords[1].speaker, isNull,
+        reason: 'Future NPC identity must not leak with gated words');
     expect(blockedWords[2].text, 'Я слушаю');
     final denied = world.apply(actionId: 'too_soon', choiceId: 'help');
     expect(denied.applied, isFalse);
@@ -491,9 +953,11 @@ void main() {
     expect(world.actorKnowsFact(npcId, 'npc_secret'), isFalse);
     expect(world.apply(actionId: 'talk', choiceId: 'wait').applied, isTrue);
     expect(world.actorKnowsFact(npcId, 'npc_secret'), isTrue);
-    expect(RichNpcDialogueKnowledge.redact(
-        signed, reviewed, world.state.knowledge)[1].text,
-        'Мне известен секрет!');
+    final afterLearning = RichNpcDialogueKnowledge.redact(
+        signed, reviewed, world.state.knowledge);
+    expect(afterLearning[1].text, 'Мне известен секрет!');
+    expect(afterLearning[1].speaker, signed[1].speaker,
+        reason: 'Verified event restores the exact signed speaker');
     expect(world.actorKnowsFact('player', 'npc_secret'), isFalse);
     expect(world.factLearningEvents(npcId, 'npc_secret').single.actionId,
         'talk');

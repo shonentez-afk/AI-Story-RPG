@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'book_source_index.dart';
 import 'narrative_book_model.dart';
 import 'reviewed_gameplay_compiler.dart';
+import 'reviewed_hero_reading_candidate.dart';
 import 'story_plan.dart';
 import 'zai_semantic_preview.dart';
 import 'zai_source_locked_gameplay_candidates.dart';
@@ -126,6 +127,41 @@ class _SourceLockedGameplayReviewPageState
     }
   }
 
+  // This path is fully OFFLINE. It proposes only the verified literal
+  // quote the chosen character can observe through a typed role-gated
+  // gameplay decision. It still needs a human review note + second consent.
+  void _proposeLocalHeroReading() {
+    final context = _context;
+    if (context == null || _working) return;
+    try {
+      final draft = ReviewedHeroReadingCandidate.fromContext(
+        index: widget.index, context: context,
+      );
+      if (draft == null || draft.candidates.length != 1) {
+        throw const FormatException(
+            'Сначала выберите героя и ролевое изучение цитаты.');
+      }
+      for (final controller in _notes.values) {
+        controller.dispose();
+      }
+      _notes.clear();
+      _selected.clear();
+      for (final item in draft.candidates) {
+        _notes[ReviewedGameplayCompiler.signature(item)] =
+            TextEditingController();
+      }
+      setState(() {
+        _draft = draft;
+        _explicitCloudConsent = false;
+        _privateFictionApproved = false;
+        _error = null;
+      });
+    } catch (error) {
+      setState(() => _error =
+          'Нельзя предложить локальное знание: ' + error.toString());
+    }
+  }
+
   void _accept() {
     final ctx = _context;
     final draft = _draft;
@@ -206,6 +242,17 @@ class _SourceLockedGameplayReviewPageState
                   subtitle: Text('Сцена: ' + choice.sceneId +
                       ' · действие: ' + choice.choiceId),
                 ),
+              if (ReviewedHeroReadingCandidate.hasEligibleChoice(source)) ...[
+                const Text('Без ИИ: можно предложить запись о дословном '
+                    'отрывке, который игрок изучит за выбранного героя. '
+                    'Знания литературного персонажа этим не доказываются.'),
+                OutlinedButton.icon(
+                  key: const Key('gameplay-local-hero-reading'),
+                  onPressed: _working ? null : _proposeLocalHeroReading,
+                  icon: const Icon(Icons.menu_book_outlined),
+                  label: const Text('Предложить знание из цитаты без ИИ'),
+                ),
+              ],
               CheckboxListTile(
                 key: const Key('gameplay-source-cloud-consent'),
                 contentPadding: EdgeInsets.zero,

@@ -12,8 +12,14 @@ dependencies:
   story_engine: 0.1.0-alpha.1
   campaign_manager:
     path: ../../packages/campaign_manager
+  rpg_gameplay:
+    path: ../../packages/rpg_gameplay
+  rpg_api:
+    path: ../../packages/rpg_api
   bookworld_format:
     path: ../../packages/bookworld_format
+  story_authoring:
+    path: ../../packages/story_authoring
   story_core:
     path: ../../packages/story_core
   shared_preferences: ^2.5.3

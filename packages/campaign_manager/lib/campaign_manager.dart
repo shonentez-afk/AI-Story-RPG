@@ -392,17 +392,35 @@ CREATE TABLE events(
     required String actionId,
     required String choiceId,
     required int expectedRevision,
-  }) {
+  }) => _commitAction(id, actionId, expectedRevision,
+      (coordinator) => coordinator.choose(
+        actionId: actionId,
+        choiceId: choiceId,
+        expectedRevision: expectedRevision,
+      ));
+
+  /// Transactional model-authored action (not a choice): CAS, event append,
+  /// final head update and rollback share the EXACT existing write path.
+  DecisionResult commitFreeform(String id, {
+    required String actionId,
+    required FreeformActionDraft draft,
+    required int expectedRevision,
+  }) => _commitAction(id, actionId, expectedRevision,
+      (coordinator) => coordinator.freeform(
+        actionId: actionId, draft: draft,
+        expectedRevision: expectedRevision,
+      ));
+
+  DecisionResult _commitAction(String id, String actionId,
+      int expectedRevision,
+      DecisionResult Function(StoryEngineCoordinator) operation) {
     return _transaction(() {
       final snapshot = _campaignRow(id);
       final coordinator = _restore(id, snapshot);
       if (snapshot.revision >= maxTurns) {
         throw const FormatException('Campaign turn limit reached');
       }
-      final result = coordinator.choose(
-        actionId: actionId, choiceId: choiceId,
-        expectedRevision: expectedRevision,
-      );
+      final result = operation(coordinator);
       if (!result.applied) return result;
       final event = result.event!;
       if (event.sequence != snapshot.revision + 1 ||
@@ -490,6 +508,7 @@ CREATE TABLE events(
   /// installed BookWorld by exact SHA; does NOT contain the book text.
   String exportPortable(String campaignId) {
     final record = loadCampaign(campaignId);
+    final sourceWorld = _world(record.metadata.worldHash);
     final body = <String, dynamic>{
       'format': saveFormat,
       'schema_version': 2,
@@ -497,7 +516,8 @@ CREATE TABLE events(
       'world_sha256': record.metadata.worldHash,
       'role': 'PROTAGONIST',
       'plot_mode': 'CANON',
-      'interaction': 'CLASSIC',
+      'interaction': sourceWorld.blueprint.supportsFreeform
+          ? 'AI_FREEFORM' : 'CLASSIC',
       'checkpoint': record.coordinator.checkpoint(),
     };
     return jsonEncode({...body, 'checksum_sha256': _checksum(body)});
@@ -534,7 +554,8 @@ CREATE TABLE events(
         parsed['schema_version'] != 2 ||
         parsed['role'] != 'PROTAGONIST' ||
         parsed['plot_mode'] != 'CANON' ||
-        parsed['interaction'] != 'CLASSIC') {
+        (parsed['interaction'] != 'CLASSIC' &&
+         parsed['interaction'] != 'AI_FREEFORM')) {
       throw const FormatException('Unsupported portable save');
     }
     final sourceId = parsed['source_campaign_id'];
@@ -554,6 +575,10 @@ CREATE TABLE events(
       throw const FormatException('Invalid portable checkpoint');
     }
     final world = _world(archiveHash);
+    if (parsed['interaction'] != (world.blueprint.supportsFreeform
+        ? 'AI_FREEFORM' : 'CLASSIC')) {
+      throw const FormatException('Portable action mode does not match BookWorld');
+    }
     final restored = StoryEngineCoordinator.restore(
       world.blueprint, checkpoint,
       socialRulebook: world.npcSocialRulebook,

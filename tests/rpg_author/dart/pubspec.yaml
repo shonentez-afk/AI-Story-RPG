@@ -13,3 +13,13 @@ dependencies:
     path: ../../../packages/bookworld_format
   story_core:
     path: ../../../packages/story_core
+  story_authoring:
+    path: ../../../packages/story_authoring
+
+# CI-only parity probe: use runner's libsqlite3 instead of downloading
+# sqlite3.dart's precompiled asset from GitHub releases (transient 504).
+# The real native Dart/SQLite semantics remain under full test.
+hooks:
+  user_defines:
+    sqlite3:
+      source: system

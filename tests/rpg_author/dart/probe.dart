@@ -6,8 +6,8 @@ import 'package:story_core/story_core.dart';
 import 'package:bookworld_format/bookworld_format.dart';
 import 'package:campaign_manager/campaign_manager.dart';
 
-import '../../../apps/story_reader/lib/book_import.dart';
-import '../../../apps/story_reader/lib/book_source_index.dart';
+// Import the source implementation directly. The Flutter app is only a client.
+import 'package:story_authoring/story_authoring.dart' show BookImporter, BookSourceIndexer;
 
 Future<void> main() async {
   final input = jsonDecode(await stdin.transform(utf8.decoder).join())

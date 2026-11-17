@@ -7,6 +7,8 @@ import 'book_source_index.dart';
 import 'book_model.dart';
 import 'source_semantic_window.dart';
 import 'source_semantic_provider.dart';
+import 'package:story_authoring/semantic_preview_models.dart';
+export 'package:story_authoring/semantic_preview_models.dart' show ZaiSemanticPreviewResult;
 
 /// Cancellation is scoped to the current, explicitly consented excerpt.
 /// It stops queued retries; an already sent HTTP POST may still finish.
@@ -52,24 +54,18 @@ class ZaiSemanticPreviewService {
 
   /// First request plus two retries. No request is made in the background,
   /// and automatic retries are limited to the same consented excerpt.
-  static const maxAttempts = 3;
+  static const maxAttempts = SemanticPreviewWireContract.maxAttempts;
   static const requestTimeout = Duration(seconds: 150);
   static const maxRetryAfter = Duration(seconds: 60);
 
-  static const providerId = 'zai-glm47flash-preview';
-  static const providerVersion = 'm2f2d-v1';
+  static const providerId = SemanticPreviewWireContract.providerId;
+  static const providerVersion = SemanticPreviewWireContract.providerVersion;
   static const maxChunkUtf16 = 4096;
   static const maxBookTitleUtf16 = 240;
   static const maxBookTitleUtf8 = 1024;
   static const maxChunkUtf8Bytes = 12 * 1024;
-  static const maxProposals = 8;
-  static const categories = <SemanticCategory>{
-    SemanticCategory.character,
-    SemanticCategory.location,
-    SemanticCategory.event,
-    SemanticCategory.fact,
-    SemanticCategory.state,
-  };
+  static const maxProposals = SemanticPreviewWireContract.maxProposals;
+  static const categories = SemanticPreviewWireContract.categories;
 
   static const _systemPrompt =
       'Вы помощник, предлагающий неподтверждённые извлечения из книги. '
@@ -601,18 +597,3 @@ class ZaiSemanticPreviewService {
   }
 }
 
-class ZaiSemanticPreviewResult {
-  const ZaiSemanticPreviewResult({
-    required this.batch,
-    required this.rejectedCount,
-    required this.rejectedNonRussian,
-    this.rejectionReasons = const [],
-    required this.totalSuggestions,
-  });
-
-  final SemanticCandidateBatch batch;
-  final int rejectedCount;
-  final int rejectedNonRussian;
-  final List<String> rejectionReasons;
-  final int totalSuggestions;
-}

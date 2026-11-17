@@ -5,14 +5,11 @@ import 'dart:math';
 import 'package:path_provider/path_provider.dart';
 
 import 'book_source_analysis.dart';
+import 'package:story_authoring/source_checkpoint_repository.dart'
+    show SourceAnalysisCheckpointRepository;
 
-/// Only checkpoints, IDs, hashes and evidence offsets are written.
-/// Full TXT/FB2 text stays in the existing private library.
-abstract class SourceAnalysisCheckpointRepository {
-  Future<String?> read(String sourceFingerprint);
-  Future<void> write(String sourceFingerprint, String checkpoint);
-  Future<void> delete(String sourceFingerprint);
-}
+export 'package:story_authoring/source_checkpoint_repository.dart'
+    show SourceAnalysisCheckpointRepository;
 
 /// Two isolated folders. Existing M2b1 files keep their original path.
 enum SourceCheckpointScope {

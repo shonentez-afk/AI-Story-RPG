@@ -82,12 +82,12 @@ void main() {
       bookStorage: storage,
     )));
     await tester.pumpAndSettle();
-    expect(find.text('Подготовить к RPG'), findsOneWidget);
+    expect(find.text('Расширенный редактор'), findsOneWidget);
     expect(find.text('Читать'), findsOneWidget);
     expect(find.byKey(const ValueKey('library-prepare-123_456.json')),
         findsOneWidget);
-    await tester.ensureVisible(find.text('Подготовить к RPG'));
-    await tester.tap(find.text('Подготовить к RPG'));
+    await tester.ensureVisible(find.text('Расширенный редактор'));
+    await tester.tap(find.text('Расширенный редактор'));
     // Preparation uses a real background isolate; pumpAndSettle would wait
     // for the pending worker under FakeAsync. The navigation itself should
     // be verified independently from worker completion.
