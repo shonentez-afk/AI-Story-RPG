@@ -31,7 +31,7 @@ class DesktopBootstrapTests(unittest.TestCase):
         server = (ROOT / "server.py").read_text(encoding="utf-8")
         tool_names = set(re.findall(r"@mcp\.tool\(\)\s*\n\s*def\s+(qa_\w+)\s*\(", server))
         self.assertEqual(tool_names, EXPECTED_TOOLS)
-        self.assertEqual(len(tool_names), 17)
+        self.assertEqual(len(tool_names), 18)
 
     def test_installer_uses_absolute_script_path_not_cwd_sensitive_module(self):
         script = (ROOT / "setup_gigacode_desktop.ps1").read_text(encoding="utf-8")

@@ -289,7 +289,9 @@ void main() {
       await tester.tap(find.text(panel));
       await tester.pumpAndSettle();
       expect(tester.takeException(), isNull, reason: panel);
-      await tester.pageBack();
+      // A modal bottom sheet has no page back button. Pop its route, not
+      // WidgetTester's AppBar pageBack helper.
+      Navigator.of(tester.element(find.byType(WorldPlayPage))).pop();
       await tester.pumpAndSettle();
     }
     await tester.sendKeyDownEvent(LogicalKeyboardKey.f11);

@@ -1,7 +1,7 @@
 """Real MCP STDIO handshake smoke test, independent of GigaCode and cwd.
 
 Run: python tools/windows_qa_mcp/protocol_smoke.py
-Starts the actual 17-tool server as a subprocess from an unrelated directory,
+Starts the actual 18-tool server as a subprocess from an unrelated directory,
 performs initialize, tools/list, qa_status, qa_begin, qa_report, and exits.
 No game GUI or user saves are touched.
 """
@@ -16,7 +16,7 @@ import traceback
 from pathlib import Path
 
 EXPECTED_TOOLS = frozenset({
-    "qa_status", "qa_begin", "qa_attach", "qa_launch", "qa_close",
+    "qa_status", "qa_crash_events", "qa_begin", "qa_attach", "qa_launch", "qa_close",
     "qa_tree", "qa_screenshot", "qa_click", "qa_click_xy", "qa_set_text",
     "qa_type_focused", "qa_press", "qa_scroll", "qa_wait_text",
     "qa_assert", "qa_note", "qa_report",
@@ -62,7 +62,7 @@ async def probe() -> dict:
                 print(f'MCP smoke: tools/list returned {len(names)} tools', file=sys.stderr, flush=True)
                 if names != EXPECTED_TOOLS:
                     raise AssertionError(
-                        "Expected exact 17 registered tools, got " + str(sorted(names))
+                        "Expected exact 18 registered tools, got " + str(sorted(names))
                     )
                 status = _text_result(await session.call_tool("qa_status", {}))
                 print('MCP smoke: qa_status OK', file=sys.stderr, flush=True)

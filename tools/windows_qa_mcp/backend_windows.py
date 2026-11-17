@@ -86,6 +86,12 @@ class WindowsBackend:
         except QAError as exc:
             return {"available": False, "reason": str(exc)}
 
+    def crash_events(self, hours: int = 24, max_events: int = 20) -> dict[str, Any]:
+        """Read only exact-path Windows Application Error 1000 events."""
+        from .crash_events import recent_app_crashes
+        return recent_app_crashes(self.config.exe, hours=hours,
+                                  max_events=max_events)
+
     def attach(self, pid: int | None = None) -> dict[str, Any]:
         candidates = self._candidates()
         if pid is None:

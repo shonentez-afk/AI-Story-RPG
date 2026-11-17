@@ -25,6 +25,11 @@ class FakeBackend:
     def status(self):
         return {'available': True, 'fake': True}
 
+    def crash_events(self, hours=24, max_events=20):
+        self.calls.append(('crash_events', hours, max_events))
+        return {'available': True, 'events': [],
+                'hours_requested': hours, 'path_match_required': True}
+
     def launch(self):
         self.calls.append(('launch',))
         return {'pid': 42}
@@ -237,6 +242,16 @@ class QATests(unittest.TestCase):
         self.assertIn("if ($LASTEXITCODE -eq 0)", script)
         self.assertNotIn("$detected = [version]", script)
         self.assertNotIn("& py -3.12 -m venv", script)
+
+    def test_crash_event_reader_is_bounded_and_read_only(self):
+        data = self.call('qa_crash_events', hours=12, max_events=4)
+        self.assertTrue(data['available'])
+        self.assertEqual(self.backend.calls[-1], ('crash_events', 12, 4))
+        for args in ({'hours': 0}, {'hours': 169},
+                     {'hours': True}, {'max_events': 41},
+                     {'max_events': 0}, {'max_events': '10'}):
+            with self.subTest(args=args), self.assertRaises(QAError):
+                self.call('qa_crash_events', **args)
 
     def test_config_only_enables_input_with_explicit_1(self):
         with patch.dict(os.environ, {'AI_STORY_QA_ALLOW_INPUT': 'true'}):

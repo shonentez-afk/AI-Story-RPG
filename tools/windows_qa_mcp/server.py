@@ -33,6 +33,11 @@ def _build():
         return result("qa_status")
 
     @mcp.tool()
+    def qa_crash_events(hours: int = 24, max_events: int = 20) -> str:
+        """Read recent Windows Application Error/1000 crashes for exactly configured game EXE."""
+        return result("qa_crash_events", hours=hours, max_events=max_events)
+
+    @mcp.tool()
     def qa_begin(name: str) -> str:
         """Start an isolated QA report (must precede assertions/screenshots). No app changes."""
         return result("qa_begin", name=name)

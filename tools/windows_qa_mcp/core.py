@@ -172,6 +172,17 @@ class QAService:
             return ({"platform": platform.system(), "app_path": str(self.config.exe) if self.config.exe else None,
                      "input_enabled": self.config.allow_input, "output_directory": str(self.config.output),
                      "backend": self.backend.status()}, None)
+        if name == "qa_crash_events":
+            hours = self._bounded(args.get("hours", 24), 1, 168, "hours")
+            maximum = self._bounded(args.get("max_events", 20), 1, 40, "max_events")
+            value = self.backend.crash_events(hours=hours, max_events=maximum)
+            if self.evidence.run_dir is not None:
+                self.evidence.action(name, {
+                    "available": value.get("available", False),
+                    "matched_events": len(value.get("events", [])),
+                    "hours": hours,
+                })
+            return value, None
         if name == "qa_begin":
             return self.evidence.begin(str(args.get("name", ""))), None
         if name == "qa_launch":
