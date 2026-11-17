@@ -437,13 +437,10 @@ jobs:
       contents: write
     name: Android APK (debug)
     runs-on: ubuntu-latest
-    needs: [reference-tests, dart-sdk, story-core, flutter-ui-crash-regression]
+    needs: [reference-tests, dart-sdk, story-core, flutter-reader]
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.13'
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -509,10 +506,13 @@ jobs:
   windows-exe:
     name: Windows portable bundle (release)
     runs-on: windows-latest
-    needs: [reference-tests, dart-sdk, story-core, flutter-reader]
+    needs: [reference-tests, dart-sdk, story-core, flutter-ui-crash-regression]
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
       - uses: subosito/flutter-action@v2
         with:
           flutter-version: '3.47.9'
