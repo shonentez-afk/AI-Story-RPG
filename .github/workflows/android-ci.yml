@@ -290,6 +290,37 @@ jobs:
           if-no-files-found: error
           retention-days: 2
 
+  flutter-ui-crash-regression:
+    name: Flutter UX navigation and crash resilience (offline)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.9'
+          channel: stable
+          cache: true
+      - name: Prepare native SQLite fixture, without external books
+        run: python3 tools/ci_prepare_verified_sqlite.py --project apps/story_reader
+      - name: Restore Flutter dependencies
+        run: flutter pub get
+        working-directory: apps/story_reader
+      - name: Run real widget interaction and crash resilience regressions
+        working-directory: apps/story_reader
+        run: |
+          flutter test -r expanded \
+            test/ux_crash_resilience_test.dart \
+            test/home_test.dart \
+            test/ui_ux_audit_test.dart \
+            test/settings_library_responsive_audit_test.dart \
+            test/book_reader_ux_test.dart \
+            test/book_rpg_start_page_test.dart \
+            test/world_rich_panels_test.dart \
+            test/reading_settings_close_test.dart \
+            test/reader_chrome_test.dart \
+            test/scene_dialogue_stage_test.dart
+
   flutter-reader:
     name: Flutter analyze and widget tests
     runs-on: ubuntu-latest
