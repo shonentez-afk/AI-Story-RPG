@@ -4498,20 +4498,6 @@
   },
   {
    "language": "python",
-   "lines": 330,
-   "path": "tools/architecture_map/generate.py",
-   "sha256": "b9af9c00e3536796d561d54f28adc8243f3cb33a90caf112e4795cfdcb7af7c5",
-   "size": 16390
-  },
-  {
-   "language": "python",
-   "lines": 59,
-   "path": "tools/architecture_map/tests/test_generate.py",
-   "sha256": "209f6fec6b9d43638d5a28e5765c2d7241ad30abbc75a13975a7db9825813225",
-   "size": 2767
-  },
-  {
-   "language": "python",
    "lines": 0,
    "path": "tools/bookworld/__init__.py",
    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
@@ -67988,146 +67974,6 @@
    "source": "file:tests/test_rich_scene_dialogue_projection.py",
    "target": "symbol:tests/test_rich_scene_dialogue_projection.py:127:test_npc_spoken_responses_require_real_source_and_distinct_outcomes",
    "url": "https://github.com/shonentez-afk/AI-Story-RPG/blob/9e5c11eb4dc8c5fd70cd588baca4d3c12e565dbc/tests/test_rich_scene_dialogue_projection.py#L127"
-  },
-  {
-   "confidence": "declaration",
-   "explanation": "Определение объявлено в исходном файле",
-   "kind": "contains",
-   "line": 40,
-   "path": "tools/architecture_map/generate.py",
-   "source": "file:tools/architecture_map/generate.py",
-   "target": "symbol:tools/architecture_map/generate.py:40:evidence",
-   "url": "https://github.com/shonentez-afk/AI-Story-RPG/blob/9e5c11eb4dc8c5fd70cd588baca4d3c12e565dbc/tools/architecture_map/generate.py#L40"
-  },
-  {
-   "confidence": "declaration",
-   "explanation": "Определение объявлено в исходном файле",
-   "kind": "contains",
-   "line": 44,
-   "path": "tools/architecture_map/generate.py",
-   "source": "file:tools/architecture_map/generate.py",
-   "target": "symbol:tools/architecture_map/generate.py:44:sha256",
-   "url": "https://github.com/shonentez-afk/AI-Story-RPG/blob/9e5c11eb4dc8c5fd70cd588baca4d3c12e565dbc/tools/architecture_map/generate.py#L44"
-  },
-  {
-   "confidence": "declaration",
-   "explanation": "Определение объявлено в исходном файле",
-   "kind": "contains",
-   "line": 48,
-   "path": "tools/architecture_map/generate.py",
-   "source": "file:tools/architecture_map/generate.py",
-   "target": "symbol:tools/architecture_map/generate.py:48:tracked_paths",
-   "url": "https://github.com/shonentez-afk/AI-Story-RPG/blob/9e5c11eb4dc8c5fd70cd588baca4d3c12e565dbc/tools/architecture_map/generate.py#L48"
-  },
-  {
-   "confidence": "declaration",
-   "explanation": "Определение объявлено в исходном файле",
-   "kind": "contains",
-   "line": 59,
-   "path": "tools/architecture_map/generate.py",
-   "source": "file:tools/architecture_map/generate.py",
-   "target": "symbol:tools/architecture_map/generate.py:59:resolve_import",
-   "url": "https://github.com/shonentez-afk/AI-Story-RPG/blob/9e5c11eb4dc8c5fd70cd588baca4d3c12e565dbc/tools/architecture_map/generate.py#L59"
-  },
-  {
-   "confidence": "declaration",
-   "explanation": "Определение объявлено в исходном файле",
-   "kind": "contains",
-   "line": 90,
-   "path": "tools/architecture_map/generate.py",
-   "source": "file:tools/architecture_map/generate.py",
-   "target": "symbol:tools/architecture_map/generate.py:90:description_before",
-   "url": "https://github.com/shonentez-afk/AI-Story-RPG/blob/9e5c11eb4dc8c5fd70cd588baca4d3c12e565dbc/tools/architecture_map/generate.py#L90"
-  },
-  {
-   "confidence": "declaration",
-   "explanation": "Определение объявлено в исходном файле",
-   "kind": "contains",
-   "line": 100,
-   "path": "tools/architecture_map/generate.py",
-   "source": "file:tools/architecture_map/generate.py",
-   "target": "symbol:tools/architecture_map/generate.py:100:symbols_python",
-   "url": "https://github.com/shonentez-afk/AI-Story-RPG/blob/9e5c11eb4dc8c5fd70cd588baca4d3c12e565dbc/tools/architecture_map/generate.py#L100"
-  },
-  {
-   "confidence": "declaration",
-   "explanation": "Определение объявлено в исходном файле",
-   "kind": "contains",
-   "line": 119,
-   "path": "tools/architecture_map/generate.py",
-   "source": "file:tools/architecture_map/generate.py",
-   "target": "symbol:tools/architecture_map/generate.py:119:symbols_dart",
-   "url": "https://github.com/shonentez-afk/AI-Story-RPG/blob/9e5c11eb4dc8c5fd70cd588baca4d3c12e565dbc/tools/architecture_map/generate.py#L119"
-  },
-  {
-   "confidence": "declaration",
-   "explanation": "Определение объявлено в исходном файле",
-   "kind": "contains",
-   "line": 139,
-   "path": "tools/architecture_map/generate.py",
-   "source": "file:tools/architecture_map/generate.py",
-   "target": "symbol:tools/architecture_map/generate.py:139:group_for",
-   "url": "https://github.com/shonentez-afk/AI-Story-RPG/blob/9e5c11eb4dc8c5fd70cd588baca4d3c12e565dbc/tools/architecture_map/generate.py#L139"
-  },
-  {
-   "confidence": "declaration",
-   "explanation": "Определение объявлено в исходном файле",
-   "kind": "contains",
-   "line": 148,
-   "path": "tools/architecture_map/generate.py",
-   "source": "file:tools/architecture_map/generate.py",
-   "target": "symbol:tools/architecture_map/generate.py:148:build",
-   "url": "https://github.com/shonentez-afk/AI-Story-RPG/blob/9e5c11eb4dc8c5fd70cd588baca4d3c12e565dbc/tools/architecture_map/generate.py#L148"
-  },
-  {
-   "confidence": "declaration",
-   "explanation": "Определение объявлено в исходном файле",
-   "kind": "contains",
-   "line": 316,
-   "path": "tools/architecture_map/generate.py",
-   "source": "file:tools/architecture_map/generate.py",
-   "target": "symbol:tools/architecture_map/generate.py:316:main",
-   "url": "https://github.com/shonentez-afk/AI-Story-RPG/blob/9e5c11eb4dc8c5fd70cd588baca4d3c12e565dbc/tools/architecture_map/generate.py#L316"
-  },
-  {
-   "confidence": "declaration",
-   "explanation": "Определение объявлено в исходном файле",
-   "kind": "contains",
-   "line": 16,
-   "path": "tools/architecture_map/tests/test_generate.py",
-   "source": "file:tools/architecture_map/tests/test_generate.py",
-   "target": "symbol:tools/architecture_map/tests/test_generate.py:16:GeneratorTests",
-   "url": "https://github.com/shonentez-afk/AI-Story-RPG/blob/9e5c11eb4dc8c5fd70cd588baca4d3c12e565dbc/tools/architecture_map/tests/test_generate.py#L16"
-  },
-  {
-   "confidence": "declaration",
-   "explanation": "Определение объявлено в исходном файле",
-   "kind": "contains",
-   "line": 17,
-   "path": "tools/architecture_map/tests/test_generate.py",
-   "source": "file:tools/architecture_map/tests/test_generate.py",
-   "target": "symbol:tools/architecture_map/tests/test_generate.py:17:test_import_rejects_nonexistent_and_external_targets",
-   "url": "https://github.com/shonentez-afk/AI-Story-RPG/blob/9e5c11eb4dc8c5fd70cd588baca4d3c12e565dbc/tools/architecture_map/tests/test_generate.py#L17"
-  },
-  {
-   "confidence": "declaration",
-   "explanation": "Определение объявлено в исходном файле",
-   "kind": "contains",
-   "line": 27,
-   "path": "tools/architecture_map/tests/test_generate.py",
-   "source": "file:tools/architecture_map/tests/test_generate.py",
-   "target": "symbol:tools/architecture_map/tests/test_generate.py:27:test_real_ast_separates_lexical_calls_and_imports",
-   "url": "https://github.com/shonentez-afk/AI-Story-RPG/blob/9e5c11eb4dc8c5fd70cd588baca4d3c12e565dbc/tools/architecture_map/tests/test_generate.py#L27"
-  },
-  {
-   "confidence": "declaration",
-   "explanation": "Определение объявлено в исходном файле",
-   "kind": "contains",
-   "line": 52,
-   "path": "tools/architecture_map/tests/test_generate.py",
-   "source": "file:tools/architecture_map/tests/test_generate.py",
-   "target": "symbol:tools/architecture_map/tests/test_generate.py:52:test_incorrect_sha_fails_closed",
-   "url": "https://github.com/shonentez-afk/AI-Story-RPG/blob/9e5c11eb4dc8c5fd70cd588baca4d3c12e565dbc/tools/architecture_map/tests/test_generate.py#L52"
   },
   {
    "confidence": "declaration",
@@ -140653,186 +140499,6 @@
    "confidence": "ast_call_candidate",
    "explanation": "AST фиксирует вызов по имени; динамическое разрешение не доказано",
    "kind": "call_candidate",
-   "line": 151,
-   "path": "tools/architecture_map/generate.py",
-   "source": "symbol:tools/architecture_map/generate.py:148:build",
-   "target": "symbol:tools/architecture_map/generate.py:48:tracked_paths",
-   "url": "https://github.com/shonentez-afk/AI-Story-RPG/blob/9e5c11eb4dc8c5fd70cd588baca4d3c12e565dbc/tools/architecture_map/generate.py#L151"
-  },
-  {
-   "confidence": "ast_call_candidate",
-   "explanation": "AST фиксирует вызов по имени; динамическое разрешение не доказано",
-   "kind": "call_candidate",
-   "line": 322,
-   "path": "tools/architecture_map/generate.py",
-   "source": "symbol:tools/architecture_map/generate.py:316:main",
-   "target": "symbol:tools/architecture_map/generate.py:148:build",
-   "url": "https://github.com/shonentez-afk/AI-Story-RPG/blob/9e5c11eb4dc8c5fd70cd588baca4d3c12e565dbc/tools/architecture_map/generate.py#L322"
-  },
-  {
-   "confidence": "ast_call_candidate",
-   "explanation": "AST фиксирует вызов по имени; динамическое разрешение не доказано",
-   "kind": "call_candidate",
-   "line": 182,
-   "path": "tools/architecture_map/generate.py",
-   "source": "symbol:tools/architecture_map/generate.py:148:build",
-   "target": "symbol:tools/architecture_map/generate.py:100:symbols_python",
-   "url": "https://github.com/shonentez-afk/AI-Story-RPG/blob/9e5c11eb4dc8c5fd70cd588baca4d3c12e565dbc/tools/architecture_map/generate.py#L182"
-  },
-  {
-   "confidence": "ast_call_candidate",
-   "explanation": "AST фиксирует вызов по имени; динамическое разрешение не доказано",
-   "kind": "call_candidate",
-   "line": 211,
-   "path": "tools/architecture_map/generate.py",
-   "source": "symbol:tools/architecture_map/generate.py:148:build",
-   "target": "symbol:tools/architecture_map/generate.py:119:symbols_dart",
-   "url": "https://github.com/shonentez-afk/AI-Story-RPG/blob/9e5c11eb4dc8c5fd70cd588baca4d3c12e565dbc/tools/architecture_map/generate.py#L211"
-  },
-  {
-   "confidence": "ast_call_candidate",
-   "explanation": "AST фиксирует вызов по имени; динамическое разрешение не доказано",
-   "kind": "call_candidate",
-   "line": 131,
-   "path": "tools/architecture_map/generate.py",
-   "source": "symbol:tools/architecture_map/generate.py:119:symbols_dart",
-   "target": "symbol:tools/architecture_map/generate.py:139:group_for",
-   "url": "https://github.com/shonentez-afk/AI-Story-RPG/blob/9e5c11eb4dc8c5fd70cd588baca4d3c12e565dbc/tools/architecture_map/generate.py#L131"
-  },
-  {
-   "confidence": "ast_call_candidate",
-   "explanation": "AST фиксирует вызов по имени; динамическое разрешение не доказано",
-   "kind": "call_candidate",
-   "line": 134,
-   "path": "tools/architecture_map/generate.py",
-   "source": "symbol:tools/architecture_map/generate.py:119:symbols_dart",
-   "target": "symbol:tools/architecture_map/generate.py:90:description_before",
-   "url": "https://github.com/shonentez-afk/AI-Story-RPG/blob/9e5c11eb4dc8c5fd70cd588baca4d3c12e565dbc/tools/architecture_map/generate.py#L134"
-  },
-  {
-   "confidence": "ast_call_candidate",
-   "explanation": "AST фиксирует вызов по имени; динамическое разрешение не доказано",
-   "kind": "call_candidate",
-   "line": 135,
-   "path": "tools/architecture_map/generate.py",
-   "source": "symbol:tools/architecture_map/generate.py:119:symbols_dart",
-   "target": "symbol:tools/architecture_map/generate.py:40:evidence",
-   "url": "https://github.com/shonentez-afk/AI-Story-RPG/blob/9e5c11eb4dc8c5fd70cd588baca4d3c12e565dbc/tools/architecture_map/generate.py#L135"
-  },
-  {
-   "confidence": "ast_call_candidate",
-   "explanation": "AST фиксирует вызов по имени; динамическое разрешение не доказано",
-   "kind": "call_candidate",
-   "line": 174,
-   "path": "tools/architecture_map/generate.py",
-   "source": "symbol:tools/architecture_map/generate.py:148:build",
-   "target": "symbol:tools/architecture_map/generate.py:139:group_for",
-   "url": "https://github.com/shonentez-afk/AI-Story-RPG/blob/9e5c11eb4dc8c5fd70cd588baca4d3c12e565dbc/tools/architecture_map/generate.py#L174"
-  },
-  {
-   "confidence": "ast_call_candidate",
-   "explanation": "AST фиксирует вызов по имени; динамическое разрешение не доказано",
-   "kind": "call_candidate",
-   "line": 175,
-   "path": "tools/architecture_map/generate.py",
-   "source": "symbol:tools/architecture_map/generate.py:148:build",
-   "target": "symbol:tools/architecture_map/generate.py:40:evidence",
-   "url": "https://github.com/shonentez-afk/AI-Story-RPG/blob/9e5c11eb4dc8c5fd70cd588baca4d3c12e565dbc/tools/architecture_map/generate.py#L175"
-  },
-  {
-   "confidence": "ast_call_candidate",
-   "explanation": "AST фиксирует вызов по имени; динамическое разрешение не доказано",
-   "kind": "call_candidate",
-   "line": 176,
-   "path": "tools/architecture_map/generate.py",
-   "source": "symbol:tools/architecture_map/generate.py:148:build",
-   "target": "symbol:tools/architecture_map/generate.py:44:sha256",
-   "url": "https://github.com/shonentez-afk/AI-Story-RPG/blob/9e5c11eb4dc8c5fd70cd588baca4d3c12e565dbc/tools/architecture_map/generate.py#L176"
-  },
-  {
-   "confidence": "ast_call_candidate",
-   "explanation": "AST фиксирует вызов по имени; динамическое разрешение не доказано",
-   "kind": "call_candidate",
-   "line": 239,
-   "path": "tools/architecture_map/generate.py",
-   "source": "symbol:tools/architecture_map/generate.py:148:build",
-   "target": "symbol:tools/architecture_map/generate.py:40:evidence",
-   "url": "https://github.com/shonentez-afk/AI-Story-RPG/blob/9e5c11eb4dc8c5fd70cd588baca4d3c12e565dbc/tools/architecture_map/generate.py#L239"
-  },
-  {
-   "confidence": "ast_call_candidate",
-   "explanation": "AST фиксирует вызов по имени; динамическое разрешение не доказано",
-   "kind": "call_candidate",
-   "line": 215,
-   "path": "tools/architecture_map/generate.py",
-   "source": "symbol:tools/architecture_map/generate.py:148:build",
-   "target": "symbol:tools/architecture_map/generate.py:59:resolve_import",
-   "url": "https://github.com/shonentez-afk/AI-Story-RPG/blob/9e5c11eb4dc8c5fd70cd588baca4d3c12e565dbc/tools/architecture_map/generate.py#L215"
-  },
-  {
-   "confidence": "ast_call_candidate",
-   "explanation": "AST фиксирует вызов по имени; динамическое разрешение не доказано",
-   "kind": "call_candidate",
-   "line": 222,
-   "path": "tools/architecture_map/generate.py",
-   "source": "symbol:tools/architecture_map/generate.py:148:build",
-   "target": "symbol:tools/architecture_map/generate.py:59:resolve_import",
-   "url": "https://github.com/shonentez-afk/AI-Story-RPG/blob/9e5c11eb4dc8c5fd70cd588baca4d3c12e565dbc/tools/architecture_map/generate.py#L222"
-  },
-  {
-   "confidence": "ast_call_candidate",
-   "explanation": "AST фиксирует вызов по имени; динамическое разрешение не доказано",
-   "kind": "call_candidate",
-   "line": 110,
-   "path": "tools/architecture_map/generate.py",
-   "source": "symbol:tools/architecture_map/generate.py:100:symbols_python",
-   "target": "symbol:tools/architecture_map/generate.py:139:group_for",
-   "url": "https://github.com/shonentez-afk/AI-Story-RPG/blob/9e5c11eb4dc8c5fd70cd588baca4d3c12e565dbc/tools/architecture_map/generate.py#L110"
-  },
-  {
-   "confidence": "ast_call_candidate",
-   "explanation": "AST фиксирует вызов по имени; динамическое разрешение не доказано",
-   "kind": "call_candidate",
-   "line": 112,
-   "path": "tools/architecture_map/generate.py",
-   "source": "symbol:tools/architecture_map/generate.py:100:symbols_python",
-   "target": "symbol:tools/architecture_map/generate.py:40:evidence",
-   "url": "https://github.com/shonentez-afk/AI-Story-RPG/blob/9e5c11eb4dc8c5fd70cd588baca4d3c12e565dbc/tools/architecture_map/generate.py#L112"
-  },
-  {
-   "confidence": "ast_call_candidate",
-   "explanation": "AST фиксирует вызов по имени; динамическое разрешение не доказано",
-   "kind": "call_candidate",
-   "line": 265,
-   "path": "tools/architecture_map/generate.py",
-   "source": "symbol:tools/architecture_map/generate.py:148:build",
-   "target": "symbol:tools/architecture_map/generate.py:40:evidence",
-   "url": "https://github.com/shonentez-afk/AI-Story-RPG/blob/9e5c11eb4dc8c5fd70cd588baca4d3c12e565dbc/tools/architecture_map/generate.py#L265"
-  },
-  {
-   "confidence": "ast_call_candidate",
-   "explanation": "AST фиксирует вызов по имени; динамическое разрешение не доказано",
-   "kind": "call_candidate",
-   "line": 203,
-   "path": "tools/architecture_map/generate.py",
-   "source": "symbol:tools/architecture_map/generate.py:148:build",
-   "target": "symbol:tools/architecture_map/generate.py:59:resolve_import",
-   "url": "https://github.com/shonentez-afk/AI-Story-RPG/blob/9e5c11eb4dc8c5fd70cd588baca4d3c12e565dbc/tools/architecture_map/generate.py#L203"
-  },
-  {
-   "confidence": "ast_call_candidate",
-   "explanation": "AST фиксирует вызов по имени; динамическое разрешение не доказано",
-   "kind": "call_candidate",
-   "line": 284,
-   "path": "tools/architecture_map/generate.py",
-   "source": "symbol:tools/architecture_map/generate.py:148:build",
-   "target": "symbol:tools/architecture_map/generate.py:40:evidence",
-   "url": "https://github.com/shonentez-afk/AI-Story-RPG/blob/9e5c11eb4dc8c5fd70cd588baca4d3c12e565dbc/tools/architecture_map/generate.py#L284"
-  },
-  {
-   "confidence": "ast_call_candidate",
-   "explanation": "AST фиксирует вызов по имени; динамическое разрешение не доказано",
-   "kind": "call_candidate",
    "line": 49,
    "path": "tools/bookworld/bookworld.py",
    "source": "symbol:tools/bookworld/bookworld.py:48:fail",
@@ -148396,10 +148062,6 @@
    "path": ".github/workflows/android-ci.yml"
   },
   {
-   "bytes": 2623,
-   "path": ".github/workflows/architecture-map-docs.yml"
-  },
-  {
    "bytes": 1226,
    "path": ".github/workflows/cleanup-old-android-releases.yml"
   },
@@ -150416,30 +150078,6 @@
    "path": "docs/adr/ADR-001_STORY_RUNTIME_RU.md"
   },
   {
-   "bytes": 7438,
-   "path": "docs/architecture-map/README_RU.md"
-  },
-  {
-   "bytes": 13477764,
-   "path": "docs/architecture-map/codegraph.json"
-  },
-  {
-   "bytes": 14522,
-   "path": "docs/architecture-map/index.html"
-  },
-  {
-   "bytes": 3563,
-   "path": "docs/architecture-map/model.c4"
-  },
-  {
-   "bytes": 14189,
-   "path": "docs/architecture-map/overview.json"
-  },
-  {
-   "bytes": 747,
-   "path": "docs/architecture-map/views.c4"
-  },
-  {
    "bytes": 1878,
    "path": "experiments/m0_engine_comparison/README_RU.md"
   },
@@ -151802,14 +151440,6 @@
   {
    "bytes": 0,
    "path": "tools/__init__.py"
-  },
-  {
-   "bytes": 16390,
-   "path": "tools/architecture_map/generate.py"
-  },
-  {
-   "bytes": 2767,
-   "path": "tools/architecture_map/tests/test_generate.py"
   },
   {
    "bytes": 0,
@@ -240975,196 +240605,6 @@
   {
    "confidence": "file_inventory",
    "group": "tools/other",
-   "id": "file:tools/architecture_map/generate.py",
-   "label": "tools/architecture_map/generate.py",
-   "line": 1,
-   "name": "generate.py",
-   "path": "tools/architecture_map/generate.py",
-   "type": "file",
-   "url": "https://github.com/shonentez-afk/AI-Story-RPG/blob/9e5c11eb4dc8c5fd70cd588baca4d3c12e565dbc/tools/architecture_map/generate.py#L1"
-  },
-  {
-   "confidence": "ast_definition",
-   "description": "",
-   "group": "tools/other",
-   "id": "symbol:tools/architecture_map/generate.py:40:evidence",
-   "label": "evidence",
-   "line": 40,
-   "name": "evidence",
-   "path": "tools/architecture_map/generate.py",
-   "type": "function",
-   "url": "https://github.com/shonentez-afk/AI-Story-RPG/blob/9e5c11eb4dc8c5fd70cd588baca4d3c12e565dbc/tools/architecture_map/generate.py#L40"
-  },
-  {
-   "confidence": "ast_definition",
-   "description": "",
-   "group": "tools/other",
-   "id": "symbol:tools/architecture_map/generate.py:44:sha256",
-   "label": "sha256",
-   "line": 44,
-   "name": "sha256",
-   "path": "tools/architecture_map/generate.py",
-   "type": "function",
-   "url": "https://github.com/shonentez-afk/AI-Story-RPG/blob/9e5c11eb4dc8c5fd70cd588baca4d3c12e565dbc/tools/architecture_map/generate.py#L44"
-  },
-  {
-   "confidence": "ast_definition",
-   "description": "",
-   "group": "tools/other",
-   "id": "symbol:tools/architecture_map/generate.py:48:tracked_paths",
-   "label": "tracked_paths",
-   "line": 48,
-   "name": "tracked_paths",
-   "path": "tools/architecture_map/generate.py",
-   "type": "function",
-   "url": "https://github.com/shonentez-afk/AI-Story-RPG/blob/9e5c11eb4dc8c5fd70cd588baca4d3c12e565dbc/tools/architecture_map/generate.py#L48"
-  },
-  {
-   "confidence": "ast_definition",
-   "description": "Resolve only concrete repo-local files; do not invent dependencies.",
-   "group": "tools/other",
-   "id": "symbol:tools/architecture_map/generate.py:59:resolve_import",
-   "label": "resolve_import",
-   "line": 59,
-   "name": "resolve_import",
-   "path": "tools/architecture_map/generate.py",
-   "type": "function",
-   "url": "https://github.com/shonentez-afk/AI-Story-RPG/blob/9e5c11eb4dc8c5fd70cd588baca4d3c12e565dbc/tools/architecture_map/generate.py#L59"
-  },
-  {
-   "confidence": "ast_definition",
-   "description": "",
-   "group": "tools/other",
-   "id": "symbol:tools/architecture_map/generate.py:90:description_before",
-   "label": "description_before",
-   "line": 90,
-   "name": "description_before",
-   "path": "tools/architecture_map/generate.py",
-   "type": "function",
-   "url": "https://github.com/shonentez-afk/AI-Story-RPG/blob/9e5c11eb4dc8c5fd70cd588baca4d3c12e565dbc/tools/architecture_map/generate.py#L90"
-  },
-  {
-   "confidence": "ast_definition",
-   "description": "",
-   "group": "tools/other",
-   "id": "symbol:tools/architecture_map/generate.py:100:symbols_python",
-   "label": "symbols_python",
-   "line": 100,
-   "name": "symbols_python",
-   "path": "tools/architecture_map/generate.py",
-   "type": "function",
-   "url": "https://github.com/shonentez-afk/AI-Story-RPG/blob/9e5c11eb4dc8c5fd70cd588baca4d3c12e565dbc/tools/architecture_map/generate.py#L100"
-  },
-  {
-   "confidence": "ast_definition",
-   "description": "",
-   "group": "tools/other",
-   "id": "symbol:tools/architecture_map/generate.py:119:symbols_dart",
-   "label": "symbols_dart",
-   "line": 119,
-   "name": "symbols_dart",
-   "path": "tools/architecture_map/generate.py",
-   "type": "function",
-   "url": "https://github.com/shonentez-afk/AI-Story-RPG/blob/9e5c11eb4dc8c5fd70cd588baca4d3c12e565dbc/tools/architecture_map/generate.py#L119"
-  },
-  {
-   "confidence": "ast_definition",
-   "description": "",
-   "group": "tools/other",
-   "id": "symbol:tools/architecture_map/generate.py:139:group_for",
-   "label": "group_for",
-   "line": 139,
-   "name": "group_for",
-   "path": "tools/architecture_map/generate.py",
-   "type": "function",
-   "url": "https://github.com/shonentez-afk/AI-Story-RPG/blob/9e5c11eb4dc8c5fd70cd588baca4d3c12e565dbc/tools/architecture_map/generate.py#L139"
-  },
-  {
-   "confidence": "ast_definition",
-   "description": "",
-   "group": "tools/other",
-   "id": "symbol:tools/architecture_map/generate.py:148:build",
-   "label": "build",
-   "line": 148,
-   "name": "build",
-   "path": "tools/architecture_map/generate.py",
-   "type": "function",
-   "url": "https://github.com/shonentez-afk/AI-Story-RPG/blob/9e5c11eb4dc8c5fd70cd588baca4d3c12e565dbc/tools/architecture_map/generate.py#L148"
-  },
-  {
-   "confidence": "ast_definition",
-   "description": "",
-   "group": "tools/other",
-   "id": "symbol:tools/architecture_map/generate.py:316:main",
-   "label": "main",
-   "line": 316,
-   "name": "main",
-   "path": "tools/architecture_map/generate.py",
-   "type": "function",
-   "url": "https://github.com/shonentez-afk/AI-Story-RPG/blob/9e5c11eb4dc8c5fd70cd588baca4d3c12e565dbc/tools/architecture_map/generate.py#L316"
-  },
-  {
-   "confidence": "file_inventory",
-   "group": "tools/other",
-   "id": "file:tools/architecture_map/tests/test_generate.py",
-   "label": "tools/architecture_map/tests/test_generate.py",
-   "line": 1,
-   "name": "test_generate.py",
-   "path": "tools/architecture_map/tests/test_generate.py",
-   "type": "file",
-   "url": "https://github.com/shonentez-afk/AI-Story-RPG/blob/9e5c11eb4dc8c5fd70cd588baca4d3c12e565dbc/tools/architecture_map/tests/test_generate.py#L1"
-  },
-  {
-   "confidence": "ast_definition",
-   "description": "",
-   "group": "tools/other",
-   "id": "symbol:tools/architecture_map/tests/test_generate.py:16:GeneratorTests",
-   "label": "GeneratorTests",
-   "line": 16,
-   "name": "GeneratorTests",
-   "path": "tools/architecture_map/tests/test_generate.py",
-   "type": "class",
-   "url": "https://github.com/shonentez-afk/AI-Story-RPG/blob/9e5c11eb4dc8c5fd70cd588baca4d3c12e565dbc/tools/architecture_map/tests/test_generate.py#L16"
-  },
-  {
-   "confidence": "ast_definition",
-   "description": "",
-   "group": "tools/other",
-   "id": "symbol:tools/architecture_map/tests/test_generate.py:17:test_import_rejects_nonexistent_and_external_targets",
-   "label": "GeneratorTests.test_import_rejects_nonexistent_and_external_targets",
-   "line": 17,
-   "name": "test_import_rejects_nonexistent_and_external_targets",
-   "path": "tools/architecture_map/tests/test_generate.py",
-   "type": "method",
-   "url": "https://github.com/shonentez-afk/AI-Story-RPG/blob/9e5c11eb4dc8c5fd70cd588baca4d3c12e565dbc/tools/architecture_map/tests/test_generate.py#L17"
-  },
-  {
-   "confidence": "ast_definition",
-   "description": "",
-   "group": "tools/other",
-   "id": "symbol:tools/architecture_map/tests/test_generate.py:27:test_real_ast_separates_lexical_calls_and_imports",
-   "label": "GeneratorTests.test_real_ast_separates_lexical_calls_and_imports",
-   "line": 27,
-   "name": "test_real_ast_separates_lexical_calls_and_imports",
-   "path": "tools/architecture_map/tests/test_generate.py",
-   "type": "method",
-   "url": "https://github.com/shonentez-afk/AI-Story-RPG/blob/9e5c11eb4dc8c5fd70cd588baca4d3c12e565dbc/tools/architecture_map/tests/test_generate.py#L27"
-  },
-  {
-   "confidence": "ast_definition",
-   "description": "",
-   "group": "tools/other",
-   "id": "symbol:tools/architecture_map/tests/test_generate.py:52:test_incorrect_sha_fails_closed",
-   "label": "GeneratorTests.test_incorrect_sha_fails_closed",
-   "line": 52,
-   "name": "test_incorrect_sha_fails_closed",
-   "path": "tools/architecture_map/tests/test_generate.py",
-   "type": "method",
-   "url": "https://github.com/shonentez-afk/AI-Story-RPG/blob/9e5c11eb4dc8c5fd70cd588baca4d3c12e565dbc/tools/architecture_map/tests/test_generate.py#L52"
-  },
-  {
-   "confidence": "file_inventory",
-   "group": "tools/other",
    "id": "file:tools/bookworld/__init__.py",
    "label": "tools/bookworld/__init__.py",
    "line": 1,
@@ -246228,14 +245668,14 @@
  "schema": "ai_story_unified_map_v1",
  "sourceCommit": "9e5c11eb4dc8c5fd70cd588baca4d3c12e565dbc",
  "statistics": {
-  "analyzedCodeFiles": 694,
-  "edges": 14352,
-  "nodes": 7395,
+  "analyzedCodeFiles": 692,
+  "edges": 14320,
+  "nodes": 7379,
   "relationKinds": {
-   "call_candidate": 5814,
-   "contains": 6701,
+   "call_candidate": 5796,
+   "contains": 6687,
    "import": 1837
   },
-  "trackedFiles": 915
+  "trackedFiles": 906
  }
 }
