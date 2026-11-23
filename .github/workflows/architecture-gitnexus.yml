@@ -8,7 +8,10 @@ on:
       - tools/architecture_map/gitnexus_audit.py
   workflow_dispatch:
 permissions:
-  contents: read
+  contents: write
+concurrency:
+  group: docs-gitnexus-evidence
+  cancel-in-progress: true
 jobs:
   analyze-gitnexus:
     runs-on: ubuntu-24.04
@@ -24,7 +27,7 @@ jobs:
         run: git worktree add --detach /tmp/ai-story-rpg-source 9e5c11eb4dc8c5fd70cd588baca4d3c12e565dbc
       - name: Install GitNexus CLI outside source
         run: |
-          npm install --prefix /tmp/ai-story-gitnexus --ignore-scripts=false gitnexus
+          npm install --prefix /tmp/ai-story-gitnexus --ignore-scripts=false gitnexus@1.6.12
           /tmp/ai-story-gitnexus/node_modules/.bin/gitnexus --version
       - name: Run actual GitNexus without modifying source code
         run: |
@@ -48,10 +51,30 @@ jobs:
           cat /tmp/gitnexus-calls.txt
           /tmp/ai-story-gitnexus/node_modules/.bin/gitnexus cypher "MATCH (a)-[r:CodeRelation]->(b) WHERE r.type = 'CALLS' AND r.confidence >= 0.7 RETURN a.name AS caller, a.filePath AS caller_file, a.startLine AS caller_line, b.name AS callee, b.filePath AS callee_file, b.startLine AS callee_line, r.confidence AS confidence LIMIT 5" -l 5 > /tmp/gitnexus-sample.txt 2>&1
           cat /tmp/gitnexus-sample.txt
+      - name: Export AST-resolved CALLS from actual GitNexus graph
+        run: |
+          cd /tmp/ai-story-rpg-source
+          /tmp/ai-story-gitnexus/node_modules/.bin/gitnexus cypher "MATCH (a)-[r:CodeRelation]->(b) WHERE r.type = 'CALLS' AND r.confidence >= 0.7 RETURN count(r) AS high_confidence_calls" > /tmp/gitnexus-high-count.txt
+          /tmp/ai-story-gitnexus/node_modules/.bin/gitnexus cypher "MATCH (a)-[r:CodeRelation]->(b) WHERE r.type = 'CALLS' AND r.confidence >= 0.7 RETURN a.name AS caller, a.filePath AS caller_file, a.startLine AS caller_line, b.name AS callee, b.filePath AS callee_file, b.startLine AS callee_line, r.confidence AS confidence LIMIT 15000" -l 15000 > /tmp/gitnexus-high-rows.txt
+          cd "$GITHUB_WORKSPACE"
+          python3 tools/architecture_map/gitnexus_export.py --input /tmp/gitnexus-high-rows.txt --output docs/architecture-map/gitnexus_calls.json
+          wc -c docs/architecture-map/gitnexus_calls.json
       - name: Build defensible evidence report
         run: |
           python3 tools/architecture_map/gitnexus_audit.py --worktree /tmp/ai-story-rpg-source --output /tmp/gitnexus-evidence.json
           cat /tmp/gitnexus-evidence.json
+      - name: Commit only verified GitNexus documentation output
+        run: |
+          cp /tmp/gitnexus-evidence.json docs/architecture-map/gitnexus_audit.json
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add docs/architecture-map/gitnexus_calls.json docs/architecture-map/gitnexus_audit.json
+          if ! git diff --cached --quiet; then
+            git commit -m 'docs: publish pinned GitNexus AST evidence [skip ci]'
+            git fetch origin docs/unified-architecture-codegraph-20261124
+            git rebase origin/docs/unified-architecture-codegraph-20261124
+            git push origin HEAD:docs/unified-architecture-codegraph-20261124
+          fi
       - uses: actions/upload-artifact@v4
         with:
           name: gitnexus-ast-evidence
@@ -60,4 +83,4 @@ jobs:
             /tmp/gitnexus-status.txt
             /tmp/gitnexus-nodes.txt
             /tmp/gitnexus-calls.txt
-          retention-days: 30
+          retention-days: 7
