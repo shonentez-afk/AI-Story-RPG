@@ -148396,7 +148396,7 @@
    "path": ".github/workflows/android-ci.yml"
   },
   {
-   "bytes": 2000,
+   "bytes": 2623,
    "path": ".github/workflows/architecture-map-docs.yml"
   },
   {
@@ -150420,7 +150420,7 @@
    "path": "docs/architecture-map/README_RU.md"
   },
   {
-   "bytes": 13477683,
+   "bytes": 13477764,
    "path": "docs/architecture-map/codegraph.json"
   },
   {
