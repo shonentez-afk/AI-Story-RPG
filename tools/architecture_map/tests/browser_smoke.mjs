@@ -20,6 +20,7 @@ try {
   assert.ok(await page.getByRole('link',{name:/Исходник, строка/}).first().getAttribute('href'));
   await page.locator('#code').click();
   await page.getByRole('heading',{name:/Связи кода/}).waitFor({timeout:30000});
+  assert.ok((await page.locator('#path').textContent()).includes('GitNexus'));
   assert.ok((await page.locator('#path').textContent()).includes('7395') ||
             (await page.locator('#path').textContent()).includes('узлов'));
   await page.locator('#search').fill('commitChoice');
@@ -40,6 +41,7 @@ try {
 
   await page.getByText('Потенциальное влияние изменений').waitFor();
   await page.locator('#direction').selectOption('incoming');
+  await page.locator('#confidence').selectOption('gitnexus');
   await page.locator('#confidence').selectOption('call_candidate');
   await page.locator('#zin').click();
   await page.locator('#fit').click();

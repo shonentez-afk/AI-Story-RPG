@@ -1,10 +1,11 @@
-name: Publish unified architecture map (GitHub Pages)
+name: Verify and publish unified architecture map
 on:
   push:
     branches:
       - docs/unified-architecture-codegraph-20261124
     paths:
       - docs/architecture-map/likec4-views.js
+      - docs/architecture-map/gitnexus_calls.json
       - .github/workflows/architecture-pages.yml
   workflow_dispatch:
 permissions:
@@ -15,38 +16,65 @@ concurrency:
   group: github-pages-architecture-map
   cancel-in-progress: true
 jobs:
-  deploy:
-    environment:
-      name: github-pages
-      url: ${{ steps.deploy.outputs.page_url }}
+  preview:
     runs-on: ubuntu-24.04
+    outputs:
+      pages_enabled: ${{ steps.pages.outputs.enabled }}
     steps:
       - uses: actions/checkout@v4
-      - name: Verify generated bundle and provenance
+      - name: Verify files and immutable source provenance
         run: |
-          test -s docs/architecture-map/likec4-views.js
-          test -s docs/architecture-map/codegraph.json
+          for p in index.html overview.json codegraph.json likec4-views.js gitnexus_calls.json; do
+            test -s "docs/architecture-map/$p"
+          done
           python3 - <<'PY'
           import json
-          data=json.load(open('docs/architecture-map/codegraph.json',encoding='utf-8'))
-          assert data['sourceCommit']=='9e5c11eb4dc8c5fd70cd588baca4d3c12e565dbc'
+          for name in ('codegraph', 'gitnexus_calls'):
+              d=json.load(open('docs/architecture-map/'+name+'.json',encoding='utf-8'))
+              assert d['sourceCommit']=='9e5c11eb4dc8c5fd70cd588baca4d3c12e565dbc'
           PY
-      - name: Assemble one static interactive site
+      - name: Verify public, immediately usable read-only HTML preview
+        env:
+          BASE: https://raw.githack.com/${{ github.repository }}/${{ github.sha }}/docs/architecture-map
         run: |
-          mkdir -p _site/docs/architecture-map
-          cp docs/architecture-map/index.html _site/docs/architecture-map/
-          cp docs/architecture-map/overview.json _site/docs/architecture-map/
-          cp docs/architecture-map/codegraph.json _site/docs/architecture-map/
-          cp docs/architecture-map/likec4-views.js _site/docs/architecture-map/
-          cp docs/ARCHITECTURE_RU.md _site/docs/
-          cp docs/RPG_ENGINE_CLIENT_AUTONOMY_AUDIT_RU_2026-11-09.md _site/docs/
-          cp docs/FLUTTER_ENGINE_UI_PARITY_P0_RU_2026-11-09.md _site/docs/
+          set -eu
+          for file in index.html overview.json codegraph.json likec4-views.js gitnexus_calls.json; do
+            echo "Verify $BASE/$file"
+            curl -fSL --retry 5 --retry-delay 3 --connect-timeout 15 --max-time 120 "$BASE/$file" -o /tmp/architecture-preview-file
+            test -s /tmp/architecture-preview-file
+          done
+          echo "PUBLIC PREVIEW URL: $BASE/index.html"
+      - name: Detect whether GitHub Pages has been enabled
+        id: pages
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          curl -fsSL -H "Accept: application/vnd.github+json" -H "Authorization: Bearer $GH_TOKEN" "https://api.github.com/repos/$GITHUB_REPOSITORY" -o /tmp/architecture-pages-repo.json
+          python3 - <<'PY' >> "$GITHUB_OUTPUT"
+          import json
+          x=json.load(open('/tmp/architecture-pages-repo.json',encoding='utf-8'))
+          print('enabled='+str(bool(x.get('has_pages'))).lower())
+          PY
+  deploy:
+    needs: preview
+    if: needs.preview.outputs.pages_enabled == 'true'
+    runs-on: ubuntu-24.04
+    environment:
+      name: github-pages
+      url: ${{ steps.publish.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Assemble one static map site
+        run: |
+          mkdir -p _site/docs/architecture-map _site/docs
+          cp docs/architecture-map/index.html docs/architecture-map/overview.json docs/architecture-map/codegraph.json docs/architecture-map/likec4-views.js docs/architecture-map/gitnexus_calls.json _site/docs/architecture-map/
           cp docs/architecture-map/README_RU.md _site/docs/architecture-map/
-          printf '%s\n' '<!DOCTYPE html><html lang="ru"><meta charset="utf-8"><meta http-equiv="refresh" content="0;url=docs/architecture-map/index.html"><title>AI Story RPG architecture</title><a href="docs/architecture-map/index.html">Open architecture map</a></html>' > _site/index.html
+          cp docs/ARCHITECTURE_RU.md docs/RPG_ENGINE_CLIENT_AUTONOMY_AUDIT_RU_2026-11-09.md docs/FLUTTER_ENGINE_UI_PARITY_P0_RU_2026-11-09.md _site/docs/
+          printf '%s\n' '<!doctype html><meta charset="utf-8"><meta http-equiv="refresh" content="0;url=docs/architecture-map/index.html"><a href="docs/architecture-map/index.html">Open unified architecture map</a>' > _site/index.html
           touch _site/.nojekyll
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
           path: _site
-      - id: deploy
+      - id: publish
         uses: actions/deploy-pages@v4

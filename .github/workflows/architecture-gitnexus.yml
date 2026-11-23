@@ -75,12 +75,3 @@ jobs:
             git rebase origin/docs/unified-architecture-codegraph-20261124
             git push origin HEAD:docs/unified-architecture-codegraph-20261124
           fi
-      - uses: actions/upload-artifact@v4
-        with:
-          name: gitnexus-ast-evidence
-          path: |
-            /tmp/gitnexus-evidence.json
-            /tmp/gitnexus-status.txt
-            /tmp/gitnexus-nodes.txt
-            /tmp/gitnexus-calls.txt
-          retention-days: 7
