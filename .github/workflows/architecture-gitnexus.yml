@@ -1,0 +1,57 @@
+name: Docs GitNexus evidence verification
+on:
+  push:
+    branches:
+      - docs/unified-architecture-codegraph-20261124
+    paths:
+      - .github/workflows/architecture-gitnexus.yml
+      - tools/architecture_map/gitnexus_audit.py
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  analyze-gitnexus:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Immutable source worktree
+        run: git worktree add --detach /tmp/ai-story-rpg-source 9e5c11eb4dc8c5fd70cd588baca4d3c12e565dbc
+      - name: Install GitNexus CLI outside source
+        run: |
+          npm install --prefix /tmp/ai-story-gitnexus --ignore-scripts=false gitnexus
+          /tmp/ai-story-gitnexus/node_modules/.bin/gitnexus --version
+      - name: Run actual GitNexus without modifying source code
+        run: |
+          cd /tmp/ai-story-rpg-source
+          export CI=1
+          export GITNEXUS_NO_UPDATE_NOTIFIER=1
+          /tmp/ai-story-gitnexus/node_modules/.bin/gitnexus analyze --index-only --skip-fts > /tmp/gitnexus-analysis.log 2>&1 || { tail -n 180 /tmp/gitnexus-analysis.log; exit 1; }
+          tail -n 100 /tmp/gitnexus-analysis.log
+      - name: Query real GitNexus index (no synthetic data)
+        run: |
+          cd /tmp/ai-story-rpg-source
+          /tmp/ai-story-gitnexus/node_modules/.bin/gitnexus status > /tmp/gitnexus-status.txt 2>&1
+          /tmp/ai-story-gitnexus/node_modules/.bin/gitnexus cypher "MATCH (n) RETURN labels(n) AS kinds, count(n) AS count ORDER BY count DESC LIMIT 15" > /tmp/gitnexus-nodes.txt 2>&1
+          /tmp/ai-story-gitnexus/node_modules/.bin/gitnexus cypher "MATCH (a)-[r:CALLS]->(b) RETURN count(r) AS calls" > /tmp/gitnexus-calls.txt 2>&1
+          cat /tmp/gitnexus-status.txt
+          cat /tmp/gitnexus-nodes.txt
+          cat /tmp/gitnexus-calls.txt
+      - name: Build defensible evidence report
+        run: |
+          python3 tools/architecture_map/gitnexus_audit.py --worktree /tmp/ai-story-rpg-source --output /tmp/gitnexus-evidence.json
+          cat /tmp/gitnexus-evidence.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: gitnexus-ast-evidence
+          path: |
+            /tmp/gitnexus-evidence.json
+            /tmp/gitnexus-status.txt
+            /tmp/gitnexus-nodes.txt
+            /tmp/gitnexus-calls.txt
+          retention-days: 30
