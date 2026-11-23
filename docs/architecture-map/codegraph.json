@@ -150420,7 +150420,11 @@
    "path": "docs/architecture-map/README_RU.md"
   },
   {
-   "bytes": 10680,
+   "bytes": 13477683,
+   "path": "docs/architecture-map/codegraph.json"
+  },
+  {
+   "bytes": 14522,
    "path": "docs/architecture-map/index.html"
   },
   {
@@ -246232,6 +246236,6 @@
    "contains": 6701,
    "import": 1837
   },
-  "trackedFiles": 914
+  "trackedFiles": 915
  }
 }
