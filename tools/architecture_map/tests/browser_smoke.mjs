@@ -9,6 +9,14 @@ try {
   assert.equal(response?.status(),200);
   await page.getByRole('heading',{name:/RPG API/}).waitFor();
   assert.ok(await page.locator('#nodes .node').count()>=10);
+  await page.waitForFunction(() => Boolean(customElements.get('likec4-view')), null, {timeout:30000});
+  const nativeView = page.locator('likec4-view');
+  await nativeView.waitFor({state:'visible'});
+  assert.equal(await nativeView.getAttribute('view-id'),'overview');
+  await page.locator('#architectureView').selectOption('runtime');
+  assert.equal(await nativeView.getAttribute('view-id'),'runtime');
+  await page.locator('#architectureView').selectOption('overview');
+
   assert.ok(await page.getByRole('link',{name:/Исходник, строка/}).first().getAttribute('href'));
   await page.locator('#code').click();
   await page.getByRole('heading',{name:/Связи кода/}).waitFor({timeout:30000});
@@ -18,13 +26,26 @@ try {
   await page.waitForTimeout(500);
   const codeNodes=page.locator('#nodes .node');
   assert.ok(await codeNodes.count()>0);
-  await codeNodes.first().click();
+  console.log('CODE_CANVAS_DEBUG', await page.evaluate(() => ({
+    mode: document.getElementById('code').className,
+    canvasHidden: document.getElementById('canvas').hidden,
+    canvasDisplay: getComputedStyle(document.getElementById('canvas')).display,
+    canvasRect: document.getElementById('canvas').getBoundingClientRect().toJSON(),
+    likec4Hidden: document.getElementById('likec4Host').hidden,
+    firstNode: document.querySelector('#nodes .node')?.getBoundingClientRect().toJSON()
+  })));
+  assert.equal(await page.locator('#canvas').evaluate(el=>el.hidden),false);
+  const firstVisible=page.locator('#nodes .node:not(.hidden)').first();
+  await firstVisible.click({timeout:8000});
+
   await page.getByText('Потенциальное влияние изменений').waitFor();
   await page.locator('#direction').selectOption('incoming');
   await page.locator('#confidence').selectOption('call_candidate');
   await page.locator('#zin').click();
   await page.locator('#fit').click();
   await page.locator('#arch').click();
+  assert.equal(await page.locator('#canvas').evaluate(el=>el.hidden),true);
+  await page.screenshot({path:'/tmp/architecture-map-desktop.png',fullPage:true});
   await page.getByRole('heading',{name:/RPG API/}).waitFor();
   assert.deepEqual(issues,[]);
   console.log('Browser QA PASS: overview, indexed code graph, search, details, impact, filters, navigation, zoom.');
