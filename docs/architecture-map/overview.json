@@ -1,0 +1,237 @@
+{
+  "sourceCommit": "9e5c11eb4dc8c5fd70cd588baca4d3c12e565dbc",
+  "scope": "Ручная проверка архитектурных границ и исходных строк; не полный AST граф репозитория",
+  "analyzer": "source inspection, NOT GitNexus",
+  "nodes": [
+    {
+      "id": "flutter",
+      "label": "Flutter — читалка и игровой интерфейс",
+      "path": "apps/story_reader/lib/world_play_page.dart",
+      "line": 1,
+      "description": "Показывает сцены и передаёт действия через WorldLibraryGateway; не является владельцем правил RPG.",
+      "operation": "Выбор игрока, экраны героя, инвентаря, NPC и журнала; асинхронный шлюз выполняет операции в isolate.",
+      "group": "clients",
+      "url": "https://github.com/shonentez-afk/AI-Story-RPG/blob/9e5c11eb4dc8c5fd70cd588baca4d3c12e565dbc/apps/story_reader/lib/world_play_page.dart#L1"
+    },
+    {
+      "id": "cli",
+      "label": "CLI и локальный HTTP-клиент",
+      "path": "apps/rpg_cli/lib/rpg_loopback_server.dart",
+      "line": 25,
+      "description": "Дополнительный клиент самостоятельного движка с защищённым loopback транспортом.",
+      "operation": "Привязка только 127.0.0.1, токен минимум 32 символа, POST /v1/rpg; запросы обрабатываются последовательно.",
+      "group": "clients",
+      "url": "https://github.com/shonentez-afk/AI-Story-RPG/blob/9e5c11eb4dc8c5fd70cd588baca4d3c12e565dbc/apps/rpg_cli/lib/rpg_loopback_server.dart#L25"
+    },
+    {
+      "id": "api",
+      "label": "RPG API — публичный контракт",
+      "path": "packages/rpg_api/lib/rpg_api.dart",
+      "line": 75,
+      "description": "Единая граница клиента для игры, авторинга и переносимых операций.",
+      "operation": "LocalRpgGameApi делегирует RpgGameplayEngine; RpgAuthoringApi работает с подготовкой книги и проверенными проектами.",
+      "group": "interface",
+      "url": "https://github.com/shonentez-afk/AI-Story-RPG/blob/9e5c11eb4dc8c5fd70cd588baca4d3c12e565dbc/packages/rpg_api/lib/rpg_api.dart#L75"
+    },
+    {
+      "id": "protocol",
+      "label": "JSON-протокол клиентов",
+      "path": "packages/rpg_api/lib/src/client_protocol.dart",
+      "line": 23,
+      "description": "Проверяет внешние команды, аргументы, версии и безопасные ответы.",
+      "operation": "Возвращает непрозрачные коды ошибок без передачи исходного текста книги, путей или SQLite-деталей.",
+      "group": "interface",
+      "url": "https://github.com/shonentez-afk/AI-Story-RPG/blob/9e5c11eb4dc8c5fd70cd588baca4d3c12e565dbc/packages/rpg_api/lib/src/client_protocol.dart#L23"
+    },
+    {
+      "id": "gameplay",
+      "label": "Проекция RPG",
+      "path": "packages/rpg_gameplay/lib/rpg_gameplay.dart",
+      "line": 322,
+      "description": "Преобразует подтверждённые события движка в состояние для UI: герой, NPC, предметы, журнал, отношения.",
+      "operation": "RpgGameplayEngine.choose вызывает транзакционный commitChoice и затем повторно загружает проверенное состояние.",
+      "group": "engine",
+      "url": "https://github.com/shonentez-afk/AI-Story-RPG/blob/9e5c11eb4dc8c5fd70cd588baca4d3c12e565dbc/packages/rpg_gameplay/lib/rpg_gameplay.dart#L322"
+    },
+    {
+      "id": "store",
+      "label": "Кампании и сохранения",
+      "path": "packages/campaign_manager/lib/campaign_manager.dart",
+      "line": 14,
+      "description": "Устанавливает проверенные миры, хранит кампании и журнал событий SQLite.",
+      "operation": "Импорт проверяется до записи; восстановление требует непрерывной последовательности событий и совпадающих хэшей.",
+      "group": "engine",
+      "url": "https://github.com/shonentez-afk/AI-Story-RPG/blob/9e5c11eb4dc8c5fd70cd588baca4d3c12e565dbc/packages/campaign_manager/lib/campaign_manager.dart#L14"
+    },
+    {
+      "id": "runtime",
+      "label": "Координатор исполнения",
+      "path": "packages/story_runtime_adapter/lib/story_runtime_adapter.dart",
+      "line": 61,
+      "description": "Согласует навигацию сценария с единственным авторитетным состоянием мира.",
+      "operation": "StoryEngineCoordinator.start валидирует сценарий, а синхронизация контролирует соответствие StoryEngine и StoryWorld.",
+      "group": "engine",
+      "url": "https://github.com/shonentez-afk/AI-Story-RPG/blob/9e5c11eb4dc8c5fd70cd588baca4d3c12e565dbc/packages/story_runtime_adapter/lib/story_runtime_adapter.dart#L61"
+    },
+    {
+      "id": "core",
+      "label": "Детерминированные RPG-правила",
+      "path": "packages/story_core/lib/src/engine.dart",
+      "line": 1,
+      "description": "Проверенные переходы, последовательность событий, причинность и состояние мира.",
+      "operation": "WorldEvent не содержит wall-clock timestamp; хэши обеспечивают воспроизводимость.",
+      "group": "engine",
+      "url": "https://github.com/shonentez-afk/AI-Story-RPG/blob/9e5c11eb4dc8c5fd70cd588baca4d3c12e565dbc/packages/story_core/lib/src/engine.dart#L1"
+    },
+    {
+      "id": "format",
+      "label": "Формат BookWorld",
+      "path": "packages/bookworld_format/lib/bookworld_format.dart",
+      "line": 40,
+      "description": "Валидация переносимых .bworld, проверенные данные и строгое чтение архивов.",
+      "operation": "Проверка содержимого, манифеста, соответствия схем и контрольных сумм до изменения кампании.",
+      "group": "engine",
+      "url": "https://github.com/shonentez-afk/AI-Story-RPG/blob/9e5c11eb4dc8c5fd70cd588baca4d3c12e565dbc/packages/bookworld_format/lib/bookworld_format.dart#L40"
+    },
+    {
+      "id": "author",
+      "label": "Автономный авторинг",
+      "path": "packages/story_authoring/lib/src/book_to_rpg_workflow.dart",
+      "line": 63,
+      "description": "Импортирует книгу и готовит проверяемый проект мира, не включая клиент Flutter.",
+      "operation": "BookToRpgWorkflow.openSource→prepare→buildReviewedDraft, точный fingerprint и повторная проверка доказательств.",
+      "group": "authoring",
+      "url": "https://github.com/shonentez-afk/AI-Story-RPG/blob/9e5c11eb4dc8c5fd70cd588baca4d3c12e565dbc/packages/story_authoring/lib/src/book_to_rpg_workflow.dart#L63"
+    },
+    {
+      "id": "source",
+      "label": "Импорт и индекс книги",
+      "path": "packages/story_authoring/lib/src/authoring_engine.dart",
+      "line": 43,
+      "description": "Формирует точный source-locked индекс для FB2/TXT и подтверждённых сцен.",
+      "operation": "BookAuthoringEngine.parseAndIndex превращает файл книги в исходные единицы с fingerprint.",
+      "group": "authoring",
+      "url": "https://github.com/shonentez-afk/AI-Story-RPG/blob/9e5c11eb4dc8c5fd70cd588baca4d3c12e565dbc/packages/story_authoring/lib/src/authoring_engine.dart#L43"
+    },
+    {
+      "id": "python",
+      "label": "Внешний Python-генератор",
+      "path": "tools/rpg_author/cli.py",
+      "line": 1,
+      "description": "Отдельный инструмент подготовки и проверки игрового мира вне обязательного мобильного runtime.",
+      "operation": "Граница обмена с движком проходит через проверяемые форматы и протоколы; источник и ревизия должны совпадать.",
+      "group": "authoring",
+      "url": "https://github.com/shonentez-afk/AI-Story-RPG/blob/9e5c11eb4dc8c5fd70cd588baca4d3c12e565dbc/tools/rpg_author/cli.py#L1"
+    }
+  ],
+  "edges": [
+    {
+      "source": "flutter",
+      "target": "api",
+      "description": "Вызов через DeviceWorldLibraryGateway и LocalRpgGameApi",
+      "path": "apps/story_reader/lib/world_library_gateway.dart",
+      "line": 27,
+      "confidence": "source_reviewed",
+      "url": "https://github.com/shonentez-afk/AI-Story-RPG/blob/9e5c11eb4dc8c5fd70cd588baca4d3c12e565dbc/apps/story_reader/lib/world_library_gateway.dart#L27"
+    },
+    {
+      "source": "cli",
+      "target": "protocol",
+      "description": "JSON-команды локального клиента",
+      "path": "apps/rpg_cli/lib/rpg_loopback_server.dart",
+      "line": 88,
+      "confidence": "source_reviewed",
+      "url": "https://github.com/shonentez-afk/AI-Story-RPG/blob/9e5c11eb4dc8c5fd70cd588baca4d3c12e565dbc/apps/rpg_cli/lib/rpg_loopback_server.dart#L88"
+    },
+    {
+      "source": "api",
+      "target": "gameplay",
+      "description": "LocalRpgGameApi делегирует RpgGameplayEngine",
+      "path": "packages/rpg_api/lib/rpg_api.dart",
+      "line": 109,
+      "confidence": "source_reviewed",
+      "url": "https://github.com/shonentez-afk/AI-Story-RPG/blob/9e5c11eb4dc8c5fd70cd588baca4d3c12e565dbc/packages/rpg_api/lib/rpg_api.dart#L109"
+    },
+    {
+      "source": "api",
+      "target": "author",
+      "description": "AuthoringApi делегирует проверяемый workflow",
+      "path": "packages/rpg_api/lib/rpg_api.dart",
+      "line": 189,
+      "confidence": "source_reviewed",
+      "url": "https://github.com/shonentez-afk/AI-Story-RPG/blob/9e5c11eb4dc8c5fd70cd588baca4d3c12e565dbc/packages/rpg_api/lib/rpg_api.dart#L189"
+    },
+    {
+      "source": "gameplay",
+      "target": "store",
+      "description": "Движок создаёт/читает/подтверждает кампании в BookworldCampaignStore",
+      "path": "packages/rpg_gameplay/lib/rpg_gameplay.dart",
+      "line": 827,
+      "confidence": "source_reviewed",
+      "url": "https://github.com/shonentez-afk/AI-Story-RPG/blob/9e5c11eb4dc8c5fd70cd588baca4d3c12e565dbc/packages/rpg_gameplay/lib/rpg_gameplay.dart#L827"
+    },
+    {
+      "source": "store",
+      "target": "runtime",
+      "description": "Восстановление кампании через StoryEngineCoordinator.restore",
+      "path": "packages/campaign_manager/lib/campaign_manager.dart",
+      "line": 335,
+      "confidence": "source_reviewed",
+      "url": "https://github.com/shonentez-afk/AI-Story-RPG/blob/9e5c11eb4dc8c5fd70cd588baca4d3c12e565dbc/packages/campaign_manager/lib/campaign_manager.dart#L335"
+    },
+    {
+      "source": "runtime",
+      "target": "core",
+      "description": "StoryWorld — авторитетные состояния и события",
+      "path": "packages/story_runtime_adapter/lib/story_runtime_adapter.dart",
+      "line": 73,
+      "confidence": "source_reviewed",
+      "url": "https://github.com/shonentez-afk/AI-Story-RPG/blob/9e5c11eb4dc8c5fd70cd588baca4d3c12e565dbc/packages/story_runtime_adapter/lib/story_runtime_adapter.dart#L73"
+    },
+    {
+      "source": "store",
+      "target": "format",
+      "description": "Импорт и валидация .bworld перед записью",
+      "path": "packages/campaign_manager/lib/campaign_manager.dart",
+      "line": 194,
+      "confidence": "source_reviewed",
+      "url": "https://github.com/shonentez-afk/AI-Story-RPG/blob/9e5c11eb4dc8c5fd70cd588baca4d3c12e565dbc/packages/campaign_manager/lib/campaign_manager.dart#L194"
+    },
+    {
+      "source": "author",
+      "target": "source",
+      "description": "Проверка импорта и индекса источника",
+      "path": "packages/story_authoring/lib/src/book_to_rpg_workflow.dart",
+      "line": 69,
+      "confidence": "source_reviewed",
+      "url": "https://github.com/shonentez-afk/AI-Story-RPG/blob/9e5c11eb4dc8c5fd70cd588baca4d3c12e565dbc/packages/story_authoring/lib/src/book_to_rpg_workflow.dart#L69"
+    },
+    {
+      "source": "author",
+      "target": "format",
+      "description": "Сборка и проверка BookWorld",
+      "path": "packages/story_authoring/lib/src/authoring_engine.dart",
+      "line": 3,
+      "confidence": "source_reviewed",
+      "url": "https://github.com/shonentez-afk/AI-Story-RPG/blob/9e5c11eb4dc8c5fd70cd588baca4d3c12e565dbc/packages/story_authoring/lib/src/authoring_engine.dart#L3"
+    },
+    {
+      "source": "gameplay",
+      "target": "core",
+      "description": "Проекция WorldEvent и WorldState",
+      "path": "packages/rpg_gameplay/lib/rpg_gameplay.dart",
+      "line": 7,
+      "confidence": "source_reviewed",
+      "url": "https://github.com/shonentez-afk/AI-Story-RPG/blob/9e5c11eb4dc8c5fd70cd588baca4d3c12e565dbc/packages/rpg_gameplay/lib/rpg_gameplay.dart#L7"
+    },
+    {
+      "source": "protocol",
+      "target": "api",
+      "description": "Версионированный транспорт вызывает публичный API",
+      "path": "packages/rpg_api/lib/src/client_protocol.dart",
+      "line": 31,
+      "confidence": "source_reviewed",
+      "url": "https://github.com/shonentez-afk/AI-Story-RPG/blob/9e5c11eb4dc8c5fd70cd588baca4d3c12e565dbc/packages/rpg_api/lib/src/client_protocol.dart#L31"
+    }
+  ]
+}
