@@ -1,0 +1,52 @@
+name: Publish unified architecture map (GitHub Pages)
+on:
+  push:
+    branches:
+      - docs/unified-architecture-codegraph-20261124
+    paths:
+      - docs/architecture-map/likec4-views.js
+      - .github/workflows/architecture-pages.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+concurrency:
+  group: github-pages-architecture-map
+  cancel-in-progress: true
+jobs:
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify generated bundle and provenance
+        run: |
+          test -s docs/architecture-map/likec4-views.js
+          test -s docs/architecture-map/codegraph.json
+          python3 - <<'PY'
+          import json
+          data=json.load(open('docs/architecture-map/codegraph.json',encoding='utf-8'))
+          assert data['sourceCommit']=='9e5c11eb4dc8c5fd70cd588baca4d3c12e565dbc'
+          PY
+      - name: Assemble one static interactive site
+        run: |
+          mkdir -p _site/docs/architecture-map
+          cp docs/architecture-map/index.html _site/docs/architecture-map/
+          cp docs/architecture-map/overview.json _site/docs/architecture-map/
+          cp docs/architecture-map/codegraph.json _site/docs/architecture-map/
+          cp docs/architecture-map/likec4-views.js _site/docs/architecture-map/
+          cp docs/ARCHITECTURE_RU.md _site/docs/
+          cp docs/RPG_ENGINE_CLIENT_AUTONOMY_AUDIT_RU_2026-11-09.md _site/docs/
+          cp docs/FLUTTER_ENGINE_UI_PARITY_P0_RU_2026-11-09.md _site/docs/
+          cp docs/architecture-map/README_RU.md _site/docs/architecture-map/
+          printf '%s\n' '<!DOCTYPE html><html lang="ru"><meta charset="utf-8"><meta http-equiv="refresh" content="0;url=docs/architecture-map/index.html"><title>AI Story RPG architecture</title><a href="docs/architecture-map/index.html">Open architecture map</a></html>' > _site/index.html
+          touch _site/.nojekyll
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+      - id: deploy
+        uses: actions/deploy-pages@v4
