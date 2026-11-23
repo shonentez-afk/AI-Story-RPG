@@ -52,6 +52,12 @@ jobs:
           assert all(str(e['url']).startswith('https://github.com/shonentez-afk/AI-Story-RPG/blob/') for e in data['edges'])
           print(data['statistics'])
           PY
+      - name: Browser interaction smoke test (Chromium)
+        run: |
+          npm install --no-save playwright@1.58.2
+          npx playwright install --with-deps chromium
+          python3 -m http.server 8765 --bind 127.0.0.1 > /tmp/architecture-http.log 2>&1 &
+          node tools/architecture_map/tests/browser_smoke.mjs
       - name: Commit generated JSON on docs branch only
         run: |
           git config user.name github-actions[bot]
