@@ -8,6 +8,9 @@ on:
   workflow_dispatch:
 permissions:
   contents: write
+concurrency:
+  group: docs-architecture-map-source-index
+  cancel-in-progress: true
 jobs:
   index:
     runs-on: ubuntu-latest
@@ -33,10 +36,12 @@ jobs:
       - name: Validate LikeC4 model and views
         run: |
           npx --yes likec4@1.61.0 validate --no-layout docs/architecture-map
+      - name: Check out exact immutable source commit
+        run: git worktree add --detach /tmp/architecture-map-source 9e5c11eb4dc8c5fd70cd588baca4d3c12e565dbc
       - name: Generate full inventory and conservative code graph
         run: |
           python3 tools/architecture_map/generate.py \
-            --root . \
+            --root /tmp/architecture-map-source \
             --base-sha 9e5c11eb4dc8c5fd70cd588baca4d3c12e565dbc \
             --out docs/architecture-map/codegraph.json
       - name: Verify index invariants
@@ -65,5 +70,7 @@ jobs:
           git add docs/architecture-map/codegraph.json
           if ! git diff --cached --quiet; then
             git commit -m 'docs: refresh source-pinned architecture graph [skip ci]'
-            git push
+            git fetch origin docs/unified-architecture-codegraph-20261124
+          git rebase origin/docs/unified-architecture-codegraph-20261124
+          git push origin HEAD:docs/unified-architecture-codegraph-20261124
           fi
