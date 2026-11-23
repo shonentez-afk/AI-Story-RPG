@@ -44,7 +44,7 @@ try {
   await page.locator('#zin').click();
   await page.locator('#fit').click();
   await page.locator('#arch').click();
-  assert.equal(await page.locator('#canvas').evaluate(el=>el.hidden),true);
+  assert.equal(await page.locator('#canvas').evaluate(el=>el.hasAttribute('hidden')),true);
   await page.screenshot({path:'/tmp/architecture-map-desktop.png',fullPage:true});
   await page.getByRole('heading',{name:/RPG API/}).waitFor();
   assert.deepEqual(issues,[]);
