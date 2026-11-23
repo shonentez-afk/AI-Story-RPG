@@ -1,0 +1,23 @@
+// LikeC4 projections of the single source-reviewed model.
+views {
+  view overview {
+    title 'AI Story RPG — границы системы'
+    include *
+    autoLayout LeftRight
+  }
+  view runtime of rpg {
+    title 'Реальные границы автономного движка'
+    include *
+    autoLayout TopBottom
+  }
+  view client_of_rpg {
+    title 'Клиент — API — состояние'
+    include client.flutter, client.cli, rpg.api, rpg.gameplay, rpg.campaign, rpg.runtime, rpg.core
+    autoLayout LeftRight
+  }
+  view authoring {
+    title 'Книга — авторинг — игровой формат'
+    include source.book, source.externalAuthor, rpg.author, rpg.format, rpg.api
+    autoLayout LeftRight
+  }
+}

@@ -1,0 +1,81 @@
+name: Documentation architecture map (read-only source audit)
+on:
+  push:
+    branches:
+      - docs/unified-architecture-codegraph-20261124
+    paths-ignore:
+      - docs/architecture-map/codegraph.json
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: docs-architecture-map-source-index
+  cancel-in-progress: true
+jobs:
+  index:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Test static analysis
+        run: python3 -m unittest discover -s tools/architecture_map/tests -v
+      - name: Verify HTML inline JavaScript
+        run: |
+          python3 - <<'PY'
+          import pathlib, re
+          page = pathlib.Path('docs/architecture-map/index.html').read_text(encoding='utf-8')
+          match = re.search(r'<script>(.*?)</script>', page, re.DOTALL)
+          assert match, "No inline JavaScript"
+          pathlib.Path('/tmp/architecture-map.js').write_text(match.group(1), encoding='utf-8')
+          PY
+          node --check /tmp/architecture-map.js
+      - name: Validate LikeC4 model and views
+        run: |
+          npx --yes likec4@1.61.0 validate --no-layout docs/architecture-map
+      - name: Generate real LikeC4 web component
+        run: |
+          npm install --no-save react@19 react-dom@19
+          npx --yes likec4@1.61.0 gen webcomponent -o docs/architecture-map/likec4-views.js docs/architecture-map
+          test -s docs/architecture-map/likec4-views.js
+      - name: Check out exact immutable source commit
+        run: git worktree add --detach /tmp/architecture-map-source 9e5c11eb4dc8c5fd70cd588baca4d3c12e565dbc
+      - name: Generate full inventory and conservative code graph
+        run: |
+          python3 tools/architecture_map/generate.py \
+            --root /tmp/architecture-map-source \
+            --base-sha 9e5c11eb4dc8c5fd70cd588baca4d3c12e565dbc \
+            --out docs/architecture-map/codegraph.json
+      - name: Verify index invariants
+        run: |
+          python3 - <<'PY'
+          import json, pathlib
+          path = pathlib.Path('docs/architecture-map/codegraph.json')
+          data = json.loads(path.read_text(encoding='utf-8'))
+          assert data['sourceCommit'] == '9e5c11eb4dc8c5fd70cd588baca4d3c12e565dbc'
+          assert data['statistics']['analyzedCodeFiles'] > 100
+          assert data['statistics']['nodes'] > 100
+          assert all(e['source'] != e['target'] for e in data['edges'] if e['kind'] == 'import')
+          assert all(str(e['url']).startswith('https://github.com/shonentez-afk/AI-Story-RPG/blob/') for e in data['edges'])
+          print(data['statistics'])
+          PY
+      - name: Browser interaction smoke test (Chromium)
+        run: |
+          npm install --no-save playwright@1.58.2
+          npx playwright install --with-deps chromium
+          python3 -m http.server 8765 --bind 127.0.0.1 > /tmp/architecture-http.log 2>&1 &
+          node tools/architecture_map/tests/browser_smoke.mjs
+      - name: Commit generated JSON on docs branch only
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add docs/architecture-map/codegraph.json docs/architecture-map/likec4-views.js
+          if ! git diff --cached --quiet; then
+            git commit -m 'docs: refresh source-pinned architecture graph [skip ci]'
+              git fetch origin docs/unified-architecture-codegraph-20261124
+            git rebase origin/docs/unified-architecture-codegraph-20261124
+            git push origin HEAD:docs/unified-architecture-codegraph-20261124
+          fi

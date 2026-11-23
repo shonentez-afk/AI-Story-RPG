@@ -1,0 +1,72 @@
+// AI Story RPG — source-reviewed architecture snapshot.
+// Source commit: 9e5c11eb4dc8c5fd70cd588baca4d3c12e565dbc
+// Distinguish this editorial architecture from the generated static dependency index.
+specification {
+  element actor { style { shape person } }
+  element system
+  element component
+  element storage
+  relationship accesses
+  relationship delegates
+  relationship validates
+  relationship persists
+}
+model {
+  player = actor 'Игрок' { description 'Использует Flutter или самостоятельный клиент' }
+  client = system 'Клиенты' {
+    flutter = component 'Flutter Story Reader' {
+      description 'Отображает книгу, игру, героя, NPC, инвентарь и журнал'
+    }
+    cli = component 'CLI / loopback HTTP' {
+      description 'Альтернативный клиент через публичный SDK/JSON'
+    }
+  }
+  rpg = system 'Автономная RPG-система' {
+    api = component 'rpg_api' {
+      description 'Общая граница клиента для игровых действий и авторинга'
+    }
+    gameplay = component 'rpg_gameplay' {
+      description 'Проекция проверенного мира и доступных действий'
+    }
+    core = component 'story_core' {
+      description 'Детерминированные правила и единственное авторитетное состояние'
+    }
+    runtime = component 'story_runtime_adapter' {
+      description 'Синхронизирует StoryWorld и сценарный StoryEngine'
+    }
+    campaign = component 'campaign_manager' {
+      description 'SQLite, журнал событий, переносимые сохранения'
+    }
+    format = component 'bookworld_format' {
+      description 'Чтение и строгая проверка игровых архивов'
+    }
+    author = component 'story_authoring' {
+      description 'Offline book-to-RPG, доказательства, редакторское подтверждение'
+    }
+    sqlite = storage 'SQLite' {
+      description 'Хранит кампании и подтвержденные события'
+    }
+  }
+  source = system 'Исходники книг и внешняя подготовка' {
+    book = component 'FB2 / TXT' {
+      description 'Недоверенный текст книги'
+    }
+    externalAuthor = component 'Python RPG author' {
+      description 'Отдельный авторский CLI'
+    }
+  }
+  player -> client.flutter 'Читает и выбирает'
+  player -> client.cli 'Выполняет команды'
+  client.flutter -> rpg.api 'Запросы игрового/авторского API'
+  client.cli -> rpg.api 'JSON-команды'
+  rpg.api -> rpg.gameplay 'Делегирует игру'
+  rpg.api -> rpg.author 'Делегирует подготовку'
+  rpg.gameplay -> rpg.campaign 'Создание, чтение и фиксация'
+  rpg.campaign -> rpg.runtime 'Восстановление состояний'
+  rpg.runtime -> rpg.core 'Правила и состояния'
+  rpg.campaign -> rpg.format 'Проверяет пакеты'
+  rpg.campaign -> rpg.sqlite 'Журнал и кампании'
+  rpg.author -> rpg.format 'Создание проверенного игрового архива'
+  source.book -> rpg.author 'Исходный текст'
+  source.externalAuthor -> rpg.format 'Файловый контракт; не прямой вызов'
+}
