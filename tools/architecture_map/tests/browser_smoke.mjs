@@ -28,13 +28,13 @@ try {
   assert.ok(await codeNodes.count()>0);
   console.log('CODE_CANVAS_DEBUG', await page.evaluate(() => ({
     mode: document.getElementById('code').className,
-    canvasHidden: document.getElementById('canvas').hidden,
+    canvasHidden: document.getElementById('canvas').hasAttribute('hidden'),
     canvasDisplay: getComputedStyle(document.getElementById('canvas')).display,
     canvasRect: document.getElementById('canvas').getBoundingClientRect().toJSON(),
     likec4Hidden: document.getElementById('likec4Host').hidden,
     firstNode: document.querySelector('#nodes .node')?.getBoundingClientRect().toJSON()
   })));
-  assert.equal(await page.locator('#canvas').evaluate(el=>el.hidden),false);
+  assert.equal(await page.locator('#canvas').evaluate(el=>el.hasAttribute('hidden')),false);
   const firstVisible=page.locator('#nodes .node:not(.hidden)').first();
   await firstVisible.click({timeout:8000});
 
