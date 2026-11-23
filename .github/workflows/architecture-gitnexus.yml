@@ -36,9 +36,13 @@ jobs:
       - name: Query real GitNexus index (no synthetic data)
         run: |
           cd /tmp/ai-story-rpg-source
+          set +e
           /tmp/ai-story-gitnexus/node_modules/.bin/gitnexus status > /tmp/gitnexus-status.txt 2>&1
-          /tmp/ai-story-gitnexus/node_modules/.bin/gitnexus cypher "MATCH (n) RETURN labels(n) AS kinds, count(n) AS count ORDER BY count DESC LIMIT 15" > /tmp/gitnexus-nodes.txt 2>&1
+          echo "status exit=$?"
+          /tmp/ai-story-gitnexus/node_modules/.bin/gitnexus cypher "MATCH (n) RETURN count(n) AS total" > /tmp/gitnexus-nodes.txt 2>&1
+          echo "nodes cypher exit=$?"
           /tmp/ai-story-gitnexus/node_modules/.bin/gitnexus cypher "MATCH (a)-[r:CALLS]->(b) RETURN count(r) AS calls" > /tmp/gitnexus-calls.txt 2>&1
+          echo "calls cypher exit=$?"
           cat /tmp/gitnexus-status.txt
           cat /tmp/gitnexus-nodes.txt
           cat /tmp/gitnexus-calls.txt
