@@ -20,6 +20,19 @@ jobs:
           python-version: '3.12'
       - name: Test static analysis
         run: python3 -m unittest discover -s tools/architecture_map/tests -v
+      - name: Verify HTML inline JavaScript
+        run: |
+          python3 - <<'PY'
+          import pathlib, re
+          page = pathlib.Path('docs/architecture-map/index.html').read_text(encoding='utf-8')
+          match = re.search(r'<script>(.*?)</script>', page, re.DOTALL)
+          assert match, "No inline JavaScript"
+          pathlib.Path('/tmp/architecture-map.js').write_text(match.group(1), encoding='utf-8')
+          PY
+          node --check /tmp/architecture-map.js
+      - name: Validate LikeC4 model and views
+        run: |
+          npx --yes likec4@1.61.0 validate --no-layout docs/architecture-map
       - name: Generate full inventory and conservative code graph
         run: |
           python3 tools/architecture_map/generate.py \
