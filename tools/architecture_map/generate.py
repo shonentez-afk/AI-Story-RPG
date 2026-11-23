@@ -65,7 +65,7 @@ def resolve_import(path: str, target: str, known: set[str]) -> str | None:
         if not sep:
             return None
         candidates = (f"packages/{pkg}/lib/{inner}", f"apps/{pkg}/lib/{inner}")
-    elif target.startswith("."):
+    elif target.startswith(".") or (not target.startswith(("dart:", "package:", "/")) and ("/" in target or target.endswith((".dart", ".py", ".js", ".ts")))):
         candidate = (source.parent / target)
         # pathlib does not normalize '..' in PurePosixPath
         bits = []
